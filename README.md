@@ -1,6 +1,6 @@
 # my-claude-plugins
 
-Personal Claude Code plugin repository. Registered in `~/.claude/settings.json` as an `extraKnownMarketplaces` entry pointing to this git repo.
+Claude Code plugin repository.
 
 ## Plugins
 
