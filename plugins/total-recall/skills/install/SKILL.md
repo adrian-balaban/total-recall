@@ -1,11 +1,11 @@
 ---
 name: install
-description: This skill should be used when the user asks to "install total-recall", "set up total-recall", "initialize total-recall for the first time", "configure the MCP server", "wire up hooks manually", "migrate from v2", or asks about "what's configurable" in total-recall. Covers first-run initialization (vault dirs, MCP registration, index build, org vault, vector search) and standalone manual hook wiring, migration notes, and known gotchas.
+description: This skill should be used when the user asks to "install total-recall", "set up total-recall", "initialize total-recall for the first time", "configure the MCP server", "wire up hooks manually" or asks about "what's configurable" in total-recall. Covers first-run initialization (vault dirs, MCP registration, index build, org vault, vector search) and standalone manual hook wiring, migration notes, and known gotchas.
 ---
 
 # Total Recall — Complete Install & Setup
 
-This skill covers everything needed to get Total Recall running: first-run initialization for plugin installs, standalone manual hook wiring, migration from v2, and known gotchas. Each step checks current state before acting — safe to re-run on a partially set-up installation.
+This skill covers everything needed to get Total Recall running: first-run initialization for plugin installs, standalone manual hook wiring, and known gotchas. Each step checks current state before acting — safe to re-run on a partially set-up installation.
 
 ## What Is Configurable
 
@@ -120,12 +120,6 @@ ls "$PLUGIN_ROOT/dist/index.js" && claude mcp get total-recall
 ```
 
 Summarize what was set up, what was skipped, and any manual steps still needed.
-
----
-
-## Migration from v2
-
-Existing `~/.total-recall` vaults are fully compatible. Run `rebuild_index` to re-scan. `rebuild_index` preserves `accessCount`/`lastAccessed` stats — safe to run at any time.
 
 ---
 

@@ -182,10 +182,6 @@ npm install @huggingface/transformers sqlite-vec better-sqlite3
 
 Uses `Xenova/all-MiniLM-L6-v2` (384-dim ONNX). Gracefully degrades to TF-IDF if not installed.
 
-## Migration from v2
-
-Existing `~/.total-recall` vaults are fully compatible. Run `rebuild_index` to re-scan.
-
 ---
 
 ## Comparison with Similar Projects
