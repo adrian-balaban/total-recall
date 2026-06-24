@@ -21,6 +21,11 @@ for d in $EXCLUDED_DIRS; do
 done
 
 TMP=$(mktemp)
+# Body accumulation temp ($TMP) and the atomic-cache write temp ($CACHE_TMP,
+# set near the write) must not leak on early exit under `set -e`. CACHE_TMP may
+# be unset if we fail before defining it.
+cleanup() { rm -f "$TMP" "${CACHE_TMP:-}" 2>/dev/null || true; }
+trap cleanup EXIT
 COUNT=0
 
 process_vault() {
@@ -70,5 +75,11 @@ process_vault "$PERSONAL_VAULT" ""
 process_vault "$ORG_VAULT" "org/"
 
 mkdir -p "$(dirname "$CACHE")"
-{ echo "$COUNT"; cat "$TMP"; } > "$CACHE"
+# Atomic cache write (A8): write to a sibling temp then rename into place. A
+# truncated/interrupted `> "$CACHE"` left a partial cache that the SessionStart
+# hook then injected as context; the rename is atomic on POSIX so readers never
+# see a half-written file. Use a distinct temp from the body `$TMP`.
+CACHE_TMP="${CACHE}.tmp.$$"
+{ echo "$COUNT"; cat "$TMP"; } > "$CACHE_TMP"
+mv -f "$CACHE_TMP" "$CACHE"
 rm -f "$TMP"

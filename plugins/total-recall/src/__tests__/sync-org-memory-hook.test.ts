@@ -174,4 +174,21 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     const args = await waitForArgs(1500);
     expect(args).toBeNull();
   });
+
+  it('does NOT spawn the cjs git sync for a personal (non-org/) key (C1)', async () => {
+    // A personal store returns a key NOT prefixed with org/; the hook must skip the
+    // cjs org-vault sync entirely (it still rebuilds the cache, but the stub args
+    // file proves the cjs was never invoked for this key).
+    const json = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'mcp__total-recall__store_memory',
+      tool_input: { title: 'Personal', content: '...', tags: [] },
+      tool_response: { content: [{ type: 'text', text: JSON.stringify({ key: 'knowledge/personal-note', message: 'stored' }) }] },
+    });
+    const r = runHook(json);
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+    const args = await waitForArgs(1500);
+    expect(args).toBeNull();
+  });
 }, 60000);

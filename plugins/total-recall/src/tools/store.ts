@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
-import { ORG_VAULT, PERSONAL_VAULT, VECTORS_DB, ensureDir } from '../paths.js';
+import { ORG_VAULT, PERSONAL_VAULT, VECTORS_DB, HOME, ensureDir } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -14,11 +14,39 @@ import type { MemoryFrontmatter } from '../types.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
 
+// Whether the shared org vault has been configured (config `orgRepo` set, or the
+// repo cloned). See A3 guard in storeMemory. Reads config.json defensively — a
+// missing/corrupt config is treated as "not configured".
+function orgVaultConfigured(): boolean {
+  try {
+    const cfgPath = path.join(HOME, '.total-recall', 'config.json');
+    const raw = fs.readFileSync(cfgPath, 'utf8');
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.orgRepo === 'string' && parsed.orgRepo) return true;
+  } catch { /* fall through to the .git check */ }
+  return fs.existsSync(path.join(HOME, '.total-recall', 'org', '.git'));
+}
+
 export function storeMemory(args: any): any {
   const { title, content, tags = [], category = 'knowledge', importanceScore = 0.5, sessionId, author, force = false } = args;
   const isOrg = tags.includes('org');
   const isPersonal = tags.includes('personal');
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+
+  // Org-config guard (A3): refuse an org store when the shared org vault is not
+  // configured. Otherwise ensureDir(catDir) below would create `~/.total-recall/
+  // org/org-vault/<category>` AND write the memory file in an environment where
+  // the org git repo was never set up — leaving an unsynced stray file/dir that
+  // then blocks the next `git clone` of the org vault (clone into a non-empty dir
+  // fails). Treat "configured" as EITHER the `orgRepo` being set in config.json OR
+  // the org git repo having been cloned (`~/.total-recall/org/.git` present).
+  if (isOrg && !orgVaultConfigured()) {
+    throw new Error(
+      'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: ' +
+      'set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). ' +
+      'Writing now would leave an unsynced file that blocks the next clone.'
+    );
+  }
 
   const slug = slugify(title);
   const catDir = isOrg
@@ -47,6 +75,7 @@ export function storeMemory(args: any): any {
   const effectiveAuthor = isOrg ? osUser : (author ?? osUser);
 
   let preservedCreated: string | undefined;
+  let preservedSessions: string[] | undefined;
   if (fs.existsSync(filePath)) {
     const existingFm = parseFrontmatter(fs.readFileSync(filePath, 'utf8')).data as Partial<MemoryFrontmatter>;
     // Org memories are author-protected regardless of force. Compare against the
@@ -62,13 +91,25 @@ export function storeMemory(args: any): any {
       );
     }
     preservedCreated = existingFm.created;
+    // Preserve prior session history on a force-overwrite (A2). Without this, the
+    // spread below reset `sessions` to just `[sessionId]` — or `[]` when no new
+    // session was supplied — discarding the accumulated session trail. Mirror
+    // update_memory's dedupe-merge so a repeated overwrite never duplicates entries.
+    preservedSessions = existingFm.sessions;
   }
 
   const now = new Date().toISOString();
+  // Dedupe-merge the carried-over session history with the current session. Like
+  // update_memory, keep only the unique set (order: prior then current) so a
+  // force-overwrite extends the history rather than wiping it.
+  const sessions = [...new Set([
+    ...(preservedSessions ?? []),
+    ...(sessionId ? [sessionId] : []),
+  ])];
   const fm: MemoryFrontmatter = {
     title, tags,
     author: effectiveAuthor,
-    sessions: sessionId ? [sessionId] : [],
+    sessions,
     created: preservedCreated ?? now,
     updated: now,
     importanceScore,

@@ -5,9 +5,12 @@ import {
   PERSONAL_VAULT,
   ORG_VAULT,
   EXCLUDED_DIRS,
+  VECTORS_DB,
   ensureDir,
 } from './paths.js';
 import { memIndex, errors } from './state.js';
+import { contentCache } from './lru-cache.js';
+import { deleteVector } from './vectorStore.js';
 import type { MemoryFrontmatter } from './types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -51,7 +54,12 @@ export function reconcileIndex() {
       // walk. Not caller-supplied. Reviewed path-traversal finding; suppressed inline.
       const fp = path.join(dir, e.name); // nosemgrep: path-join-resolve-traversal — filesystem-discovered name, vault-rooted walk.
       if (e.isDirectory()) {
-        if (!EXCLUDED_DIRS.has(e.name.toLowerCase())) walk(fp, isOrg);
+        // Reserve the `org/` key prefix for the ORG vault. A personal-vault
+        // subdir literally named `org` would index files to keys like `org/x`,
+        // colliding with (and shadowing) org-vault keys (`org/<rel>`). Skip it
+        // on the personal walk so the org namespace stays unambiguous.
+        const reservedOrgPrefix = !isOrg && e.name === 'org';
+        if (!EXCLUDED_DIRS.has(e.name.toLowerCase()) && !reservedOrgPrefix) walk(fp, isOrg);
       } else if (e.name.endsWith('.md')) {
         indexFile(fp, isOrg);
         seen.add(keyFromPath(fp, isOrg));
@@ -62,7 +70,18 @@ export function reconcileIndex() {
   ensureDir(ORG_VAULT);
   walk(PERSONAL_VAULT, false);
   walk(ORG_VAULT, true);
-  for (const key of before) if (!seen.has(key)) delete memIndex[key];
+  // Drop index entries whose file vanished since the last scan, AND purge their
+  // cached content + vector embedding so a deleted/orphaned memory can't resurface
+  // through the vector search path (searchVector reads vec_memories directly and
+  // does not consult memIndex). Fire-and-forget: deleteVector no-ops when the
+  // optional sqlite-vec deps are absent.
+  for (const key of before) {
+    if (!seen.has(key)) {
+      delete memIndex[key];
+      contentCache.delete(key);
+      deleteVector(VECTORS_DB, key).catch(() => {});
+    }
+  }
 }
 
 export function indexFile(filePath: string, isOrg: boolean) {

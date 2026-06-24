@@ -23,4 +23,8 @@ export interface MemoryMetadata extends MemoryFrontmatter {
 }
 
 export type Index = Record<string, MemoryMetadata>;
-export type InvertedIndex = Record<string, { docs: string[]; idf: number }>;
+// `docs` stores the per-document term frequency (tf) alongside the key so
+// tfidfSearch reads it directly instead of re-tokenizing every (token × doc)
+// pair on each query — O(Q·D) rather than O(Q·D·L). Built once in
+// rebuildInvertedIndex; never mutated at search time.
+export type InvertedIndex = Record<string, { docs: Array<{ key: string; tf: number }>; idf: number }>;

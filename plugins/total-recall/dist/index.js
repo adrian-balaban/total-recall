@@ -15511,22 +15511,22 @@ function tokenize(text) {
 }
 function rebuildInvertedIndex() {
   const docFreq = {};
-  const docTokens = {};
+  const tfByDoc = {};
   const N = Object.keys(memIndex).length;
   for (const [key, meta2] of Object.entries(memIndex)) {
     const tokens = tokenize(`${meta2.title} ${meta2.tags.join(" ")} ${meta2.contentPreview}`);
-    docTokens[key] = tokens;
-    const unique = new Set(tokens);
-    for (const t of unique) {
+    const tf = {};
+    for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
+    tfByDoc[key] = tf;
+    for (const t of Object.keys(tf)) {
       docFreq[t] = (docFreq[t] ?? 0) + 1;
     }
   }
   for (const t of Object.keys(invertedIndex)) delete invertedIndex[t];
-  for (const [key, tokens] of Object.entries(docTokens)) {
-    const unique = new Set(tokens);
-    for (const t of unique) {
+  for (const [key, tf] of Object.entries(tfByDoc)) {
+    for (const [t, count] of Object.entries(tf)) {
       if (!invertedIndex[t]) invertedIndex[t] = { docs: [], idf: 0 };
-      invertedIndex[t].docs.push(key);
+      invertedIndex[t].docs.push({ key, tf: count });
     }
   }
   for (const t of Object.keys(invertedIndex)) {
@@ -15539,20 +15539,19 @@ function tfidfSearch(query, excludeJournal = true) {
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
-    for (const key of entry.docs) {
-      const meta2 = memIndex[key];
+    for (const doc of entry.docs) {
+      const meta2 = memIndex[doc.key];
       if (!meta2) continue;
       if (excludeJournal && meta2.category === "journal") continue;
-      const tf = tokenize(`${meta2.title} ${meta2.tags.join(" ")} ${meta2.contentPreview}`).filter((t) => t === token).length;
-      let score = tf * entry.idf;
+      let score = doc.tf * entry.idf;
       if (meta2.title.toLowerCase().includes(token)) score *= 2;
       if (meta2.tags.some((t) => t.toLowerCase().includes(token))) score *= 1.5;
       const decay = computeRetentionStrength(
         meta2.importanceScore,
-        daysSince(meta2.updated),
+        daysSince(meta2.lastAccessed || meta2.updated),
         meta2.accessCount
       );
-      scores[key] = (scores[key] ?? 0) + score * decay;
+      scores[doc.key] = (scores[doc.key] ?? 0) + score * decay;
     }
   }
   return Object.entries(scores).map(([key, score]) => ({ key, score })).sort((a, b) => b.score - a.score);
@@ -15755,93 +15754,6 @@ function needsQuotes(s) {
   return false;
 }
 
-// src/vault-scan.ts
-function slugify2(title) {
-  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
-  return slug || "untitled";
-}
-function keyFromPath(filePath, isOrg) {
-  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path3.relative(base, filePath).replace(/\.md$/, "");
-  return isOrg ? `org/${rel}` : rel;
-}
-function tokenEstimate(text) {
-  return Math.ceil(text.length / 4);
-}
-function reconcileIndex() {
-  const before = new Set(Object.keys(memIndex));
-  const seen = /* @__PURE__ */ new Set();
-  const walk = (dir, isOrg) => {
-    let entries;
-    try {
-      entries = fs3.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const e of entries) {
-      const fp = path3.join(dir, e.name);
-      if (e.isDirectory()) {
-        if (!EXCLUDED_DIRS.has(e.name.toLowerCase())) walk(fp, isOrg);
-      } else if (e.name.endsWith(".md")) {
-        indexFile(fp, isOrg);
-        seen.add(keyFromPath(fp, isOrg));
-      }
-    }
-  };
-  ensureDir(PERSONAL_VAULT);
-  ensureDir(ORG_VAULT);
-  walk(PERSONAL_VAULT, false);
-  walk(ORG_VAULT, true);
-  for (const key of before) if (!seen.has(key)) delete memIndex[key];
-}
-function indexFile(filePath, isOrg) {
-  try {
-    const raw = fs3.readFileSync(filePath, "utf8");
-    const { data, content } = parseFrontmatter(raw);
-    const fm = data;
-    const key = keyFromPath(filePath, isOrg);
-    const existing = memIndex[key];
-    memIndex[key] = {
-      key,
-      filePath,
-      // Coerce title to a string: a hand-edited (or teammate-pushed, via the shared
-      // org vault) frontmatter with an UNQUOTED numeric title (`title: 2026`) is
-      // parsed by coerceScalar into a Number. That would later crash tfidfSearch's
-      // `meta.title.toLowerCase()` and buildIndexCache's `m.title.slice()` (the
-      // latter in a debounced timer → uncaught throw → process crash). The writer
-      // always quotes numeric-looking titles, so this only affects externally
-      // authored files — but the threat model is the same as the frontmatter-key
-      // ReDoS hardening (teammate-pushed malformed frontmatter).
-      title: String(fm.title ?? path3.basename(filePath, ".md")),
-      tags: fm.tags ?? [],
-      author: fm.author,
-      sessions: fm.sessions ?? [],
-      created: fm.created ?? (/* @__PURE__ */ new Date()).toISOString(),
-      updated: fm.updated ?? (/* @__PURE__ */ new Date()).toISOString(),
-      importanceScore: fm.importanceScore ?? 0.5,
-      category: deriveCategory(filePath, isOrg),
-      contentPreview: content.trim().slice(0, 500),
-      accessCount: existing?.accessCount ?? 0,
-      lastAccessed: existing?.lastAccessed ?? (/* @__PURE__ */ new Date()).toISOString(),
-      tokenEstimate: tokenEstimate(raw),
-      isOrg
-    };
-  } catch (e) {
-    errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
-  }
-}
-function deriveCategory(filePath, isOrg) {
-  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path3.relative(base, filePath);
-  const parts = rel.split(path3.sep);
-  return parts.length > 1 ? parts[0] : "knowledge";
-}
-
-// src/tools/store.ts
-var fs5 = __toESM(require("fs"));
-var os2 = __toESM(require("os"));
-var path5 = __toESM(require("path"));
-
 // src/lru-cache.ts
 var LRUCache = class {
   constructor(maxSize, ttlMs) {
@@ -15881,46 +15793,6 @@ var LRUCache = class {
   }
 };
 var contentCache = new LRUCache(100, 30 * 60 * 1e3);
-
-// src/journal.ts
-var fs4 = __toESM(require("fs"));
-var path4 = __toESM(require("path"));
-function appendJournal(action, key, title) {
-  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const journalPath = path4.join(PERSONAL_VAULT, "journal", `${today}.md`);
-  ensureDir(path4.dirname(journalPath));
-  const entry = `
-- ${(/* @__PURE__ */ new Date()).toISOString()} [${action}] **${title}** (\`${key}\`)
-`;
-  fs4.appendFileSync(journalPath, entry);
-}
-
-// src/embeddings.ts
-var pipeline = null;
-var loadAttempted = false;
-async function getEmbedder() {
-  if (loadAttempted) return pipeline;
-  loadAttempted = true;
-  try {
-    const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-    const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-    pipeline = async (text) => {
-      const output = await extractor(text, { pooling: "mean", normalize: true });
-      return Array.from(output.data);
-    };
-  } catch {
-    pipeline = null;
-  }
-  return pipeline;
-}
-async function embed(text) {
-  const embedder = await getEmbedder();
-  if (!embedder) return null;
-  return embedder(text);
-}
-function isVectorAvailable() {
-  return pipeline !== null;
-}
 
 // src/vectorStore.ts
 var dbPromise = null;
@@ -15972,12 +15844,162 @@ async function deleteVector(dbPath, key) {
   d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
 }
 
+// src/vault-scan.ts
+function slugify2(title) {
+  const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
+  return slug || "untitled";
+}
+function keyFromPath(filePath, isOrg) {
+  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+  const rel = path3.relative(base, filePath).replace(/\.md$/, "");
+  return isOrg ? `org/${rel}` : rel;
+}
+function tokenEstimate(text) {
+  return Math.ceil(text.length / 4);
+}
+function reconcileIndex() {
+  const before = new Set(Object.keys(memIndex));
+  const seen = /* @__PURE__ */ new Set();
+  const walk = (dir, isOrg) => {
+    let entries;
+    try {
+      entries = fs3.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      const fp = path3.join(dir, e.name);
+      if (e.isDirectory()) {
+        const reservedOrgPrefix = !isOrg && e.name === "org";
+        if (!EXCLUDED_DIRS.has(e.name.toLowerCase()) && !reservedOrgPrefix) walk(fp, isOrg);
+      } else if (e.name.endsWith(".md")) {
+        indexFile(fp, isOrg);
+        seen.add(keyFromPath(fp, isOrg));
+      }
+    }
+  };
+  ensureDir(PERSONAL_VAULT);
+  ensureDir(ORG_VAULT);
+  walk(PERSONAL_VAULT, false);
+  walk(ORG_VAULT, true);
+  for (const key of before) {
+    if (!seen.has(key)) {
+      delete memIndex[key];
+      contentCache.delete(key);
+      deleteVector(VECTORS_DB, key).catch(() => {
+      });
+    }
+  }
+}
+function indexFile(filePath, isOrg) {
+  try {
+    const raw = fs3.readFileSync(filePath, "utf8");
+    const { data, content } = parseFrontmatter(raw);
+    const fm = data;
+    const key = keyFromPath(filePath, isOrg);
+    const existing = memIndex[key];
+    memIndex[key] = {
+      key,
+      filePath,
+      // Coerce title to a string: a hand-edited (or teammate-pushed, via the shared
+      // org vault) frontmatter with an UNQUOTED numeric title (`title: 2026`) is
+      // parsed by coerceScalar into a Number. That would later crash tfidfSearch's
+      // `meta.title.toLowerCase()` and buildIndexCache's `m.title.slice()` (the
+      // latter in a debounced timer → uncaught throw → process crash). The writer
+      // always quotes numeric-looking titles, so this only affects externally
+      // authored files — but the threat model is the same as the frontmatter-key
+      // ReDoS hardening (teammate-pushed malformed frontmatter).
+      title: String(fm.title ?? path3.basename(filePath, ".md")),
+      tags: fm.tags ?? [],
+      author: fm.author,
+      sessions: fm.sessions ?? [],
+      created: fm.created ?? (/* @__PURE__ */ new Date()).toISOString(),
+      updated: fm.updated ?? (/* @__PURE__ */ new Date()).toISOString(),
+      importanceScore: fm.importanceScore ?? 0.5,
+      category: deriveCategory(filePath, isOrg),
+      contentPreview: content.trim().slice(0, 500),
+      accessCount: existing?.accessCount ?? 0,
+      lastAccessed: existing?.lastAccessed ?? (/* @__PURE__ */ new Date()).toISOString(),
+      tokenEstimate: tokenEstimate(raw),
+      isOrg
+    };
+  } catch (e) {
+    errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
+  }
+}
+function deriveCategory(filePath, isOrg) {
+  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+  const rel = path3.relative(base, filePath);
+  const parts = rel.split(path3.sep);
+  return parts.length > 1 ? parts[0] : "knowledge";
+}
+
 // src/tools/store.ts
+var fs5 = __toESM(require("fs"));
+var os2 = __toESM(require("os"));
+var path5 = __toESM(require("path"));
+
+// src/journal.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
+function appendJournal(action, key, title) {
+  const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+  const journalPath = path4.join(PERSONAL_VAULT, "journal", `${today}.md`);
+  ensureDir(path4.dirname(journalPath));
+  const entry = `
+- ${(/* @__PURE__ */ new Date()).toISOString()} [${action}] **${title}** (\`${key}\`)
+`;
+  fs4.appendFileSync(journalPath, entry);
+}
+
+// src/embeddings.ts
+var pipeline = null;
+var loadAttempted = false;
+async function getEmbedder() {
+  if (loadAttempted) return pipeline;
+  loadAttempted = true;
+  try {
+    const { pipeline: hfPipeline } = await import("@huggingface/transformers");
+    const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    pipeline = async (text) => {
+      const output = await extractor(text, { pooling: "mean", normalize: true });
+      return Array.from(output.data);
+    };
+  } catch {
+    pipeline = null;
+  }
+  return pipeline;
+}
+async function embed(text) {
+  const embedder = await getEmbedder();
+  if (!embedder) return null;
+  return embedder(text);
+}
+function isVectorAvailable() {
+  return pipeline !== null;
+}
+
+// src/tools/store.ts
+function orgVaultConfigured() {
+  try {
+    const cfgPath = path5.join(HOME, ".total-recall", "config.json");
+    const raw = fs5.readFileSync(cfgPath, "utf8");
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed.orgRepo === "string" && parsed.orgRepo) return true;
+  } catch {
+  }
+  return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
+}
 function storeMemory(args) {
   const { title, content, tags = [], category = "knowledge", importanceScore = 0.5, sessionId, author, force = false } = args;
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+  if (isOrg && !orgVaultConfigured()) {
+    throw new Error(
+      'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). Writing now would leave an unsynced file that blocks the next clone.'
+    );
+  }
   const slug = slugify2(title);
   const catDir = isOrg ? path5.join(ORG_VAULT, category) : path5.join(PERSONAL_VAULT, category);
   const filePath = path5.join(catDir, `${slug}.md`);
@@ -15991,6 +16013,7 @@ function storeMemory(args) {
   const osUser = os2.userInfo().username;
   const effectiveAuthor = isOrg ? osUser : author ?? osUser;
   let preservedCreated;
+  let preservedSessions;
   if (fs5.existsSync(filePath)) {
     const existingFm = parseFrontmatter(fs5.readFileSync(filePath, "utf8")).data;
     if (isOrg && existingFm.author !== effectiveAuthor) {
@@ -16002,13 +16025,18 @@ function storeMemory(args) {
       );
     }
     preservedCreated = existingFm.created;
+    preservedSessions = existingFm.sessions;
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const sessions = [.../* @__PURE__ */ new Set([
+    ...preservedSessions ?? [],
+    ...sessionId ? [sessionId] : []
+  ])];
   const fm = {
     title,
     tags,
     author: effectiveAuthor,
-    sessions: sessionId ? [sessionId] : [],
+    sessions,
     created: preservedCreated ?? now,
     updated: now,
     importanceScore
@@ -16056,6 +16084,15 @@ function parseRelativeDate(expr) {
   const ms = unit === "d" ? n * 864e5 : unit === "w" ? n * 7 * 864e5 : n * 30 * 864e5;
   return new Date(Date.now() - ms);
 }
+function toCutoff(expr) {
+  const d = parseRelativeDate(expr) ?? new Date(expr);
+  if (isNaN(d.getTime())) {
+    throw new Error(
+      `Invalid date filter "${expr}": expected a relative shorthand (e.g. 7d, 2w, 1m) or an ISO date (e.g. 2026-06-24).`
+    );
+  }
+  return d;
+}
 
 // src/rrf.ts
 function reciprocalRankFusion(lists, k = 60) {
@@ -16094,14 +16131,14 @@ async function recallMemory(args) {
     ranked = ranked.filter((r) => memIndex[r.key]?.category !== "journal");
   }
   if (since) {
-    const cutoff = parseRelativeDate(since) ?? new Date(since);
+    const cutoff = toCutoff(since);
     ranked = ranked.filter((r) => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) >= cutoff : false;
     });
   }
   if (before) {
-    const cutoff = parseRelativeDate(before) ?? new Date(before);
+    const cutoff = toCutoff(before);
     ranked = ranked.filter((r) => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) < cutoff : false;
@@ -16114,10 +16151,10 @@ async function recallMemory(args) {
   return ranked.map((r) => {
     const meta2 = memIndex[r.key];
     if (!meta2) return null;
-    meta2.accessCount++;
-    meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
-    scheduleSave();
     if (full) {
+      meta2.accessCount++;
+      meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
+      scheduleSave();
       let content = contentCache.get(r.key);
       if (!content) {
         try {
@@ -16134,17 +16171,17 @@ async function recallMemory(args) {
   }).filter(Boolean);
 }
 function searchIndex(args) {
-  const { query, limit = 20, since, before, minScore = 0, category, tags: filterTags } = args;
-  let results = tfidfSearch(query);
+  const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  let results = tfidfSearch(query, excludeJournal);
   if (since) {
-    const cutoff = parseRelativeDate(since) ?? new Date(since);
+    const cutoff = toCutoff(since);
     results = results.filter((r) => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) >= cutoff : false;
     });
   }
   if (before) {
-    const cutoff = parseRelativeDate(before) ?? new Date(before);
+    const cutoff = toCutoff(before);
     results = results.filter((r) => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) < cutoff : false;
@@ -16189,7 +16226,7 @@ function getMemoriesByKeys(args) {
       } catch {
         return { key, error: "Failed to read memory file" };
       }
-      const execSummary = content2.match(/## Executive Summary\n+([\s\S]{0,500})/)?.[1] ?? content2.slice(0, 500);
+      const execSummary = content2.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content2.slice(0, 500);
       return { key, title: meta2.title, category: meta2.category, tags: meta2.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
@@ -16223,8 +16260,8 @@ function getStats() {
 }
 function getTimeline(args) {
   const { since, before, limit = 50, offset = 0, category } = args;
-  const cutoff = since ? parseRelativeDate(since) ?? new Date(since) : /* @__PURE__ */ new Date(0);
-  const upper = before ? parseRelativeDate(before) ?? new Date(before) : null;
+  const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
+  const upper = before ? toCutoff(before) : null;
   return Object.values(memIndex).filter((m) => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()).slice(offset, offset + limit).map((m) => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
 }
 function getRelatedMemories(args) {
@@ -16233,10 +16270,12 @@ function getRelatedMemories(args) {
   if (!source) throw new Error(`Memory not found: ${key}`);
   const srcTags = new Set(source.tags);
   return Object.values(memIndex).filter((m) => m.key !== key).map((m) => {
-    const shared = m.tags.filter((t) => srcTags.has(t)).length;
+    const mTags = new Set(m.tags);
+    let shared = 0;
+    for (const t of mTags) if (srcTags.has(t)) shared++;
     if (shared === 0) return null;
     const categoryBoost = m.category === source.category ? 0.2 : 0;
-    return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + m.tags.length - shared) + categoryBoost };
+    return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + mTags.size - shared) + categoryBoost };
   }).filter((m) => m !== null).sort((a, b) => b.score - a.score).slice(0, limit);
 }
 function pruneMemories(args) {
@@ -16245,7 +16284,7 @@ function pruneMemories(args) {
     key: m.key,
     title: m.title,
     category: m.category,
-    retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.updated), m.accessCount),
+    retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
     lastAccessed: m.lastAccessed,
     importanceScore: m.importanceScore
   })).filter((m) => m.retentionStrength < threshold).sort((a, b) => a.retentionStrength - b.retentionStrength).slice(0, limit);
@@ -16418,6 +16457,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           since: { type: "string", description: "Relative or ISO date. Lower bound on updated." },
           before: { type: "string", description: "Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range." },
           minScore: { type: "number", default: 0, description: "Minimum TF-IDF score; drop results below this. Default 0 = no filtering." },
+          excludeJournal: { type: "boolean", default: true, description: "Drop journal entries (auto-appended daily logs). Default true." },
           category: { type: "string" },
           tags: { type: "array", items: { type: "string" } }
         },

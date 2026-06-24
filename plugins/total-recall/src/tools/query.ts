@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { parseFrontmatter } from '../frontmatter.js';
 import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
-import { parseRelativeDate } from '../dates.js';
+import { toCutoff } from '../dates.js';
 import { memIndex, errors, perfSamples } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
@@ -37,7 +37,7 @@ export function getMemoriesByKeys(args: any): any {
       } catch {
         return { key, error: 'Failed to read memory file' };
       }
-      const execSummary = content.match(/## Executive Summary\n+([\s\S]{0,500})/)?.[1] ?? content.slice(0, 500);
+      const execSummary = content.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content.slice(0, 500);
       return { key, title: meta.title, category: meta.category, tags: meta.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
@@ -74,9 +74,9 @@ export function getStats(): any {
 
 export function getTimeline(args: any): any {
   const { since, before, limit = 50, offset = 0, category } = args;
-  const cutoff = since ? (parseRelativeDate(since) ?? new Date(since)) : new Date(0);
+  const cutoff = since ? toCutoff(since) : new Date(0);
   // Symmetric upper bound — mirrors `since`; combine for a date-range window.
-  const upper = before ? (parseRelativeDate(before) ?? new Date(before)) : null;
+  const upper = before ? toCutoff(before) : null;
   return Object.values(memIndex)
     .filter(m => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category))
     .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
@@ -93,7 +93,13 @@ export function getRelatedMemories(args: any): any {
   return Object.values(memIndex)
     .filter(m => m.key !== key)
     .map(m => {
-      const shared = m.tags.filter(t => srcTags.has(t)).length;
+      // Dedupe m.tags before Jaccard: the union/intersection cardinalities must be
+      // over SETS, but `srcTags` is a Set and `m.tags` is an Array — a tag repeated
+      // in m.tags would inflate the denominator (union) without adding to the
+      // intersection, deflating the score. Normalize both sides.
+      const mTags = new Set(m.tags);
+      let shared = 0;
+      for (const t of mTags) if (srcTags.has(t)) shared++;
       // Jaccard similarity on TAGS with a same-category boost. A memory with no
       // shared tags is not "related" — the same-category boost must amplify an
       // existing tag overlap, not manufacture a relation from nothing. Without
@@ -101,7 +107,7 @@ export function getRelatedMemories(args: any): any {
       // score 0.2 (0 Jaccard + 0.2 boost).
       if (shared === 0) return null;
       const categoryBoost = m.category === source.category ? 0.2 : 0;
-      return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + m.tags.length - shared) + categoryBoost };
+      return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + mTags.size - shared) + categoryBoost };
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
     .sort((a, b) => b.score - a.score)
@@ -113,7 +119,7 @@ export function pruneMemories(args: any): any {
   return Object.values(memIndex)
     .map(m => ({
       key: m.key, title: m.title, category: m.category,
-      retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.updated), m.accessCount),
+      retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
       lastAccessed: m.lastAccessed, importanceScore: m.importanceScore,
     }))
     .filter(m => m.retentionStrength < threshold)

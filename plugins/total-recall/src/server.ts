@@ -130,6 +130,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           since: { type: 'string', description: 'Relative or ISO date. Lower bound on updated.' },
           before: { type: 'string', description: 'Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range.' },
           minScore: { type: 'number', default: 0, description: 'Minimum TF-IDF score; drop results below this. Default 0 = no filtering.' },
+          excludeJournal: { type: 'boolean', default: true, description: 'Drop journal entries (auto-appended daily logs). Default true.' },
           category: { type: 'string' },
           tags: { type: 'array', items: { type: 'string' } },
         },

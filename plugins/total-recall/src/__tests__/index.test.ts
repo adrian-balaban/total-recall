@@ -48,6 +48,11 @@ function mkVaultDirs() {
     fs.mkdirSync(path.join(VAULT, 'personal-vault', cat), { recursive: true });
   }
   fs.mkdirSync(path.join(VAULT, 'org', 'org-vault'), { recursive: true });
+  // A3 guard: store_memory refuses an org store unless the shared org vault is
+  // configured (config.json `orgRepo` set, OR the repo cloned at org/.git).
+  // Provision a config.json so the org-routing/author-guard tests exercise the
+  // real (configured) path rather than being refused up front.
+  fs.writeFileSync(path.join(VAULT, 'config.json'), JSON.stringify({ orgRepo: 'https://example.com/org-vault.git' }));
 }
 
 async function callTool(name: string, args: Record<string, unknown> = {}) {
@@ -103,6 +108,22 @@ describe('store_memory', () => {
     });
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('cannot have both');
+  });
+
+  it('refuses an org store when the org vault is not configured (A3)', async () => {
+    // mkVaultDirs provisions config.json; remove it (and any cloned .git) so the
+    // A3 guard sees an unconfigured org vault. Nothing else in this run touches
+    // config.json, and beforeEach recreates it for subsequent tests.
+    fs.rmSync(path.join(VAULT, 'config.json'), { force: true });
+    const res = await callTool('store_memory', {
+      title: 'Unconfigured Org', content: 'X', tags: ['org'], category: 'architecture',
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('Org vault is not configured');
+    // No stray file or directory was created in the org vault — the guard must
+    // refuse BEFORE ensureDir runs, or it leaves debris that blocks the next clone.
+    expect(fs.existsSync(path.join(VAULT, 'org', 'org-vault', 'architecture', 'unconfigured-org.md'))).toBe(false);
+    expect(fs.existsSync(path.join(VAULT, 'org', 'org-vault', 'architecture'))).toBe(false);
   });
 
   it('guards against overwriting another user org memory', async () => {
@@ -642,7 +663,9 @@ describe('rebuild_index', () => {
     // IDF recalc is debounced, so without a rebuild the first recall returns [].
     await callTool('rebuild_index');
     // First recall bumps accessCount 0 -> 1; recall_memory returns the bumped value.
-    const r1 = result(await callTool('recall_memory', { query: 'acount' }));
+    // full=true is required: a metadata-only recall deliberately does NOT bump
+    // accessCount (B6), so the regression check must read the memory's content.
+    const r1 = result(await callTool('recall_memory', { query: 'acount', full: true }));
     expect(r1.length).toBeGreaterThan(0);
     const before = r1[0].accessCount;
     expect(before).toBeGreaterThan(0);
@@ -650,7 +673,7 @@ describe('rebuild_index', () => {
     // Second recall: if rebuild preserved stats, accessCount was `before` and is now
     // bumped to before+1. If rebuild wiped it (old `memIndex = {}` behavior), it was
     // reset to 0 and is now 1 — strictly less than before+1.
-    const r2 = result(await callTool('recall_memory', { query: 'acount' }));
+    const r2 = result(await callTool('recall_memory', { query: 'acount', full: true }));
     expect(r2[0].key).toBe(key);
     expect(r2[0].accessCount).toBe(before + 1);
   });
@@ -957,6 +980,30 @@ describe('store_memory — duplicate key protection', () => {
     const raw2 = fs.readFileSync(second.filePath, 'utf8');
     expect(raw2).toContain('Overwritten');
     expect(raw2).toContain(created1!.trim()); // created preserved
+  });
+
+  it('force=true preserves prior session history (A2: no silent wipe)', async () => {
+    const first = result(await callTool('store_memory', {
+      title: 'Sessions Keeper', content: 'V1', tags: [], category: 'knowledge', sessionId: 'sess-a',
+    }));
+    // A second overwrite carrying a DIFFERENT session must extend, not replace,
+    // the sessions array — old code reset it to just [sess-b].
+    const second = result(await callTool('store_memory', {
+      title: 'Sessions Keeper', content: 'V2', tags: [], category: 'knowledge', sessionId: 'sess-b', force: true,
+    }));
+    const raw = fs.readFileSync(second.filePath, 'utf8');
+    expect(raw).toContain('sess-a');
+    expect(raw).toContain('sess-b');
+    // An overwrite supplying NO session must not drop the carried history.
+    const third = result(await callTool('store_memory', {
+      title: 'Sessions Keeper', content: 'V3', tags: [], category: 'knowledge', force: true,
+    }));
+    const raw3 = fs.readFileSync(third.filePath, 'utf8');
+    expect(raw3).toContain('sess-a');
+    expect(raw3).toContain('sess-b');
+    // Repeated identical session must dedupe, not duplicate.
+    expect((raw3.match(/sess-a/g) || []).length).toBe(1);
+    expect((raw3.match(/sess-b/g) || []).length).toBe(1);
   });
 });
 

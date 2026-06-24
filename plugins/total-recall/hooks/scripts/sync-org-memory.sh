@@ -78,17 +78,30 @@ mkdir -p "$(dirname "$LOCK")"
 # parse the hook output. Redirect the backgrounded children's stdout+stderr to a
 # log file so the hook emits exactly one clean JSON line and the sync output is
 # still discoverable at ~/.total-recall/org/.sync.log.
-if [ "$DELETE_FLAG" = "1" ]; then
-  (
-    flock -x 9
-    node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY" --delete
-  ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
-else
-  (
-    flock -x 9
-    node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY"
-  ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
-fi
+#
+# Only org-tagged memories live in the shared git vault (their keys are prefixed
+# `org/`). A personal memory store/update/delete must NOT spawn the cjs git
+# sync — the cjs would treat a non-org key as missing from the org vault and
+# (attempt to) push a deletion / no-op, wasting a lock+spawn per personal write
+# and, for --delete, removing an unrelated entry if a path collision occurred.
+# Short-circuit personal keys: skip the cjs entirely but still rebuild the cache
+# below (personal writes must reflect in the injected index).
+case "$KEY" in
+  org/*)
+    if [ "$DELETE_FLAG" = "1" ]; then
+      (
+        flock -x 9
+        node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY" --delete
+      ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
+    else
+      (
+        flock -x 9
+        node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY"
+      ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
+    fi
+    ;;
+  *) ;;  # personal key: no org-vault git sync needed
+esac
 
 bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
 

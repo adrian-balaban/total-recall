@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { parseFrontmatter } from '../frontmatter.js';
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
-import { parseRelativeDate } from '../dates.js';
+import { toCutoff } from '../dates.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
@@ -53,7 +53,7 @@ export async function recallMemory(args: any): Promise<any> {
   }
 
   if (since) {
-    const cutoff = parseRelativeDate(since) ?? new Date(since);
+    const cutoff = toCutoff(since);
     ranked = ranked.filter(r => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) >= cutoff : false;
@@ -63,7 +63,7 @@ export async function recallMemory(args: any): Promise<any> {
   // memories updated strictly before it are kept. With `since` this gives a
   // date-range query (e.g. "last week but not today") without a return-shape change.
   if (before) {
-    const cutoff = parseRelativeDate(before) ?? new Date(before);
+    const cutoff = toCutoff(before);
     ranked = ranked.filter(r => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) < cutoff : false;
@@ -85,10 +85,15 @@ export async function recallMemory(args: any): Promise<any> {
   return ranked.map(r => {
     const meta = memIndex[r.key];
     if (!meta) return null;
-    meta.accessCount++;
-    meta.lastAccessed = new Date().toISOString();
-    scheduleSave();
     if (full) {
+      // Only a real content retrieval counts as an "access" that resets the
+      // Ebbinghaus decay clock (lastAccessed) and bumps accessCount. A
+      // metadata-only recall must NOT — otherwise every lightweight search
+      // refreshes lastAccessed, memories never decay, and prune_memories can
+      // never nominate the rarely-read ones it's meant to surface.
+      meta.accessCount++;
+      meta.lastAccessed = new Date().toISOString();
+      scheduleSave();
       let content = contentCache.get(r.key);
       if (!content) {
         try {
@@ -107,11 +112,11 @@ export async function recallMemory(args: any): Promise<any> {
 }
 
 export function searchIndex(args: any): any {
-  const { query, limit = 20, since, before, minScore = 0, category, tags: filterTags } = args;
-  let results = tfidfSearch(query);
+  const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  let results = tfidfSearch(query, excludeJournal);
 
   if (since) {
-    const cutoff = parseRelativeDate(since) ?? new Date(since);
+    const cutoff = toCutoff(since);
     results = results.filter(r => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) >= cutoff : false;
@@ -119,7 +124,7 @@ export function searchIndex(args: any): any {
   }
   // Symmetric upper bound — mirrors `since`; combine for a date-range query.
   if (before) {
-    const cutoff = parseRelativeDate(before) ?? new Date(before);
+    const cutoff = toCutoff(before);
     results = results.filter(r => {
       const updated = memIndex[r.key]?.updated;
       return updated ? new Date(updated) < cutoff : false;
