@@ -289,36 +289,46 @@ describe('list_memories', () => {
 
   it('returns all memories', async () => {
     const res = result(await callTool('list_memories'));
-    expect(res.length).toBeGreaterThanOrEqual(2);
+    expect(res.items.length).toBeGreaterThanOrEqual(2);
   });
 
   it('filters by category', async () => {
     const res = result(await callTool('list_memories', { category: 'architecture' }));
-    expect(res.every((m: any) => m.category === 'architecture')).toBe(true);
+    expect(res.items.every((m: any) => m.category === 'architecture')).toBe(true);
   });
 
   it('filters by tag', async () => {
     const res = result(await callTool('list_memories', { tag: 'team' }));
-    expect(res.every((m: any) => m.tags.includes('team'))).toBe(true);
+    expect(res.items.every((m: any) => m.tags.includes('team'))).toBe(true);
   });
 
   it('respects limit', async () => {
     const res = result(await callTool('list_memories', { limit: 1 }));
-    expect(res.length).toBeLessThanOrEqual(1);
+    expect(res.items.length).toBeLessThanOrEqual(1);
   });
 
   it('offset skips the first N results (pagination)', async () => {
     const page0 = result(await callTool('list_memories', { limit: 50 }));
     const page1 = result(await callTool('list_memories', { limit: 50, offset: 1 }));
     // offset:1 drops exactly the newest entry; the rest of the page shifts up.
-    expect(page1.length).toBe(page0.length - 1);
-    expect(page1[0].key).toBe(page0[1].key);
+    expect(page1.items.length).toBe(page0.items.length - 1);
+    expect(page1.items[0].key).toBe(page0.items[1].key);
   });
 
   it('returns metadata only (no content field)', async () => {
     const res = result(await callTool('list_memories'));
-    expect(res[0].content).toBeUndefined();
-    expect(res[0].title).toBeDefined();
+    expect(res.items[0].content).toBeUndefined();
+    expect(res.items[0].title).toBeDefined();
+  });
+
+  it('returns total and hasMore for pagination', async () => {
+    await callTool('store_memory', { title: 'Page Third', content: 'C', tags: [], category: 'knowledge' });
+    const page1 = result(await callTool('list_memories', { limit: 2 }));
+    expect(page1.total).toBe(3);
+    expect(page1.hasMore).toBe(true);
+    expect(page1.items.length).toBe(2);
+    const page2 = result(await callTool('list_memories', { limit: 2, offset: 2 }));
+    expect(page2.hasMore).toBe(false);
   });
 });
 
@@ -365,7 +375,7 @@ describe('delete_memory', () => {
     const { key } = result(await callTool('store_memory', { title: 'Del Listed', content: 'X', tags: [], category: 'knowledge' }));
     await callTool('delete_memory', { key });
     const listed = result(await callTool('list_memories'));
-    expect(listed.find((m: any) => m.key === key)).toBeUndefined();
+    expect(listed.items.find((m: any) => m.key === key)).toBeUndefined();
   });
 
   it('returns error for unknown key', async () => {
@@ -465,7 +475,7 @@ describe('get_memories_by_keys', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    const key = list.find((m: any) => m.title === 'No Exec Summary')?.key;
+    const key = list.items.find((m: any) => m.title === 'No Exec Summary')?.key;
     if (!key) return;
     const [mem] = result(await callTool('get_memories_by_keys', { keys: [key], summary: true }));
     expect(mem.summary).toContain('plain content');
@@ -527,37 +537,47 @@ describe('get_timeline', () => {
 
   it('returns memories in descending updated order', async () => {
     const res = result(await callTool('get_timeline'));
-    expect(res.length).toBeGreaterThanOrEqual(2);
-    for (let i = 1; i < res.length; i++) {
-      expect(new Date(res[i - 1].updated).getTime()).toBeGreaterThanOrEqual(new Date(res[i].updated).getTime());
+    expect(res.items.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < res.items.length; i++) {
+      expect(new Date(res.items[i - 1].updated).getTime()).toBeGreaterThanOrEqual(new Date(res.items[i].updated).getTime());
     }
   });
 
   it('filters by category', async () => {
     const res = result(await callTool('get_timeline', { category: 'architecture' }));
-    expect(res.every((m: any) => m.category === 'architecture')).toBe(true);
+    expect(res.items.every((m: any) => m.category === 'architecture')).toBe(true);
   });
 
   it('filters by since (relative)', async () => {
     const res = result(await callTool('get_timeline', { since: '7d' }));
-    expect(res.length).toBeGreaterThan(0);
+    expect(res.items.length).toBeGreaterThan(0);
   });
 
   it('respects before (exclusive upper bound on updated)', async () => {
-    expect(result(await callTool('get_timeline', { before: '1970-01-01' })).length).toBe(0);
-    expect(result(await callTool('get_timeline', { before: '2999-01-01' })).length).toBeGreaterThan(0);
+    expect(result(await callTool('get_timeline', { before: '1970-01-01' })).items.length).toBe(0);
+    expect(result(await callTool('get_timeline', { before: '2999-01-01' })).items.length).toBeGreaterThan(0);
   });
 
   it('respects limit', async () => {
     const res = result(await callTool('get_timeline', { limit: 1 }));
-    expect(res.length).toBeLessThanOrEqual(1);
+    expect(res.items.length).toBeLessThanOrEqual(1);
   });
 
   it('offset skips the first N results (pagination)', async () => {
     const page0 = result(await callTool('get_timeline', { limit: 50 }));
     const page1 = result(await callTool('get_timeline', { limit: 50, offset: 1 }));
-    expect(page1.length).toBe(page0.length - 1);
-    expect(page1[0].key).toBe(page0[1].key);
+    expect(page1.items.length).toBe(page0.items.length - 1);
+    expect(page1.items[0].key).toBe(page0.items[1].key);
+  });
+
+  it('returns total and hasMore for pagination', async () => {
+    await callTool('store_memory', { title: 'TL C', content: 'C', tags: [], category: 'decisions' });
+    const page1 = result(await callTool('get_timeline', { limit: 2 }));
+    expect(page1.total).toBe(3);
+    expect(page1.hasMore).toBe(true);
+    expect(page1.items.length).toBe(2);
+    const page2 = result(await callTool('get_timeline', { limit: 2, offset: 2 }));
+    expect(page2.hasMore).toBe(false);
   });
 });
 
@@ -572,7 +592,7 @@ describe('get_related_memories', () => {
 
   it('returns memories sharing tags', async () => {
     const list = result(await callTool('list_memories'));
-    const key = list.find((m: any) => m.title === 'Kafka Source')?.key;
+    const key = list.items.find((m: any) => m.title === 'Kafka Source')?.key;
     if (!key) return;
     const res = result(await callTool('get_related_memories', { key }));
     expect(res.some((m: any) => m.title === 'Kafka Sink')).toBe(true);
@@ -580,7 +600,7 @@ describe('get_related_memories', () => {
 
   it('same-category boosts score over different-category', async () => {
     const list = result(await callTool('list_memories'));
-    const key = list.find((m: any) => m.title === 'Kafka Source')?.key;
+    const key = list.items.find((m: any) => m.title === 'Kafka Source')?.key;
     if (!key) return;
     const res = result(await callTool('get_related_memories', { key }));
     const sinkScore = res.find((m: any) => m.title === 'Kafka Sink')?.score ?? 0;
@@ -595,7 +615,7 @@ describe('get_related_memories', () => {
 
   it('respects limit', async () => {
     const list = result(await callTool('list_memories'));
-    const key = list[0]?.key;
+    const key = list.items[0]?.key;
     if (!key) return;
     const res = result(await callTool('get_related_memories', { key, limit: 1 }));
     expect(res.length).toBeLessThanOrEqual(1);
@@ -613,7 +633,7 @@ describe('prune_memories', () => {
   it('lists candidates without deleting them', async () => {
     await callTool('prune_memories', { threshold: 1.0 });
     const list = result(await callTool('list_memories'));
-    expect(list.length).toBeGreaterThanOrEqual(2);
+    expect(list.items.length).toBeGreaterThanOrEqual(2);
   });
 
   it('each candidate has retentionStrength >= 0', async () => {
@@ -654,7 +674,7 @@ describe('rebuild_index', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    expect(list.some((m: any) => m.title === 'Direct File')).toBe(true);
+    expect(list.items.some((m: any) => m.title === 'Direct File')).toBe(true);
   });
 
   it('preserves accessCount across rebuild_index (regression: old code wiped it)', async () => {
@@ -751,8 +771,8 @@ describe('since date filter — ISO date strings', () => {
   it('get_timeline accepts absolute ISO date string for since', async () => {
     const past = new Date(Date.now() - 7 * 86400000).toISOString();
     const res = result(await callTool('get_timeline', { since: past }));
-    expect(Array.isArray(res)).toBe(true);
-    expect(res.length).toBeGreaterThan(0);
+    expect(res.items).toBeDefined();
+    expect(res.items.length).toBeGreaterThan(0);
   });
 });
 
@@ -766,7 +786,7 @@ describe('org vault scan', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    expect(list.some((m: any) => m.title === 'Org Test')).toBe(true);
+    expect(list.items.some((m: any) => m.title === 'Org Test')).toBe(true);
   });
 
   it('personal vault takes precedence over org vault for same key', async () => {
@@ -786,7 +806,7 @@ describe('org vault scan', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    const personal = list.find((m: any) => m.key === `knowledge/${slug}`);
+    const personal = list.items.find((m: any) => m.key === `knowledge/${slug}`);
     expect(personal?.title).toBe('Personal Version');
   });
 });
@@ -883,7 +903,7 @@ describe('get_related_memories — sort comparator and zero-score filter', () =>
     await callTool('store_memory', { title: 'Partial', content: 'X', tags: ['a'],         category: 'knowledge' });
     await callTool('store_memory', { title: 'NoMatch', content: 'X', tags: ['z'],         category: 'decisions' });
     const list = result(await callTool('list_memories'));
-    const srcKey = list.find((m: any) => m.title === 'Source')?.key;
+    const srcKey = list.items.find((m: any) => m.title === 'Source')?.key;
     if (!srcKey) return;
     const res = result(await callTool('get_related_memories', { key: srcKey }));
     // Perfect > Partial; NoMatch filtered (score=0)
@@ -901,7 +921,7 @@ describe('get_related_memories — sort comparator and zero-score filter', () =>
     await callTool('store_memory', { title: 'ArchSrc', content: 'X', tags: ['kafka'], category: 'architecture' });
     await callTool('store_memory', { title: 'ArchSibling', content: 'X', tags: ['postgres'], category: 'architecture' });
     const list = result(await callTool('list_memories'));
-    const srcKey = list.find((m: any) => m.title === 'ArchSrc')?.key;
+    const srcKey = list.items.find((m: any) => m.title === 'ArchSrc')?.key;
     if (!srcKey) return;
     const res = result(await callTool('get_related_memories', { key: srcKey }));
     expect(res.find((m: any) => m.title === 'ArchSibling')).toBeUndefined();
@@ -920,7 +940,7 @@ describe('excluded directories', () => {
     }
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    expect(list.find((m: any) => m.title === 'Should Not Index')).toBeUndefined();
+    expect(list.items.find((m: any) => m.title === 'Should Not Index')).toBeUndefined();
   });
 });
 
@@ -1020,7 +1040,7 @@ describe('update_memory — org author protection', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    const key = list.find((m: any) => m.title === 'Protected Org')?.key;
+    const key = list.items.find((m: any) => m.title === 'Protected Org')?.key;
     if (!key) return;
     const res = await callTool('update_memory', { key, content: 'Hacked' });
     expect(res.isError).toBe(true);
@@ -1038,7 +1058,7 @@ describe('update_memory — org author protection', () => {
     );
     await callTool('rebuild_index');
     const list = result(await callTool('list_memories'));
-    const key = list.find((m: any) => m.title === 'No Author Org')?.key;
+    const key = list.items.find((m: any) => m.title === 'No Author Org')?.key;
     if (!key) return;
     const res = await callTool('update_memory', { key, content: 'Hacked' });
     expect(res.isError).toBe(true);
@@ -1134,7 +1154,7 @@ describe('get_timeline — no since (all time) returns everything', () => {
   it('returns all memories when since is omitted', async () => {
     await callTool('store_memory', { title: 'TL NoSince', content: 'X', tags: [], category: 'knowledge' });
     const res = result(await callTool('get_timeline', {}));
-    expect(res.length).toBeGreaterThan(0);
+    expect(res.items.length).toBeGreaterThan(0);
   });
 });
 

@@ -5,7 +5,8 @@
   "main": "dist/index.js",
   "scripts": {
     "build:esbuild": "./node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js --define:__PLUGIN_VERSION__=\"\\\"$npm_package_version\\\"\" --external:fsevents --external:@huggingface/transformers --external:sqlite-vec --external:better-sqlite3",
-    "build": "npm run build:esbuild",
+    "build:frontmatter": "./node_modules/.bin/esbuild src/frontmatter.ts --bundle --platform=node --format=cjs --outfile=dist/frontmatter.cjs",
+    "build": "npm run build:esbuild && npm run build:frontmatter",
     "build:watch": "npm run build:esbuild -- --watch",
     "dev": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",

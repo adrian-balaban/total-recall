@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { stringifyFrontmatter } = require('../../dist/frontmatter.cjs');
 
 const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 
@@ -29,27 +30,7 @@ function slugify(s) {
     .slice(0, 80) || 'untitled';
 }
 
-// Minimal YAML scalar emitter for the frontmatter values we produce. Good enough
-// for titles/tags/numbers — we don't need a full YAML library here.
-function yamlScalar(v) {
-  if (Array.isArray(v)) return '[' + v.map(yamlScalar).join(', ') + ']';
-  if (typeof v === 'string') {
-    return /[:#\[\]{}&*!|>'"%@`,]/.test(v) || /^\s|\s$/.test(v) ? JSON.stringify(v) : v;
-  }
-  if (typeof v === 'number') return String(v);
-  if (typeof v === 'boolean') return v ? 'true' : 'false';
-  return String(v ?? '');
-}
-
-function fmStringify(body, data) {
-  const lines = ['---'];
-  for (const [k, v] of Object.entries(data)) {
-    if (v === undefined || v === null) continue;
-    lines.push(`${k}: ${yamlScalar(v)}`);
-  }
-  lines.push('---', '', body.endsWith('\n') ? body : body + '\n');
-  return lines.join('\n');
-}
+// yamlScalar/fmStringify removed — now using shared stringifyFrontmatter from dist/frontmatter.cjs
 
 let input = '';
 process.stdin.on('data', (d) => { input += d; });
@@ -90,7 +71,7 @@ process.stdin.on('end', () => {
     };
     const body = `\n${obj.content}`;
     try {
-      fs.writeFileSync(filePath, fmStringify(body, fm));
+      fs.writeFileSync(filePath, stringifyFrontmatter(body, fm));
       written++;
     } catch { errors++; }
   }

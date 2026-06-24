@@ -22,7 +22,14 @@ function atomicWrite(p: string, data: string) {
   ensureDir(path.dirname(p));
   const tmp = `${p}.tmp`;
   fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, p);
+  try {
+    fs.renameSync(tmp, p);
+  } catch {
+    // rename can fail on Windows (open handles / cross-volume); fall back to
+    // a direct overwrite — loses POSIX atomicity but avoids a hard crash.
+    fs.writeFileSync(p, data);
+    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup */ }
+  }
 }
 
 function loadIndex<T extends Record<string, unknown>>(target: T, p: string) {

@@ -15564,7 +15564,15 @@ function atomicWrite(p, data) {
   ensureDir(path2.dirname(p));
   const tmp = `${p}.tmp`;
   fs2.writeFileSync(tmp, data);
-  fs2.renameSync(tmp, p);
+  try {
+    fs2.renameSync(tmp, p);
+  } catch {
+    fs2.writeFileSync(p, data);
+    try {
+      fs2.unlinkSync(tmp);
+    } catch {
+    }
+  }
 }
 function loadIndex(target, p) {
   for (const k of Object.keys(target)) delete target[k];
@@ -16200,7 +16208,9 @@ function searchIndex(args) {
 var fs7 = __toESM(require("fs"));
 function listMemories(args) {
   const { category, tag, limit = 50, offset = 0 } = args;
-  return Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag))).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()).slice(offset, offset + limit).map(({ key, title, category: category2, tags, updated, importanceScore, tokenEstimate: tokenEstimate2 }) => ({
+  const filtered = Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag))).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const total = filtered.length;
+  const items = filtered.slice(offset, offset + limit).map(({ key, title, category: category2, tags, updated, importanceScore, tokenEstimate: tokenEstimate2 }) => ({
     key,
     title,
     category: category2,
@@ -16209,6 +16219,7 @@ function listMemories(args) {
     importanceScore,
     tokenEstimate: tokenEstimate2
   }));
+  return { items, total, hasMore: offset + limit < total };
 }
 function getMemoriesByKeys(args) {
   const { keys, summary = false } = args;
@@ -16262,7 +16273,10 @@ function getTimeline(args) {
   const { since, before, limit = 50, offset = 0, category } = args;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
-  return Object.values(memIndex).filter((m) => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()).slice(offset, offset + limit).map((m) => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
+  const filtered = Object.values(memIndex).filter((m) => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const total = filtered.length;
+  const items = filtered.slice(offset, offset + limit).map((m) => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
+  return { items, total, hasMore: offset + limit < total };
 }
 function getRelatedMemories(args) {
   const { key, limit = 10, includeContent = false } = args;

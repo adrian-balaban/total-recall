@@ -9,13 +9,16 @@ import { isVectorAvailable } from '../embeddings.js';
 
 export function listMemories(args: any): any {
   const { category, tag, limit = 50, offset = 0 } = args;
-  return Object.values(memIndex)
+  const filtered = Object.values(memIndex)
     .filter(m => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
-    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
+    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const total = filtered.length;
+  const items = filtered
     .slice(offset, offset + limit)
     .map(({ key, title, category, tags, updated, importanceScore, tokenEstimate }) => ({
       key, title, category, tags, updated, importanceScore, tokenEstimate,
     }));
+  return { items, total, hasMore: offset + limit < total };
 }
 
 export function getMemoriesByKeys(args: any): any {
@@ -77,11 +80,14 @@ export function getTimeline(args: any): any {
   const cutoff = since ? toCutoff(since) : new Date(0);
   // Symmetric upper bound — mirrors `since`; combine for a date-range window.
   const upper = before ? toCutoff(before) : null;
-  return Object.values(memIndex)
+  const filtered = Object.values(memIndex)
     .filter(m => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category))
-    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime())
+    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const total = filtered.length;
+  const items = filtered
     .slice(offset, offset + limit)
     .map(m => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
+  return { items, total, hasMore: offset + limit < total };
 }
 
 export function getRelatedMemories(args: any): any {

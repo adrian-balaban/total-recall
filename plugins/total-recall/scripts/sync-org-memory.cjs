@@ -6,6 +6,8 @@ const path = require('path');
 const os = require('os');
 const { execSync, spawnSync } = require('child_process');
 
+const { parseFrontmatter, stringifyFrontmatter } = require('../dist/frontmatter.cjs');
+
 const TOTAL_RECALL_DIR = path.join(os.homedir(), '.total-recall');
 const PERSONAL_VAULT = path.join(TOTAL_RECALL_DIR, 'personal-vault');
 const ORG_VAULT_DIR = path.join(TOTAL_RECALL_DIR, 'org');
@@ -91,59 +93,7 @@ const PHONE_RE = new RegExp(`(?:${INTL_PHONE_RE.source}|${US_PHONE_RE.source})`)
 // Added: GitLab PAT (glpat-), GitHub xApp token (xapp-), JWTs (eyJ…), and PEM keys.
 const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/;
 
-function matterParse(raw) {
-  const match = raw.match(/^---\n([\s\S]*?)\n---/);
-  if (!match) return { data: {}, content: raw };
-  const data = {};
-  let lastArrayKey = null;
-  for (const line of match[1].split('\n')) {
-    // Skip blank lines and comments (a "# foo" line would otherwise create a bogus
-    // array key via the "key:" branch). lastArrayKey survives blank lines so a block
-    // sequence may span them.
-    if (!line.trim() || line.trim().startsWith('#')) continue;
-    // Block sequence item belonging to the most recently opened array key: "  - value"
-    const blockItem = line.match(/^\s+-\s+(.+)$/);
-    if (blockItem) {
-      if (lastArrayKey) {
-        if (!Array.isArray(data[lastArrayKey])) data[lastArrayKey] = [];
-        data[lastArrayKey].push(blockItem[1].replace(/^["']|["']$/g, ''));
-      }
-      continue;
-    }
-    const [k, ...rest] = line.split(':');
-    if (k && rest.length) {
-      const val = rest.join(':').trim();
-      if (val.startsWith('[')) {
-        try {
-          // Handle both JSON arrays ["a","b"] and unquoted YAML arrays [a, b, c]
-          const jsonSafe = val.replace(/([[\s,])([a-zA-Z0-9_-]+)(?=[,\]])/g, '$1"$2"');
-          data[k.trim()] = JSON.parse(jsonSafe);
-        } catch { data[k.trim()] = val; }
-        lastArrayKey = k.trim();
-      } else if (val === '') {
-        // "key:" with an empty inline value opens a block sequence (items follow as
-        // "  - x"). Preset an empty array and remember the key; if no items follow it
-        // is dropped below. Note "key:".split(':') yields rest=[''] (length 1), so THIS
-        // branch — not the !rest.length one below — is what actually catches the opener.
-        data[k.trim()] = [];
-        lastArrayKey = k.trim();
-      } else {
-        data[k.trim()] = val.replace(/^["']|["']$/g, '');
-        lastArrayKey = null;
-      }
-    } else if (k && !rest.length) {
-      // "key:" with no inline value — opens a block array (items follow as "  - x").
-      // Preset an empty array and remember the key; if no items follow, drop it.
-      data[k.trim()] = [];
-      lastArrayKey = k.trim();
-    }
-  }
-  // Drop keys preset as empty arrays that never received block items (treat as absent)
-  for (const [k, v] of Object.entries(data)) {
-    if (Array.isArray(v) && v.length === 0) delete data[k];
-  }
-  return { data, content: raw.slice(match[0].length).trim() };
-}
+// matterParse removed — now using shared parseFrontmatter from dist/frontmatter.cjs
 
 function privacyCheck(data, content) {
   // Scan the union of title, author, tags, and body. Previously only title+body
@@ -263,7 +213,7 @@ async function main() {
   // Store mode: privacy + tag checks BEFORE staging anything (never stage a file that
   // fails — staging it would risk a later blind `git add -A` sweeping it up).
   const raw = fs.readFileSync(orgFile, 'utf8');
-  const { data, content } = matterParse(raw);
+  const { data, content } = parseFrontmatter(raw);
   const tags = Array.isArray(data.tags) ? data.tags : [];
 
   if (!tags.includes('org')) {
