@@ -60,7 +60,7 @@ Before calling `store_memory`, verify:
 
 ## Known Gotchas
 
-- `since` date filter silently **excludes** memories with missing `updated` field (by design, after fix — was previously passing them as epoch 1970)
+- `since` date filter silently **excludes** memories with missing `updated` field (by design)
 - `rebuild_index` now preserves `accessCount`/`lastAccessed` — safe to run anytime
 - Org vault `index.json` is updated on every sync — no manual rebuild needed
 - Vector search (`@huggingface/transformers`, `sqlite-vec`) is lazy-loaded; if packages missing, gracefully degrades to TF-IDF only

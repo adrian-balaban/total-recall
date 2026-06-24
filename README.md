@@ -4,7 +4,7 @@ Claude Code plugin repository.
 
 ## Plugins
 
-- **total-recall** — Persistent memory plugin: MCP server (12 tools), SessionStart/PostToolUse/PreCompact hooks, and skills (memory-workflow, setup, init). Memory vault lives in [`private_claude-persisted-memories`](../private_claude-persisted-memories) and syncs to/from GitHub automatically via hooks.
+- **total-recall** — Persistent memory plugin: MCP server (12 tools), SessionStart/PostToolUse/PreCompact hooks, and skills (memory-workflow, install, init). Personal vault at `~/.total-recall/personal-vault/`. Org vault (for `org`-tagged memories) syncs to a GitHub repo configured via `~/.total-recall/config.json` (`orgRepo` key, branch `org-vault`) with privacy filtering on every store/update/delete.
 
 ## Proactive memory-saving behavior
 
@@ -63,6 +63,6 @@ Summary of 6 tools called in one session and what they gave back:
 
 **`get_related_memories`** (key: `project/total-recall-review-fix-loop-converged-2026-06-19`) — Jaccard tag similarity + same-category boost. Returns 6 related memories; all other `project/*` entries scored 0.2, the total-recall architecture entry scored 0.14 (different category, shared tags).
 
-**`prune_memories`** — blocked by auto-mode classifier (it lists deletion candidates using Ebbinghaus decay; not destructive itself, but the classifier treated it conservatively). To run it: just ask explicitly.
+**`prune_memories`** — lists low-retention candidates using Ebbinghaus decay. Does NOT auto-delete (safe to inspect anytime).
 
 Skipped (write/destructive): `store_memory`, `update_memory`, `delete_memory`, `rebuild_index` — all need specific inputs or are expensive full re-scans.

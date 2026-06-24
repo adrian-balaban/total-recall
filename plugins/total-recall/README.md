@@ -34,7 +34,7 @@ Grouped by function:
 - `get_stats` — index statistics
 - `get_timeline` — memories ordered by time
 - `get_related_memories` — find memories related to a given one
-- `prune_memories` — remove low-importance/stale entries
+- `prune_memories` — surface low-retention candidates (does NOT auto-delete)
 
 **Mutate** (`src/tools/mutate.ts`)
 - `update_memory` — edit existing memory; deduplicates session history (capped at 50)
