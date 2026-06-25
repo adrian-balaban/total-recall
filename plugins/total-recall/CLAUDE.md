@@ -19,6 +19,10 @@ npx vitest run src/__tests__/ebbinghaus.test.ts  # run a single test file
 
 Tests run sequentially (maxWorkers=1) because the server has module-level state (the shared singletons in `src/state.ts`).
 
+## Build artifacts (`dist/`)
+
+`dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.
+
 ## Architecture
 
 This is an MCP server that exposes 12 tools for persistent memory management. It runs as a stdio process registered with Claude Code via `claude mcp add`. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:

@@ -11,10 +11,10 @@ Add to `~/.claude/settings.json` under `"hooks"`. This is an object keyed by eve
   "SessionStart": [
     {
       "hooks": [
-        {"type":"command","command":"bash <plugin>/hooks/scripts/pull-org-vault.sh","timeout":30000},
-        {"type":"command","command":"bash <plugin>/hooks/scripts/build-memory-index.sh","timeout":15000},
-        {"type":"command","command":"bash <plugin>/hooks/scripts/load-memory-index.sh","timeout":5000},
-        {"type":"command","command":"bash <plugin>/hooks/scripts/load-open-questions.sh","timeout":5000}
+        {"type":"command","command":"bash <plugin>/hooks/scripts/pull-org-vault.sh","timeout":30},
+        {"type":"command","command":"bash <plugin>/hooks/scripts/build-memory-index.sh","timeout":15},
+        {"type":"command","command":"bash <plugin>/hooks/scripts/load-memory-index.sh","timeout":5},
+        {"type":"command","command":"bash <plugin>/hooks/scripts/load-open-questions.sh","timeout":5}
       ]
     }
   ],
@@ -22,14 +22,14 @@ Add to `~/.claude/settings.json` under `"hooks"`. This is an object keyed by eve
     {
       "matcher": "store_memory|update_memory|delete_memory",
       "hooks": [
-        {"type":"command","command":"bash <plugin>/hooks/scripts/sync-org-memory.sh","timeout":30000}
+        {"type":"command","command":"bash <plugin>/hooks/scripts/sync-org-memory.sh","timeout":30}
       ]
     }
   ],
   "PreCompact": [
     {
       "hooks": [
-        {"type":"command","command":"bash <plugin>/hooks/scripts/extract-and-store-memories.sh","timeout":60000}
+        {"type":"command","command":"bash <plugin>/hooks/scripts/extract-and-store-memories.sh","timeout":60}
       ]
     }
   ]
