@@ -227,6 +227,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
 export async function main() {
+  process.stderr.write(`total-recall v${PLUGIN_VERSION} starting\n`);
   ensureDir(PERSONAL_VAULT);
   ensureDir(ORG_VAULT);
   for (const cat of DEFAULT_CATEGORIES) ensureDir(path.join(PERSONAL_VAULT, cat));
