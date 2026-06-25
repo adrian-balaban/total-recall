@@ -16375,7 +16375,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.2" : null.version;
+var PLUGIN_VERSION = true ? "1.0.3" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
@@ -16589,6 +16589,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 async function main() {
+  process.stderr.write(`total-recall v${PLUGIN_VERSION} starting
+`);
   ensureDir(PERSONAL_VAULT);
   ensureDir(ORG_VAULT);
   for (const cat of DEFAULT_CATEGORIES) ensureDir(path6.join(PERSONAL_VAULT, cat));
