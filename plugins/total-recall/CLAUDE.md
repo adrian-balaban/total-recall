@@ -19,6 +19,10 @@ npx vitest run src/__tests__/ebbinghaus.test.ts  # run a single test file
 
 Tests run sequentially (maxWorkers=1) because the server has module-level state (the shared singletons in `src/state.ts`).
 
+## Install / setup
+
+`install.sh` (plugin root) is the one-shot, state-aware setup script: vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.
+
 ## Build artifacts (`dist/`)
 
 `dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.

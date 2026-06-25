@@ -108,14 +108,23 @@ src/tools/{store,recall,query,mutate}.ts  <- 12 tool implementations
 
 ## Install
 
+Installed as a Claude Code **plugin** (recommended), `hooks/hooks.json` and `.mcp.json` are auto-loaded — no manual MCP registration or hook wiring needed.
+
+For a standalone or scripted setup, run **`install.sh`** (at the plugin root) — a one-shot, state-aware setup script that creates the vault dirs, registers the MCP server, builds the index, and optionally wires hooks / enables the org vault and vector search. Every step checks current state first, so it's safe to re-run:
+
 ```bash
 cd plugins/total-recall
-npm install
-npm run build
-claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(pwd)'/dist/index.js"]}'
+npm install && npm run build      # build dist/ if not already present
+./install.sh                      # interactive
+./install.sh --help               # all flags
+./install.sh -y --standalone --org-repo https://github.com/you/your-vault.git   # non-interactive
 ```
 
-Installed as a Claude Code **plugin** (recommended), `hooks/hooks.json` and `.mcp.json` are auto-loaded — no manual MCP registration or hook wiring needed. For guided setup (vault dirs, MCP registration, org vault, vector search, standalone hook wiring), run the **`install`** skill — it's state-aware and safe to re-run.
+Manual MCP registration (if not using the script or plugin):
+
+```bash
+claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(pwd)'/dist/index.js"]}'
+```
 
 ## Data Locations
 
@@ -211,7 +220,7 @@ Four implementations share the "total-recall" name or solve the same problem. He
 | | **This plugin** | **strvmarv** | **davegoldblatt** | **thedotmack** |
 |---|---|---|---|---|
 | Hooks | SessionStart, PostToolUse, PreCompact | UserPromptSubmit | SessionStart, PreCompact | 5-stage pipeline |
-| Skills | 2 (memory-workflow, install) | Auto-discovered | 10 slash commands | 1 (mem-search) |
+| Skills | 1 (memory-workflow) + `install.sh` setup script | Auto-discovered | 10 slash commands | 1 (mem-search) |
 | Auto-capture | LLM extracts 0–3 learnings at PreCompact | Compaction + decay | PreCompact timestamp only | Captures everything automatically |
 | Token injection | Memory index + open questions at SessionStart | Pinned tier (always) + Hot tier (4 000-token budget) | CLAUDE.local.md (~1 500 words) | Filtered search results |
 

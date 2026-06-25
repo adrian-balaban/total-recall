@@ -4,7 +4,7 @@
 
 ## Plugins
 
-- **total-recall** v1.0.2 — Persistent memory plugin: MCP server (12 tools), SessionStart/PostToolUse/PreCompact hooks, and skills (memory-workflow, install, init). Personal vault at `~/.total-recall/personal-vault/`. Org vault (for `org`-tagged memories) syncs to a GitHub repo configured via `~/.total-recall/config.json` (`orgRepo` key, branch `org-vault`) with privacy filtering on every store/update/delete.
+- **total-recall** v1.0.2 — Persistent memory plugin: MCP server (12 tools), SessionStart/PostToolUse/PreCompact hooks, the `memory-workflow` skill, and an `install.sh` setup script. Personal vault at `~/.total-recall/personal-vault/`. Org vault (for `org`-tagged memories) syncs to a GitHub repo configured via `~/.total-recall/config.json` (`orgRepo` key, branch `org-vault`) with privacy filtering on every store/update/delete.
 
 ## Proactive memory-saving behavior
 
