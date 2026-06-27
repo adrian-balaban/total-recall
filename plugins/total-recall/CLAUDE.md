@@ -27,6 +27,16 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 `dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.
 
+## Before committing — mandatory pre-commit checklist
+
+Run all three, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
+
+1. **Increase the version.** Bump the version in **both** `package.json` **and** `.claude-plugin/plugin.json` — they MUST stay in sync (package.json is the source the SessionStart hook reads; plugin.json is what Claude Code displays). `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__`, so the version must be set **before** step 2.
+2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.cjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
+3. **Test all.** `npm test` (208 unit/component tests, `maxWorkers=1`) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
+
+Only after all three are green: `git add -A && git commit` from the plugin root, then push.
+
 ## Architecture
 
 This is an MCP server that exposes 12 tools for persistent memory management. It runs as a stdio process registered with Claude Code via `claude mcp add`. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
