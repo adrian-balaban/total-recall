@@ -45,6 +45,17 @@ function git(cwd, args, opts = {}) {
   return result.stdout ?? '';
 }
 
+// Atomic write (write-`.tmp` + rename) for the org index.json — mirrors the
+// persistence.ts atomicWrite rule. A plain writeFileSync could leave a
+// half-written index.json if the process is interrupted mid-write (the
+// PostToolUse hook backgrounds this script, so a SIGTERM mid-write is a real
+// risk); a corrupt index.json breaks the next SessionStart index injection.
+function atomicWrite(p, data) {
+  const tmp = `${p}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, p);
+}
+
 // Allowed email domains — emails at these domains are treated as non-personal
 // and may be pushed to the shared org vault. Configurable via
 // `allowedEmailDomains` in ~/.total-recall/config.json (e.g. ["yourcompany.com"]).
@@ -135,7 +146,7 @@ function updateOrgIndex(key, data, content) {
     importanceScore: data.importanceScore ?? 0.5,
     contentPreview: content.slice(0, 500),
   };
-  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
+  atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }
 
 function removeFromOrgIndex(key) {
@@ -143,7 +154,7 @@ function removeFromOrgIndex(key) {
   let index = {};
   try { index = JSON.parse(fs.readFileSync(indexPath, 'utf8')); } catch {}
   delete index[key];
-  fs.writeFileSync(indexPath, JSON.stringify(index, null, 2));
+  atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }
 
 async function main() {
@@ -153,7 +164,20 @@ async function main() {
   if (!key) { console.error('Usage: sync-org-memory.cjs <key> [--delete]'); process.exit(1); }
 
   const relKey = key.replace(/^org\//, '');
+  // Path-traversal guard: `key` arrives from the hook (caller-supplied). A key
+  // like `org/../../etc/passwd` or an absolute path would resolve `orgFile`
+  // outside the org vault and let the script stage/commit/delete an arbitrary
+  // file. Reject any relKey that escapes the vault before joining.
+  if (relKey.includes('..') || relKey.includes('\0') || path.isAbsolute(relKey)) {
+    console.error(`Rejecting suspicious org key: ${key}`);
+    process.exit(0);
+  }
   const orgFile = path.join(ORG_VAULT, relKey + '.md');
+  const resolvedOrgFile = path.resolve(orgFile);
+  if (!resolvedOrgFile.startsWith(path.resolve(ORG_VAULT) + path.sep)) {
+    console.error(`Org key escapes vault: ${key}`);
+    process.exit(0);
+  }
   const relFile = path.relative(ORG_VAULT_DIR, orgFile);     // e.g. org-vault/architecture/foo.md
   const relIndex = path.relative(ORG_VAULT_DIR, path.join(ORG_VAULT, 'index.json'));
 

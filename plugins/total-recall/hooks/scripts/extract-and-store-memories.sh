@@ -22,6 +22,12 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Guard: if the `claude` CLI is not on PATH (e.g. hook fired in an environment
+# without the binary, or a broken install), `claude -p` below would fail under
+# `set -e` and — even with the trailing `|| true` — emit a confusing error to
+# the user. Skip cleanly instead; the next compaction will retry.
+command -v claude >/dev/null 2>&1 || { echo "extract-and-store-memories: claude CLI not found — skipping" >&2; echo '{"continue":true}'; exit 0; }
+
 EXTRACT_PROMPT='You are reviewing a Claude Code session transcript. Extract 0-3 distinct, reusable learnings worth storing as persistent memories.
 
 For each learning output a JSON object on a single line:

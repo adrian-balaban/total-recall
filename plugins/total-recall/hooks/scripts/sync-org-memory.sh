@@ -64,6 +64,10 @@ PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 LOCK="$HOME/.total-recall/org/.sync.lock"
 SYNC_LOG="$HOME/.total-recall/org/.sync.log"
 mkdir -p "$(dirname "$LOCK")"
+# flock is Linux-only (absent on macOS by default). Without it the git sync runs
+# unlocked — concurrent PostToolUse invocations can race on the org-vault repo.
+# Log the degradation so it's discoverable; the sync still proceeds.
+command -v flock >/dev/null 2>&1 || echo "warning: 'flock' not found; org sync running without a lock" >>"$SYNC_LOG"
 
 # Run the git sync under an exclusive flock so concurrent PostToolUse invocations
 # serialize instead of racing on the same org-vault repo (checkout/pull/push). The
@@ -90,12 +94,12 @@ case "$KEY" in
   org/*)
     if [ "$DELETE_FLAG" = "1" ]; then
       (
-        flock -x 9
+        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
         node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY" --delete
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     else
       (
-        flock -x 9
+        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
         node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY"
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     fi

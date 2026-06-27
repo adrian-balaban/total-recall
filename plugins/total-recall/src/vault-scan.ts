@@ -107,9 +107,13 @@ export function indexFile(filePath: string, isOrg: boolean) {
       // authored files — but the threat model is the same as the frontmatter-key
       // ReDoS hardening (teammate-pushed malformed frontmatter).
       title: String(fm.title ?? path.basename(filePath, '.md')),
-      tags: fm.tags ?? [],
+      // Coerce arrays defensively: a teammate-pushed (or hand-edited) frontmatter
+      // with a scalar `tags: foo` or `sessions: bar` would otherwise crash
+      // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
+      // the same externally-authored threat model as the numeric-title coercion.
+      tags: Array.isArray(fm.tags) ? fm.tags : [],
       author: fm.author,
-      sessions: fm.sessions ?? [],
+      sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? new Date().toISOString(),
       updated: fm.updated ?? new Date().toISOString(),
       importanceScore: fm.importanceScore ?? 0.5,
@@ -120,6 +124,13 @@ export function indexFile(filePath: string, isOrg: boolean) {
       tokenEstimate: tokenEstimate(raw),
       isOrg,
     };
+    // Invalidate any cached content for this key: indexFile re-reads from disk
+    // (boot, reconcile, rebuild_index), so the cached body may now be stale (e.g.
+    // an org git pull updated the file, or an external edit changed it).
+    // recall_memory(full=true) and get_memories_by_keys read through contentCache —
+    // drop the entry so they re-read fresh content instead of serving the old body
+    // for up to the 30-min LRU TTL.
+    contentCache.delete(key);
   } catch (e: any) {
     errors.push({ time: new Date().toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
   }

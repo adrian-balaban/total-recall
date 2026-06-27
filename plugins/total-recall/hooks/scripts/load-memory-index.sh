@@ -11,8 +11,11 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR/../..}"
 VERSION=$(node -e "try{process.stdout.write(String(require('$PLUGIN_ROOT/package.json').version||'unknown'))}catch{process.stdout.write('unknown')}" 2>/dev/null || echo unknown)
 
 # Announce the version on every session start, even before any memories exist.
-if [ -f "$CACHE" ]; then
-  INDEX_CONTENT=$(cat "$CACHE")
+if [ -f "$CACHE" ] && [ -r "$CACHE" ]; then
+  # `cat` can still fail on a race (file deleted between -f and read) or a
+  # permission issue; fall back to a hint instead of letting `set -e` abort the
+  # hook (which would drop the whole SessionStart context injection).
+  INDEX_CONTENT=$(cat "$CACHE" 2>/dev/null) || INDEX_CONTENT="(memory index unreadable — run rebuild_index)"
 else
   INDEX_CONTENT="(no memories yet — store one with store_memory)"
 fi

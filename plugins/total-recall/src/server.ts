@@ -99,7 +99,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           key: { type: 'string' },
           content: { type: 'string' },
           tags: { type: 'array', items: { type: 'string' } },
-          importanceScore: { type: 'number' },
+          importanceScore: { type: 'number', minimum: 0, maximum: 1 },
           sessionId: { type: 'string' },
         },
         required: ['key'],

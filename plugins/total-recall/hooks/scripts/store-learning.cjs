@@ -21,6 +21,17 @@ const { stringifyFrontmatter } = require('../../dist/frontmatter.cjs');
 
 const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 
+// Atomic write (write-`.tmp` + rename): a partial write of a memory .md would
+// leave a corrupt frontmatter on disk. The existsSync guard below would then
+// treat the partial file as "existing" and skip re-extraction forever — so a
+// crashed extract silently blocks future captures of the same learning.
+// Atomic rename guarantees the file only appears once it's fully written.
+function atomicWrite(p, data) {
+  const tmp = `${p}.tmp.${process.pid}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, p);
+}
+
 function slugify(s) {
   return String(s || 'untitled')
     .toLowerCase()
@@ -71,7 +82,7 @@ process.stdin.on('end', () => {
     };
     const body = `\n${obj.content}`;
     try {
-      fs.writeFileSync(filePath, stringifyFrontmatter(body, fm));
+      atomicWrite(filePath, stringifyFrontmatter(body, fm));
       written++;
     } catch { errors++; }
   }

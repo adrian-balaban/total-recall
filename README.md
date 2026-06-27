@@ -37,6 +37,7 @@ Guides a structured recall/store session.
 | What you want | Say / tool name |
 |---|---|
 | Stats snapshot | "get total-recall stats" → `get_stats` |
+| Fetch by known key(s) | "get memory by key" → `get_memories_by_keys` |
 | Browse all memories | "list memories" → `list_memories` |
 | Search by query | "recall X" → `recall_memory` / `search_index` |
 | Store something | "remember X" → `store_memory` |

@@ -12,6 +12,15 @@ if [ -z "$ORG_REPO" ]; then
   exit 0
 fi
 
+# Reject a non-URL orgRepo early. A typo or a local path in config.json would
+# hand `gh repo clone` / `git clone` an unusable argument (confusing error) or,
+# for a path that happens to exist locally, attempt a clone of an unintended
+# source. Only https:// and git@ SSH URLs are valid remotes.
+case "$ORG_REPO" in
+  https://*|git@*) ;;
+  *) echo '{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Org vault skipped: orgRepo in config.json is not an https:// or git@ SSH URL."}}'; exit 0 ;;
+esac
+
 # Use gh for authenticated git operations
 export GIT_ASKPASS=""
 export GIT_TERMINAL_PROMPT=0

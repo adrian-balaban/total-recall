@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { ORG_VAULT, PERSONAL_VAULT, VECTORS_DB, HOME, ensureDir } from '../paths.js';
-import { slugify, keyFromPath, tokenEstimate } from '../vault-scan.js';
+import { slugify, keyFromPath, tokenEstimate, deriveCategory } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
@@ -32,6 +32,18 @@ export function storeMemory(args: any): any {
   const isOrg = tags.includes('org');
   const isPersonal = tags.includes('personal');
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+
+  // The `org/` key prefix is reserved for the org vault (keyFromPath prefixes org
+  // keys with `org/`; reconcileIndex skips a personal-vault subdir literally named
+  // `org`). A personal memory (no `org` tag) with `category: 'org'` would write to
+  // `personal-vault/org/<slug>.md` → key `org/<slug>`, colliding with org-vault keys
+  // AND being dropped on the next reconcile (the personal walk skips `org/`) — a
+  // silent data-loss footgun. Reject it; route to the org vault via the `org` tag.
+  if (!isOrg && category === 'org') {
+    throw new Error(
+      'Category "org" is reserved for the shared org vault. Use a different category, or tag the memory "org" to route it to the org vault.'
+    );
+  }
 
   // Org-config guard (A3): refuse an org store when the shared org vault is not
   // configured. Otherwise ensureDir(catDir) below would create `~/.total-recall/
@@ -126,7 +138,7 @@ export function storeMemory(args: any): any {
   const existing = memIndex[key];
   memIndex[key] = {
     key, filePath, title, tags, author: fm.author, sessions: fm.sessions,
-    created: fm.created, updated: now, importanceScore, category,
+    created: fm.created, updated: now, importanceScore, category: deriveCategory(filePath, isOrg),
     contentPreview: body.trim().slice(0, 500),
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,

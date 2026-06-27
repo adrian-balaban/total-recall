@@ -41,8 +41,16 @@ export function updateMemory(args: any): any {
     // against a file that never had the field can't leave tags/importanceScore as
     // `undefined` in memIndex — that would crash tfidfSearch/list filters (~3s
     // later via the debounced rebuildInvertedIndex) on meta.tags.join/.includes.
-    tags: (tags ?? parsed.data.tags) ?? [],
-    importanceScore: (importanceScore ?? parsed.data.importanceScore) ?? 0.5,
+    // Coerce tags to an array: a caller may pass a scalar, or the existing file
+    // may carry a scalar `tags` from a hand-edited/teammate-pushed frontmatter.
+    // Matches indexFile's Array.isArray guard; without it, a scalar would crash
+    // tfidfSearch's meta.tags.join and getRelatedMemories' Set(m.tags).
+    tags: Array.isArray(tags ?? parsed.data.tags) ? (tags ?? parsed.data.tags) : [],
+    // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
+    // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
+    // store_memory's schema enforces 0..1; update_memory's schema doesn't, so a
+    // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
+    importanceScore: Math.max(0, Math.min(1, (importanceScore ?? parsed.data.importanceScore) ?? 0.5)),
     updated: now,
     sessions,
   };

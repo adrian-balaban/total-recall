@@ -20,5 +20,9 @@ CONTENT=$(cat "$OQ_FILE")
 # hookSpecificOutput REQUIRES hookEventName:"SessionStart" or additionalContext is
 # silently dropped (verified against the Claude Code hooks reference). JSON-encode
 # via node (node is this plugin's hard dependency; python3 is not guaranteed).
-ADDCONTEXT=$(printf '## Ambient Curiosity — Open Technical Questions\n\n%s' "$CONTENT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))')
+ADDCONTEXT=$(printf '## Ambient Curiosity — Open Technical Questions\n\n%s' "$CONTENT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))' 2>/dev/null) || ADDCONTEXT='""'
+# Guard against an empty ADDCONTEXT (node missing/failed): a bare
+# "additionalContext:" in the JSON below would make the hook output unparseable
+# and silently drop the whole SessionStart context. Match load-memory-index.sh.
+[ -n "$ADDCONTEXT" ] || ADDCONTEXT='""'
 echo "{\"continue\":true,\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":$ADDCONTEXT}}"

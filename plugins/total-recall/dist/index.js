@@ -15918,9 +15918,13 @@ function indexFile(filePath, isOrg) {
       // authored files — but the threat model is the same as the frontmatter-key
       // ReDoS hardening (teammate-pushed malformed frontmatter).
       title: String(fm.title ?? path3.basename(filePath, ".md")),
-      tags: fm.tags ?? [],
+      // Coerce arrays defensively: a teammate-pushed (or hand-edited) frontmatter
+      // with a scalar `tags: foo` or `sessions: bar` would otherwise crash
+      // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
+      // the same externally-authored threat model as the numeric-title coercion.
+      tags: Array.isArray(fm.tags) ? fm.tags : [],
       author: fm.author,
-      sessions: fm.sessions ?? [],
+      sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? (/* @__PURE__ */ new Date()).toISOString(),
       updated: fm.updated ?? (/* @__PURE__ */ new Date()).toISOString(),
       importanceScore: fm.importanceScore ?? 0.5,
@@ -15931,6 +15935,7 @@ function indexFile(filePath, isOrg) {
       tokenEstimate: tokenEstimate(raw),
       isOrg
     };
+    contentCache.delete(key);
   } catch (e) {
     errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
   }
@@ -16003,6 +16008,11 @@ function storeMemory(args) {
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+  if (!isOrg && category === "org") {
+    throw new Error(
+      'Category "org" is reserved for the shared org vault. Use a different category, or tag the memory "org" to route it to the org vault.'
+    );
+  }
   if (isOrg && !orgVaultConfigured()) {
     throw new Error(
       'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). Writing now would leave an unsynced file that blocks the next clone.'
@@ -16063,7 +16073,7 @@ function storeMemory(args) {
     created: fm.created,
     updated: now,
     importanceScore,
-    category,
+    category: deriveCategory(filePath, isOrg),
     contentPreview: body.trim().slice(0, 500),
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,
@@ -16226,9 +16236,11 @@ function getMemoriesByKeys(args) {
   return keys.map((key) => {
     const meta2 = memIndex[key];
     if (!meta2) return { key, error: "Not found" };
-    meta2.accessCount++;
-    meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
-    scheduleSave();
+    const bumpAccess = () => {
+      meta2.accessCount++;
+      meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
+      scheduleSave();
+    };
     if (summary) {
       let content2 = "";
       try {
@@ -16237,19 +16249,23 @@ function getMemoriesByKeys(args) {
       } catch {
         return { key, error: "Failed to read memory file" };
       }
+      bumpAccess();
       const execSummary = content2.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content2.slice(0, 500);
       return { key, title: meta2.title, category: meta2.category, tags: meta2.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
+    let readOk = !!content;
     if (!content) {
       try {
         const raw = fs7.readFileSync(meta2.filePath, "utf8");
         content = parseFrontmatter(raw).content;
         contentCache.set(key, content);
+        readOk = true;
       } catch {
         content = "";
       }
     }
+    if (readOk) bumpAccess();
     return { ...meta2, key, content };
   });
 }
@@ -16328,8 +16344,16 @@ function updateMemory(args) {
     // against a file that never had the field can't leave tags/importanceScore as
     // `undefined` in memIndex — that would crash tfidfSearch/list filters (~3s
     // later via the debounced rebuildInvertedIndex) on meta.tags.join/.includes.
-    tags: tags ?? parsed.data.tags ?? [],
-    importanceScore: importanceScore ?? parsed.data.importanceScore ?? 0.5,
+    // Coerce tags to an array: a caller may pass a scalar, or the existing file
+    // may carry a scalar `tags` from a hand-edited/teammate-pushed frontmatter.
+    // Matches indexFile's Array.isArray guard; without it, a scalar would crash
+    // tfidfSearch's meta.tags.join and getRelatedMemories' Set(m.tags).
+    tags: Array.isArray(tags ?? parsed.data.tags) ? tags ?? parsed.data.tags : [],
+    // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
+    // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
+    // store_memory's schema enforces 0..1; update_memory's schema doesn't, so a
+    // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
+    importanceScore: Math.max(0, Math.min(1, importanceScore ?? parsed.data.importanceScore ?? 0.5)),
     updated: now,
     sessions
   };
@@ -16375,7 +16399,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.3" : null.version;
+var PLUGIN_VERSION = true ? "1.0.4" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
@@ -16440,7 +16464,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           key: { type: "string" },
           content: { type: "string" },
           tags: { type: "array", items: { type: "string" } },
-          importanceScore: { type: "number" },
+          importanceScore: { type: "number", minimum: 0, maximum: 1 },
           sessionId: { type: "string" }
         },
         required: ["key"]

@@ -26,9 +26,16 @@ export function getMemoriesByKeys(args: any): any {
   return keys.map((key: string) => {
     const meta = memIndex[key];
     if (!meta) return { key, error: 'Not found' };
-    meta.accessCount++;
-    meta.lastAccessed = new Date().toISOString();
-    scheduleSave();
+    // Defer the access-count bump until a read actually succeeds. Previously the
+    // bump + scheduleSave ran unconditionally before the read, so a vanished file
+    // (meta present, file gone) inflated accessCount/lastAccessed and triggered a
+    // debounced save for a memory that just errored — skewing retention/pruning
+    // stats and persisting state for a broken key.
+    const bumpAccess = () => {
+      meta.accessCount++;
+      meta.lastAccessed = new Date().toISOString();
+      scheduleSave();
+    };
     if (summary) {
       // Guard the read like the full-content path does: if the file vanished between
       // index load and this read, surface a per-key error rather than crashing the
@@ -40,10 +47,12 @@ export function getMemoriesByKeys(args: any): any {
       } catch {
         return { key, error: 'Failed to read memory file' };
       }
+      bumpAccess();
       const execSummary = content.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content.slice(0, 500);
       return { key, title: meta.title, category: meta.category, tags: meta.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
+    let readOk = !!content;
     if (!content) {
       try {
         const raw = fs.readFileSync(meta.filePath, 'utf8');
@@ -52,8 +61,10 @@ export function getMemoriesByKeys(args: any): any {
         // LRU with '' for 30 min (every later get_memories_by_keys(full) on this
         // key would return empty until the entry expires/evicts).
         contentCache.set(key, content!);
+        readOk = true;
       } catch { content = ''; }
     }
+    if (readOk) bumpAccess();
     return { ...meta, key, content };
   });
 }
