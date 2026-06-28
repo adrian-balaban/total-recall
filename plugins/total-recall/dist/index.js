@@ -15584,8 +15584,32 @@ function loadIndex(target, p) {
   } catch {
   }
 }
+function coerceMemEntry(raw) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const e = raw;
+  return {
+    ...e,
+    title: String(e.title ?? ""),
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    sessions: Array.isArray(e.sessions) ? e.sessions : []
+  };
+}
+function loadMemIndex() {
+  for (const k of Object.keys(memIndex)) delete memIndex[k];
+  let parsed;
+  try {
+    parsed = JSON.parse(fs2.readFileSync(INDEX_PATH, "utf8"));
+  } catch {
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+  for (const [k, v] of Object.entries(parsed)) {
+    const coerced = coerceMemEntry(v);
+    if (coerced) memIndex[k] = coerced;
+  }
+}
 function loadIndexes() {
-  loadIndex(memIndex, INDEX_PATH);
+  loadMemIndex();
   loadIndex(invertedIndex, INVERTED_INDEX_PATH);
 }
 function scheduleSave() {
@@ -16421,7 +16445,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.7" : null.version;
+var PLUGIN_VERSION = true ? "1.0.8" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

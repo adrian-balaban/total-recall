@@ -39,8 +39,41 @@ function loadIndex<T extends Record<string, unknown>>(target: T, p: string) {
   try { Object.assign(target, JSON.parse(fs.readFileSync(p, 'utf8'))); } catch { /* empty */ }
 }
 
+// Per-entry coercion on the memIndex restore path. A pre-v1.0.6 install may
+// have written a Number title (`title: 2026` from a teammate-pushed org file
+// before indexFile's String() coercion landed) or a scalar-string tags value
+// into index.json. The in-memory type is strict (`MemoryMetadata.title: string`,
+// `tags: string[]`), so a raw JSON.parse would re-introduce those bad values
+// on the very first boot after upgrade. Coerce on restore so the read-side
+// callers — buildIndexCache (`m.title.slice`), tfidfSearch
+// (`meta.title.toLowerCase`, `meta.tags.some/join`), getRelatedMemories
+// (`Set(m.tags)`), query (`m.tags.includes`) — never see a non-string title or
+// non-array tags. Mirrors the indexFile read-path hardening for the
+// load-from-on-disk-cache path.
+function coerceMemEntry(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const e = raw as Record<string, unknown>;
+  return {
+    ...e,
+    title: String(e.title ?? ''),
+    tags: Array.isArray(e.tags) ? e.tags : [],
+    sessions: Array.isArray(e.sessions) ? e.sessions : [],
+  };
+}
+
+function loadMemIndex() {
+  for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
+  let parsed: unknown;
+  try { parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); } catch { return; }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
+  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+    const coerced = coerceMemEntry(v);
+    if (coerced) (memIndex as any)[k] = coerced;
+  }
+}
+
 export function loadIndexes() {
-  loadIndex(memIndex, INDEX_PATH);
+  loadMemIndex();
   loadIndex(invertedIndex, INVERTED_INDEX_PATH);
 }
 

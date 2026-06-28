@@ -3,13 +3,29 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 
+// Override HOME BEFORE any module imports. ES module imports are hoisted to
+// the top of the module, so plain `process.env.HOME = ...` here would run AFTER
+// the static imports — too late, because `paths.ts` captures
+// `os.homedir()` exactly once at module load and `persistence.ts` reads
+// `INDEX_PATH` from there. `vi.hoisted` is the vitest API for "run this
+// synchronously at the top of the module, before imports" — necessary for the
+// loadIndexes coercion tests below, which must point INDEX_PATH at the test
+// vault rather than the user's real ~/.total-recall.
+vi.hoisted(() => {
+  // `path` and `os` imports are hoisted and not yet initialized at this point
+  // — construct the test home path via plain string ops to avoid the TDZ.
+  // tmpdir is stable across platforms for our purposes (real path components
+  // are not needed; persistence.ts only cares about `path.join(HOME, ...)`).
+  process.env.HOME = '/tmp/tr-test-' + process.pid;
+});
+
+import { loadIndexes } from '../persistence.js';
+import { memIndex } from '../state.js';
+
 // ─── Test vault — unique per process ─────────────────────────────────────────
 
-const TEST_HOME = path.join(os.tmpdir(), `tr-test-${process.pid}`);
+const TEST_HOME = process.env.HOME!;
 const VAULT = path.join(TEST_HOME, '.total-recall');
-
-// Override HOME before any module loads (os.homedir() reads process.env.HOME on Linux)
-process.env.HOME = TEST_HOME;
 
 // ─── MCP SDK mock — must use regular function (not arrow) for `new Server()` ─
 
@@ -1324,5 +1340,129 @@ describe('store_memory — defensive coercion of non-string title and non-array 
     // held a scalar — assert the search path completes and finds the memory
     const searched = result(await callTool('search_index', { query: 'scalar-tags' }));
     expect(searched.length).toBeGreaterThan(0);
+  });
+});
+
+// ─── loadIndexes: defensive coercion on the restore-from-on-disk path ────────
+//
+// The in-memory `MemoryMetadata` shape is strict (`title: string`, `tags: string[]`)
+// but the on-disk `~/.total-recall/index.json` may predate that strictness: a
+// pre-v1.0.6 install could have written a Number title (a teammate-pushed org
+// file with `title: 2026` parsed by the frontmatter scalar coercer before the
+// indexFile String() guard landed) or a scalar-string tags value (`tags: foo`).
+// loadIndexes now coerces on restore so the very first buildIndexCache /
+// tfidfSearch / get_related_memories call after upgrade does not crash before
+// the user's next rebuild_index triggers the hardened indexFile read path.
+describe('loadIndexes — defensive coercion on restore', () => {
+  const INDEX_PATH = path.join(VAULT, 'index.json');
+
+  it('coerces a Number title and scalar-string tags from on-disk index.json', () => {
+    // Simulate an index.json from a pre-v1.0.6 install: Number title (from an
+    // unquoted `title: 2026` in a teammate-pushed org file that ran through
+    // coerceScalar before indexFile added String()), and scalar-string tags
+    // (from `tags: foo` parsed by coerceScalar as a string).
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({
+      'knowledge/legacy-2026': {
+        key: 'knowledge/legacy-2026',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'legacy-2026.md'),
+        title: 2026,        // Number — would crash m.title.slice / .toLowerCase
+        tags: 'kafka',      // scalar string — would crash m.tags.slice / .join / Set
+        author: 'me',
+        sessions: ['s1'],
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5,
+        category: 'knowledge',
+        contentPreview: 'legacy',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+      'knowledge/scalar-tags': {
+        key: 'knowledge/scalar-tags',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'scalar-tags.md'),
+        title: 'Scalar Tags',
+        tags: 'kafka,cdc',   // scalar string
+        sessions: 's1',      // scalar string, also coerced
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5,
+        category: 'knowledge',
+        contentPreview: 'scalar',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+    }));
+    loadIndexes();
+    const a = memIndex['knowledge/legacy-2026'];
+    const b = memIndex['knowledge/scalar-tags'];
+    expect(a).toBeDefined();
+    expect(typeof a.title).toBe('string');
+    expect(a.title).toBe('2026');
+    expect(Array.isArray(a.tags)).toBe(true);
+    expect(a.tags).toEqual([]);
+    expect(Array.isArray(a.sessions)).toBe(true);
+    expect(typeof b.title).toBe('string');
+    expect(Array.isArray(b.tags)).toBe(true);
+    expect(b.tags).toEqual([]);
+    expect(Array.isArray(b.sessions)).toBe(true);
+  });
+
+  it('survives the read-side callers after a coerced restore', async () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({
+      'knowledge/read-survives': {
+        key: 'knowledge/read-survives',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'read-survives.md'),
+        title: 4242,             // Number
+        tags: 'kafka',           // scalar string
+        sessions: [],
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5,
+        category: 'knowledge',
+        contentPreview: 'survives',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+    }));
+    loadIndexes();
+    // buildIndexCache crashes on m.title.slice(Number) and m.tags.slice(string).
+    // If loadIndexes coerced, these reads succeed and the in-memory title is
+    // the String('4242'), not the Number.
+    const listed = result(await callTool('list_memories'));
+    const meta = listed.items.find((m: any) => m.key === 'knowledge/read-survives');
+    expect(meta).toBeDefined();
+    expect(typeof meta.title).toBe('string');
+    expect(meta.title).toBe('4242');
+    expect(Array.isArray(meta.tags)).toBe(true);
+    // get_related_memories builds `new Set(m.tags)` — would throw on a scalar.
+    const related = result(await callTool('get_related_memories', { key: 'knowledge/read-survives' }));
+    expect(Array.isArray(related)).toBe(true);
+  });
+
+  it('tolerates a malformed index.json without throwing', () => {
+    // Garbage that is not valid JSON. loadIndexes must swallow the parse error
+    // and leave memIndex empty (rather than crashing the boot path).
+    fs.writeFileSync(INDEX_PATH, 'this is { not : valid json');
+    expect(() => loadIndexes()).not.toThrow();
+    expect(Object.keys(memIndex)).toEqual([]);
+  });
+
+  it('tolerates a non-object index.json (e.g. an array)', () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify([1, 2, 3]));
+    expect(() => loadIndexes()).not.toThrow();
+    expect(Object.keys(memIndex)).toEqual([]);
+  });
+
+  it('skips entries that are not objects (e.g. a stray string value)', () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({ 'knowledge/ok': { title: 'OK', tags: ['t'] }, 'knowledge/bad': 'not-an-object' }));
+    loadIndexes();
+    expect(memIndex['knowledge/ok']).toBeDefined();
+    expect(memIndex['knowledge/bad']).toBeUndefined();
   });
 });
