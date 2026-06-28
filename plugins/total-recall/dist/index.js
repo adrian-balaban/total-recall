@@ -16008,7 +16008,9 @@ function orgVaultConfigured() {
   return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
 }
 function storeMemory(args) {
-  const { title, content, tags = [], category = "knowledge", importanceScore = 0.5, sessionId, author, force = false } = args;
+  const { content, category = "knowledge", importanceScore = 0.5, sessionId, author, force = false } = args;
+  const title = String(args.title ?? "");
+  const tags = Array.isArray(args.tags) ? args.tags : [];
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
@@ -16419,7 +16421,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.6" : null.version;
+var PLUGIN_VERSION = true ? "1.0.7" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

@@ -28,7 +28,19 @@ function orgVaultConfigured(): boolean {
 }
 
 export function storeMemory(args: any): any {
-  const { title, content, tags = [], category = 'knowledge', importanceScore = 0.5, sessionId, author, force = false } = args;
+  // Defensive coercion at the WRITE path (mirrors indexFile's read-path coercion):
+  // MCP does not enforce the tool's inputSchema, so a misbehaving caller — buggy
+  // agent, hostile plugin consumer, hand-crafted stdio request — can pass
+  // `title: 12345` or `tags: "kafka,cdc"`. Without coercing here, slugify(title)
+  // throws (Number has no toLowerCase) and `tags.includes` silently accepts a
+  // scalar string that then crashes tfidfSearch (`meta.tags.join/.some`),
+  // buildIndexCache (`m.tags.slice`), and getRelatedMemories (`Set(m.tags)`)
+  // on the next read. Coerce at the destructure so every downstream use is
+  // safe — same blast radius the indexFile hardening guards against for
+  // externally-authored frontmatter.
+  const { content, category = 'knowledge', importanceScore = 0.5, sessionId, author, force = false } = args;
+  const title = String(args.title ?? '');
+  const tags = Array.isArray(args.tags) ? args.tags : [];
   const isOrg = tags.includes('org');
   const isPersonal = tags.includes('personal');
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
@@ -119,7 +131,8 @@ export function storeMemory(args: any): any {
     ...(sessionId ? [sessionId] : []),
   ])];
   const fm: MemoryFrontmatter = {
-    title, tags,
+    title,
+    tags,
     author: effectiveAuthor,
     sessions,
     created: preservedCreated ?? now,

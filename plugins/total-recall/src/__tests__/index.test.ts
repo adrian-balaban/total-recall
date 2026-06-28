@@ -1264,3 +1264,65 @@ describe('process signal handlers — SIGINT and beforeExit', () => {
     expect(fs.existsSync(path.join(VAULT, 'index.json'))).toBe(true);
   });
 });
+
+// ─── store_memory: defensive coercion at the write path ─────────────────────
+//
+// MCP does not enforce a tool's inputSchema — `inputSchema` is metadata for
+// clients, not a runtime guard. A misbehaving caller (buggy agent, hand-crafted
+// stdio request) can pass `title: 12345` or `tags: "kafka,cdc"`. Without
+// coercion at the write path, the value lands in memIndex and crashes
+// tfidfSearch (`meta.title.toLowerCase()`, `meta.tags.join/.some`),
+// buildIndexCache (`m.title.slice()`, `m.tags.slice`), and getRelatedMemories
+// (`Set(m.tags)`) on the very next read. Mirrors indexFile's read-path
+// hardening (vault-scan.ts) for the write path.
+describe('store_memory — defensive coercion of non-string title and non-array tags', () => {
+  it('coerces a numeric title to a string so recall_memory does not crash', async () => {
+    const stored = result(await callTool('store_memory', {
+      title: 2026 as any,                  // bypass inputSchema
+      content: 'numeric-title content',
+      tags: [],
+      category: 'knowledge',
+    }));
+    // memIndex holds a string title, not the raw number
+    const list = result(await callTool('list_memories'));
+    const meta = list.items.find((m: any) => m.key === stored.key);
+    expect(meta).toBeDefined();
+    expect(typeof meta!.title).toBe('string');
+    expect(meta!.title).toBe('2026');
+    // On-disk frontmatter is also a string (quoted, so it round-trips).
+    // needsQuotes emits single-quoted scalars for numeric-looking values.
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    expect(raw).toMatch(/^title: '2026'/m);
+    // Force the inverted index to include this memory (otherwise the debounced
+    // rebuild lags behind the test).
+    await callTool('rebuild_index');
+    // recall_memory would crash on `meta.title.toLowerCase()` if memIndex held a
+    // Number — assert the search path completes and finds the memory
+    const recalled = result(await callTool('recall_memory', { query: 'numeric-title' }));
+    expect(recalled.length).toBeGreaterThan(0);
+  });
+
+  it('coerces a scalar-string tags argument to an empty array so tfidfSearch does not crash', async () => {
+    const stored = result(await callTool('store_memory', {
+      title: 'Scalar Tags',
+      content: 'scalar-tags content',
+      tags: 'kafka,cdc' as any,            // bypass inputSchema — scalar string, not array
+      category: 'knowledge',
+    }));
+    // memIndex holds an array tags, not a scalar string
+    const list = result(await callTool('list_memories'));
+    const meta = list.items.find((m: any) => m.key === stored.key);
+    expect(meta).toBeDefined();
+    expect(Array.isArray(meta!.tags)).toBe(true);
+    expect(meta!.tags).toEqual([]);
+    // Force the inverted index to include this memory.
+    await callTool('rebuild_index');
+    // get_related_memories calls `Set(m.tags)` — a scalar would throw here
+    const related = result(await callTool('get_related_memories', { key: stored.key }));
+    expect(Array.isArray(related)).toBe(true);
+    // tfidfSearch would crash on `meta.tags.join` / `meta.tags.some` if memIndex
+    // held a scalar — assert the search path completes and finds the memory
+    const searched = result(await callTool('search_index', { query: 'scalar-tags' }));
+    expect(searched.length).toBeGreaterThan(0);
+  });
+});
