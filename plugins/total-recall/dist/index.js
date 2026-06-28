@@ -2984,7 +2984,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve2.call(this, root, ref);
+      let _sch = resolve3.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3011,7 +3011,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve2(root, ref) {
+    function resolve3(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3642,7 +3642,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve2(baseURI, relativeURI, options) {
+    function resolve3(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3900,7 +3900,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve2,
+      resolve: resolve3,
       resolveComponent,
       equal,
       serialize,
@@ -14210,7 +14210,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve2) => setTimeout(resolve2, pollInterval));
+        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -14227,7 +14227,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -14305,7 +14305,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve2(parseResult.data);
+            resolve3(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -14566,12 +14566,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve2, reject) => {
+    return new Promise((resolve3, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve2, interval);
+      const timeoutId = setTimeout(resolve3, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -15441,12 +15441,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve2) => {
+    return new Promise((resolve3) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve2();
+        resolve3();
       } else {
-        this._stdout.once("drain", resolve2);
+        this._stdout.once("drain", resolve3);
       }
     });
   }
@@ -15584,11 +15584,32 @@ function loadIndex(target, p) {
   } catch {
   }
 }
-function coerceMemEntry(raw) {
+function deriveFilePathFromKey(key) {
+  if (typeof key !== "string" || !key) return null;
+  if (key.includes("\0") || key.includes("\\")) return null;
+  const isOrg = key.startsWith("org/");
+  const rel = isOrg ? key.slice("org/".length) : key;
+  if (!rel || rel.startsWith("/") || rel.includes("//")) return null;
+  const segments = rel.split("/");
+  if (segments.some((s) => s === ".." || s === "." || s === "")) return null;
+  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+  const filePath = path2.join(base, rel + ".md");
+  const vaultRoot = path2.resolve(base);
+  const resolved = path2.resolve(filePath);
+  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path2.sep)) return null;
+  return filePath;
+}
+function coerceMemEntry(raw, key) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
   const e = raw;
+  const filePath = deriveFilePathFromKey(key);
+  if (!filePath) return null;
   return {
     ...e,
+    key,
+    // normalize to the trusted memIndex key (discard any inner key)
+    filePath,
+    // re-derived + containment-checked; discards any persisted filePath
     title: String(e.title ?? ""),
     tags: Array.isArray(e.tags) ? e.tags : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
@@ -15611,7 +15632,7 @@ function loadMemIndex() {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
   for (const [k, v] of Object.entries(parsed)) {
-    const coerced = coerceMemEntry(v);
+    const coerced = coerceMemEntry(v, k);
     if (coerced) memIndex[k] = coerced;
   }
 }
@@ -15910,6 +15931,7 @@ function reconcileIndex() {
       return;
     }
     for (const e of entries) {
+      if (e.isSymbolicLink()) continue;
       const fp = path3.join(dir, e.name);
       if (e.isDirectory()) {
         const reservedOrgPrefix = !isOrg && e.name === "org";
@@ -15935,6 +15957,15 @@ function reconcileIndex() {
 }
 function indexFile(filePath, isOrg) {
   try {
+    const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+    try {
+      if (fs3.lstatSync(filePath).isSymbolicLink()) return;
+    } catch {
+      return;
+    }
+    const realBase = fs3.realpathSync(base);
+    const realFile = fs3.realpathSync(filePath);
+    if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
     const raw = fs3.readFileSync(filePath, "utf8");
     const { data, content } = parseFrontmatter(raw);
     const fm = data;
@@ -16073,6 +16104,21 @@ function storeMemory(args) {
   const resolved = path5.resolve(filePath);
   if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path5.sep)) {
     throw new Error(`Invalid category "${category}": resolves outside the vault.`);
+  }
+  try {
+    if (!fs5.lstatSync(catDir).isDirectory()) {
+      throw new Error(`Invalid category "${category}": category path is not a real directory (symlink or file).`);
+    }
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") throw e;
+  }
+  try {
+    const st = fs5.lstatSync(filePath);
+    if (!st.isFile()) {
+      throw new Error(`Memory "${key}" already exists as a non-file entry (symlink or directory).`);
+    }
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") throw e;
   }
   ensureDir(catDir);
   const osUser = os2.userInfo().username;
@@ -16466,7 +16512,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.9" : null.version;
+var PLUGIN_VERSION = true ? "1.0.10" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

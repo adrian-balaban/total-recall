@@ -4,6 +4,8 @@ import {
   INDEX_PATH,
   INVERTED_INDEX_PATH,
   INDEX_CACHE_PATH,
+  ORG_VAULT,
+  PERSONAL_VAULT,
   ensureDir,
 } from './paths.js';
 import { memIndex, invertedIndex } from './state.js';
@@ -50,11 +52,47 @@ function loadIndex<T extends Record<string, unknown>>(target: T, p: string) {
 // (`Set(m.tags)`), query (`m.tags.includes`) — never see a non-string title or
 // non-array tags. Mirrors the indexFile read-path hardening for the
 // load-from-on-disk-cache path.
-function coerceMemEntry(raw: unknown): Record<string, unknown> | null {
+// Re-derive filePath from the memIndex key, discarding any persisted filePath.
+// The key is the trusted lookup token — a vault-relative path (`knowledge/foo`)
+// with an `org/` prefix for org memories — so filePath must always be
+// `<vault>/<rel>.md`. A poisoned index.json could set `filePath: '/etc/shadow'`;
+// worse, the ORG vault's `index.json` IS git-synced, so a teammate with push
+// access can plant one. Tools pass `meta.filePath` straight to fs.*Sync
+// (query.ts get_memories_by_keys, recall.ts, mutate.ts delete_memory) →
+// arbitrary read AND arbitrary delete. Never trust a persisted filePath:
+// rebuild it from the validated key and containment-check the result. Reject
+// keys that could escape when joined (`..`/`.` segments, leading `/`, `\`,
+// null bytes, empty segments); return null on any failure so the caller drops
+// the entry rather than indexing a path that points outside the vault.
+function deriveFilePathFromKey(key: unknown): string | null {
+  if (typeof key !== 'string' || !key) return null;
+  if (key.includes('\0') || key.includes('\\')) return null;
+  const isOrg = key.startsWith('org/');
+  const rel = isOrg ? key.slice('org/'.length) : key;
+  if (!rel || rel.startsWith('/') || rel.includes('//')) return null;
+  const segments = rel.split('/');
+  if (segments.some(s => s === '..' || s === '.' || s === '')) return null;
+  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+  const filePath = path.join(base, rel + '.md');
+  const vaultRoot = path.resolve(base);
+  const resolved = path.resolve(filePath);
+  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path.sep)) return null;
+  return filePath;
+}
+
+// `key` is the memIndex key (the JSON object key in index.json) — the trusted
+// identity of the entry, independent of any (possibly poisoned) `key`/`filePath`
+// fields inside the entry. filePath is re-derived from it (see
+// deriveFilePathFromKey); the inner `key` field is normalized to match.
+function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const e = raw as Record<string, unknown>;
+  const filePath = deriveFilePathFromKey(key);
+  if (!filePath) return null;
   return {
     ...e,
+    key,        // normalize to the trusted memIndex key (discard any inner key)
+    filePath,   // re-derived + containment-checked; discards any persisted filePath
     title: String(e.title ?? ''),
     tags: Array.isArray(e.tags) ? e.tags : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
@@ -74,7 +112,7 @@ function loadMemIndex() {
   try { parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); } catch { return; }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-    const coerced = coerceMemEntry(v);
+    const coerced = coerceMemEntry(v, k);
     if (coerced) (memIndex as any)[k] = coerced;
   }
 }

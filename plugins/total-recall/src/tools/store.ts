@@ -102,6 +102,38 @@ export function storeMemory(args: any): any {
   if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path.sep)) {
     throw new Error(`Invalid category "${category}": resolves outside the vault.`);
   }
+  // Symlink containment: the path.resolve check above is LEXICAL — it normalizes
+  // `.`/`..` as string ops and never calls stat/readlink, so it does NOT detect a
+  // symlink. A local attacker (or a teammate who planted a symlink via the org
+  // vault's `git pull`, which preserves symlinks) can make either the category
+  // dir or a pre-existing `slug.md` a symlink pointing anywhere; the lexical
+  // check passes (both lexical paths are inside the vault) but writeFileSync
+  // below would follow the link and write outside the vault — clobbering an
+  // arbitrary file, or (for a dangling symlink) creating a file at the link's
+  // target. Both catDir and filePath must be real filesystem entries before we
+  // create or write anything: a category dir must be a real directory, and an
+  // existing target must be a real file. lstatSync stats the entry itself (not
+  // the target), so a symlink-to-dir reports isDirectory()=false and a
+  // symlink-to-file reports isFile()=false — both rejected. ENOENT (the entry
+  // doesn't exist yet) is the normal "new category / new file" case and is
+  // allowed through to ensureDir/writeFileSync. This closes the planted-symlink
+  // write-escape; it is not a TOCTOU-proof guard against a microsecond swap
+  // race, which would need O_NOFOLLOW per-component opens.
+  try {
+    if (!fs.lstatSync(catDir).isDirectory()) {
+      throw new Error(`Invalid category "${category}": category path is not a real directory (symlink or file).`);
+    }
+  } catch (e: any) {
+    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = new category dir, fine
+  }
+  try {
+    const st = fs.lstatSync(filePath);
+    if (!st.isFile()) {
+      throw new Error(`Memory "${key}" already exists as a non-file entry (symlink or directory).`);
+    }
+  } catch (e: any) {
+    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = new file, fine
+  }
   ensureDir(catDir);
   // Org memories are always attributed to the real OS user — never trust a
   // caller-supplied `author` for org, or any caller could pass the existing

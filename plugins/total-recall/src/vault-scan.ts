@@ -49,6 +49,19 @@ export function reconcileIndex() {
     let entries: fs.Dirent[];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
+      // Skip symlinks entirely. `git pull` preserves symlinks, so a teammate
+      // with push access to the shared org vault can plant a symlink named
+      // `*.md` → `~/.ssh/id_rsa` (or any victim-readable file), or a symlinked
+      // directory pointing outside the vault. Without this guard, a
+      // symlink-to-a-directory is treated as a directory (recursing outside the
+      // vault) and a symlink-to-a-file ending in `.md` is indexed — and
+      // indexFile's readFileSync follows it, dumping the target's contents into
+      // contentPreview (surfaced via search_index / get_memories_by_keys /
+      // recall_memory(full)). Dirent.isSymbolicLink() detects the link itself
+      // (not the target), so this fires before the isDirectory/endsWith branches
+      // below. The privacy filter never runs on pulled content, so this
+      // index-time skip is the only barrier against the read-side leak.
+      if (e.isSymbolicLink()) continue;
       // `e.name` is a filesystem-discovered entry from readdirSync (excludes
       // `.`/`..`; filenames can't contain `/`), and `dir` is vault-rooted by the
       // walk. Not caller-supplied. Reviewed path-traversal finding; suppressed inline.
@@ -86,6 +99,25 @@ export function reconcileIndex() {
 
 export function indexFile(filePath: string, isOrg: boolean) {
   try {
+    // Defense-in-depth against symlink traversal. The reconcileIndex walk skips
+    // symlinks (e.isSymbolicLink() above), but indexFile is exported and could
+    // be called with a caller-supplied path, so guard here too. lstatSync stats
+    // the path itself (not the target): a symlink — dangling or pointing at
+    // `~/.ssh/id_rsa` or any victim-readable file — returns isSymbolicLink()=true
+    // and is rejected, so readFileSync below can't follow a link out of the vault
+    // and leak the target into contentPreview. realpathSync then resolves through
+    // any link in the path and we re-check containment against the realpath'd
+    // vault root — closing the lexical-only gap of path.resolve for the read
+    // path. (A teammate can plant a symlink via the org vault's `git pull`, which
+    // preserves symlinks; the privacy filter never runs on pulled content.)
+    const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+    try {
+      if (fs.lstatSync(filePath).isSymbolicLink()) return;
+    } catch { return; }
+    const realBase = fs.realpathSync(base);
+    const realFile = fs.realpathSync(filePath);
+    if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
+
     const raw = fs.readFileSync(filePath, 'utf8');
     const { data, content } = parseFrontmatter(raw);
     const fm = data as Partial<MemoryFrontmatter>;

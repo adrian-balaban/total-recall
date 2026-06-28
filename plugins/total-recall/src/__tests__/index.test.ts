@@ -226,6 +226,134 @@ describe('store_memory', () => {
   });
 });
 
+// ─── vault-boundary hardening (symlink traversal + poisoned filePath) ─────────
+//
+// SEC-001 (Critical): reconcileIndex's walk followed symlinks — a teammate
+// plants a symlink `*.md` → `~/.ssh/id_rsa` via the org vault's `git pull`
+// (which preserves symlinks); readFileSync followed it into contentPreview,
+// surfaced via search_index / get_memories_by_keys / recall_memory(full). The
+// privacy filter never runs on pulled content. The walk now skips symlinks.
+// SEC-002 (High): store.ts containment used lexical path.resolve (doesn't
+// resolve symlinks); a symlinked category dir or slug.md escaped the vault on
+// write. Both catDir and filePath are now lstat-checked as real entries.
+// SEC-003 (Medium): persistence.coerceMemEntry trusted a persisted filePath
+// (poisonable via the git-synced org index.json) → arbitrary read/delete.
+// filePath is now re-derived from the validated memIndex key.
+
+describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () => {
+  // "Outside the vault" scratch dir — a sibling of TEST_HOME, never under VAULT.
+  const OUTSIDE = path.join('/tmp', 'tr-outside-' + process.pid);
+  beforeEach(() => { fs.rmSync(OUTSIDE, { recursive: true, force: true }); fs.mkdirSync(OUTSIDE, { recursive: true }); });
+  afterEach(() => { fs.rmSync(OUTSIDE, { recursive: true, force: true }); });
+
+  it('reconcileIndex skips a symlinked .md file (no arbitrary-file read)', async () => {
+    // A teammate plants a symlink `*.md` → a victim file outside the vault via
+    // the org vault's git pull. The walk must skip it so readFileSync never
+    // follows the link into contentPreview.
+    const victim = path.join(OUTSIDE, 'secret.txt');
+    fs.writeFileSync(victim, 'TOPSECRET-LEAK');
+    fs.symlinkSync(victim, path.join(VAULT, 'personal-vault', 'knowledge', 'leak.md'));
+    await callTool('rebuild_index');
+    expect(memIndex['knowledge/leak']).toBeUndefined();
+    const allPreviews = Object.values(memIndex).map((m: any) => m.contentPreview ?? '');
+    expect(allPreviews.every((p: string) => !p.includes('TOPSECRET-LEAK'))).toBe(true);
+  });
+
+  it('reconcileIndex does not recurse into a symlinked directory', async () => {
+    const outsideDir = path.join(OUTSIDE, 'linked-dir');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.writeFileSync(path.join(outsideDir, 'stolen.md'), '---\ntitle: Stolen\n---\nTOPSECRET-DIR');
+    fs.symlinkSync(outsideDir, path.join(VAULT, 'personal-vault', 'linked-dir'));
+    await callTool('rebuild_index');
+    expect(memIndex['linked-dir/stolen']).toBeUndefined();
+    const allPreviews = Object.values(memIndex).map((m: any) => m.contentPreview ?? '');
+    expect(allPreviews.every((p: string) => !p.includes('TOPSECRET-DIR'))).toBe(true);
+  });
+
+  it('store_memory rejects a symlinked category directory (no vault-escape write)', async () => {
+    const outsideDir = path.join(OUTSIDE, 'evil-target');
+    fs.mkdirSync(outsideDir, { recursive: true });
+    fs.symlinkSync(outsideDir, path.join(VAULT, 'personal-vault', 'evil'));
+    const res = await callTool('store_memory', { title: 'Escape Via Symlink', content: 'payload', tags: [], category: 'evil' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('symlink');
+    // No file was written through the symlink into the outside target dir.
+    expect(fs.existsSync(path.join(outsideDir, 'escape-via-symlink.md'))).toBe(false);
+  });
+
+  it('store_memory rejects a symlinked target file (no clobber of a victim file)', async () => {
+    const victim = path.join(OUTSIDE, 'victim.txt');
+    fs.writeFileSync(victim, 'VICTIM-INTACT');
+    // `knowledge` is a real category dir (mkVaultDirs); plant a symlink slug.md
+    // → victim. A store whose title slugifies to 'clobber' would otherwise
+    // follow the link and overwrite the victim.
+    fs.symlinkSync(victim, path.join(VAULT, 'personal-vault', 'knowledge', 'clobber.md'));
+    const res = await callTool('store_memory', { title: 'clobber', content: 'ATTACK', tags: [], category: 'knowledge' });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('symlink');
+    expect(fs.readFileSync(victim, 'utf8')).toBe('VICTIM-INTACT');
+  });
+
+  it('loadIndexes re-derives filePath from the key (drops a poisoned filePath)', () => {
+    const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
+    fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({
+      'knowledge/poison': {
+        key: 'knowledge/poison',
+        filePath: '/etc/shadow',   // poisoned — must be discarded
+        title: 'Poison', tags: [], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5, category: 'knowledge',
+        contentPreview: 'p', accessCount: 0, lastAccessed: '2026-01-01T00:00:00Z', tokenEstimate: 1, isOrg: false,
+      },
+    }));
+    loadIndexes();
+    const meta = memIndex['knowledge/poison'];
+    expect(meta).toBeDefined();
+    expect(meta.filePath).not.toBe('/etc/shadow');
+    expect(meta.filePath).toBe(path.join(VAULT, 'personal-vault', 'knowledge', 'poison.md'));
+  });
+
+  it('loadIndexes drops an entry whose key escapes the vault', () => {
+    const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
+    fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({
+      '../../etc/shadow': {
+        key: '../../etc/shadow', filePath: '/etc/shadow',
+        title: 'Escape', tags: [], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5, category: 'knowledge',
+        contentPreview: 'e', accessCount: 0, lastAccessed: '2026-01-01T00:00:00Z', tokenEstimate: 1, isOrg: false,
+      },
+    }));
+    loadIndexes();
+    expect(memIndex['../../etc/shadow']).toBeUndefined();
+  });
+
+  it('loadIndexes drops an org entry whose key escapes the org vault, keeps a legit one', () => {
+    const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
+    fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({
+      'org/..': {
+        key: 'org/..', filePath: '/etc/shadow',
+        title: 'Org Escape', tags: ['org'], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5, category: 'knowledge',
+        contentPreview: 'o', accessCount: 0, lastAccessed: '2026-01-01T00:00:00Z', tokenEstimate: 1, isOrg: true,
+      },
+      'org/architecture/legit': {
+        key: 'org/architecture/legit',
+        filePath: path.join(VAULT, 'org', 'org-vault', 'architecture', 'legit.md'),
+        title: 'Legit Org', tags: ['org'], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5, category: 'architecture',
+        contentPreview: 'l', accessCount: 0, lastAccessed: '2026-01-01T00:00:00Z', tokenEstimate: 1, isOrg: true,
+      },
+    }));
+    loadIndexes();
+    expect(memIndex['org/..']).toBeUndefined();
+    expect(memIndex['org/architecture/legit']).toBeDefined();
+    expect(memIndex['org/architecture/legit'].filePath).toBe(path.join(VAULT, 'org', 'org-vault', 'architecture', 'legit.md'));
+  });
+});
+
 // ─── recall_memory ────────────────────────────────────────────────────────────
 
 describe('recall_memory', () => {
