@@ -27,6 +27,18 @@ function has(bin: string): boolean {
 }
 const OK = has('git') && has('node');
 
+// Symlinks are needed to plant the teammate-push vector (git pull preserves
+// symlinks). Linux/macOS always allow them; on a FS that doesn't, skip the
+// symlink test rather than fail it on a capability it can't exercise.
+const CAN_SYMLINK = (() => {
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sym-'));
+    fs.symlinkSync('nonexistent-target', path.join(d, 'link'));
+    fs.rmSync(d, { recursive: true, force: true });
+    return true;
+  } catch { return false; }
+})();
+
 let tmpHome: string;
 let remote: string;
 let orgDir: string;
@@ -143,5 +155,37 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
     writeMkdir(file, `---\ntitle: Block Array Doc\ntags:\n  - org\n  - architecture\nauthor: tester\n---\n${body}`);
     runCjs(key);
     expect(remoteTree()).toContain('org-vault/architecture/block-tags.md');
+  });
+
+  // Pass 2 fix #4: a teammate with push access plants a symlink `architecture/leak.md`
+  // → an outside file in the shared org vault; git pull preserves it. The PostToolUse
+  // sync fires (even on a failed store_memory over that key), readFileSync follows the
+  // link, and — if the victim is org-tagged with an inert body — privacyCheck passes
+  // and updateOrgIndex commits contentPreview (the target's first 500 chars) into the
+  // shared org index.json: an arbitrary-file leak to every teammate. The orgFileIsSafe
+  // lstat+realpath guard must reject the symlink BEFORE readFileSync. The victim is
+  // deliberately org-tagged + inert: a non-org victim would be caught by the not-tagged-
+  // org check first (no leak even without the guard) → a false-positive test.
+  const symTest = CAN_SYMLINK ? it : it.skip;
+  symTest('rejects a symlinked org file planted in the shared vault (no contentPreview leak)', () => {
+    const SENTINEL = 'tr-symlink-leak-sentinel-7Q2X-no-real-secrets';
+    // Victim: an OUTSIDE file (not under orgVault), org-tagged, inert body (no
+    // secret/email/phone/pronoun) so privacyCheck would pass without the guard.
+    const victimPath = path.join(tmpHome, 'stolen.md');
+    writeMkdir(victimPath, `---\ntitle: Stolen Doc\ntags: [org]\nauthor: tester\n---\n## Executive Summary\n\n${SENTINEL} plain body.\n`);
+    // Plant the symlink inside the org vault pointing at the outside victim.
+    const linkPath = path.join(orgVault, 'architecture/leak.md');
+    fs.mkdirSync(path.dirname(linkPath), { recursive: true });
+    fs.symlinkSync(victimPath, linkPath);
+
+    const res = runCjs('org/architecture/leak');
+    // The guard's rejection message names the symlink / outside-vault reason.
+    expect(res.stderr).toMatch(/symlink|outside the org vault/i);
+    // The symlinked file is never staged/committed (no symlink blob pushed).
+    expect(remoteTree()).not.toContain('org-vault/architecture/leak.md');
+    // The victim's content (the sentinel) never reaches the shared org index.json.
+    let indexJson = '';
+    try { indexJson = git(['show', 'org-vault:org-vault/index.json'], { cwd: remote }); } catch { /* no index.json pushed yet */ }
+    expect(indexJson).not.toContain(SENTINEL);
   });
 }, 60000);

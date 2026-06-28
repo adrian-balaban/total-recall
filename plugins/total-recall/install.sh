@@ -207,9 +207,15 @@ else
   NODE_BIN=$(ls ~/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)
   [ -n "$NODE_BIN" ] || NODE_BIN="$(command -v node)"
   info "Using node binary: $NODE_BIN"
-  if claude mcp add-json total-recall \
-       "{\"type\":\"stdio\",\"command\":\"$NODE_BIN\",\"args\":[\"$PLUGIN_ROOT/dist/index.js\"]}" \
-       --scope user; then
+  # Build the MCP registration JSON via node + JSON.stringify, passing the two
+  # paths through env rather than interpolating them into the literal: a `"` or
+  # `\` in $NODE_BIN or $PLUGIN_ROOT (a Windows-style path, an escaped char, an
+  # apostrophe in a username) would break the hand-rolled JSON and make
+  # `claude mcp add-json` fail — silently skipping registration. JSON.stringify
+  # guarantees valid JSON regardless of path content; env-pass avoids any
+  # shell/JS injection from the path (mirrors load-memory-index.sh).
+  MCP_JSON=$(NODE_BIN="$NODE_BIN" PLUGIN_ROOT="$PLUGIN_ROOT" node -e 'process.stdout.write(JSON.stringify({type:"stdio",command:process.env.NODE_BIN,args:[process.env.PLUGIN_ROOT+"/dist/index.js"]}))')
+  if claude mcp add-json total-recall "$MCP_JSON" --scope user; then
     if claude mcp get total-recall 2>&1 | grep -qi 'failed to connect'; then
       warn "MCP server shows 'Failed to connect' — the node path may be wrong: $NODE_BIN"
       warn "Re-run with the correct node, or fix via 'claude mcp remove total-recall' + 'claude mcp add-json ...'."
@@ -256,7 +262,11 @@ if (JSON.stringify(s.hooks).includes('hooks/scripts/build-memory-index.sh')) {
   console.log('SKIP: total-recall hooks already present.');
   process.exit(0);
 }
-const cmd = (p, timeout) => ({ type: 'command', command: `bash ${plugin}/hooks/scripts/${p}`, timeout });
+// String concat, not a template literal: `plugin` is $PLUGIN_ROOT from argv,
+// and a backtick or `${` sequence in that path would break the template literal
+// and abort the hook-wiring heredoc (silent: hooks never get wired). Plain
+// concat is immune to path-content injection.
+const cmd = (p, timeout) => ({ type: 'command', command: 'bash ' + plugin + '/hooks/scripts/' + p, timeout });
 (s.hooks.SessionStart = s.hooks.SessionStart || []).push({ hooks: [
   cmd('pull-org-vault.sh', 30),
   cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh

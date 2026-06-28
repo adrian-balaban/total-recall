@@ -37,7 +37,19 @@ function git(cwd, args, opts = {}) {
   const result = spawnSync('git', ['-C', cwd, ...args], {
     encoding: 'utf8',
     stdio: opts.quiet ? 'pipe' : 'inherit',
-    env: { ...process.env },
+    // Defense-in-depth against a teammate-pushed .gitmodules with an ext:: submodule
+    // URL (ext:: is literal command execution). orgRepo is the user's configured
+    // https/git@ remote, so ext:: can't enter via the remote URL; this blocks it for
+    // any submodule fetch. Applied via env so checkout/pull/add/commit/push all
+    // inherit it uniformly. protocol.file is left at its default so local bare-remote
+    // clones (incl. the e2e test) keep working — the file:// submodule vector is
+    // closed by --no-recurse-submodules on the pull below, not by blocking file://.
+    env: {
+      ...process.env,
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'protocol.ext.allow',
+      GIT_CONFIG_VALUE_0: 'never',
+    },
   });
   if (result.status !== 0 && !opts.allowFail) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr?.trim()}`);
@@ -157,6 +169,33 @@ function removeFromOrgIndex(key) {
   atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }
 
+// Symlink + realpath containment for an org-vault file (mirrors src/vault-scan.ts
+// indexFile + src/tools/store.ts). The lexical path.resolve check in main() does NOT
+// detect symlinks, and the org vault is a SHARED git repo: a teammate with push
+// access can plant a symlink named `<relKey>.md` → any victim-readable file
+// (`~/.ssh/id_rsa`, `/etc/passwd`); `git pull` preserves symlinks. Without this guard,
+// readFileSync(orgFile) in store mode follows the link and reads the target into
+// `raw`; if the target's first 500 chars contain no secret/email/phone (e.g.
+// /etc/passwd), privacyCheck passes and updateOrgIndex commits that content as
+// `contentPreview` into the shared org index.json → a 500-char arbitrary-file leak to
+// every teammate. The PostToolUse sync fires on tool invocation including errors, so
+// this is reachable even when the originating store_memory threw on store.ts's own
+// lstat guard. lstatSync stats the entry itself (not the target) → a symlink is
+// rejected regardless of what it points at; realpathSync resolves through any link in
+// the path and we re-check containment against the realpath'd org vault root. ENOENT
+// (missing file) returns true: delete mode no-ops, store mode is gated by existsSync.
+function orgFileIsSafe(p) {
+  try {
+    if (fs.lstatSync(p).isSymbolicLink()) return false;
+  } catch (e) {
+    if (e && e.code === 'ENOENT') return true; // missing = no link to follow
+    throw e;
+  }
+  const realBase = fs.realpathSync(ORG_VAULT);
+  const realFile = fs.realpathSync(p);
+  return realFile === realBase || realFile.startsWith(realBase + path.sep);
+}
+
 async function main() {
   const key = process.argv[2];
   const deleteMode = process.argv.includes('--delete');
@@ -186,9 +225,15 @@ async function main() {
   // old code read from PERSONAL_VAULT here — where org files never live — so
   // existsSync was always false and every org sync silently exited 0 (a no-op). Sync
   // now commits the file that is already on disk, not a copy from personal.
-  if (!deleteMode && !fs.existsSync(orgFile)) {
-    console.error(`Org file not found: ${orgFile}`);
-    process.exit(0);
+  if (!deleteMode) {
+    if (!fs.existsSync(orgFile)) {
+      console.error(`Org file not found: ${orgFile}`);
+      process.exit(0);
+    }
+    if (!orgFileIsSafe(orgFile)) {
+      console.error(`Rejecting org key ${key}: file is a symlink or resolves outside the org vault (possible planted link in the shared repo).`);
+      process.exit(0);
+    }
   }
 
   // Keep the org-vault on the org-vault branch (its steady state). We deliberately do
@@ -208,10 +253,14 @@ async function main() {
   // incoming path, or the remote advanced non-ff) we still try to commit locally; the
   // push will fail loudly if the remote has advanced, and we reset the local commit on
   // failure so the branch stays clean for the next attempt.
-  git(ORG_VAULT_DIR, ['pull', '--ff-only', 'origin', BRANCH], { quiet: true, allowFail: true });
+  git(ORG_VAULT_DIR, ['pull', '--ff-only', '--no-recurse-submodules', 'origin', BRANCH], { quiet: true, allowFail: true });
 
   if (deleteMode) {
     if (fs.existsSync(orgFile)) {
+      if (!orgFileIsSafe(orgFile)) {
+        console.error(`Refusing to delete org key ${key}: file is a symlink or resolves outside the org vault.`);
+        process.exit(0);
+      }
       try { fs.unlinkSync(orgFile); } catch {}
     }
     removeFromOrgIndex(relKey);

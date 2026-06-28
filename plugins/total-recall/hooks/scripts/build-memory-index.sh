@@ -31,7 +31,14 @@ COUNT=0
 process_vault() {
   local base="$1"
   local prefix="$2"
-  [ -d "$base" ] || return
+  # `return 0`, not bare `return`: a bare `return` propagates the `[ -d ]`
+  # failure status (1) when the vault dir is absent — and `process_vault` is
+  # called as a standalone command under `set -e`, so that 1 aborts the whole
+  # SessionStart cache build before the cache is written. The org vault dir is
+  # regularly absent (personal-only installs, or before `--org-repo` setup), so
+  # this left those users with a stale/missing injected index. An absent vault
+  # means "no memories from this vault" — success, not failure.
+  [ -d "$base" ] || return 0
   while IFS= read -r -d '' mdfile; do
     local rel="${mdfile#$base/}"
     local key="$prefix${rel%.md}"
@@ -63,12 +70,25 @@ process_vault() {
     [ -z "$title" ] && title=$(basename "$key")
     title="${title:0:40}"
     # Trim each tag (strip the leading space left after comma-splitting) so the
-    # cache shows "kafka, streaming" not "kafka,  streaming".
-    tags_short=$(echo "$tags" | awk -F',' '{for(i=1;i<=NF&&i<=3;i++){gsub(/^[ \t]+|[ \t]+$/,"",$i); printf "%s%s",$i,(i<NF&&i<3?", ","")} if(NF>3) printf ", ..."}')
+    # cache shows "kafka, streaming" not "kafka,  streaming". Build the joined
+    # string in a plain loop instead of a ternary inside printf: the previous
+    # form `printf "%s%s",$i,(i<NF&&i<3?", ":"")` had a `,` where the ternary `:`
+    # belonged, which gawk (and mawk) reject as a syntax error — under `set -e`
+    # that aborted the whole SessionStart cache build, leaving the injected
+    # index stale/missing. The loop form is portable across awk implementations
+    # and avoids the fragile ternary-in-printf construct entirely.
+    tags_short=$(echo "$tags" | awk -F',' '{out=""; for(i=1;i<=NF;i++){t=$i; gsub(/^[ \t]+|[ \t]+$/,"",t); if(i<=3) out=out (i>1?", ":"") t} if(NF>3) out=out ", ..."; print out}')
 
     echo "- $key: $title [$tags_short] ($category)" >> "$TMP"
     COUNT=$((COUNT + 1))
-  done < <(find "$base" -type d \( $PRUNE \) -prune -o -name '*.md' -print0 2>/dev/null)
+  # -type f excludes symlinked .md (type l): keeps this cache builder in sync with
+  # the TS reconcileIndex walk (src/vault-scan.ts), which skips symlinks so the MCP
+  # tools never surface them — without -type f the injected index would advertise a
+  # memory the tools then can't find. It also avoids a `set -e` crash: a dangling
+  # symlink in the shared org vault (a teammate can plant one via git pull, which
+  # preserves symlinks) makes `done < "$mdfile"` above fail to open and abort the
+  # whole SessionStart cache build, leaving the injected index stale/missing.
+  done < <(find "$base" -type d \( $PRUNE \) -prune -o -type f -name '*.md' -print0 2>/dev/null)
 }
 
 process_vault "$PERSONAL_VAULT" ""

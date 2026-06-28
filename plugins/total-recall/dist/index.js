@@ -16512,7 +16512,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.10" : null.version;
+var PLUGIN_VERSION = true ? "1.0.11" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

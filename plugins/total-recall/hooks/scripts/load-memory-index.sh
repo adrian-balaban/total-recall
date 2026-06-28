@@ -8,7 +8,11 @@ CACHE="$HOME/.total-recall/.index-cache.txt"
 # reports in its initialize handshake). node is this plugin's hard dependency;
 # falls back to "unknown" if package.json can't be read.
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR/../..}"
-VERSION=$(node -e "try{process.stdout.write(String(require('$PLUGIN_ROOT/package.json').version||'unknown'))}catch{process.stdout.write('unknown')}" 2>/dev/null || echo unknown)
+# Pass $PLUGIN_ROOT to node via env, not by interpolating it into the JS string
+# literal: a single quote or backtick in the install path would break the
+# `require('...')` literal (silent 'unknown' today) and is a JS-injection vector
+# if the path were ever attacker-controlled. env-pass is injection-safe.
+VERSION=$(PLUGIN_ROOT="$PLUGIN_ROOT" node -e "try{process.stdout.write(String(require(process.env.PLUGIN_ROOT+'/package.json').version||'unknown'))}catch{process.stdout.write('unknown')}" 2>/dev/null || echo unknown)
 
 # Announce the version on every session start, even before any memories exist.
 if [ -f "$CACHE" ] && [ -r "$CACHE" ]; then
