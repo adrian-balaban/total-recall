@@ -128,7 +128,31 @@ export function getRelatedMemories(args: any): any {
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
     .sort((a, b) => b.score - a.score)
-    .slice(0, limit);
+    .slice(0, limit)
+    .map(m => {
+      // `includeContent` is advertised in the schema but was previously
+      // ignored — callers that opted in got the same payload as default. Honor
+      // it now: read through the LRU first (mirrors recall_memory's full path)
+      // and fall back to a one-shot fs read. Do NOT bump accessCount / lastAccessed
+      // here — get_related_memories is a discovery query, not a "read"; an entry
+      // surfaced as related-but-never-read should still decay (mirrors the
+      // recall_memory(full=false) policy in recall.ts).
+      if (!includeContent) return m;
+      let content = contentCache.get(m.key);
+      if (content === undefined) {
+        try {
+          const meta = memIndex[m.key];
+          if (meta) {
+            const raw = fs.readFileSync(meta.filePath, 'utf8');
+            content = parseFrontmatter(raw).content;
+            // Only cache successful reads — a transient read failure (race,
+            // lock) must not poison the LRU with '' for 30 min.
+            contentCache.set(m.key, content);
+          }
+        } catch { content = ''; }
+      }
+      return { ...m, content };
+    });
 }
 
 export function pruneMemories(args: any): any {

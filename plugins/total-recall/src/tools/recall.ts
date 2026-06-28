@@ -52,6 +52,13 @@ export async function recallMemory(args: any): Promise<any> {
     ranked = ranked.filter(r => memIndex[r.key]?.category !== 'journal');
   }
 
+  // Date filters silently exclude memories with a missing/Invalid `updated` —
+  // mirrors `list_memories` (see CLAUDE.md "Key Gotchas"). A memory lacking
+  // `updated` would crash `new Date(undefined)` into NaN and compare false
+  // against any cutoff, so the explicit `updated ? … : false` short-circuits
+  // before the NaN path. Same rationale as list_memories: every memory SHOULD
+  // carry `updated`; the drop is the safest fallback for externally-authored
+  // files that predate the field.
   if (since) {
     const cutoff = toCutoff(since);
     ranked = ranked.filter(r => {

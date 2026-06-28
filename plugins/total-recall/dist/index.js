@@ -15495,9 +15495,12 @@ var perfSamples = [];
 
 // src/ebbinghaus.ts
 function computeRetentionStrength(importance, daysSince2, accessCount) {
-  const lambda = 0.16 * (1 - importance * 0.8);
-  const strength = importance * Math.exp(-lambda * daysSince2) * (1 + accessCount * 0.2);
-  return Math.min(1, strength);
+  const i = Number.isFinite(importance) ? Math.max(0, Math.min(1, importance)) : 0.5;
+  const d = Number.isFinite(daysSince2) ? Math.max(0, daysSince2) : 0;
+  const a = Number.isFinite(accessCount) ? Math.max(0, accessCount) : 0;
+  const lambda = 0.16 * (1 - i * 0.8);
+  const strength = i * Math.exp(-lambda * d) * (1 + a * 0.2);
+  return Math.max(0, Math.min(1, strength));
 }
 function daysSince(date3) {
   const d = typeof date3 === "string" ? new Date(date3) : date3;
@@ -15906,6 +15909,7 @@ function indexFile(filePath, isOrg) {
     const fm = data;
     const key = keyFromPath(filePath, isOrg);
     const existing = memIndex[key];
+    const now = (/* @__PURE__ */ new Date()).toISOString();
     memIndex[key] = {
       key,
       filePath,
@@ -15925,13 +15929,13 @@ function indexFile(filePath, isOrg) {
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       author: fm.author,
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
-      created: fm.created ?? (/* @__PURE__ */ new Date()).toISOString(),
-      updated: fm.updated ?? (/* @__PURE__ */ new Date()).toISOString(),
+      created: fm.created ?? now,
+      updated: fm.updated ?? now,
       importanceScore: fm.importanceScore ?? 0.5,
       category: deriveCategory(filePath, isOrg),
       contentPreview: content.trim().slice(0, 500),
       accessCount: existing?.accessCount ?? 0,
-      lastAccessed: existing?.lastAccessed ?? (/* @__PURE__ */ new Date()).toISOString(),
+      lastAccessed: existing?.lastAccessed ?? now,
       tokenEstimate: tokenEstimate(raw),
       isOrg
     };
@@ -16306,7 +16310,23 @@ function getRelatedMemories(args) {
     if (shared === 0) return null;
     const categoryBoost = m.category === source.category ? 0.2 : 0;
     return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + mTags.size - shared) + categoryBoost };
-  }).filter((m) => m !== null).sort((a, b) => b.score - a.score).slice(0, limit);
+  }).filter((m) => m !== null).sort((a, b) => b.score - a.score).slice(0, limit).map((m) => {
+    if (!includeContent) return m;
+    let content = contentCache.get(m.key);
+    if (content === void 0) {
+      try {
+        const meta2 = memIndex[m.key];
+        if (meta2) {
+          const raw = fs7.readFileSync(meta2.filePath, "utf8");
+          content = parseFrontmatter(raw).content;
+          contentCache.set(m.key, content);
+        }
+      } catch {
+        content = "";
+      }
+    }
+    return { ...m, content };
+  });
 }
 function pruneMemories(args) {
   const { threshold = 0.1, limit = 20 } = args;
@@ -16399,7 +16419,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.5" : null.version;
+var PLUGIN_VERSION = true ? "1.0.6" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

@@ -620,6 +620,25 @@ describe('get_related_memories', () => {
     const res = result(await callTool('get_related_memories', { key, limit: 1 }));
     expect(res.length).toBeLessThanOrEqual(1);
   });
+
+  it('includeContent=false (default) omits the content field', async () => {
+    const list = result(await callTool('list_memories'));
+    const key = list.items.find((m: any) => m.title === 'Kafka Source')?.key;
+    if (!key) return;
+    const res = result(await callTool('get_related_memories', { key }));
+    for (const m of res) expect(m.content).toBeUndefined();
+  });
+
+  it('includeContent=true includes full content for each related memory', async () => {
+    const list = result(await callTool('list_memories'));
+    const key = list.items.find((m: any) => m.title === 'Kafka Source')?.key;
+    if (!key) return;
+    const res = result(await callTool('get_related_memories', { key, includeContent: true }));
+    expect(res.length).toBeGreaterThan(0);
+    const sink = res.find((m: any) => m.title === 'Kafka Sink');
+    expect(sink).toBeDefined();
+    expect(sink.content).toContain('Kafka consumer');
+  });
 });
 
 // ─── prune_memories ───────────────────────────────────────────────────────────

@@ -95,6 +95,13 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // entries are now refreshed too (previously skipped via the !memIndex[key] guard,
     // which left org contentPreview/tags stale after a git pull).
     const existing = memIndex[key];
+    // Single scan-time "now" per file. Without this, `created`, `updated`, and
+    // `lastAccessed` each call `new Date()` independently — across an N-file
+    // reconcileIndex sweep, two fallbacks in the same file can land on either
+    // side of a millisecond boundary, producing a `created` later than
+    // `updated` (impossible ordering) and a `lastAccessed` distinct from both.
+    // Capture once; reuse for the three fallback fields.
+    const now = new Date().toISOString();
     memIndex[key] = {
       key,
       filePath,
@@ -114,13 +121,13 @@ export function indexFile(filePath: string, isOrg: boolean) {
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       author: fm.author,
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
-      created: fm.created ?? new Date().toISOString(),
-      updated: fm.updated ?? new Date().toISOString(),
+      created: fm.created ?? now,
+      updated: fm.updated ?? now,
       importanceScore: fm.importanceScore ?? 0.5,
       category: deriveCategory(filePath, isOrg),
       contentPreview: content.trim().slice(0, 500),
       accessCount: existing?.accessCount ?? 0,
-      lastAccessed: existing?.lastAccessed ?? new Date().toISOString(),
+      lastAccessed: existing?.lastAccessed ?? now,
       tokenEstimate: tokenEstimate(raw),
       isOrg,
     };
