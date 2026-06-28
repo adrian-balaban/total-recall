@@ -48,9 +48,13 @@ export function updateMemory(args: any): any {
     tags: Array.isArray(tags ?? parsed.data.tags) ? (tags ?? parsed.data.tags) : [],
     // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
     // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
-    // store_memory's schema enforces 0..1; update_memory's schema doesn't, so a
+    // MCP does not enforce the inputSchema (see store.ts destructure comment), so a
     // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
-    importanceScore: Math.max(0, Math.min(1, (importanceScore ?? parsed.data.importanceScore) ?? 0.5)),
+    // The Number.isFinite guard closes the NaN hole: `Math.min(1, NaN)` returns
+    // NaN (NaN propagates through Math.min/max), so a non-numeric string like
+    // 'high' would persist as NaN. Fall back to 0.5 (the schema default) in that
+    // case, matching Ebbinghaus's own fallback.
+    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(importanceScore ?? parsed.data.importanceScore)) ? Number(importanceScore ?? parsed.data.importanceScore) : 0.5)),
     updated: now,
     sessions,
   };

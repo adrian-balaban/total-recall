@@ -1099,6 +1099,28 @@ describe('update_memory — org author protection', () => {
     expect(res.isError).toBe(true);
     expect(res.content[0].text).toContain('(unknown)');
   });
+
+  it('clamps + coerces a string/out-of-range importanceScore on update (mirrors store)', async () => {
+    // store_memory now clamps+coerces importanceScore at the destructure; this
+    // pins the symmetric hardening on update_memory (which previously only had
+    // a clamp, not a NaN fallback — `Math.min(1, NaN)` returns NaN, so a
+    // non-numeric string would have persisted as NaN).
+    const stored = result(await callTool('store_memory', {
+      title: 'Update IS Coerce',
+      content: 'update-is-coerce content',
+      tags: [],
+      category: 'knowledge',
+      importanceScore: 0.5,
+    }));
+    const res = await callTool('update_memory', { key: stored.key, importanceScore: 'urgent' as any });
+    expect(res.isError).not.toBe(true);
+    const list = result(await callTool('list_memories'));
+    const meta = list.items.find((m: any) => m.key === stored.key);
+    expect(meta).toBeDefined();
+    expect(typeof meta!.importanceScore).toBe('number');
+    expect(Number.isFinite(meta!.importanceScore)).toBe(true);
+    expect(meta!.importanceScore).toBe(0.5); // NaN fallback to schema default
+  });
 });
 
 // ─── flushPending, saveNow, recalcIdfNow ─────────────────────────────────────
@@ -1464,5 +1486,158 @@ describe('loadIndexes — defensive coercion on restore', () => {
     loadIndexes();
     expect(memIndex['knowledge/ok']).toBeDefined();
     expect(memIndex['knowledge/bad']).toBeUndefined();
+  });
+
+  it('clamps + coerces an out-of-range and string importanceScore from on-disk index.json', () => {
+    // A pre-v1.0.9 install may have written a string (`'high'` from a hand-edited
+    // file with a QUOTED `importanceScore: 'high'`) or an out-of-range Number
+    // (`5` or `-1`). Ebbinghaus's own coerce-and-clamp handles the read-time math,
+    // but the persisted value would still leak via list_memories /
+    // get_related_memories / prune_memories. coerceMemEntry must normalize so a
+    // loaded index exposes a finite number in [0, 1].
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({
+      'knowledge/string-importance': {
+        key: 'knowledge/string-importance',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'string-importance.md'),
+        title: 'String IS',
+        tags: [],
+        sessions: [],
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: 'high',  // string from a quoted frontmatter value
+        category: 'knowledge',
+        contentPreview: 'string',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+      'knowledge/over-importance': {
+        key: 'knowledge/over-importance',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'over-importance.md'),
+        title: 'Over IS',
+        tags: [],
+        sessions: [],
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: 5,        // out-of-range above 1
+        category: 'knowledge',
+        contentPreview: 'over',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+      'knowledge/under-importance': {
+        key: 'knowledge/under-importance',
+        filePath: path.join(VAULT, 'personal-vault', 'knowledge', 'under-importance.md'),
+        title: 'Under IS',
+        tags: [],
+        sessions: [],
+        created: '2026-01-01T00:00:00Z',
+        updated: '2026-01-01T00:00:00Z',
+        importanceScore: -1,       // out-of-range below 0
+        category: 'knowledge',
+        contentPreview: 'under',
+        accessCount: 0,
+        lastAccessed: '2026-01-01T00:00:00Z',
+        tokenEstimate: 10,
+        isOrg: false,
+      },
+    }));
+    loadIndexes();
+    // 'high' → Number('high') = NaN → Number.isFinite(NaN) = false → fall back
+    // to 0.5 (the schema default), matching Ebbinghaus's own NaN fallback.
+    const s = memIndex['knowledge/string-importance'];
+    expect(s).toBeDefined();
+    expect(typeof s.importanceScore).toBe('number');
+    expect(Number.isFinite(s.importanceScore)).toBe(true);
+    expect(s.importanceScore).toBeGreaterThanOrEqual(0);
+    expect(s.importanceScore).toBeLessThanOrEqual(1);
+    expect(s.importanceScore).toBe(0.5);
+    // 5 → Number.isFinite(5) = true → clamped to 1
+    expect(memIndex['knowledge/over-importance'].importanceScore).toBe(1);
+    // -1 → Number.isFinite(-1) = true → clamped to 0
+    expect(memIndex['knowledge/under-importance'].importanceScore).toBe(0);
+  });
+});
+
+// ─── store_memory: defensive clamp+coerce of importanceScore ─────────────────
+//
+// Mirrors mutate.ts:53 — MCP does not enforce the tool's inputSchema, so a caller
+// can pass `importanceScore: 'high'` or `importanceScore: -5`. Ebbinghaus's own
+// coerce-and-clamp handles the read-time math, but the bad value would still
+// persist in memIndex + on disk and resurface via list_memories /
+// get_related_memories / prune_memories. store_memory now clamps+coerces at the
+// destructure so the persisted value is always a finite number in [0, 1].
+
+describe('store_memory — defensive clamp+coerce of importanceScore', () => {
+  it('clamps an out-of-range importanceScore to [0, 1] before persistence', async () => {
+    const stored = result(await callTool('store_memory', {
+      title: 'Over IS',
+      content: 'over-is content',
+      tags: [],
+      category: 'knowledge',
+      importanceScore: 5 as any,    // bypass inputSchema — out-of-range above 1
+    }));
+    const list = result(await callTool('list_memories'));
+    const meta = list.items.find((m: any) => m.key === stored.key);
+    expect(meta).toBeDefined();
+    expect(meta!.importanceScore).toBe(1);
+    // On-disk frontmatter is also clamped (stringifies via Number → String)
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    expect(raw).toMatch(/^importanceScore: 1$/m);
+  });
+
+  it('coerces a string importanceScore to a finite number before persistence', async () => {
+    const stored = result(await callTool('store_memory', {
+      title: 'String IS',
+      content: 'string-is content',
+      tags: [],
+      category: 'knowledge',
+      importanceScore: 'high' as any,  // bypass inputSchema — string, not number
+    }));
+    const list = result(await callTool('list_memories'));
+    const meta = list.items.find((m: any) => m.key === stored.key);
+    expect(meta).toBeDefined();
+    expect(typeof meta!.importanceScore).toBe('number');
+    expect(Number.isFinite(meta!.importanceScore)).toBe(true);
+    expect(meta!.importanceScore).toBeGreaterThanOrEqual(0);
+    expect(meta!.importanceScore).toBeLessThanOrEqual(1);
+    // Number('high') = NaN → fall back to 0.5 (the schema default)
+    expect(meta!.importanceScore).toBe(0.5);
+  });
+});
+
+// ─── indexFile: clamp+coerce importanceScore on read path ───────────────────
+//
+// A hand-edited (or teammate-pushed) frontmatter with a QUOTED importanceScore
+// (`importanceScore: '0.7'`) parses by coerceScalar into a string, not a number.
+// indexFile now normalizes at the read path so the value surfaced from a freshly
+// indexed file is always a finite number in [0, 1].
+
+describe('indexFile — quoted string importanceScore in frontmatter', () => {
+  it('coerces a string importanceScore so prune_memories does not crash', async () => {
+    const dir = path.join(VAULT, 'personal-vault', 'knowledge');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(
+      path.join(dir, 'quoted-importance.md'),
+      `---\ntitle: Quoted IS\ntags: []\ncreated: 2026-01-01T00:00:00Z\nupdated: 2026-01-01T00:00:00Z\nimportanceScore: '0.7'\n---\n\nQuoted importance note.\n`
+    );
+    await callTool('rebuild_index');
+    // search_index returns a metadata-only shape that omits importanceScore,
+    // so fetch via get_memories_by_keys (which echoes the full MemoryMetadata)
+    // to verify the index-time coerce landed.
+    const res = await callTool('get_memories_by_keys', { keys: ['knowledge/quoted-importance'] });
+    expect(res.isError).not.toBe(true);
+    const found = (result(res) as any[]).find((m: any) => m.key === 'knowledge/quoted-importance');
+    expect(found).toBeDefined();
+    // prune_memories iterates Object.values(memIndex) and computes
+    // computeRetentionStrength(m.importanceScore, …); the read-time Ebbinghaus
+    // clamp handles strings, but the persisted value surfaced here must also be
+    // a finite number in [0, 1].
+    expect(typeof found!.importanceScore).toBe('number');
+    expect(Number.isFinite(found!.importanceScore)).toBe(true);
+    expect(found!.importanceScore).toBe(0.7);
   });
 });

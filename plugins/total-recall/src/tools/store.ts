@@ -38,9 +38,21 @@ export function storeMemory(args: any): any {
   // on the next read. Coerce at the destructure so every downstream use is
   // safe — same blast radius the indexFile hardening guards against for
   // externally-authored frontmatter.
-  const { content, category = 'knowledge', importanceScore = 0.5, sessionId, author, force = false } = args;
+  const { content, category = 'knowledge', sessionId, author, force = false } = args;
   const title = String(args.title ?? '');
   const tags = Array.isArray(args.tags) ? args.tags : [];
+  // Clamp + coerce importanceScore: mirrors mutate.ts:53. MCP does not enforce
+  // the tool's inputSchema (see the destructure comment above), so a caller can
+  // pass `importanceScore: 'high'` or `importanceScore: -5`. Ebbinghaus's own
+  // coerce-and-clamp handles the runtime read, but the bad value would still
+  // persist in memIndex + on disk and resurface in list_memories /
+  // get_related_memories / prune_memories output. Match mutate.ts so the two
+  // write paths are symmetric and the persisted value is always a finite
+  // number in [0, 1]. The Number.isFinite check is critical: `Math.min(1, NaN)`
+  // returns NaN (NaN propagates through Math.min/max), so without the guard a
+  // non-numeric string like 'high' would persist as NaN. Fall back to 0.5
+  // (the schema default) in that case, matching Ebbinghaus's own fallback.
+  const importanceScore = Math.max(0, Math.min(1, Number.isFinite(Number(args.importanceScore)) ? Number(args.importanceScore) : 0.5));
   const isOrg = tags.includes('org');
   const isPersonal = tags.includes('personal');
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");

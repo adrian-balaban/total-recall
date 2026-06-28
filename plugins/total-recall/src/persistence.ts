@@ -58,6 +58,13 @@ function coerceMemEntry(raw: unknown): Record<string, unknown> | null {
     title: String(e.title ?? ''),
     tags: Array.isArray(e.tags) ? e.tags : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
+    // Clamp + coerce importanceScore: a pre-v1.0.9 install may have written a
+    // string (`'high'`) or out-of-range Number (`5`, `-1`) from a hand-edited
+    // file. Ebbinghaus's own coerce-and-clamp handles the read-time math, but
+    // the persisted value would still leak via list_memories /
+    // get_related_memories / prune_memories. Normalize on restore so the value
+    // surfaced from a loaded index is always a finite number in [0, 1].
+    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(e.importanceScore)) ? Number(e.importanceScore) : 0.5)),
   };
 }
 

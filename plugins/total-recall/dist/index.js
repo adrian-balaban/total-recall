@@ -15591,7 +15591,14 @@ function coerceMemEntry(raw) {
     ...e,
     title: String(e.title ?? ""),
     tags: Array.isArray(e.tags) ? e.tags : [],
-    sessions: Array.isArray(e.sessions) ? e.sessions : []
+    sessions: Array.isArray(e.sessions) ? e.sessions : [],
+    // Clamp + coerce importanceScore: a pre-v1.0.9 install may have written a
+    // string (`'high'`) or out-of-range Number (`5`, `-1`) from a hand-edited
+    // file. Ebbinghaus's own coerce-and-clamp handles the read-time math, but
+    // the persisted value would still leak via list_memories /
+    // get_related_memories / prune_memories. Normalize on restore so the value
+    // surfaced from a loaded index is always a finite number in [0, 1].
+    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(e.importanceScore)) ? Number(e.importanceScore) : 0.5))
   };
 }
 function loadMemIndex() {
@@ -15955,7 +15962,16 @@ function indexFile(filePath, isOrg) {
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? now,
       updated: fm.updated ?? now,
-      importanceScore: fm.importanceScore ?? 0.5,
+      // Coerce + clamp importanceScore: a hand-edited (or teammate-pushed)
+      // frontmatter with a QUOTED importanceScore (`importanceScore: '0.7'`)
+      // parses by coerceScalar into a string, not a number — and an UNQUOTED
+      // out-of-range value (`importanceScore: 5`) survives the parse as a
+      // Number. Both leak into memIndex and surface via list_memories /
+      // get_related_memories / prune_memories as a non-finite or
+      // out-of-range importanceScore. Ebbinghaus's own coerce-and-clamp
+      // handles the read-time math, but persist a normalized number so the
+      // exposed value is always in [0, 1].
+      importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(fm.importanceScore)) ? Number(fm.importanceScore) : 0.5)),
       category: deriveCategory(filePath, isOrg),
       contentPreview: content.trim().slice(0, 500),
       accessCount: existing?.accessCount ?? 0,
@@ -16032,9 +16048,10 @@ function orgVaultConfigured() {
   return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
 }
 function storeMemory(args) {
-  const { content, category = "knowledge", importanceScore = 0.5, sessionId, author, force = false } = args;
+  const { content, category = "knowledge", sessionId, author, force = false } = args;
   const title = String(args.title ?? "");
   const tags = Array.isArray(args.tags) ? args.tags : [];
+  const importanceScore = Math.max(0, Math.min(1, Number.isFinite(Number(args.importanceScore)) ? Number(args.importanceScore) : 0.5));
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
@@ -16397,9 +16414,13 @@ function updateMemory(args) {
     tags: Array.isArray(tags ?? parsed.data.tags) ? tags ?? parsed.data.tags : [],
     // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
     // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
-    // store_memory's schema enforces 0..1; update_memory's schema doesn't, so a
+    // MCP does not enforce the inputSchema (see store.ts destructure comment), so a
     // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
-    importanceScore: Math.max(0, Math.min(1, importanceScore ?? parsed.data.importanceScore ?? 0.5)),
+    // The Number.isFinite guard closes the NaN hole: `Math.min(1, NaN)` returns
+    // NaN (NaN propagates through Math.min/max), so a non-numeric string like
+    // 'high' would persist as NaN. Fall back to 0.5 (the schema default) in that
+    // case, matching Ebbinghaus's own fallback.
+    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(importanceScore ?? parsed.data.importanceScore)) ? Number(importanceScore ?? parsed.data.importanceScore) : 0.5)),
     updated: now,
     sessions
   };
@@ -16445,7 +16466,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.8" : null.version;
+var PLUGIN_VERSION = true ? "1.0.9" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
