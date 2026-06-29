@@ -67,13 +67,13 @@ This step is project-specific. Adapt to whatever the repo declares in `CLAUDE.md
 
 **4a. Verify green** — `npm test` + `npm run typecheck`. Both must pass clean. If they don't, fix and re-run; do NOT proceed.
 
-**4b. Bump version in BOTH manifests** — `package.json` and `.claude-plugin/plugin.json`. They MUST stay in sync. The version is what `claude plugin update` keys on; a fix committed at the same version is invisible to consumers.
+**4b. Bump version in `package.json` only** — it is the single source of truth; do not edit `.claude-plugin/plugin.json`'s version by hand. The `npm run build` step (4c) runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into `plugin.json` automatically, so the two can never drift. The version is what `claude plugin update` keys on; a fix committed at the same version is invisible to consumers.
 
 - Patch (`x.y.Z → x.y.(Z+1)`) for fixes / hardening.
 - Minor (`x.Y.z → x.(Y+1).0`) for new tools or features.
 - Major (`X.y.z → (X+1).0.0`) is rarely appropriate here.
 
-**4c. Rebuild dist** — for projects that ship pre-built artifacts (the total-recall `dist/` is committed because the plugin is distributed via `git-subdir`): run `npm run build`. The build injects the version via `--define:__PLUGIN_VERSION__`, so the bump in 4b MUST happen first. Verify the bundle contains the new version string before committing.
+**4c. Rebuild dist** — for projects that ship pre-built artifacts (the total-recall `dist/` is committed because the plugin is distributed via `git-subdir`): run `npm run build`. The build first runs `sync:version` (copies `package.json` → `plugin.json`), then injects the version into the bundle via `--define:__PLUGIN_VERSION__`, so the bump in 4b MUST happen first. Verify the bundle contains the new version string before committing.
 
 For non-total-recall repos: ask the user what the project's pre-commit ritual is (it may be a Makefile target, `./gradlew build`, `tox`, etc.). Never invent a checklist.
 
@@ -133,7 +133,7 @@ Pass 1 (3 findings):
 2. `src/ebbinghaus.ts:11` — `computeRetentionStrength` has no input guards; hand-edited `importanceScore: -1` yields negative strength. Coerce + clamp.
 3. `src/tools/query.ts:104` — `get_related_memories` accepts `includeContent` but never reads it. Implement LRU read-through.
 
-→ Apply all → add 2 tests → bump `package.json` + `plugin.json` to 1.0.6 → `npm run build` → commit `fix(total-recall): harden 4 edge cases + bump to 1.0.6` → push.
+→ Apply all → add 2 tests → bump `package.json` to 1.0.6 → `npm run build` (syncs `plugin.json` from `package.json`) → commit `fix(total-recall): harden 4 edge cases + bump to 1.0.6` → push.
 
 Pass 2: re-read all 12 source modules + 9 hook scripts + 7 test files. No new findings. `git diff --stat` empty.
 
