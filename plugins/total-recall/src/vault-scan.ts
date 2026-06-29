@@ -64,6 +64,30 @@ export function assertRegularFile(filePath: string, key: string): void {
   }
 }
 
+// Read a memory file's body (frontmatter stripped) with the symlink guard.
+// Consolidates the assertRegularFile + readFileSync + parseFrontmatter + try/catch
+// core that was inlined across recall_memory(full), get_memories_by_keys (summary
+// AND full), and get_related_memories(includeContent) — four copies of the same
+// symlink-guarded read. Returns the body string on success, which may be '' for an
+// empty-bodied memory (a VALID result, NOT a failure), or null on any failure
+// (assertRegularFile rejected a swapped symlink/dir, readFileSync threw, or
+// parseFrontmatter threw). The null/'' split is the point: callers must NOT
+// conflate an empty body with a failed read when deciding whether to cache the
+// result or bump access — null means "don't cache, signal failure", '' means
+// "cache it, it's a real empty body". The cache-check policy (truthy `!content`
+// vs strict `=== undefined`) and the access-bump policy (unconditional / iff-readOk
+// / none) differ per call site and are intentionally NOT unified here — callers
+// keep their own; this helper owns only the safe read.
+export function readMemoryContent(filePath: string, key: string): string | null {
+  try {
+    assertRegularFile(filePath, key);
+    const raw = fs.readFileSync(filePath, 'utf8');
+    return parseFrontmatter(raw).content;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Full vault scan ─────────────────────────────────────────────────────────
 
 // Reconcile the in-memory index against disk: add new/updated files, drop keys

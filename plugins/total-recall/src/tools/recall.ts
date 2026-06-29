@@ -1,5 +1,3 @@
-import * as fs from 'fs';
-import { parseFrontmatter } from '../frontmatter.js';
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
 import { toCutoff, inDateWindow } from '../dates.js';
@@ -9,7 +7,7 @@ import { scheduleSave } from '../persistence.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
-import { assertRegularFile } from '../vault-scan.js';
+import { readMemoryContent } from '../vault-scan.js';
 
 export async function recallMemory(args: any): Promise<any> {
   const { query, full = false, since, before, minScore = 0, limit = 10, excludeJournal = true, hybrid = true } = args;
@@ -94,23 +92,22 @@ export async function recallMemory(args: any): Promise<any> {
       scheduleSave();
       let content = contentCache.get(r.key);
       if (!content) {
-        try {
-          // Symlink containment (mirrors store.ts/mutate.ts via
-          // assertRegularFile): meta.filePath is lexically inside the vault but
-          // can be a symlink a teammate swapped in via the org vault's git pull
-          // AFTER the boot-time reconcileIndex that rejects symlinks at scan. The
-          // MCP server is long-lived and does not re-scan mid-session, so without
-          // this guard readFileSync follows the link and leaks the target into
-          // `content` (-> MCP response -> LLM context). Fail closed into the
-          // catch below (content='') instead of following.
-          assertRegularFile(meta.filePath, r.key);
-          const raw = fs.readFileSync(meta.filePath, 'utf8');
-          content = parseFrontmatter(raw).content; // strip YAML frontmatter
+        // readMemoryContent owns the swapped-symlink guard (assertRegularFile +
+        // read + parseFrontmatter, see vault-scan.ts): null = failed read (vanish,
+        // swapped symlink, parse error) → fail closed to ''; '' = a real empty body.
+        // This site keeps its two intentional policies: the truthy `!content` cache
+        // check (a cached '' re-reads, matching the prior behavior) and the
+        // unconditional access bump above — both preserved, only the read core moved.
+        const body = readMemoryContent(meta.filePath, r.key);
+        if (body !== null) {
+          content = body;
           // Only cache successful reads — a transient read failure (race, lock)
           // must not poison the LRU with '' for 30 min, or every later full recall
           // returns empty content until the entry expires/evicts.
-          contentCache.set(r.key, content!);
-        } catch { content = ''; }
+          contentCache.set(r.key, content);
+        } else {
+          content = '';
+        }
       }
       return { ...meta, content, score: r.score };
     }

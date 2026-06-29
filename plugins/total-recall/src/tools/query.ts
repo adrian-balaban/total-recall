@@ -1,12 +1,10 @@
-import * as fs from 'fs';
-import { parseFrontmatter } from '../frontmatter.js';
 import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
 import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, errors, perfSamples } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
 import { isVectorAvailable } from '../embeddings.js';
-import { assertRegularFile } from '../vault-scan.js';
+import { readMemoryContent } from '../vault-scan.js';
 
 export function listMemories(args: any): any {
   const { category, tag, limit = 50, offset = 0 } = args;
@@ -38,45 +36,36 @@ export function getMemoriesByKeys(args: any): any {
       scheduleSave();
     };
     if (summary) {
-      // Guard the read like the full-content path does: if the file vanished between
-      // index load and this read, surface a per-key error rather than crashing the
-      // whole batch.
-      let content = '';
-      try {
-        // Symlink containment (assertRegularFile): meta.filePath is lexically
-        // inside the vault but can be a symlink a teammate swapped in via the org
-        // vault's git pull AFTER the boot-time reconcileIndex that rejects
-        // symlinks at scan. Without this guard readFileSync follows the link and
-        // the executive-summary fallback returns the target's body verbatim
-        // (-> MCP response -> LLM context). Fail closed into the catch below.
-        assertRegularFile(meta.filePath, key);
-        const raw = fs.readFileSync(meta.filePath, 'utf8');
-        content = parseFrontmatter(raw).content;
-      } catch {
-        return { key, error: 'Failed to read memory file' };
-      }
+      // readMemoryContent owns the swapped-symlink guard (see vault-scan.ts):
+      // null = failed read (vanished file, swapped symlink, parse error) → surface
+      // a per-key error rather than crashing the whole batch; '' = a real empty body
+      // → the exec-summary regex misses and falls back to slice(0,500) of ''. No
+      // cache on the summary path.
+      const body = readMemoryContent(meta.filePath, key);
+      if (body === null) return { key, error: 'Failed to read memory file' };
       bumpAccess();
-      const execSummary = content.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content.slice(0, 500);
+      const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
       return { key, title: meta.title, category: meta.category, tags: meta.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
     let readOk = !!content;
     if (!content) {
-      try {
-        // Symlink containment (assertRegularFile) — see the summary path above.
-        // Without this guard readFileSync follows a swapped symlink and leaks
-        // the target into `content` (and poisons the LRU with it for 30 min).
-        // Fail closed into the catch (content='', readOk stays false → no access
-        // bump, no cache poison).
-        assertRegularFile(meta.filePath, key);
-        const raw = fs.readFileSync(meta.filePath, 'utf8');
-        content = parseFrontmatter(raw).content; // strip YAML frontmatter
+      // readMemoryContent owns the swapped-symlink guard — see vault-scan.ts.
+      // null = failed read (fail closed: content='', readOk stays false → no access
+      // bump, no cache poison); '' = a real empty body (cache + bump). The truthy
+      // `!content` check (a cached '' re-reads) and the deferred bump-on-readOk are
+      // this site's policies, preserved.
+      const body = readMemoryContent(meta.filePath, key);
+      if (body !== null) {
+        content = body;
         // Only cache successful reads — a transient failure must not poison the
         // LRU with '' for 30 min (every later get_memories_by_keys(full) on this
         // key would return empty until the entry expires/evicts).
-        contentCache.set(key, content!);
+        contentCache.set(key, content);
         readOk = true;
-      } catch { content = ''; }
+      } else {
+        content = '';
+      }
     }
     if (readOk) bumpAccess();
     return { ...meta, key, content };
@@ -158,20 +147,25 @@ export function getRelatedMemories(args: any): any {
       if (!includeContent) return m;
       let content = contentCache.get(m.key);
       if (content === undefined) {
-        try {
-          const meta = memIndex[m.key];
-          if (meta) {
-            // Symlink containment (assertRegularFile) — see get_memories_by_keys
-            // above. Without this guard readFileSync follows a swapped symlink
-            // and leaks the target into `content` (and the LRU). Fail closed.
-            assertRegularFile(meta.filePath, m.key);
-            const raw = fs.readFileSync(meta.filePath, 'utf8');
-            content = parseFrontmatter(raw).content;
+        // readMemoryContent owns the swapped-symlink guard — see vault-scan.ts.
+        // Strict `=== undefined` (NOT truthy `!content`): a cached '' is a HIT and
+        // is NOT re-read — the intentional difference from recall_memory /
+        // get_memories_by_keys, which re-read a cached empty body. null from the
+        // helper = failed read → fail closed to '' (NOT cached, matching the old
+        // catch's content='' that left the LRU untouched); no access bump (this is
+        // a discovery query, not a read).
+        const meta = memIndex[m.key];
+        if (meta) {
+          const body = readMemoryContent(meta.filePath, m.key);
+          if (body !== null) {
+            content = body;
             // Only cache successful reads — a transient read failure (race,
             // lock) must not poison the LRU with '' for 30 min.
             contentCache.set(m.key, content);
+          } else {
+            content = '';
           }
-        } catch { content = ''; }
+        }
       }
       return { ...m, content };
     });

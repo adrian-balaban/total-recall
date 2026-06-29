@@ -6876,12 +6876,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs9, exportName) {
+    function addFormats(ajv, list, fs7, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs9[f]);
+        ajv.addFormat(f, fs7[f]);
     }
     module2.exports = exports2 = formatsPlugin;
     Object.defineProperty(exports2, "__esModule", { value: true });
@@ -15931,6 +15931,15 @@ function assertRegularFile(filePath, key) {
     if (!e || e.code !== "ENOENT") throw e;
   }
 }
+function readMemoryContent(filePath, key) {
+  try {
+    assertRegularFile(filePath, key);
+    const raw = fs3.readFileSync(filePath, "utf8");
+    return parseFrontmatter(raw).content;
+  } catch {
+    return null;
+  }
+}
 function reconcileIndex() {
   const before = new Set(Object.keys(memIndex));
   const seen = /* @__PURE__ */ new Set();
@@ -16192,9 +16201,6 @@ function storeMemory(args) {
   return { key, filePath, message: `Memory stored: ${key}` };
 }
 
-// src/tools/recall.ts
-var fs6 = __toESM(require("fs"));
-
 // src/dates.ts
 function parseRelativeDate(expr) {
   const m = expr.match(/^(\d+)([dwm])$/);
@@ -16276,12 +16282,11 @@ async function recallMemory(args) {
       scheduleSave();
       let content = contentCache.get(r.key);
       if (!content) {
-        try {
-          assertRegularFile(meta2.filePath, r.key);
-          const raw = fs6.readFileSync(meta2.filePath, "utf8");
-          content = parseFrontmatter(raw).content;
+        const body = readMemoryContent(meta2.filePath, r.key);
+        if (body !== null) {
+          content = body;
           contentCache.set(r.key, content);
-        } catch {
+        } else {
           content = "";
         }
       }
@@ -16308,7 +16313,6 @@ function searchIndex(args) {
 }
 
 // src/tools/query.ts
-var fs7 = __toESM(require("fs"));
 function listMemories(args) {
   const { category, tag, limit = 50, offset = 0 } = args;
   const filtered = Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag))).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
@@ -16335,28 +16339,21 @@ function getMemoriesByKeys(args) {
       scheduleSave();
     };
     if (summary) {
-      let content2 = "";
-      try {
-        assertRegularFile(meta2.filePath, key);
-        const raw = fs7.readFileSync(meta2.filePath, "utf8");
-        content2 = parseFrontmatter(raw).content;
-      } catch {
-        return { key, error: "Failed to read memory file" };
-      }
+      const body = readMemoryContent(meta2.filePath, key);
+      if (body === null) return { key, error: "Failed to read memory file" };
       bumpAccess();
-      const execSummary = content2.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? content2.slice(0, 500);
+      const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
       return { key, title: meta2.title, category: meta2.category, tags: meta2.tags, summary: execSummary.trim() };
     }
     let content = contentCache.get(key);
     let readOk = !!content;
     if (!content) {
-      try {
-        assertRegularFile(meta2.filePath, key);
-        const raw = fs7.readFileSync(meta2.filePath, "utf8");
-        content = parseFrontmatter(raw).content;
+      const body = readMemoryContent(meta2.filePath, key);
+      if (body !== null) {
+        content = body;
         contentCache.set(key, content);
         readOk = true;
-      } catch {
+      } else {
         content = "";
       }
     }
@@ -16405,16 +16402,15 @@ function getRelatedMemories(args) {
     if (!includeContent) return m;
     let content = contentCache.get(m.key);
     if (content === void 0) {
-      try {
-        const meta2 = memIndex[m.key];
-        if (meta2) {
-          assertRegularFile(meta2.filePath, m.key);
-          const raw = fs7.readFileSync(meta2.filePath, "utf8");
-          content = parseFrontmatter(raw).content;
+      const meta2 = memIndex[m.key];
+      if (meta2) {
+        const body = readMemoryContent(meta2.filePath, m.key);
+        if (body !== null) {
+          content = body;
           contentCache.set(m.key, content);
+        } else {
+          content = "";
         }
-      } catch {
-        content = "";
       }
     }
     return { ...m, content };
@@ -16433,20 +16429,20 @@ function pruneMemories(args) {
 }
 
 // src/tools/mutate.ts
-var fs8 = __toESM(require("fs"));
+var fs6 = __toESM(require("fs"));
 var os3 = __toESM(require("os"));
 function updateMemory(args) {
   const { key, content, tags, importanceScore, sessionId } = args;
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   try {
-    if (!fs8.lstatSync(meta2.filePath).isFile()) {
+    if (!fs6.lstatSync(meta2.filePath).isFile()) {
       throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
     }
   } catch (e) {
     if (!e || e.code !== "ENOENT") throw e;
   }
-  const raw = fs8.readFileSync(meta2.filePath, "utf8");
+  const raw = fs6.readFileSync(meta2.filePath, "utf8");
   const parsed = parseFrontmatter(raw);
   const now = (/* @__PURE__ */ new Date()).toISOString();
   if (meta2.isOrg) {
@@ -16474,7 +16470,7 @@ function updateMemory(args) {
     sessions
   };
   const newContent = content ? withExecutiveSummary(content) : parsed.content;
-  fs8.writeFileSync(meta2.filePath, stringifyFrontmatter(newContent, newFm));
+  fs6.writeFileSync(meta2.filePath, stringifyFrontmatter(newContent, newFm));
   Object.assign(meta2, {
     tags: newFm.tags,
     importanceScore: newFm.importanceScore,
@@ -16497,7 +16493,7 @@ function deleteMemory(args) {
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   try {
-    fs8.unlinkSync(meta2.filePath);
+    fs6.unlinkSync(meta2.filePath);
   } catch {
   }
   delete memIndex[key];
@@ -16515,7 +16511,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.18" : null.version;
+var PLUGIN_VERSION = true ? "1.0.19" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
