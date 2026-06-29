@@ -64,6 +64,25 @@ export function assertRegularFile(filePath: string, key: string): void {
   }
 }
 
+// Generalised form of assertRegularFile: stat the entry itself (lstat, not stat,
+// so a symlink is judged on its identity as a link, not on the target's type)
+// and apply a caller-supplied predicate. ENOENT is allowed through — the caller
+// is expected to handle "this entry doesn't exist yet" (a new category dir, a
+// fresh memory file) as the normal case. Used by the write path in store.ts,
+// where the two arms (category dir must be a directory, existing target must
+// be a regular file) share the same try/catch + rethrow-non-ENOENT shape.
+export function assertLstat(
+  filePath: string,
+  predicate: (stats: fs.Stats) => boolean,
+  errorIfFail: string
+): void {
+  try {
+    if (!predicate(fs.lstatSync(filePath))) throw new Error(errorIfFail);
+  } catch (e: any) {
+    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = entry doesn't exist yet, fine
+  }
+}
+
 // Read a memory file's body (frontmatter stripped) with the symlink guard.
 // Consolidates the assertRegularFile + readFileSync + parseFrontmatter + try/catch
 // core that was inlined across recall_memory(full), get_memories_by_keys (summary

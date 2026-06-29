@@ -87,10 +87,10 @@ function parseYamlish(body) {
     if (line.trim() === "" || line.trim().startsWith("#")) continue;
     const blockItem = line.match(/^\s+-\s+(.+)$/);
     if (blockItem) {
-      const lastKey = lastArrayKey(data);
-      if (lastKey) {
-        const arr = data[lastKey];
-        arr.push(unquote(blockItem[1]));
+      let lastArrayKey = null;
+      for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) lastArrayKey = k;
+      if (lastArrayKey) {
+        data[lastArrayKey].push(unquote(blockItem[1]));
         continue;
       }
       continue;
@@ -116,11 +116,6 @@ function parseYamlish(body) {
     }
   }
   return data;
-}
-function lastArrayKey(data) {
-  let found = null;
-  for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) found = k;
-  return found;
 }
 function hadBlockItems(body, key) {
   const re = new RegExp(`^${escapeRegExp(key)}:\\s*\\n(\\s+-\\s+.+\\n)+`, "m");

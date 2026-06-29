@@ -15757,10 +15757,10 @@ function parseYamlish(body) {
     if (line.trim() === "" || line.trim().startsWith("#")) continue;
     const blockItem = line.match(/^\s+-\s+(.+)$/);
     if (blockItem) {
-      const lastKey = lastArrayKey(data);
-      if (lastKey) {
-        const arr = data[lastKey];
-        arr.push(unquote(blockItem[1]));
+      let lastArrayKey = null;
+      for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) lastArrayKey = k;
+      if (lastArrayKey) {
+        data[lastArrayKey].push(unquote(blockItem[1]));
         continue;
       }
       continue;
@@ -15786,11 +15786,6 @@ function parseYamlish(body) {
     }
   }
   return data;
-}
-function lastArrayKey(data) {
-  let found = null;
-  for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) found = k;
-  return found;
 }
 function hadBlockItems(body, key) {
   const re = new RegExp(`^${escapeRegExp(key)}:\\s*\\n(\\s+-\\s+.+\\n)+`, "m");
@@ -15932,6 +15927,13 @@ function assertRegularFile(filePath, key) {
     if (!fs3.lstatSync(filePath).isFile()) {
       throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
     }
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") throw e;
+  }
+}
+function assertLstat(filePath, predicate, errorIfFail) {
+  try {
+    if (!predicate(fs3.lstatSync(filePath))) throw new Error(errorIfFail);
   } catch (e) {
     if (!e || e.code !== "ENOENT") throw e;
   }
@@ -16146,21 +16148,16 @@ function storeMemory(args) {
   if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path5.sep)) {
     throw new Error(`Invalid category "${category}": resolves outside the vault.`);
   }
-  try {
-    if (!fs5.lstatSync(catDir).isDirectory()) {
-      throw new Error(`Invalid category "${category}": category path is not a real directory (symlink or file).`);
-    }
-  } catch (e) {
-    if (!e || e.code !== "ENOENT") throw e;
-  }
-  try {
-    const st = fs5.lstatSync(filePath);
-    if (!st.isFile()) {
-      throw new Error(`Memory "${key}" already exists as a non-file entry (symlink or directory).`);
-    }
-  } catch (e) {
-    if (!e || e.code !== "ENOENT") throw e;
-  }
+  assertLstat(
+    catDir,
+    (s) => s.isDirectory(),
+    `Invalid category "${category}": category path is not a real directory (symlink or file).`
+  );
+  assertLstat(
+    filePath,
+    (s) => s.isFile(),
+    `Memory "${key}" already exists as a non-file entry (symlink or directory).`
+  );
   ensureDir(catDir);
   const osUser = os2.userInfo().username;
   const effectiveAuthor = isOrg ? osUser : author ?? osUser;
@@ -16483,7 +16480,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.21" : null.version;
+var PLUGIN_VERSION = true ? "1.0.22" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

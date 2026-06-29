@@ -4,7 +4,7 @@ import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir } from '../paths.js';
-import { slugify, keyFromPath, tokenEstimate, deriveCategory } from '../vault-scan.js';
+import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
@@ -112,21 +112,16 @@ export function storeMemory(args: any): any {
   // allowed through to ensureDir/writeFileSync. This closes the planted-symlink
   // write-escape; it is not a TOCTOU-proof guard against a microsecond swap
   // race, which would need O_NOFOLLOW per-component opens.
-  try {
-    if (!fs.lstatSync(catDir).isDirectory()) {
-      throw new Error(`Invalid category "${category}": category path is not a real directory (symlink or file).`);
-    }
-  } catch (e: any) {
-    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = new category dir, fine
-  }
-  try {
-    const st = fs.lstatSync(filePath);
-    if (!st.isFile()) {
-      throw new Error(`Memory "${key}" already exists as a non-file entry (symlink or directory).`);
-    }
-  } catch (e: any) {
-    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = new file, fine
-  }
+  assertLstat(
+    catDir,
+    (s) => s.isDirectory(),
+    `Invalid category "${category}": category path is not a real directory (symlink or file).`
+  );
+  assertLstat(
+    filePath,
+    (s) => s.isFile(),
+    `Memory "${key}" already exists as a non-file entry (symlink or directory).`
+  );
   ensureDir(catDir);
   // Org memories are always attributed to the real OS user — never trust a
   // caller-supplied `author` for org, or any caller could pass the existing

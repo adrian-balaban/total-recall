@@ -103,11 +103,14 @@ function parseYamlish(body: string): Record<string, unknown> {
     // Block sequence item belonging to a pending key: "  - value"
     const blockItem = line.match(/^\s+-\s+(.+)$/);
     if (blockItem) {
-      // Attach to the most recently seen array-typed key
-      const lastKey = lastArrayKey(data);
-      if (lastKey) {
-        const arr = data[lastKey] as string[];
-        arr.push(unquote(blockItem[1]));
+      // Attach to the most recently seen array-typed key. There is at most one
+      // "open" block-sequence array at any time (parsed top-down; the writer
+      // emits inline arrays, so a block-sequence here is a legacy / hand-edited
+      // fallback). Walk data once for the block, find the array key if any.
+      let lastArrayKey: string | null = null;
+      for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) lastArrayKey = k;
+      if (lastArrayKey) {
+        (data[lastArrayKey] as string[]).push(unquote(blockItem[1]));
         continue;
       }
       // Orphan block item — ignore
@@ -149,12 +152,6 @@ function parseYamlish(body: string): Record<string, unknown> {
     }
   }
   return data;
-}
-
-function lastArrayKey(data: Record<string, unknown>): string | null {
-  let found: string | null = null;
-  for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) found = k;
-  return found;
 }
 
 function hadBlockItems(body: string, key: string): boolean {
