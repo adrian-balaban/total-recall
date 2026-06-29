@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { VECTORS_DB, ensureDir } from '../paths.js';
+import { VECTORS_DB } from '../paths.js';
 import { reconcileIndex, assertRegularFile } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';

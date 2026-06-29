@@ -17,7 +17,7 @@ import { scheduleSave } from '../persistence.js';
 import type { MemoryMetadata } from '../types.js';
 
 const mkMeta = (): MemoryMetadata => ({
-  key: 'k1', title: 't', tags: [], sessions: [], author: undefined,
+  key: 'k1', title: 't', tags: [], sessions: [],
   filePath: '/tmp/k1.md',
   created: '2025-01-01T00:00:00.000Z', updated: '2025-01-01T00:00:00.000Z',
   importanceScore: 0.5, category: 'knowledge', contentPreview: '',

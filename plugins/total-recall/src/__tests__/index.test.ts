@@ -455,8 +455,8 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     loadIndexes();
     const meta = memIndex['knowledge/poison'];
     expect(meta).toBeDefined();
-    expect(meta.filePath).not.toBe('/etc/shadow');
-    expect(meta.filePath).toBe(path.join(VAULT, 'personal-vault', 'knowledge', 'poison.md'));
+    expect(meta!.filePath).not.toBe('/etc/shadow');
+    expect(meta!.filePath).toBe(path.join(VAULT, 'personal-vault', 'knowledge', 'poison.md'));
   });
 
   it('loadIndexes drops an entry whose key escapes the vault', () => {
@@ -496,7 +496,7 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     loadIndexes();
     expect(memIndex['org/..']).toBeUndefined();
     expect(memIndex['org/architecture/legit']).toBeDefined();
-    expect(memIndex['org/architecture/legit'].filePath).toBe(path.join(VAULT, 'org', 'org-vault', 'architecture', 'legit.md'));
+    expect(memIndex['org/architecture/legit']!.filePath).toBe(path.join(VAULT, 'org', 'org-vault', 'architecture', 'legit.md'));
   });
 });
 
@@ -1190,7 +1190,7 @@ describe('indexFile error handling — corrupt .md triggers catch', () => {
 
 describe('recall_memory full=true — cache miss path', () => {
   it('reads file from disk when content is not in LRU cache', async () => {
-    const { key } = result(await callTool('store_memory', {
+    result(await callTool('store_memory', {
       title: 'Cache Miss Test', content: 'Disk content check', tags: ['cache'], category: 'knowledge',
     }));
     await callTool('rebuild_index');
@@ -1262,7 +1262,6 @@ describe('index cache build (more than 3 tags)', () => {
     });
     // The cache rebuild is debounced — trigger rebuild_index to force it synchronously
     await callTool('rebuild_index');
-    const cacheFile = path.join(VAULT, '.index-cache.txt');
     // Cache is written by debounced timer — may not exist yet; just verify no crash
     expect(true).toBe(true);
   });
@@ -1312,7 +1311,7 @@ describe('store_memory — duplicate key protection', () => {
   });
 
   it('force=true preserves prior session history (A2: no silent wipe)', async () => {
-    const first = result(await callTool('store_memory', {
+    result(await callTool('store_memory', {
       title: 'Sessions Keeper', content: 'V1', tags: [], category: 'knowledge', sessionId: 'sess-a',
     }));
     // A second overwrite carrying a DIFFERENT session must extend, not replace,
@@ -1681,15 +1680,15 @@ describe('loadIndexes — defensive coercion on restore', () => {
     const a = memIndex['knowledge/legacy-2026'];
     const b = memIndex['knowledge/scalar-tags'];
     expect(a).toBeDefined();
-    expect(typeof a.title).toBe('string');
-    expect(a.title).toBe('2026');
-    expect(Array.isArray(a.tags)).toBe(true);
-    expect(a.tags).toEqual([]);
-    expect(Array.isArray(a.sessions)).toBe(true);
-    expect(typeof b.title).toBe('string');
-    expect(Array.isArray(b.tags)).toBe(true);
-    expect(b.tags).toEqual([]);
-    expect(Array.isArray(b.sessions)).toBe(true);
+    expect(typeof a!.title).toBe('string');
+    expect(a!.title).toBe('2026');
+    expect(Array.isArray(a!.tags)).toBe(true);
+    expect(a!.tags).toEqual([]);
+    expect(Array.isArray(a!.sessions)).toBe(true);
+    expect(typeof b!.title).toBe('string');
+    expect(Array.isArray(b!.tags)).toBe(true);
+    expect(b!.tags).toEqual([]);
+    expect(Array.isArray(b!.sessions)).toBe(true);
   });
 
   it('survives the read-side callers after a coerced restore', async () => {
@@ -1809,15 +1808,15 @@ describe('loadIndexes — defensive coercion on restore', () => {
     // to 0.5 (the schema default), matching Ebbinghaus's own NaN fallback.
     const s = memIndex['knowledge/string-importance'];
     expect(s).toBeDefined();
-    expect(typeof s.importanceScore).toBe('number');
-    expect(Number.isFinite(s.importanceScore)).toBe(true);
-    expect(s.importanceScore).toBeGreaterThanOrEqual(0);
-    expect(s.importanceScore).toBeLessThanOrEqual(1);
-    expect(s.importanceScore).toBe(0.5);
+    expect(typeof s!.importanceScore).toBe('number');
+    expect(Number.isFinite(s!.importanceScore)).toBe(true);
+    expect(s!.importanceScore).toBeGreaterThanOrEqual(0);
+    expect(s!.importanceScore).toBeLessThanOrEqual(1);
+    expect(s!.importanceScore).toBe(0.5);
     // 5 → Number.isFinite(5) = true → clamped to 1
-    expect(memIndex['knowledge/over-importance'].importanceScore).toBe(1);
+    expect(memIndex['knowledge/over-importance']!.importanceScore).toBe(1);
     // -1 → Number.isFinite(-1) = true → clamped to 0
-    expect(memIndex['knowledge/under-importance'].importanceScore).toBe(0);
+    expect(memIndex['knowledge/under-importance']!.importanceScore).toBe(0);
   });
 });
 

@@ -18,7 +18,8 @@ function findSuspiciousEmail(text, allowedDomains) {
   EMAIL_RE.lastIndex = 0;
   let m;
   while ((m = EMAIL_RE.exec(text)) !== null) {
-    if (!isAllowedEmail(m[1], allowedDomains)) return m[0];
+    const host = m[1];
+    if (!isAllowedEmail(host, allowedDomains)) return m[0];
   }
   return null;
 }

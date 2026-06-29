@@ -58,7 +58,11 @@ export function findSuspiciousEmail(text: string, allowedDomains: string[]): str
   EMAIL_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = EMAIL_RE.exec(text)) !== null) {
-    if (!isAllowedEmail(m[1], allowedDomains)) return m[0];
+    // EMAIL_RE always captures group 1 (the host) on a match; assert non-undefined
+    // so the rest of the function reads it as a plain string under
+    // noUncheckedIndexedAccess.
+    const host = m[1]!;
+    if (!isAllowedEmail(host, allowedDomains)) return m[0];
   }
   return null;
 }

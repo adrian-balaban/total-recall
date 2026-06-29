@@ -33,7 +33,9 @@ export function rebuildInvertedIndex() {
     }
   }
   for (const t of Object.keys(invertedIndex)) {
-    invertedIndex[t].idf = Math.log((N + 1) / (docFreq[t] + 1)) + 1;
+    // invertedIndex[t] was just iterated from the same object above, so it
+    // is guaranteed present here.
+    invertedIndex[t]!.idf = Math.log((N + 1) / (docFreq[t]! + 1)) + 1;
   }
 }
 

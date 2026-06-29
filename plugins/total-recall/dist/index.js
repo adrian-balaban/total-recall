@@ -15767,7 +15767,7 @@ function parseYamlish(body) {
     const kv = line.match(/^([^:\s]+):\s*(.*)$/);
     if (!kv) continue;
     const key = kv[1];
-    const val = kv[2];
+    const val = kv[2] ?? "";
     if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
     if (val === "") {
       data[key] = [];
@@ -16010,7 +16010,7 @@ function indexFile(filePath, isOrg) {
     const key = keyFromPath(filePath, isOrg);
     const existing = memIndex[key];
     const now = (/* @__PURE__ */ new Date()).toISOString();
-    memIndex[key] = {
+    const meta2 = {
       key,
       filePath,
       // Coerce title to a string: a hand-edited (or teammate-pushed, via the shared
@@ -16027,7 +16027,6 @@ function indexFile(filePath, isOrg) {
       // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
       // the same externally-authored threat model as the numeric-title coercion.
       tags: Array.isArray(fm.tags) ? fm.tags : [],
-      author: fm.author,
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? now,
       updated: fm.updated ?? now,
@@ -16041,6 +16040,8 @@ function indexFile(filePath, isOrg) {
       tokenEstimate: tokenEstimate(raw),
       isOrg
     };
+    if (fm.author !== void 0) meta2.author = fm.author;
+    memIndex[key] = meta2;
     contentCache.delete(key);
   } catch (e) {
     errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
@@ -16050,7 +16051,7 @@ function deriveCategory(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
   const rel = path3.relative(base, filePath);
   const parts = rel.split(path3.sep);
-  return parts.length > 1 ? parts[0] : "knowledge";
+  return parts.length > 1 ? parts[0] ?? "knowledge" : "knowledge";
 }
 
 // src/tools/store.ts
@@ -16193,13 +16194,11 @@ function storeMemory(args) {
   const fileContent = stringifyFrontmatter(body, fm);
   fs5.writeFileSync(filePath, fileContent);
   const existing = memIndex[key];
-  memIndex[key] = {
+  const meta2 = {
     key,
     filePath,
     title,
     tags,
-    author: fm.author,
-    sessions: fm.sessions,
     created: fm.created,
     updated: now,
     importanceScore,
@@ -16210,6 +16209,9 @@ function storeMemory(args) {
     tokenEstimate: tokenEstimate(fileContent),
     isOrg
   };
+  if (fm.author !== void 0) meta2.author = fm.author;
+  if (fm.sessions !== void 0) meta2.sessions = fm.sessions;
+  memIndex[key] = meta2;
   contentCache.set(key, body);
   if (!isOrg) appendJournal("store", key, title);
   scheduleSave();
@@ -16479,7 +16481,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.23" : null.version;
+var PLUGIN_VERSION = true ? "1.0.24" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

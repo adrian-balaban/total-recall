@@ -6,7 +6,7 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './paths.js';
-import { loadIndexes, scheduleSave, flushPending } from './persistence.js';
+import { loadIndexes, scheduleSave } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
 import { rebuildInvertedIndex } from './tfidf.js';
 import { perfSamples, errors } from './state.js';

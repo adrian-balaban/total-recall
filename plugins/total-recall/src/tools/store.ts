@@ -10,7 +10,7 @@ import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
 import { scheduleSave } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
-import type { MemoryFrontmatter } from '../types.js';
+import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
 
@@ -181,14 +181,20 @@ export function storeMemory(args: any): any {
   fs.writeFileSync(filePath, fileContent);
 
   const existing = memIndex[key];
-  memIndex[key] = {
-    key, filePath, title, tags, author: fm.author, sessions: fm.sessions,
+  const meta: MemoryMetadata = {
+    key, filePath, title, tags,
     created: fm.created, updated: now, importanceScore, category: deriveCategory(filePath, isOrg),
     contentPreview: body.trim().slice(0, 500),
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,
     tokenEstimate: tokenEstimate(fileContent), isOrg,
   };
+  // exactOptionalPropertyTypes: conditionally attach optional fields only when
+  // defined; assigning `undefined` to `author?: string` is a type error under EOPT
+  // (a present-but-undefined key differs from an absent one).
+  if (fm.author !== undefined) meta.author = fm.author;
+  if (fm.sessions !== undefined) meta.sessions = fm.sessions;
+  memIndex[key] = meta;
   contentCache.set(key, body);
 
   if (!isOrg) appendJournal('store', key, title);

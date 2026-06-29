@@ -32,8 +32,9 @@ function escapeRegExp(s: string): string {
 export function parseFrontmatter(raw: string): Frontmatter {
   const match = raw.match(FM_RE);
   if (!match) return { data: {}, content: raw };
-  const data = parseYamlish(match[1]);
-  const content = raw.slice(match.index! + match[0].length);
+  // Group 1 of FM_RE is guaranteed by the regex when match succeeds.
+  const data = parseYamlish(match[1]!);
+  const content = raw.slice(match.index! + match[0]!.length);
   return { data, content };
 }
 
@@ -97,7 +98,7 @@ function parseYamlish(body: string): Record<string, unknown> {
   const lines = body.split(/\r?\n/);
   let i = 0;
   while (i < lines.length) {
-    const line = lines[i];
+    const line = lines[i]!;
     i++;
     if (line.trim() === '' || line.trim().startsWith('#')) continue;
     // Block sequence item belonging to a pending key: "  - value"
@@ -110,7 +111,7 @@ function parseYamlish(body: string): Record<string, unknown> {
       let lastArrayKey: string | null = null;
       for (const [k, v] of Object.entries(data)) if (Array.isArray(v)) lastArrayKey = k;
       if (lastArrayKey) {
-        (data[lastArrayKey] as string[]).push(unquote(blockItem[1]));
+        (data[lastArrayKey] as string[]).push(unquote(blockItem[1]!));
         continue;
       }
       // Orphan block item — ignore
@@ -118,8 +119,10 @@ function parseYamlish(body: string): Record<string, unknown> {
     }
     const kv = line.match(/^([^:\s]+):\s*(.*)$/);
     if (!kv) continue;
-    const key = kv[1];
-    const val = kv[2];
+    const key = kv[1]!;
+    // Coerce through "" so the undefined type from noUncheckedIndexedAccess
+    // doesn't propagate; the next branches all read `val` as a string.
+    const val = kv[2] ?? '';
     // Prototype-pollution guard: a crafted `__proto__:` / `constructor:` /
     // `prototype:` key in frontmatter (a teammate can push one via the shared
     // org vault) would invoke the Object.prototype __proto__ setter on `data`

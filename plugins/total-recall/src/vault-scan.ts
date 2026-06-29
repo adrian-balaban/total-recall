@@ -12,7 +12,7 @@ import {
 import { memIndex, errors } from './state.js';
 import { contentCache } from './lru-cache.js';
 import { deleteVector } from './vectorStore.js';
-import type { MemoryFrontmatter } from './types.js';
+import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -244,7 +244,11 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // `updated` (impossible ordering) and a `lastAccessed` distinct from both.
     // Capture once; reuse for the three fallback fields.
     const now = new Date().toISOString();
-    memIndex[key] = {
+    // Build the metadata object, then conditionally attach optional fields. Under
+    // exactOptionalPropertyTypes, `author: undefined` is NOT assignable to
+    // `author?: string` (a present-but-undefined key differs from an absent key);
+    // omitting the key when the frontmatter lacks it is the type-correct path.
+    const meta: MemoryMetadata = {
       key,
       filePath,
       // Coerce title to a string: a hand-edited (or teammate-pushed, via the shared
@@ -261,7 +265,6 @@ export function indexFile(filePath: string, isOrg: boolean) {
       // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
       // the same externally-authored threat model as the numeric-title coercion.
       tags: Array.isArray(fm.tags) ? fm.tags : [],
-      author: fm.author,
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? now,
       updated: fm.updated ?? now,
@@ -275,6 +278,8 @@ export function indexFile(filePath: string, isOrg: boolean) {
       tokenEstimate: tokenEstimate(raw),
       isOrg,
     };
+    if (fm.author !== undefined) meta.author = fm.author;
+    memIndex[key] = meta;
     // Invalidate any cached content for this key: indexFile re-reads from disk
     // (boot, reconcile, rebuild_index), so the cached body may now be stale (e.g.
     // an org git pull updated the file, or an external edit changed it).
@@ -291,5 +296,5 @@ export function deriveCategory(filePath: string, isOrg: boolean): string {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
   const rel = path.relative(base, filePath);
   const parts = rel.split(path.sep);
-  return parts.length > 1 ? parts[0] : 'knowledge';
+  return parts.length > 1 ? (parts[0] ?? 'knowledge') : 'knowledge';
 }

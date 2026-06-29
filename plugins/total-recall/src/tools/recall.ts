@@ -2,7 +2,6 @@ import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
 import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, bumpAccess } from '../state.js';
-import { contentCache } from '../lru-cache.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
