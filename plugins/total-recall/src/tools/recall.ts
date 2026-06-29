@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import { parseFrontmatter } from '../frontmatter.js';
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
-import { toCutoff } from '../dates.js';
+import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
@@ -54,28 +54,18 @@ export async function recallMemory(args: any): Promise<any> {
   }
 
   // Date filters silently exclude memories with a missing/Invalid `updated` —
-  // mirrors `list_memories` (see CLAUDE.md "Key Gotchas"). A memory lacking
-  // `updated` would crash `new Date(undefined)` into NaN and compare false
-  // against any cutoff, so the explicit `updated ? … : false` short-circuits
-  // before the NaN path. Same rationale as list_memories: every memory SHOULD
-  // carry `updated`; the drop is the safest fallback for externally-authored
-  // files that predate the field.
-  if (since) {
-    const cutoff = toCutoff(since);
-    ranked = ranked.filter(r => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) >= cutoff : false;
-    });
-  }
-  // Symmetric upper bound (mirrors `since`): a relative ("2d") or ISO date; only
-  // memories updated strictly before it are kept. With `since` this gives a
-  // date-range query (e.g. "last week but not today") without a return-shape change.
-  if (before) {
-    const cutoff = toCutoff(before);
-    ranked = ranked.filter(r => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) < cutoff : false;
-    });
+  // mirrors `list_memories` (see CLAUDE.md "Key Gotchas"). inDateWindow resolves
+  // the cutoffs ONCE (toCutoff throws on a bad bound, same throw point as the old
+  // per-block calls) and applies the [since, before) window in a single pass; a
+  // missing `updated` returns false (the drop is the safest fallback for
+  // externally-authored files that predate the field). The `if (lower || upper)`
+  // guard preserves the no-filter behavior: when neither bound is given the old
+  // code skipped both blocks and kept every entry, so we skip the filter too
+  // (keeping memories that lack `updated`, which a window check would drop).
+  const lower = since ? toCutoff(since) : null;
+  const upper = before ? toCutoff(before) : null;
+  if (lower || upper) {
+    ranked = ranked.filter(r => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
 
   // Minimum-score floor (mirrors danilop/claude-total-recall's `threshold`):
@@ -132,20 +122,14 @@ export function searchIndex(args: any): any {
   const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
   let results = tfidfSearch(query, excludeJournal);
 
-  if (since) {
-    const cutoff = toCutoff(since);
-    results = results.filter(r => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) >= cutoff : false;
-    });
-  }
-  // Symmetric upper bound — mirrors `since`; combine for a date-range query.
-  if (before) {
-    const cutoff = toCutoff(before);
-    results = results.filter(r => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) < cutoff : false;
-    });
+  // Same single-pass date window as recall_memory above (see the comment there):
+  // resolve the bounds once, apply the [since, before) window via inDateWindow,
+  // and skip the filter entirely when neither bound is given (keeps entries
+  // that lack `updated`, which a window check would silently drop).
+  const lower = since ? toCutoff(since) : null;
+  const upper = before ? toCutoff(before) : null;
+  if (lower || upper) {
+    results = results.filter(r => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter(r => memIndex[r.key]?.category === category);
   if (filterTags?.length) results = results.filter(r => filterTags.every((t: string) => memIndex[r.key]?.tags.includes(t)));

@@ -16213,6 +16213,14 @@ function toCutoff(expr) {
   }
   return d;
 }
+function inDateWindow(updated, lower, upper) {
+  if (!updated) return false;
+  const d = new Date(updated);
+  if (isNaN(d.getTime())) return false;
+  if (lower && d < lower) return false;
+  if (upper && d >= upper) return false;
+  return true;
+}
 
 // src/rrf.ts
 function reciprocalRankFusion(lists, k = 60) {
@@ -16250,19 +16258,10 @@ async function recallMemory(args) {
   if (excludeJournal) {
     ranked = ranked.filter((r) => memIndex[r.key]?.category !== "journal");
   }
-  if (since) {
-    const cutoff = toCutoff(since);
-    ranked = ranked.filter((r) => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) >= cutoff : false;
-    });
-  }
-  if (before) {
-    const cutoff = toCutoff(before);
-    ranked = ranked.filter((r) => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) < cutoff : false;
-    });
+  const lower = since ? toCutoff(since) : null;
+  const upper = before ? toCutoff(before) : null;
+  if (lower || upper) {
+    ranked = ranked.filter((r) => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (minScore > 0) {
     ranked = ranked.filter((r) => r.score >= minScore);
@@ -16294,19 +16293,10 @@ async function recallMemory(args) {
 function searchIndex(args) {
   const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
   let results = tfidfSearch(query, excludeJournal);
-  if (since) {
-    const cutoff = toCutoff(since);
-    results = results.filter((r) => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) >= cutoff : false;
-    });
-  }
-  if (before) {
-    const cutoff = toCutoff(before);
-    results = results.filter((r) => {
-      const updated = memIndex[r.key]?.updated;
-      return updated ? new Date(updated) < cutoff : false;
-    });
+  const lower = since ? toCutoff(since) : null;
+  const upper = before ? toCutoff(before) : null;
+  if (lower || upper) {
+    results = results.filter((r) => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter((r) => memIndex[r.key]?.category === category);
   if (filterTags?.length) results = results.filter((r) => filterTags.every((t) => memIndex[r.key]?.tags.includes(t)));
@@ -16394,7 +16384,7 @@ function getTimeline(args) {
   const { since, before, limit = 50, offset = 0, category } = args;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
-  const filtered = Object.values(memIndex).filter((m) => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const filtered = Object.values(memIndex).filter((m) => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
   const total = filtered.length;
   const items = filtered.slice(offset, offset + limit).map((m) => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
   return { items, total, hasMore: offset + limit < total };
@@ -16525,7 +16515,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.17" : null.version;
+var PLUGIN_VERSION = true ? "1.0.18" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

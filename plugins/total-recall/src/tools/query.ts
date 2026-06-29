@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import { parseFrontmatter } from '../frontmatter.js';
 import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
-import { toCutoff } from '../dates.js';
+import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, errors, perfSamples } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
@@ -102,11 +102,15 @@ export function getStats(): any {
 
 export function getTimeline(args: any): any {
   const { since, before, limit = 50, offset = 0, category } = args;
+  // Default the lower bound to the epoch so a timeline with no `since` still
+  // excludes entries lacking a valid `updated`: inDateWindow returns false for a
+  // missing `updated` whenever a lower bound is present (and `cutoff` is never
+  // null here), matching the prior `new Date(m.updated) >= new Date(0)` behavior.
+  // `upper` is the symmetric exclusive upper bound; combine for a date-range window.
   const cutoff = since ? toCutoff(since) : new Date(0);
-  // Symmetric upper bound — mirrors `since`; combine for a date-range window.
   const upper = before ? toCutoff(before) : null;
   const filtered = Object.values(memIndex)
-    .filter(m => new Date(m.updated) >= cutoff && (!upper || new Date(m.updated) < upper) && (!category || m.category === category))
+    .filter(m => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category))
     .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
   const total = filtered.length;
   const items = filtered
