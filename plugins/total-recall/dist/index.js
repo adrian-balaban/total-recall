@@ -16484,7 +16484,10 @@ function rebuildIndex() {
 var PLUGIN_VERSION = true ? "1.0.24" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
-  { capabilities: { tools: {} } }
+  {
+    capabilities: { tools: {} },
+    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (12 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys.`
+  }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [

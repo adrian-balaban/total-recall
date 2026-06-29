@@ -36,7 +36,12 @@ const PLUGIN_VERSION: string =
 
 const server = new Server(
   { name: 'total-recall', version: PLUGIN_VERSION },
-  { capabilities: { tools: {} } }
+  {
+    capabilities: { tools: {} },
+    instructions:
+      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (12 tools). ` +
+      `Retrieval order: search_index → recall_memory → get_memories_by_keys.`,
+  }
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
