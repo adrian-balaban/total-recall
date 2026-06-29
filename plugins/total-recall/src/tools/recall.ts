@@ -1,13 +1,12 @@
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
 import { toCutoff, inDateWindow } from '../dates.js';
-import { memIndex } from '../state.js';
+import { memIndex, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
-import { scheduleSave } from '../persistence.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
-import { readMemoryContent } from '../vault-scan.js';
+import { readCachedOrFresh } from '../vault-scan.js';
 
 export async function recallMemory(args: any): Promise<any> {
   const { query, full = false, since, before, minScore = 0, limit = 10, excludeJournal = true, hybrid = true } = args;
@@ -87,28 +86,14 @@ export async function recallMemory(args: any): Promise<any> {
       // metadata-only recall must NOT — otherwise every lightweight search
       // refreshes lastAccessed, memories never decay, and prune_memories can
       // never nominate the rarely-read ones it's meant to surface.
-      meta.accessCount++;
-      meta.lastAccessed = new Date().toISOString();
-      scheduleSave();
-      let content = contentCache.get(r.key);
-      if (!content) {
-        // readMemoryContent owns the swapped-symlink guard (assertRegularFile +
-        // read + parseFrontmatter, see vault-scan.ts): null = failed read (vanish,
-        // swapped symlink, parse error) → fail closed to ''; '' = a real empty body.
-        // This site keeps its two intentional policies: the truthy `!content` cache
-        // check (a cached '' re-reads, matching the prior behavior) and the
-        // unconditional access bump above — both preserved, only the read core moved.
-        const body = readMemoryContent(meta.filePath, r.key);
-        if (body !== null) {
-          content = body;
-          // Only cache successful reads — a transient read failure (race, lock)
-          // must not poison the LRU with '' for 30 min, or every later full recall
-          // returns empty content until the entry expires/evicts.
-          contentCache.set(r.key, content);
-        } else {
-          content = '';
-        }
-      }
+      bumpAccess(meta);
+      // LRU-or-read via the shared helper (vault-scan.ts readCachedOrFresh).
+      // `onEmpty: 'reread'` preserves this site's truthy-`!content` policy: a
+      // cached '' triggers a fresh fs read (the original behavior). The access
+      // bump above is UNCONDITIONAL — even on a `failed` read the caller asked
+      // for full content; the bump credits the intent. (Distinct from
+      // get_memories_by_keys, which defers the bump until after a successful read.)
+      const { content } = readCachedOrFresh(r.key, meta.filePath, 'reread');
       return { ...meta, content, score: r.score };
     }
     return { ...meta, score: r.score };

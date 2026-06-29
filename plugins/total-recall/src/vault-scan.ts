@@ -88,6 +88,45 @@ export function readMemoryContent(filePath: string, key: string): string | null 
   }
 }
 
+// LRU-or-read: try the shared contentCache first, fall back to readMemoryContent
+// on a miss, and cache successful reads (but NOT failed reads — a transient fs
+// failure must not poison the LRU with '' for 30 min). Returns a tri-state
+// result so callers can branch on access-bump policy without conflating a real
+// empty body with a failed read:
+//   - { status: 'hit',     content } — LRU had the body (may be '' for an
+//     empty-bodied memory). The two sites with this contract differ only on
+//     whether a cached '' re-reads: recall_memory / get_memories_by_keys want
+//     truthy `!content` → reread; get_related_memories wants strict
+//     `=== undefined` → hit. Pass `onEmpty: 'reread'` to choose the truthy
+//     policy; default is `hit`. Either way, on a hit we return 'hit' — the
+//     policy decides whether we GET HERE.
+//   - { status: 'fresh',   content } — LRU miss and readMemoryContent returned
+//     a real body (may be '' for an empty file). Cache populated; caller may
+//     want to bump access on this fresh read.
+//   - { status: 'failed',  content: '' } — LRU miss and readMemoryContent
+//     returned null (assertRegularFile rejected a swapped symlink/dir,
+//     readFileSync threw ENOENT/EACCES, or parseFrontmatter threw). NOT
+//     cached. Caller may want to skip the access bump (the original
+//     get_memories_by_keys deferred its bump until after a successful read).
+// Empty-bodied memories are vanishingly rare (every store_memory writes a body),
+// so the wasted fs call on cached '' for the truthy-policy sites is a non-issue.
+export function readCachedOrFresh(
+  key: string,
+  filePath: string,
+  onEmpty: 'hit' | 'reread' = 'hit'
+): { status: 'hit' | 'fresh' | 'failed'; content: string } {
+  const hit = contentCache.get(key);
+  if (hit !== undefined && !(onEmpty === 'reread' && hit === '')) {
+    return { status: 'hit', content: hit };
+  }
+  const body = readMemoryContent(filePath, key);
+  if (body !== null) {
+    contentCache.set(key, body);
+    return { status: 'fresh', content: body };
+  }
+  return { status: 'failed', content: '' };
+}
+
 // ─── Full vault scan ─────────────────────────────────────────────────────────
 
 // Reconcile the in-memory index against disk: add new/updated files, drop keys

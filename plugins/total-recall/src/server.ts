@@ -195,26 +195,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
+// Tool dispatch table — replaces the 12-case switch with a lookup so adding a
+// tool is a one-line import + one entry below. All handlers return `any`; the
+// async/sync mix (recall_memory returns a Promise, the rest are synchronous)
+// is folded into a uniform await on the caller side below.
+const TOOL_HANDLERS: Record<string, (args: any) => any> = {
+  store_memory: storeMemory,
+  recall_memory: recallMemory,
+  list_memories: listMemories,
+  update_memory: updateMemory,
+  delete_memory: deleteMemory,
+  rebuild_index: rebuildIndex,
+  search_index: searchIndex,
+  get_memories_by_keys: getMemoriesByKeys,
+  get_stats: getStats,
+  get_timeline: getTimeline,
+  get_related_memories: getRelatedMemories,
+  prune_memories: pruneMemories,
+};
+
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const start = Date.now();
   const { name, arguments: args } = request.params;
   try {
-    let result: any;
-    switch (name) {
-      case 'store_memory':         result = storeMemory(args); break;
-      case 'recall_memory':        result = await recallMemory(args); break;
-      case 'list_memories':        result = listMemories(args); break;
-      case 'update_memory':        result = updateMemory(args); break;
-      case 'delete_memory':        result = deleteMemory(args); break;
-      case 'rebuild_index':        result = rebuildIndex(); break;
-      case 'search_index':         result = searchIndex(args); break;
-      case 'get_memories_by_keys': result = getMemoriesByKeys(args); break;
-      case 'get_stats':            result = getStats(); break;
-      case 'get_timeline':         result = getTimeline(args); break;
-      case 'get_related_memories': result = getRelatedMemories(args); break;
-      case 'prune_memories':       result = pruneMemories(args); break;
-      default: throw new Error(`Unknown tool: ${name}`);
-    }
+    const handler = TOOL_HANDLERS[name];
+    if (!handler) throw new Error(`Unknown tool: ${name}`);
+    const result = await handler(args);
     perfSamples.push(Date.now() - start);
     if (perfSamples.length > 1000) perfSamples.shift();
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };

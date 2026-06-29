@@ -2,14 +2,14 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { VECTORS_DB } from '../paths.js';
+import { VECTORS_DB, ensureDir } from '../paths.js';
 import { reconcileIndex, assertRegularFile } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
-import { embed } from '../embeddings.js';
-import { upsertVector, deleteVector } from '../vectorStore.js';
+import { embedAndUpsert } from '../embeddings.js';
+import { deleteVector } from '../vectorStore.js';
 import type { MemoryFrontmatter } from '../types.js';
 
 export function updateMemory(args: any): any {
@@ -82,11 +82,7 @@ export function updateMemory(args: any): any {
   contentCache.delete(key);
   scheduleSave();
 
-  if (content) {
-    embed(content).then(vec => {
-      if (vec) upsertVector(VECTORS_DB, key, vec);
-    }).catch(() => {});
-  }
+  if (content) embedAndUpsert(key, content);
 
   return { key, message: 'Memory updated.' };
 }

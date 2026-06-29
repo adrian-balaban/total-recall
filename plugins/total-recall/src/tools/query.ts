@@ -1,10 +1,9 @@
 import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
 import { toCutoff, inDateWindow } from '../dates.js';
-import { memIndex, errors, perfSamples } from '../state.js';
+import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
-import { scheduleSave } from '../persistence.js';
 import { isVectorAvailable } from '../embeddings.js';
-import { readMemoryContent } from '../vault-scan.js';
+import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
 
 export function listMemories(args: any): any {
   const { category, tag, limit = 50, offset = 0 } = args;
@@ -30,11 +29,6 @@ export function getMemoriesByKeys(args: any): any {
     // (meta present, file gone) inflated accessCount/lastAccessed and triggered a
     // debounced save for a memory that just errored — skewing retention/pruning
     // stats and persisting state for a broken key.
-    const bumpAccess = () => {
-      meta.accessCount++;
-      meta.lastAccessed = new Date().toISOString();
-      scheduleSave();
-    };
     if (summary) {
       // readMemoryContent owns the swapped-symlink guard (see vault-scan.ts):
       // null = failed read (vanished file, swapped symlink, parse error) → surface
@@ -43,31 +37,18 @@ export function getMemoriesByKeys(args: any): any {
       // cache on the summary path.
       const body = readMemoryContent(meta.filePath, key);
       if (body === null) return { key, error: 'Failed to read memory file' };
-      bumpAccess();
+      bumpAccess(meta);
       const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
       return { key, title: meta.title, category: meta.category, tags: meta.tags, summary: execSummary.trim() };
     }
-    let content = contentCache.get(key);
-    let readOk = !!content;
-    if (!content) {
-      // readMemoryContent owns the swapped-symlink guard — see vault-scan.ts.
-      // null = failed read (fail closed: content='', readOk stays false → no access
-      // bump, no cache poison); '' = a real empty body (cache + bump). The truthy
-      // `!content` check (a cached '' re-reads) and the deferred bump-on-readOk are
-      // this site's policies, preserved.
-      const body = readMemoryContent(meta.filePath, key);
-      if (body !== null) {
-        content = body;
-        // Only cache successful reads — a transient failure must not poison the
-        // LRU with '' for 30 min (every later get_memories_by_keys(full) on this
-        // key would return empty until the entry expires/evicts).
-        contentCache.set(key, content);
-        readOk = true;
-      } else {
-        content = '';
-      }
-    }
-    if (readOk) bumpAccess();
+    // LRU-or-read via the shared helper (see vault-scan.ts readCachedOrFresh).
+    // `onEmpty: 'reread'` preserves this site's truthy-`!content` policy: a cached
+    // '' triggers a fresh fs read (the original behavior). bumpAccess runs only
+    // on hit OR fresh-success (status: 'failed' means the read returned null —
+    // vanished file, swapped symlink, parse error — and the prior code deferred
+    // the bump in that case so a broken key can't inflate accessCount).
+    const { status, content } = readCachedOrFresh(key, meta.filePath, 'reread');
+    if (status !== 'failed') bumpAccess(meta);
     return { ...meta, key, content };
   });
 }
@@ -145,28 +126,14 @@ export function getRelatedMemories(args: any): any {
       // surfaced as related-but-never-read should still decay (mirrors the
       // recall_memory(full=false) policy in recall.ts).
       if (!includeContent) return m;
-      let content = contentCache.get(m.key);
-      if (content === undefined) {
-        // readMemoryContent owns the swapped-symlink guard — see vault-scan.ts.
-        // Strict `=== undefined` (NOT truthy `!content`): a cached '' is a HIT and
-        // is NOT re-read — the intentional difference from recall_memory /
-        // get_memories_by_keys, which re-read a cached empty body. null from the
-        // helper = failed read → fail closed to '' (NOT cached, matching the old
-        // catch's content='' that left the LRU untouched); no access bump (this is
-        // a discovery query, not a read).
-        const meta = memIndex[m.key];
-        if (meta) {
-          const body = readMemoryContent(meta.filePath, m.key);
-          if (body !== null) {
-            content = body;
-            // Only cache successful reads — a transient read failure (race,
-            // lock) must not poison the LRU with '' for 30 min.
-            contentCache.set(m.key, content);
-          } else {
-            content = '';
-          }
-        }
-      }
+      const meta = memIndex[m.key];
+      if (!meta) return m;
+      // LRU-or-read via the shared helper (vault-scan.ts readCachedOrFresh).
+      // Default `onEmpty: 'hit'` preserves this site's strict-`=== undefined`
+      // policy: a cached '' is a HIT and is NOT re-read (intentional difference
+      // from recall_memory / get_memories_by_keys, which re-read a cached empty).
+      // No access bump regardless of status — this is a discovery query.
+      const { content } = readCachedOrFresh(m.key, meta.filePath);
       return { ...m, content };
     });
 }

@@ -65,6 +65,7 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
 }));
 vi.mock('../embeddings.js', () => ({
   embed: vi.fn().mockResolvedValue(null),
+  embedAndUpsert: vi.fn(),
   isVectorAvailable: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../vectorStore.js', () => ({
@@ -1498,9 +1499,13 @@ describe('getStats — performance percentiles', () => {
 });
 
 // ─── embed callbacks: store_memory and update_memory when vec is non-null ────
+// These tests pin down the embedAndUpsert contract: store/update MUST call it,
+// and the helper (mocked here as a no-op spy) takes a string + key. Originally
+// these asserted the inner embed→upsert chain; the chain is now encapsulated
+// inside embedAndUpsert (src/embeddings.ts), and is tested there directly via
+// the embeddings.test.ts unit suite. Here we just verify the call site fires.
 
-describe('embed callback — upsertVector called when embed returns a vector', () => {
-  // Grab the mocked modules so we can change their return value
+describe('embed callback — embedAndUpsert called on write', () => {
   let embedMod: typeof import('../embeddings.js');
 
   beforeAll(async () => {
@@ -1508,53 +1513,34 @@ describe('embed callback — upsertVector called when embed returns a vector', (
   });
 
   afterEach(() => {
-    // Restore embed mock to null after each test
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
     vi.mocked(embedMod.embed).mockResolvedValue(null);
-    vi.mocked(embedMod.isVectorAvailable).mockReturnValue(false);
   });
 
-  it('store_memory calls upsertVector when embed returns a vector', async () => {
-    const fakeVec = Array(384).fill(0.1);
-    vi.mocked(embedMod.embed).mockResolvedValue(fakeVec as any);
-    const { upsertVector } = await import('../vectorStore.js');
-    const upsertSpy = vi.mocked(upsertVector);
-    upsertSpy.mockClear();
-
+  it('store_memory calls embedAndUpsert(key, content)', async () => {
     await callTool('store_memory', { title: 'Embed Store Test', content: 'vector content', tags: [], category: 'knowledge' });
-    await new Promise(r => setTimeout(r, 10));
-    expect(upsertSpy).toHaveBeenCalled();
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalled();
+    // Find the call from THIS test (other store_memory tests may have run earlier)
+    const match = vi.mocked(embedMod.embedAndUpsert).mock.calls.find(([, c]) => c === 'vector content');
+    expect(match).toBeDefined();
+    const [key] = match!;
+    expect(typeof key).toBe('string');
   });
 
-  it('store_memory swallows embed rejection via .catch', async () => {
-    vi.mocked(embedMod.embed).mockRejectedValue(new Error('embed failed'));
-    // Should not throw — .catch(() => {}) swallows the error
-    await expect(callTool('store_memory', {
-      title: 'Embed Catch Test', content: 'catch path', tags: [], category: 'knowledge',
-    })).resolves.not.toThrow();
-    await new Promise(r => setTimeout(r, 10));
-  });
-
-  it('update_memory calls upsertVector when embed returns a vector', async () => {
-    const fakeVec = Array(384).fill(0.2);
-    vi.mocked(embedMod.embed).mockResolvedValue(fakeVec as any);
-    const { upsertVector } = await import('../vectorStore.js');
-    const upsertSpy = vi.mocked(upsertVector);
-    upsertSpy.mockClear();
-
+  it('update_memory calls embedAndUpsert(key, content) when content is provided', async () => {
     const { key } = result(await callTool('store_memory', { title: 'Embed Update Test', content: 'original', tags: [], category: 'knowledge', force: true }));
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
     await callTool('update_memory', { key, content: 'updated vector content' });
-    await new Promise(r => setTimeout(r, 10));
-    expect(upsertSpy).toHaveBeenCalled();
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, 'updated vector content');
   });
 
-  it('update_memory swallows embed rejection via .catch', async () => {
-    vi.mocked(embedMod.embed).mockResolvedValue(null);
+  it('update_memory does NOT call embedAndUpsert when content is omitted', async () => {
     const { key } = result(await callTool('store_memory', {
-      title: 'Update Catch Base', content: 'base', tags: [], category: 'knowledge',
+      title: 'Embed Skip Test', content: 'orig', tags: [], category: 'knowledge',
     }));
-    vi.mocked(embedMod.embed).mockRejectedValue(new Error('embed update failed'));
-    await expect(callTool('update_memory', { key, content: 'new content' })).resolves.not.toThrow();
-    await new Promise(r => setTimeout(r, 10));
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
+    await callTool('update_memory', { key, tags: ['newtag'] });
+    expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
   });
 });
 

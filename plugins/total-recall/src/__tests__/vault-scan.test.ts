@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterAll } from 'vitest';
+import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
@@ -13,7 +13,8 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-rmc-' + process.pid;
 });
 
-import { readMemoryContent } from '../vault-scan.js';
+import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
+import { contentCache } from '../lru-cache.js';
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-rmc-'));
 
@@ -112,5 +113,57 @@ describe('readMemoryContent', () => {
     // Error) → helper catch → null. The ENOENT-from-target readFileSync path is
     // never reached because assertRegularFile rejects first.
     expect(readMemoryContent(link, 'knowledge/dangling')).toBeNull();
+  });
+});
+
+describe('readCachedOrFresh', () => {
+  // Clear cache before each test so prior tests' entries don't bleed in.
+  beforeEach(() => contentCache.delete('k-' + Math.random()));
+
+  it("returns 'fresh' and caches a real read", () => {
+    const key = 'k-fresh';
+    const fp = path.join(TMP, 'fresh.md');
+    fs.writeFileSync(fp, '---\ntitle: "Fresh"\n---\n\nhello\n');
+    const r = readCachedOrFresh(key, fp);
+    expect(r).toEqual({ status: 'fresh', content: '\nhello\n' });
+    expect(contentCache.get(key)).toBe('\nhello\n');
+  });
+
+  it("returns 'hit' on a subsequent call without re-reading", () => {
+    const key = 'k-hit';
+    const fp = path.join(TMP, 'hit.md');
+    fs.writeFileSync(fp, '---\ntitle: "Hit"\n---\n\nworld\n');
+    readCachedOrFresh(key, fp); // prime the cache
+    const r = readCachedOrFresh(key, fp);
+    expect(r.status).toBe('hit');
+    expect(r.content).toBe('\nworld\n');
+  });
+
+  it("returns 'failed' on a vanished file and does NOT cache", () => {
+    const key = 'k-failed';
+    const fp = path.join(TMP, 'vanished.md'); // never created
+    const r = readCachedOrFresh(key, fp);
+    expect(r).toEqual({ status: 'failed', content: '' });
+    expect(contentCache.get(key)).toBeUndefined();
+  });
+
+  it("onEmpty='reread' re-reads a cached ''", () => {
+    const key = 'k-reread';
+    const fp = path.join(TMP, 'reread.md');
+    // First, prime the cache with a real body so we can override it.
+    fs.writeFileSync(fp, '---\ntitle: "R"\n---\n\nbody\n');
+    readCachedOrFresh(key, fp); // status: fresh, caches '\nbody\n'
+    contentCache.set(key, ''); // simulate a later empty body being cached
+    const r = readCachedOrFresh(key, fp, 'reread');
+    expect(r.status).toBe('fresh');
+    expect(r.content).toBe('\nbody\n');
+  });
+
+  it("onEmpty='hit' returns a cached '' as a HIT (default policy)", () => {
+    const key = 'k-hitempty';
+    const fp = path.join(TMP, 'hitempty.md');
+    contentCache.set(key, '');
+    const r = readCachedOrFresh(key, fp);
+    expect(r).toEqual({ status: 'hit', content: '' });
   });
 });

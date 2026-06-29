@@ -2,6 +2,8 @@
  * Optional HuggingFace embedding model — lazy-loaded from vector/node_modules.
  * If @huggingface/transformers is not installed, all methods are no-ops.
  */
+import { VECTORS_DB } from './paths.js';
+import { upsertVector } from './vectorStore.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadAttempted = false;
@@ -26,6 +28,18 @@ export async function embed(text: string): Promise<number[] | null> {
   const embedder = await getEmbedder();
   if (!embedder) return null;
   return embedder(text);
+}
+
+// Fire-and-forget embed → upsert. Centralized so the two write paths (store +
+// update) share one implementation, and so the lazy load, the no-op-when-deps-
+// absent path, and the null-skip when the model returns nothing are owned
+// in one place. The `.catch(() => {})` matches the original inline sites:
+// a transient embed or upsert failure is logged via the upsertVector path
+// (vectorStore.ts) and never blocks the caller's response.
+export function embedAndUpsert(key: string, text: string): void {
+  embed(text).then(vec => {
+    if (vec) upsertVector(VECTORS_DB, key, vec);
+  }).catch(() => {});
 }
 
 // Honest signal: true only once the pipeline has actually loaded. Used for

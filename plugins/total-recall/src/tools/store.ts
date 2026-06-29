@@ -3,14 +3,13 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { ORG_VAULT, PERSONAL_VAULT, VECTORS_DB, HOME, ensureDir } from '../paths.js';
+import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate, deriveCategory } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
 import { scheduleSave } from '../persistence.js';
-import { embed } from '../embeddings.js';
-import { upsertVector } from '../vectorStore.js';
+import { embedAndUpsert } from '../embeddings.js';
 import type { MemoryFrontmatter } from '../types.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
@@ -200,9 +199,7 @@ export function storeMemory(args: any): any {
   if (!isOrg) appendJournal('store', key, title);
   scheduleSave();
 
-  embed(content).then(vec => {
-    if (vec) upsertVector(VECTORS_DB, key, vec);
-  }).catch(() => {});
+  embedAndUpsert(key, content);
 
   return { key, filePath, message: `Memory stored: ${key}` };
 }

@@ -15511,6 +15511,11 @@ var memIndex = {};
 var invertedIndex = {};
 var errors = [];
 var perfSamples = [];
+function bumpAccess(meta2) {
+  meta2.accessCount++;
+  meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
+  scheduleSave();
+}
 
 // src/tfidf.ts
 function tokenize(text) {
@@ -15940,6 +15945,18 @@ function readMemoryContent(filePath, key) {
     return null;
   }
 }
+function readCachedOrFresh(key, filePath, onEmpty = "hit") {
+  const hit = contentCache.get(key);
+  if (hit !== void 0 && !(onEmpty === "reread" && hit === "")) {
+    return { status: "hit", content: hit };
+  }
+  const body = readMemoryContent(filePath, key);
+  if (body !== null) {
+    contentCache.set(key, body);
+    return { status: "fresh", content: body };
+  }
+  return { status: "failed", content: "" };
+}
 function reconcileIndex() {
   const before = new Set(Object.keys(memIndex));
   const seen = /* @__PURE__ */ new Set();
@@ -16081,6 +16098,12 @@ async function embed(text) {
   if (!embedder) return null;
   return embedder(text);
 }
+function embedAndUpsert(key, text) {
+  embed(text).then((vec) => {
+    if (vec) upsertVector(VECTORS_DB, key, vec);
+  }).catch(() => {
+  });
+}
 function isVectorAvailable() {
   return pipeline !== null;
 }
@@ -16194,10 +16217,7 @@ function storeMemory(args) {
   contentCache.set(key, body);
   if (!isOrg) appendJournal("store", key, title);
   scheduleSave();
-  embed(content).then((vec) => {
-    if (vec) upsertVector(VECTORS_DB, key, vec);
-  }).catch(() => {
-  });
+  embedAndUpsert(key, content);
   return { key, filePath, message: `Memory stored: ${key}` };
 }
 
@@ -16277,19 +16297,8 @@ async function recallMemory(args) {
     const meta2 = memIndex[r.key];
     if (!meta2) return null;
     if (full) {
-      meta2.accessCount++;
-      meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
-      scheduleSave();
-      let content = contentCache.get(r.key);
-      if (!content) {
-        const body = readMemoryContent(meta2.filePath, r.key);
-        if (body !== null) {
-          content = body;
-          contentCache.set(r.key, content);
-        } else {
-          content = "";
-        }
-      }
+      bumpAccess(meta2);
+      const { content } = readCachedOrFresh(r.key, meta2.filePath, "reread");
       return { ...meta2, content, score: r.score };
     }
     return { ...meta2, score: r.score };
@@ -16333,31 +16342,15 @@ function getMemoriesByKeys(args) {
   return keys.map((key) => {
     const meta2 = memIndex[key];
     if (!meta2) return { key, error: "Not found" };
-    const bumpAccess = () => {
-      meta2.accessCount++;
-      meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
-      scheduleSave();
-    };
     if (summary) {
       const body = readMemoryContent(meta2.filePath, key);
       if (body === null) return { key, error: "Failed to read memory file" };
-      bumpAccess();
+      bumpAccess(meta2);
       const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
       return { key, title: meta2.title, category: meta2.category, tags: meta2.tags, summary: execSummary.trim() };
     }
-    let content = contentCache.get(key);
-    let readOk = !!content;
-    if (!content) {
-      const body = readMemoryContent(meta2.filePath, key);
-      if (body !== null) {
-        content = body;
-        contentCache.set(key, content);
-        readOk = true;
-      } else {
-        content = "";
-      }
-    }
-    if (readOk) bumpAccess();
+    const { status, content } = readCachedOrFresh(key, meta2.filePath, "reread");
+    if (status !== "failed") bumpAccess(meta2);
     return { ...meta2, key, content };
   });
 }
@@ -16400,19 +16393,9 @@ function getRelatedMemories(args) {
     return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + mTags.size - shared) + categoryBoost };
   }).filter((m) => m !== null).sort((a, b) => b.score - a.score).slice(0, limit).map((m) => {
     if (!includeContent) return m;
-    let content = contentCache.get(m.key);
-    if (content === void 0) {
-      const meta2 = memIndex[m.key];
-      if (meta2) {
-        const body = readMemoryContent(meta2.filePath, m.key);
-        if (body !== null) {
-          content = body;
-          contentCache.set(m.key, content);
-        } else {
-          content = "";
-        }
-      }
-    }
+    const meta2 = memIndex[m.key];
+    if (!meta2) return m;
+    const { content } = readCachedOrFresh(m.key, meta2.filePath);
     return { ...m, content };
   });
 }
@@ -16474,12 +16457,7 @@ function updateMemory(args) {
   });
   contentCache.delete(key);
   scheduleSave();
-  if (content) {
-    embed(content).then((vec) => {
-      if (vec) upsertVector(VECTORS_DB, key, vec);
-    }).catch(() => {
-    });
-  }
+  if (content) embedAndUpsert(key, content);
   return { key, message: "Memory updated." };
 }
 function deleteMemory(args) {
@@ -16505,7 +16483,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.20" : null.version;
+var PLUGIN_VERSION = true ? "1.0.21" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
@@ -16665,51 +16643,27 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     }
   ]
 }));
+var TOOL_HANDLERS = {
+  store_memory: storeMemory,
+  recall_memory: recallMemory,
+  list_memories: listMemories,
+  update_memory: updateMemory,
+  delete_memory: deleteMemory,
+  rebuild_index: rebuildIndex,
+  search_index: searchIndex,
+  get_memories_by_keys: getMemoriesByKeys,
+  get_stats: getStats,
+  get_timeline: getTimeline,
+  get_related_memories: getRelatedMemories,
+  prune_memories: pruneMemories
+};
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const start = Date.now();
   const { name, arguments: args } = request.params;
   try {
-    let result;
-    switch (name) {
-      case "store_memory":
-        result = storeMemory(args);
-        break;
-      case "recall_memory":
-        result = await recallMemory(args);
-        break;
-      case "list_memories":
-        result = listMemories(args);
-        break;
-      case "update_memory":
-        result = updateMemory(args);
-        break;
-      case "delete_memory":
-        result = deleteMemory(args);
-        break;
-      case "rebuild_index":
-        result = rebuildIndex();
-        break;
-      case "search_index":
-        result = searchIndex(args);
-        break;
-      case "get_memories_by_keys":
-        result = getMemoriesByKeys(args);
-        break;
-      case "get_stats":
-        result = getStats();
-        break;
-      case "get_timeline":
-        result = getTimeline(args);
-        break;
-      case "get_related_memories":
-        result = getRelatedMemories(args);
-        break;
-      case "prune_memories":
-        result = pruneMemories(args);
-        break;
-      default:
-        throw new Error(`Unknown tool: ${name}`);
-    }
+    const handler = TOOL_HANDLERS[name];
+    if (!handler) throw new Error(`Unknown tool: ${name}`);
+    const result = await handler(args);
     perfSamples.push(Date.now() - start);
     if (perfSamples.length > 1e3) perfSamples.shift();
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
