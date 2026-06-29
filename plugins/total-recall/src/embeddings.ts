@@ -6,22 +6,39 @@ import { VECTORS_DB } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
-let loadAttempted = false;
+let loadPromise: Promise<((text: string) => Promise<number[]>) | null> | null = null;
 
 async function getEmbedder(): Promise<((text: string) => Promise<number[]>) | null> {
-  if (loadAttempted) return pipeline;
-  loadAttempted = true;
-  try {
-    const { pipeline: hfPipeline } = await import('@huggingface/transformers');
-    const extractor = await hfPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-    pipeline = async (text: string) => {
-      const output = await extractor(text, { pooling: 'mean', normalize: true });
-      return Array.from(output.data as Float32Array);
-    };
-  } catch {
-    pipeline = null;
-  }
-  return pipeline;
+  // Cache the *promise*, not a `loadAttempted` boolean. The previous code set
+  // loadAttempted=true synchronously (before the `await import` resolved), so a
+  // concurrent caller arriving mid-load saw the flag set but `pipeline` still
+  // null, returned null, and embedAndUpsert's `if (vec) upsertVector(...)` then
+  // SILENTLY SKIPPED the vector upsert for that key — a permanent hole in the
+  // vector index. The race is reachable in practice: embedAndUpsert is
+  // fire-and-forget (store.ts / mutate.ts don't await it), so the server is free
+  // to process a second store_memory — or a hybrid recall_memory — during the
+  // seconds-to-minutes @huggingface/transformers import + model init, and the
+  // losing writer drops its vector. A failed load caches a promise that resolves
+  // to null, so subsequent callers also get null (no retry) — matching the prior
+  // no-retry-on-failure semantics. Mirrors vectorStore.ts getDb (lines 13-17),
+  // which was rewritten for the identical bug class. `pipeline` is still mutated
+  // inside the load body so isVectorAvailable() flips true only once loaded.
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    try {
+      const { pipeline: hfPipeline } = await import('@huggingface/transformers');
+      const extractor = await hfPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      pipeline = async (text: string) => {
+        const output = await extractor(text, { pooling: 'mean', normalize: true });
+        return Array.from(output.data as Float32Array);
+      };
+      return pipeline;
+    } catch {
+      pipeline = null;
+      return null;
+    }
+  })();
+  return loadPromise;
 }
 
 export async function embed(text: string): Promise<number[] | null> {

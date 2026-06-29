@@ -228,7 +228,20 @@ else
   # shell/JS injection from the path (mirrors load-memory-index.sh).
   MCP_JSON=$(NODE_BIN="$NODE_BIN" PLUGIN_ROOT="$PLUGIN_ROOT" node -e 'process.stdout.write(JSON.stringify({type:"stdio",command:process.env.NODE_BIN,args:[process.env.PLUGIN_ROOT+"/dist/index.js"]}))')
   if claude mcp add-json total-recall "$MCP_JSON" --scope user; then
-    if claude mcp get total-recall 2>&1 | grep -qi 'failed to connect'; then
+    # Capture `claude mcp get` output BEFORE grepping. This script runs under
+    # `set -o pipefail` (line 78), and in the real failure case this guard is
+    # meant to catch (wrong node path → stdio server unreachable) `claude mcp get`
+    # prints "Failed to connect" AND exits non-zero. A bare `claude mcp get … |
+    # grep -qi 'failed to connect'` pipeline then exits non-zero (pipefail takes
+    # the rightmost non-zero stage = claude), the `if` is false, and the script
+    # prints a FALSE `ok "Registered MCP server …"` while skipping the warning
+    # that tells the user the node path is wrong — the guard could only ever fire
+    # when claude exits 0 AND prints "Failed to connect", which is contradictory.
+    # Capturing first (with `|| true` so a non-zero claude doesn't trip set -e
+    # elsewhere) and grepping the captured string makes the match independent of
+    # claude's exit status.
+    MCP_GET_OUT=$(claude mcp get total-recall 2>&1 || true)
+    if printf '%s' "$MCP_GET_OUT" | grep -qi 'failed to connect'; then
       warn "MCP server shows 'Failed to connect' — the node path may be wrong: $NODE_BIN"
       warn "Re-run with the correct node, or fix via 'claude mcp remove total-recall' + 'claude mcp add-json ...'."
     else

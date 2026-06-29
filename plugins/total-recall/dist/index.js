@@ -16149,21 +16149,24 @@ function appendJournal(action, key, title) {
 
 // src/embeddings.ts
 var pipeline = null;
-var loadAttempted = false;
+var loadPromise = null;
 async function getEmbedder() {
-  if (loadAttempted) return pipeline;
-  loadAttempted = true;
-  try {
-    const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-    const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-    pipeline = async (text) => {
-      const output = await extractor(text, { pooling: "mean", normalize: true });
-      return Array.from(output.data);
-    };
-  } catch {
-    pipeline = null;
-  }
-  return pipeline;
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    try {
+      const { pipeline: hfPipeline } = await import("@huggingface/transformers");
+      const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+      pipeline = async (text) => {
+        const output = await extractor(text, { pooling: "mean", normalize: true });
+        return Array.from(output.data);
+      };
+      return pipeline;
+    } catch {
+      pipeline = null;
+      return null;
+    }
+  })();
+  return loadPromise;
 }
 async function embed(text) {
   const embedder = await getEmbedder();
@@ -16551,7 +16554,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.27" : null.version;
+var PLUGIN_VERSION = true ? "1.0.28" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -42,7 +42,18 @@ Rules:
 
 # Extract via `claude -p` (valid), then write each JSON line straight to the vault.
 # store-learning.mjs validates JSON, slugifies, and skips existing memories.
+# Persist node's stderr to ~/.total-recall/.extract.log instead of /dev/null:
+# store-learning.mjs emits a "X written, Y skipped, Z errors" summary to stderr
+# "for debugging", and any crash/import failure (e.g. a build-drifted missing
+# dist/frontmatter.mjs → ERR_MODULE_NOT_FOUND) lands there too. /dev/null
+# discarded both, so a persistent extraction failure dropped every PreCompact
+# learning with ZERO observable signal — no log, no error, no exit-code change
+# (the trailing `|| true` still swallows the exit). Mirror sync-org-memory.sh,
+# which persists its backgrounded children's stderr to ~/.total-recall/org/.sync.log
+# for the same discoverability. stdout stays clean (the hook only emits the
+# final {"continue":true}); only stderr is tee'd to the log.
+EXTRACT_LOG="$HOME/.total-recall/.extract.log"
 claude -p "$EXTRACT_PROMPT" < "$TRANSCRIPT" 2>/dev/null \
-  | node "$SCRIPT_DIR/store-learning.mjs" 2>/dev/null || true
+  | node "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
 
 echo '{"continue":true}'

@@ -211,4 +211,106 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
+
+  // Pass 7 fix #2: extract-and-store-memories.sh must persist node
+  // store-learning.mjs's stderr to ~/.total-recall/.extract.log (not /dev/null).
+  // store-learning.mjs emits a "X written, Y skipped, Z errors" summary to stderr
+  // "for debugging", and any crash/import failure (e.g. a build-drifted missing
+  // dist/frontmatter.mjs → ERR_MODULE_NOT_FOUND) lands there too. The old
+  // `2>/dev/null` discarded BOTH, so a persistent extraction failure dropped every
+  // PreCompact learning with ZERO observable signal — no log, no error, no
+  // exit-code change (the trailing `|| true` still swallowed the exit). This test
+  // stubs `claude` (empty stdout, exit 0) so store-learning.mjs gets no JSON
+  // lines, then asserts the log captured the summary that /dev/null discarded.
+  const EXTRACT_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'extract-and-store-memories.sh');
+  it('extract-and-store-memories.sh: persists the store-learning summary to .extract.log', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-extract-log-'));
+    // The PreCompact hook runs post-install, so ~/.total-recall exists (install.sh
+    // Step 2). The `2>>"$HOME/.total-recall/.extract.log"` redirect needs the dir
+    // to exist or bash can't open the target and store-learning.mjs never runs
+    // (store-learning.mjs is self-healing for the vault dir via mkdir recursive,
+    // but the bash redirect is not). Mirror the post-install invariant here.
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    // Stub `claude` on a tmp PATH: empty stdout, exit 0 → store-learning.mjs gets
+    // no JSON lines → 0 written, emits the "0 written, 0 skipped, 0 errors"
+    // summary to stderr (the exact stream the old 2>/dev/null discarded).
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const claudeStub = path.join(binDir, 'claude');
+    fs.writeFileSync(claudeStub, '#!/usr/bin/env bash\nexit 0\n');
+    fs.chmodSync(claudeStub, 0o755);
+    // A non-empty transcript file so the script passes the transcript guard and
+    // reaches the extract pipeline.
+    const transcript = path.join(home, 'transcript.jsonl');
+    fs.writeFileSync(transcript, '{"type":"assistant","message":{"content":[]}}\n');
+    try {
+      const r = spawnSync('bash', [EXTRACT_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        input: JSON.stringify({ transcript_path: transcript }),
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      // stdout stays clean: only the hook's {"continue":true}.
+      expect(JSON.parse(r.stdout)).toEqual({ continue: true });
+      // The summary the old /dev/null discarded is now captured to the log.
+      const logPath = path.join(home, '.total-recall', '.extract.log');
+      expect(fs.existsSync(logPath)).toBe(true);
+      expect(fs.readFileSync(logPath, 'utf8')).toMatch(/written|skipped|errors/);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Pass 7 fix #3: install.sh's "Failed to connect" guard runs under
+  // `set -o pipefail` (line 78). The real failure case (wrong node path → stdio
+  // server unreachable) has `claude mcp get` print "Failed to connect" AND exit
+  // non-zero. A bare `claude mcp get … | grep -qi 'failed to connect'` pipeline
+  // then exits non-zero (pipefail takes the rightmost non-zero stage = claude's
+  // 1), the `if` is false, and the script prints a FALSE
+  // `ok "Registered MCP server …"` while SKIPPING the warning that tells the user
+  // the node path is wrong — the guard could only ever fire when claude exits 0
+  // AND prints "Failed to connect", which is contradictory. The fix captures the
+  // output first (`$(… || true)`) and greps the captured string, making the match
+  // independent of claude's exit status. This test stubs `claude` to print
+  // "Failed to connect" + exit 1 on `mcp get`, then asserts the warning fires and
+  // the false success line does NOT.
+  const INSTALL_SCRIPT = path.join(REPO_ROOT, 'install.sh');
+  it('install.sh: warns (not false-ok) when claude mcp get reports Failed to connect + exits non-zero', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-pipefail-'));
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const claudeStub = path.join(binDir, 'claude');
+    fs.writeFileSync(claudeStub, [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = "mcp" ] && [ "$2" = "get" ]; then',
+      '  echo "Failed to connect to server."',
+      '  exit 1', // the real failure case: claude mcp get exits non-zero
+      'fi',
+      'if [ "$1" = "mcp" ] && [ "$2" = "add-json" ]; then exit 0; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(claudeStub, 0o755);
+    try {
+      // Use the REAL plugin root so Step 1's dist/index.js probe passes (a tmp
+      // root with no dist/index.js dies at Step 1 before reaching the Step 3
+      // guard under test). Step 4 then runs the real build-memory-index.sh
+      // against the tmp HOME vault (empty → fast, exit 0); Step 7 --no-vector
+      // skips the npm install. No --standalone/--statusline/--org-repo.
+      const r = spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector'], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      // install.sh has no `set -e` → runs all 8 steps and exits 0.
+      expect(r.status).toBe(0);
+      const out = r.stdout + r.stderr;
+      // The warning the guard is meant to surface…
+      expect(out).toContain('Failed to connect');
+      // …and NOT the false success the buggy pipefail inversion produced.
+      expect(out).not.toContain("Registered MCP server 'total-recall' (user scope).");
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
 }, 60000);
