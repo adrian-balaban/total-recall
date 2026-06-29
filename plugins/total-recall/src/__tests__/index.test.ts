@@ -577,6 +577,23 @@ describe('list_memories', () => {
     await callTool('store_memory', { title: 'Decision One', content: 'Dec', tags: ['team'], category: 'decisions' });
   });
 
+  // server.ts CallTool dispatch defaults `arguments ?? {}` before calling the
+  // handler. The MCP SDK types request.params.arguments as optional, and a client
+  // is permitted to omit it entirely on a bare no-arg call (list_memories with no
+  // params object). callTool() above always passes `{}`, so it can't catch a
+  // regression where the `?? {}` default is removed: listMemories reads
+  // `args?.field` but its parameter is non-optional, so `undefined` throws a
+  // TypeError at the first `args.x` access → dispatched as isError. Call the
+  // captured handler directly with `arguments: undefined` to pin the default.
+  it('does not throw on a bare call with arguments omitted entirely', async () => {
+    const handler = registeredHandlers.get('CallToolRequestSchema')!;
+    const res = await handler({ params: { name: 'list_memories', arguments: undefined } });
+    expect(res.isError).toBeFalsy();
+    const parsed = JSON.parse(res.content[0].text);
+    expect(Array.isArray(parsed.items)).toBe(true);
+    expect(parsed.items.length).toBeGreaterThanOrEqual(2);
+  });
+
   it('returns all memories', async () => {
     const res = result(await callTool('list_memories'));
     expect(res.items.length).toBeGreaterThanOrEqual(2);
@@ -2014,5 +2031,28 @@ describe('atomicWrite — random tmp path defeats predictable-tmp symlink race (
       fs.rmSync(predictableTmp, { force: true });
       fs.rmSync(victim, { force: true });
     }
+  });
+});
+
+describe('CallTool dispatch — no-arguments call (Pass 5)', () => {
+  it('list_memories with no arguments object returns results, not isError', async () => {
+    // The MCP SDK types request.params.arguments as optional (ZodOptional); a
+    // client is permitted to send a bare list_memories call with no params
+    // object. Before the fix, `handler(args)` passed `undefined` straight to
+    // listMemories, whose parameter is non-optional and whose first line is
+    // `const { category, tag, limit, offset } = args` — destructuring undefined
+    // throws TypeError → caught by the dispatch catch → returned isError:true,
+    // so a VALID no-arg call surfaced as a spurious tool failure. The fix
+    // (`await handler(args ?? {})`) defaults to {} so the destructure yields the
+    // defaults (limit=50, offset=0). This test calls the registered handler with
+    // `arguments: undefined` directly (callTool defaults to {}, which would NOT
+    // catch the bug).
+    await callTool('store_memory', { title: 'NoArg Memory', content: 'x', tags: [], category: 'knowledge' });
+    const handler = registeredHandlers.get('CallToolRequestSchema')!;
+    const res = await handler({ params: { name: 'list_memories', arguments: undefined } });
+    expect(res.isError).toBeUndefined();
+    const list = JSON.parse(res.content[0].text);
+    expect(list.total).toBe(1);
+    expect(list.items[0].title).toBe('NoArg Memory');
   });
 });

@@ -15,6 +15,19 @@ export const invertedIndex: InvertedIndex = {};
 export const errors: Array<{ time: string; msg: string }> = [];
 export const perfSamples: number[] = [];
 
+// Append to the shared `errors` singleton with a cap. A long-lived stdio server
+// (one process per Claude Code session, potentially days) with a recurring error
+// — a misbehaving client hitting an unknown tool, or a teammate-pushed malformed
+// org file failing indexFile on every reconcile — would otherwise grow `errors`
+// without limit. Mirror the perfSamples cap (server.ts shifts perfSamples > 1000).
+// getStats only returns the last 10, so the cap is invisible to consumers.
+// Centralize here so every push site (server.ts dispatch catch, vault-scan
+// indexFile catch, persistence debounce/flush catches) is bounded uniformly.
+export function recordError(msg: string): void {
+  errors.push({ time: new Date().toISOString(), msg });
+  if (errors.length > 1000) errors.shift();
+}
+
 // Bump the access-tracking fields (accessCount + lastAccessed) on a memory entry
 // and schedule an index save. Three call sites share the exact same triple:
 //   - get_memories_by_keys(full)         — deferred to after a successful read

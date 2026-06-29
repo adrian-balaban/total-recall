@@ -18,6 +18,16 @@ describe('parseFrontmatter', () => {
     expect(data.sessions).toEqual(['s1', 's2']);
   });
 
+  it('parses inline array items that themselves contain a comma (quote-aware)', () => {
+    // A tag like `cdc,outbox` is single-quoted by the serializer so the inner
+    // comma is unambiguous; parseInlineArray must NOT split on a comma inside
+    // quotes. The previous naive .split(',') corrupted this on re-parse:
+    //   [kafka, 'cdc,outbox'] → ['kafka', 'cdc', 'outbox']
+    const raw = `---\ntitle: Foo\ntags: [kafka, 'cdc,outbox']\n---\nbody\n`;
+    const { data } = parseFrontmatter(raw);
+    expect(data.tags).toEqual(['kafka', 'cdc,outbox']);
+  });
+
   it('keeps ISO date strings as strings (not Date objects)', () => {
     const raw = `---\ncreated: 2026-04-01T10:00:00.000Z\nupdated: 2026-04-01T10:00:00.000Z\n---\nbody\n`;
     const { data } = parseFrontmatter(raw);
@@ -130,6 +140,21 @@ describe('stringifyFrontmatter', () => {
     const parsed = parseFrontmatter(out);
     expect(parsed.data).toEqual(data);
     expect(parsed.content).toBe('\n## Executive Summary\n\nbody');
+  });
+
+  it('round-trips a tag containing a comma (quotes the item, parses back intact)', () => {
+    // The bug: a comma inside a tag was re-split by parseInlineArray on re-parse,
+    // so `tags: [kafka, 'cdc,outbox']` → ['kafka','cdc','outbox'] → re-serialized
+    // as [kafka, cdc, outbox], silently corrupting the tag. needsQuotes now flags
+    // commas (single-quotes the item) and parseInlineArray is quote-aware.
+    const data = { title: 'CDC', tags: ['kafka', 'cdc,outbox'] };
+    const out = stringifyFrontmatter('body', data);
+    expect(out).toContain("tags: [kafka, 'cdc,outbox']");
+    const reparsed = parseFrontmatter(out);
+    expect(reparsed.data.tags).toEqual(['kafka', 'cdc,outbox']);
+    // The round-trip is stable: re-serializing the parse yields the same text.
+    const out2 = stringifyFrontmatter('body', reparsed.data);
+    expect(out2).toBe(out);
   });
 
   it('handles apostrophes in strings (mid-string quotes need no escaping)', () => {

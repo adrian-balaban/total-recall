@@ -24,5 +24,20 @@ export function appendJournal(action: string, key: string, title: string) {
     return;
   }
   const entry = `\n- ${new Date().toISOString()} [${action}] **${title}** (\`${key}\`)\n`;
-  fs.appendFileSync(journalPath, entry);
+  // The journal append is the LAST step of store_memory, AFTER the .md file
+  // write, memIndex update, and scheduleSave() have already succeeded — so the
+  // memory is already durable when we get here. assertRegularFile above guards
+  // the symlink/dir case, but a TOCTOU between that lstat and this append, an
+  // ENOSPC (disk full), or an EACCES must NOT throw into the store_memory call:
+  // the dispatch catch in server.ts would catch it and return isError:true,
+  // making the agent believe the store failed and retry — creating a DUPLICATE
+  // memory at the same key (store_memory throws on duplicate without force).
+  // The header invariant ("must never throw into a store_memory call") holds
+  // only if this append is guarded too. Swallow; the memory itself is safe and
+  // a missed journal line is cosmetic. Mirrors the assertRegularFile guard.
+  try {
+    fs.appendFileSync(journalPath, entry);
+  } catch {
+    /* best-effort journal; must never throw into store_memory (would surface as isError and trigger a duplicate-key retry) */
+  }
 }

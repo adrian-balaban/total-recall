@@ -12,7 +12,7 @@ vi.mock('../state.js', async () => {
   return { ...actual, memIndex: {} };
 });
 
-import { bumpAccess } from '../state.js';
+import { bumpAccess, recordError, errors } from '../state.js';
 import { scheduleSave } from '../persistence.js';
 import type { MemoryMetadata } from '../types.js';
 
@@ -25,7 +25,39 @@ const mkMeta = (): MemoryMetadata => ({
   isOrg: false,
 });
 
-afterEach(() => vi.mocked(scheduleSave).mockClear());
+afterEach(() => {
+  vi.mocked(scheduleSave).mockClear();
+  // recordError mutates the REAL shared `errors` singleton (the vi.mock above
+  // spreads `actual`, so `errors` is the live array other suites' get_stats
+  // reads). Reset it so the cap test below can't pollute the cross-test index.
+  errors.length = 0;
+});
+
+describe('recordError', () => {
+  // state.ts caps `errors` at 1000 (mirrors the perfSamples cap in server.ts).
+  // A long-lived stdio server with a recurring error (misbehaving client hitting
+  // an unknown tool, or a teammate-pushed malformed org file failing indexFile on
+  // every reconcile) would otherwise grow `errors` without bound. get_stats only
+  // returns the last 10, so the cap is invisible to consumers — but without it,
+  // memory grows unbounded over a multi-day session.
+  it('caps the errors array at 1000 entries (FIFO shift)', () => {
+    const base = errors.length;
+    for (let i = 0; i < 1001; i++) recordError(`err-${i}`);
+    expect(errors.length).toBe(1000);
+    // The oldest entry was shifted out; the array head is the 2nd-pushed entry
+    // and the tail is the last-pushed.
+    expect(errors[0]!.msg).toBe('err-1');
+    expect(errors[999]!.msg).toBe('err-1000');
+    // Sanity: exactly one entry was dropped relative to the 1001 pushes (+ base).
+    expect(base).toBe(0);
+  });
+
+  it('records the message with an ISO timestamp', () => {
+    recordError('boom');
+    expect(errors[errors.length - 1]!.msg).toBe('boom');
+    expect(errors[errors.length - 1]!.time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
 
 describe('bumpAccess', () => {
   it('increments accessCount and updates lastAccessed in place', () => {

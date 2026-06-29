@@ -49,7 +49,28 @@ function coerceScalar(s) {
   return t;
 }
 function parseInlineArray(s) {
-  return s.split(",").map((x) => unquote(x)).filter((x) => x !== "");
+  const out = [];
+  let cur = "";
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      cur += ch;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+    } else if (ch === ",") {
+      const v = unquote(cur);
+      if (v !== "") out.push(v);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  const last = unquote(cur);
+  if (last !== "") out.push(last);
+  return out;
 }
 function parseYamlish(body) {
   const data = {};
@@ -117,6 +138,7 @@ function needsQuotes(s) {
   if (/^\s|\s$/.test(s)) return true;
   if (/^[!&*?|>%@`"'#,[\]{}-]/.test(s)) return true;
   if (/:/.test(s)) return true;
+  if (/,/.test(s)) return true;
   if (/#/.test(s)) return true;
   if (/^(true|false|null|~|yes|no)$/i.test(s)) return true;
   if (/^-?\d+(\.\d+)?$/.test(s)) return true;

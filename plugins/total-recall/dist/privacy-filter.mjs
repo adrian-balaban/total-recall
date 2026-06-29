@@ -26,9 +26,10 @@ function findSuspiciousEmail(text, allowedDomains) {
 var SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
 function privacyCheck(data, content, allowedDomains = []) {
   const tagText = Array.isArray(data.tags) ? data.tags.join(" ") : String(data.tags ?? "");
+  const sessionText = Array.isArray(data.sessions) ? data.sessions.join(" ") : String(data.sessions ?? "");
   const title = String(data.title ?? "");
   const author = String(data.author ?? "");
-  const text = `${title} ${author} ${tagText} ${content}`;
+  const text = `${title} ${author} ${tagText} ${sessionText} ${content}`;
   if (SECRET_TOKEN_RE.test(text)) return "secret token or API key detected";
   if (findSuspiciousEmail(text, allowedDomains)) return "suspicious email address detected";
   return null;

@@ -19,6 +19,14 @@ export interface PrivacyData {
   title?: unknown;
   author?: unknown;
   tags?: unknown;
+  // The `sessions` history array (update_memory appends session ids, capped at
+  // 50). A session id is a free-form client-supplied string, so a leaked secret
+  // or personal email could ride in via `sessions: ['ghp_xxx', 'me@personal.com']`
+  // — and the writer persists it into the frontmatter of the org .md file. The
+  // filter must scan it the same way it scans tags, or a session id leaks into
+  // the shared org repo unscanned. Typed `unknown` (like tags) so the scalar-
+  // fallback branch below still covers a hand-edited `sessions: ghp_xxx`.
+  sessions?: unknown;
 }
 
 // Sanitize the configured email-domain allowlist: drop non-strings, empties, and BARE
@@ -82,22 +90,26 @@ export function findSuspiciousEmail(text: string, allowedDomains: string[]): str
 // prefix of a longer base64 run.
 export const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
 
-// Scan the union of title, author, tags, and body. Tags are scanned whether they parsed
-// as an array OR as a raw scalar string: the TS writer always emits tags as an array,
-// but a teammate-pushed / hand-edited memory may carry `tags: ghp_xxx` as a scalar
-// (parseFrontmatter yields a string, not an array), which the array branch alone would
-// leave unscanned — letting a scalar-tag secret sail into the shared org repo. Scanning
-// the raw string form is fail-closed: more text scanned, never less. Returns a human-
-// readable block reason, or null if the memory is safe to sync.
+// Scan the union of title, author, tags, sessions, and body. Tags and sessions are
+// scanned whether they parsed as an array OR as a raw scalar string: the TS writer
+// always emits them as arrays, but a teammate-pushed / hand-edited memory may carry
+// `tags: ghp_xxx` or `sessions: me@personal.com` as a scalar (parseFrontmatter yields
+// a string, not an array), which the array branch alone would leave unscanned —
+// letting a scalar secret sail into the shared org repo. sessions is client-supplied
+// free-form text (a session id), so it is exactly as untrusted as tags and must not be
+// the one field the filter skips. Scanning the raw string form is fail-closed: more
+// text scanned, never less. Returns a human-readable block reason, or null if the
+// memory is safe to sync.
 export function privacyCheck(
   data: PrivacyData,
   content: string,
   allowedDomains: string[] = []
 ): string | null {
   const tagText = Array.isArray(data.tags) ? data.tags.join(' ') : String(data.tags ?? '');
+  const sessionText = Array.isArray(data.sessions) ? data.sessions.join(' ') : String(data.sessions ?? '');
   const title = String(data.title ?? '');
   const author = String(data.author ?? '');
-  const text = `${title} ${author} ${tagText} ${content}`;
+  const text = `${title} ${author} ${tagText} ${sessionText} ${content}`;
   if (SECRET_TOKEN_RE.test(text)) return 'secret token or API key detected';
   if (findSuspiciousEmail(text, allowedDomains)) return 'suspicious email address detected';
   return null;

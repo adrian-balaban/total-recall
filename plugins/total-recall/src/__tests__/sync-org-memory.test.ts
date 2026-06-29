@@ -81,6 +81,29 @@ describe('privacyCheck', () => {
     expect(privacyCheck({ tags: 'architecture' }, 'Clean body.')).toBeNull();
   });
 
+  it('blocks a secret token in an array sessions field', () => {
+    // sessions is a client-supplied free-form array (update_memory appends session
+    // ids); a leaked token could ride in via sessions just as via tags. Before the
+    // fix, privacyCheck did not scan sessions at all, so this sailed into the org
+    // repo. The fix adds sessions to the scanned union (array form here).
+    expect(privacyCheck({ sessions: ['s1', 'sk-abcdefghijklmnopqrstuvwxyz123456'] }, 'Clean body.')).toMatch(/secret/);
+  });
+
+  it('blocks a secret token in a SCALAR sessions field (hand-edited frontmatter)', () => {
+    // Same scalar fallback as tags: a teammate-pushed `sessions: sk-xxx` is parsed
+    // as a string, not an array. The String(data.sessions ?? '') branch must scan it.
+    expect(privacyCheck({ sessions: 'sk-abcdefghijklmnopqrstuvwxyz123456' }, 'Clean body.')).toMatch(/secret/);
+  });
+
+  it('blocks a personal email in the sessions field', () => {
+    // A personal email in a session id must be blocked just as in the body.
+    expect(privacyCheck({ sessions: ['me@personal.com'] }, 'Clean body.')).toMatch(/email/);
+  });
+
+  it('still passes a clean sessions field', () => {
+    expect(privacyCheck({ sessions: ['abc-123', 'def-456'] }, 'Clean body.')).toBeNull();
+  });
+
   // ── SECRET_TOKEN_RE — Stripe live, AWS STS (ASIA), labeled AWS secret access key.
   // Each is a prefixed/labeled form with negligible false-positive risk; the
   // privacy-filter.ts comment explains why the AWS 40-char secret is matched only when

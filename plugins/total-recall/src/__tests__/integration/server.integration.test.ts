@@ -44,6 +44,14 @@ beforeAll(async () => {
   }
   fs.mkdirSync(path.join(VAULT, 'personal-vault', 'knowledge'), { recursive: true });
   fs.mkdirSync(path.join(VAULT, 'org', 'org-vault'), { recursive: true });
+  // Org-config guard (store.ts orgVaultConfigured): an org-tagged store is refused
+  // unless EITHER ~/.total-recall/config.json has orgRepo OR ~/.total-recall/org/.git
+  // exists (a cloned org vault). The integration transport must exercise the org
+  // route end-to-end, so provision a stub `.git` dir — the guard only checks
+  // existence, and store_memory itself does no git/network work (the PostToolUse
+  // sync hook does, and isn't in scope here). Without this the org-store test
+  // fails with "Org vault is not configured" before the route is even taken.
+  fs.mkdirSync(path.join(VAULT, 'org', '.git'), { recursive: true });
 
   // StdioClientParameters.env is Record<string, string>; strip undefined values.
   const env: Record<string, string> = {};
@@ -177,8 +185,12 @@ describe('total-recall over real stdio', () => {
   });
 
   it('list_memories returns the stored entries', async () => {
+    // list_memories returns { items, total, hasMore } (src/tools/query.ts), NOT a
+    // bare array — a stale `Array.isArray(listed)` assertion documented the wrong
+    // shape and has been failing since the handler moved to the paginated object.
     const listed = json(await client.callTool({ name: 'list_memories', arguments: {} }));
-    expect(Array.isArray(listed)).toBe(true);
-    expect(listed.length).toBeGreaterThan(0);
+    expect(listed.total).toBeGreaterThan(0);
+    expect(Array.isArray(listed.items)).toBe(true);
+    expect(listed.items.length).toBeGreaterThan(0);
   });
 });

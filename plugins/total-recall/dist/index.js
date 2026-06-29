@@ -15510,6 +15510,10 @@ var memIndex = {};
 var invertedIndex = {};
 var errors = [];
 var perfSamples = [];
+function recordError(msg) {
+  errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg });
+  if (errors.length > 1e3) errors.shift();
+}
 function bumpAccess(meta2) {
   meta2.accessCount++;
   meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
@@ -15575,7 +15579,16 @@ var idfTimer = null;
 function atomicWrite(p, data) {
   ensureDir(path2.dirname(p));
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
-  fs2.writeFileSync(tmp, data);
+  try {
+    fs2.writeFileSync(tmp, data);
+  } catch {
+    try {
+      fs2.writeFileSync(p, data);
+    } catch (e) {
+      recordError(`atomicWrite(${p}): ${e.message}`);
+    }
+    return;
+  }
   try {
     fs2.renameSync(tmp, p);
   } catch {
@@ -15648,16 +15661,32 @@ function loadIndexes() {
 function scheduleSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
-    atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-    scheduleIdfRecalc();
+    try {
+      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+      scheduleIdfRecalc();
+    } catch (e) {
+      recordError(`scheduleSave: ${e.message}`);
+      try {
+        console.error(e);
+      } catch {
+      }
+    }
   }, 1e3);
 }
 function scheduleIdfRecalc() {
   if (idfTimer) clearTimeout(idfTimer);
   idfTimer = setTimeout(() => {
-    rebuildInvertedIndex();
-    atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-    buildIndexCache();
+    try {
+      rebuildInvertedIndex();
+      atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
+      buildIndexCache();
+    } catch (e) {
+      recordError(`scheduleIdfRecalc: ${e.message}`);
+      try {
+        console.error(e);
+      } catch {
+      }
+    }
   }, 2e3);
 }
 function saveNow() {
@@ -15674,8 +15703,24 @@ function flushPending() {
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
-  saveNow();
-  recalcIdfNow();
+  try {
+    saveNow();
+  } catch (e) {
+    recordError(`flushPending saveNow: ${e.message}`);
+    try {
+      console.error("flushPending saveNow:", e);
+    } catch {
+    }
+  }
+  try {
+    recalcIdfNow();
+  } catch (e) {
+    recordError(`flushPending recalcIdfNow: ${e.message}`);
+    try {
+      console.error("flushPending recalcIdfNow:", e);
+    } catch {
+    }
+  }
 }
 function buildIndexCache() {
   const entries = Object.values(memIndex);
@@ -15744,7 +15789,28 @@ function coerceScalar(s) {
   return t;
 }
 function parseInlineArray(s) {
-  return s.split(",").map((x) => unquote(x)).filter((x) => x !== "");
+  const out = [];
+  let cur = "";
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === quote) quote = null;
+      cur += ch;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+    } else if (ch === ",") {
+      const v = unquote(cur);
+      if (v !== "") out.push(v);
+      cur = "";
+    } else {
+      cur += ch;
+    }
+  }
+  const last = unquote(cur);
+  if (last !== "") out.push(last);
+  return out;
 }
 function parseYamlish(body) {
   const data = {};
@@ -15812,6 +15878,7 @@ function needsQuotes(s) {
   if (/^\s|\s$/.test(s)) return true;
   if (/^[!&*?|>%@`"'#,[\]{}-]/.test(s)) return true;
   if (/:/.test(s)) return true;
+  if (/,/.test(s)) return true;
   if (/#/.test(s)) return true;
   if (/^(true|false|null|~|yes|no)$/i.test(s)) return true;
   if (/^-?\d+(\.\d+)?$/.test(s)) return true;
@@ -16044,7 +16111,7 @@ function indexFile(filePath, isOrg) {
     memIndex[key] = meta2;
     contentCache.delete(key);
   } catch (e) {
-    errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
+    recordError(`indexFile ${filePath}: ${e.message}`);
   }
 }
 function deriveCategory(filePath, isOrg) {
@@ -16074,7 +16141,10 @@ function appendJournal(action, key, title) {
   const entry = `
 - ${(/* @__PURE__ */ new Date()).toISOString()} [${action}] **${title}** (\`${key}\`)
 `;
-  fs4.appendFileSync(journalPath, entry);
+  try {
+    fs4.appendFileSync(journalPath, entry);
+  } catch {
+  }
 }
 
 // src/embeddings.ts
@@ -16481,7 +16551,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.26" : null.version;
+var PLUGIN_VERSION = true ? "1.0.27" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16664,12 +16734,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const handler = TOOL_HANDLERS[name];
     if (!handler) throw new Error(`Unknown tool: ${name}`);
-    const result = await handler(args);
+    const result = await handler(args ?? {});
     perfSamples.push(Date.now() - start);
     if (perfSamples.length > 1e3) perfSamples.shift();
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (e) {
-    errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg: `${name}: ${e.message}` });
+    recordError(`${name}: ${e.message}`);
     return { content: [{ type: "text", text: `Error: ${e.message}` }], isError: true };
   }
 });

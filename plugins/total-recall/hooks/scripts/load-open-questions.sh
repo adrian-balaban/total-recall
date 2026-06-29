@@ -2,7 +2,16 @@
 set -euo pipefail
 
 PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
-OQ_FILE=$(find "$PERSONAL_VAULT" \( -name "*open*question*" -o -name "*ambient*curiosity*" \) 2>/dev/null | head -1)
+# `|| true` is load-bearing under `set -euo pipefail`: (1) if the personal vault
+# dir is absent (fresh install before any store_memory), find exits non-zero and
+# the pipeline's status is non-zero → set -e aborts the SessionStart hook before
+# the `continue:true` fallback below ever runs → Claude Code treats the hook as
+# failed. (2) if MORE than one file matches, `head -1` closes the pipe after the
+# first line and find gets SIGPIPE on its next write → find exits 141 → with
+# pipefail the pipeline returns 141 → set -e aborts for the same reason. `|| true`
+# collapses both to status 0; the `-z "$OQ_FILE"` / `-f` guards below handle the
+# no-match case explicitly.
+OQ_FILE=$(find "$PERSONAL_VAULT" \( -name "*open*question*" -o -name "*ambient*curiosity*" \) 2>/dev/null | head -1 || true)
 
 if [ -z "$OQ_FILE" ] || [ ! -f "$OQ_FILE" ]; then
   echo '{"continue":true}'

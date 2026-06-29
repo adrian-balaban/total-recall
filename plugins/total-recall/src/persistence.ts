@@ -9,7 +9,7 @@ import {
   ensureDir,
 } from './paths.js';
 import { clampImportanceScore } from './ebbinghaus.js';
-import { memIndex, invertedIndex } from './state.js';
+import { memIndex, invertedIndex, recordError } from './state.js';
 import { rebuildInvertedIndex } from './tfidf.js';
 import * as crypto from 'crypto';
 
@@ -30,7 +30,23 @@ function atomicWrite(p: string, data: string) {
   // clobber the target. randomBytes makes the tmp path unguessable, closing the
   // symlink-race escalation (write-to-vault → clobber-any-user-writable-file).
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
-  fs.writeFileSync(tmp, data);
+  try {
+    fs.writeFileSync(tmp, data);
+  } catch {
+    // Tmp write failed (ENOSPC / EACCES / EROFS / EISDIR). atomicWrite is
+    // called from debounced setTimeout callbacks AND from flushPending on the
+    // SIGTERM/SIGINT/beforeExit path; an uncaught throw here escapes the timer
+    // callback → uncaughtException → the stdio server dies mid-session (index.ts
+    // registers no uncaughtException handler). Fall back to a direct overwrite
+    // of the target (loses POSIX atomicity, same trade-off as the rename-fallback
+    // below) rather than crashing. The .md files are already durable and
+    // reconcileIndex rebuilds the index on next boot, so a transient I/O error
+    // must not take the process down. Callers (scheduleSave / scheduleIdfRecalc
+    // / flushPending) additionally wrap their own bodies so a remaining throw is
+    // recorded via recordError, not fatal.
+    try { fs.writeFileSync(p, data); } catch (e) { recordError(`atomicWrite(${p}): ${(e as Error).message}`); }
+    return;
+  }
   try {
     fs.renameSync(tmp, p);
   } catch {
@@ -128,17 +144,33 @@ export function loadIndexes() {
 export function scheduleSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
-    atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-    scheduleIdfRecalc();
+    // A throw inside a setTimeout callback fires uncaughtException (index.ts
+    // registers no handler) and kills the stdio server mid-session. atomicWrite
+    // now falls back rather than throwing on transient I/O, but JSON.stringify
+    // of an odd memIndex shape or a scheduleIdfRecalc failure could still throw
+    // — record to the shared `errors` singleton (bounded in state.ts via
+    // recordError) and never rethrow from an async timer.
+    try {
+      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+      scheduleIdfRecalc();
+    } catch (e) {
+      recordError(`scheduleSave: ${(e as Error).message}`);
+      try { console.error(e); } catch { /* stderr closed — ignore */ }
+    }
   }, 1000);
 }
 
 export function scheduleIdfRecalc() {
   if (idfTimer) clearTimeout(idfTimer);
   idfTimer = setTimeout(() => {
-    rebuildInvertedIndex();
-    atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-    buildIndexCache();
+    try {
+      rebuildInvertedIndex();
+      atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
+      buildIndexCache();
+    } catch (e) {
+      recordError(`scheduleIdfRecalc: ${(e as Error).message}`);
+      try { console.error(e); } catch { /* stderr closed — ignore */ }
+    }
   }, 2000);
 }
 
@@ -164,8 +196,15 @@ export function flushPending() {
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
-  saveNow();
-  recalcIdfNow();
+  // Isolate the two writes: if saveNow throws (transient I/O), recalcIdfNow
+  // must still run, and the throw must not propagate out of the SIGTERM/SIGINT
+  // handler in index.ts (which would skip process.exit(0) and die via
+  // uncaughtException). atomicWrite already swallows its own throws; this belt-
+  // and-braces catch guards anything atomicWrite doesn't (e.g. a throw inside
+  // rebuildInvertedIndex/buildIndexCache). Log to stderr + record; both writes
+  // are best-effort and reconcileIndex rebuilds on next boot.
+  try { saveNow(); } catch (e) { recordError(`flushPending saveNow: ${(e as Error).message}`); try { console.error('flushPending saveNow:', e); } catch { /* stderr closed */ } }
+  try { recalcIdfNow(); } catch (e) { recordError(`flushPending recalcIdfNow: ${(e as Error).message}`); try { console.error('flushPending recalcIdfNow:', e); } catch { /* stderr closed */ } }
 }
 
 // ─── Index cache (shell-readable) ────────────────────────────────────────────

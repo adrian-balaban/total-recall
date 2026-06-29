@@ -9,7 +9,7 @@ import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './path
 import { loadIndexes, scheduleSave } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
 import { rebuildInvertedIndex } from './tfidf.js';
-import { perfSamples, errors } from './state.js';
+import { perfSamples, recordError } from './state.js';
 import { storeMemory } from './tools/store.js';
 import { recallMemory, searchIndex } from './tools/recall.js';
 import {
@@ -225,12 +225,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   try {
     const handler = TOOL_HANDLERS[name];
     if (!handler) throw new Error(`Unknown tool: ${name}`);
-    const result = await handler(args);
+    // `args` is request.params.arguments, which the MCP SDK types as
+    // ZodOptional and a client is permitted to omit entirely (e.g. a bare
+    // `list_memories` call with no params object). The tool handlers are typed
+    // `(args: ParsedArgs) => …` and several (listMemories, getStats, prune) read
+    // optional fields via `args?.field` but the function parameter itself is
+    // non-optional, so passing `undefined` through throws a TypeError at the
+    // first `args.x` access — caught here and returned as isError, surfacing as
+    // a spurious tool failure on a valid no-arg call. Default to `{}`.
+    const result = await handler(args ?? {});
     perfSamples.push(Date.now() - start);
     if (perfSamples.length > 1000) perfSamples.shift();
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (e: any) {
-    errors.push({ time: new Date().toISOString(), msg: `${name}: ${e.message}` });
+    recordError(`${name}: ${e.message}`);
     return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
   }
 });

@@ -85,12 +85,44 @@ function coerceScalar(s: string): unknown {
 }
 
 function parseInlineArray(s: string): string[] {
-  // Content between [ ... ]; items are simple tokens (tags, session ids) — no
-  // embedded commas/quotes in practice. Split on commas, strip quotes.
-  return s
-    .split(',')
-    .map((x) => unquote(x))
-    .filter((x) => x !== '');
+  // Content between [ ... ]; items are simple tokens (tags, session ids) — but
+  // an item may itself contain a comma (e.g. a tag `cdc,outbox`), which the
+  // serializer single-quotes so the inner comma is unambiguous (see
+  // serializeArrayItem → needsQuotes → the comma check below). A naive
+  // .split(',') would split `'cdc,outbox'` at the inner comma on re-parse,
+  // corrupting the tag into two entries and breaking the round-trip:
+  //   tags: [kafka, 'cdc,outbox']  →  parse  →  ['kafka', 'cdc', 'outbox']
+  //                                                 →  re-serialize  →  [kafka, cdc, outbox]
+  // Walk the string with a small quote-aware scanner: break only on commas
+  // OUTSIDE single/double quotes, accumulate every char (quote chars included)
+  // into the current segment, and unquote each segment at the end. Because the
+  // quote chars are always accumulated into the segment regardless of toggle
+  // state, the toggle only governs comma-breaking — so `''` (single-quote
+  // escape) and `\"` (double-quote escape) inside an item are still repaired by
+  // unquote() on the full token. Preserves the prior behavior for unquoted
+  // simple tokens (whitespace trimmed, empties dropped).
+  const out: string[] = [];
+  let cur = '';
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (quote) {
+      if (ch === quote) quote = null;
+      cur += ch;
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      cur += ch;
+    } else if (ch === ',') {
+      const v = unquote(cur);
+      if (v !== '') out.push(v);
+      cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  const last = unquote(cur);
+  if (last !== '') out.push(last);
+  return out;
 }
 
 function parseYamlish(body: string): Record<string, unknown> {
@@ -196,6 +228,7 @@ function needsQuotes(s: string): boolean {
   if (/^\s|\s$/.test(s)) return true; // leading/trailing whitespace
   if (/^[!&*?|>%@`"'#,[\]{}-]/.test(s)) return true; // YAML indicator chars at start
   if (/:/.test(s)) return true; // any colon (ISO dates, "Title: Sub") — dates stay strings
+  if (/,/.test(s)) return true; // any comma — would otherwise re-split on parseInlineArray (see round-trip fix there)
   if (/#/.test(s)) return true; // comment marker
   if (/^(true|false|null|~|yes|no)$/i.test(s)) return true; // YAML keywords
   if (/^-?\d+(\.\d+)?$/.test(s)) return true; // looks numeric

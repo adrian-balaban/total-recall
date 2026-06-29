@@ -12,6 +12,7 @@ import { spawnSync } from 'child_process';
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const LOAD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'load-memory-index.sh');
 const BUILD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'build-memory-index.sh');
+const OQ_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'load-open-questions.sh');
 
 function has(bin: string): boolean {
   return spawnSync(bin, ['--version'], { stdio: 'ignore' }).status === 0;
@@ -102,5 +103,112 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(cache).toContain('knowledge/real:');
     expect(cache).not.toContain('knowledge/linked:');
     expect(cache).not.toContain('knowledge/dangling:');
+  });
+
+  // Pass 5 fix #7: load-open-questions.sh runs under `set -euo pipefail`. The
+  // OQ_FILE assignment is `find "$PERSONAL_VAULT" (...) | head -1 || true`. Without
+  // `|| true`: on a fresh install the personal vault dir is absent → find exits
+  // non-zero → under pipefail the pipeline returns non-zero → set -e ABORTS the
+  // SessionStart hook before the `{"continue":true}` fallback runs, so Claude Code
+  // treats the hook as failed. `|| true` collapses that to status 0 and the
+  // `-z "$OQ_FILE"` guard below emits the continue. Verified empirically: without
+  // `|| true` this exact invocation exits 1; with it, exits 0. (The >1-match
+  // SIGPIPE sub-case in the fix's comment shares the SAME `|| true` guard but is
+  // racy to trigger deterministically — short paths buffer in the pipe and find
+  // exits 0 before head closes — so the no-vault case stands in for both.)
+  it('load-open-questions.sh: exits 0 + {"continue":true} when the vault dir is absent', () => {
+    // Fresh empty HOME — no .total-recall/personal-vault → find's root is missing.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-oq-novault-'));
+    try {
+      const r = spawnSync('bash', [OQ_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout)).toEqual({ continue: true });
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // Pass 5 fix #8: build-memory-index.sh must (a) strip a trailing CR from each
+  // frontmatter line so a teammate-pushed CRLF .md doesn't leak \r into the injected
+  // title/tags, and (b) parse block-sequence tags (tags:\n  - a\n  - b) so a
+  // block-form memory surfaces real tags instead of empty `[]`. Both are parity gaps
+  // with the TS parser (which splits on /\r?\n/ and parses block arrays) that desync
+  // the injected SessionStart index from list_memories. This single CRLF file with
+  // block-array tags exercises both: without the CR strip the cache line carries a
+  // literal \r (caught by the global no-\r assertion); without the block-array branch
+  // the tags render as `[]` (caught by the [kafka, cdc] assertion).
+  it('build-memory-index.sh: strips CRLF + joins block-array tags (parity with list_memories)', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-bmi-crlf-'));
+    const knowledge = path.join(home, '.total-recall', 'personal-vault', 'knowledge');
+    fs.mkdirSync(knowledge, { recursive: true });
+    // CRLF line endings throughout; block-sequence (not inline []) tags.
+    const crlf = [
+      '---',
+      'title: CRLF Title',
+      'tags:',
+      '  - kafka',
+      '  - cdc',
+      '---',
+      'body',
+      '',
+    ].join('\r\n');
+    fs.writeFileSync(path.join(knowledge, 'crlf-block.md'), crlf);
+
+    try {
+      const r = spawnSync('bash', [BUILD_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const cache = fs.readFileSync(path.join(home, '.total-recall', '.index-cache.txt'), 'utf8');
+      // Block-array tags joined (catches the missing block-array branch → would be []).
+      expect(cache).toContain('knowledge/crlf-block: CRLF Title [kafka, cdc] (knowledge)');
+      // CRLF strip (catches the missing CR strip → the line would carry a literal \r
+      // in the title and/or the joined tags). The script re-emits with LF, so a clean
+      // cache has no CR anywhere.
+      expect(cache).not.toContain('\r');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // build-memory-index.sh prunes EXCLUDED_DIRS with `find -iname` (case-
+  // insensitive), matching src/vault-scan.ts which checks
+  // `EXCLUDED_DIRS.has(e.name.toLowerCase())`. A mixed-case dir like `Projects`
+  // IS skipped by the MCP tools but a case-sensitive `find -name projects` would
+  // NOT prune it — the cache would inject `Projects/secret` as a memory the tools
+  // never surface (the exact desync this script's header warns against).
+  it('build-memory-index.sh: prunes a mixed-case excluded dir (Projects/)', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-bmi-case-'));
+    const knowledge = path.join(home, '.total-recall', 'personal-vault', 'knowledge');
+    fs.mkdirSync(knowledge, { recursive: true });
+    fs.writeFileSync(path.join(knowledge, 'mixed.md'), '---\ntitle: Mixed\n---\nbody\n');
+    // Mixed-case variant of the `projects` excluded dir.
+    const projects = path.join(home, '.total-recall', 'personal-vault', 'Projects');
+    fs.mkdirSync(projects, { recursive: true });
+    fs.writeFileSync(path.join(projects, 'secret.md'), '---\ntitle: Secret\n---\nbody\n');
+
+    try {
+      const r = spawnSync('bash', [BUILD_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const cache = fs.readFileSync(path.join(home, '.total-recall', '.index-cache.txt'), 'utf8');
+      // The legitimate memory is indexed…
+      expect(cache).toContain('knowledge/mixed:');
+      // …and the mixed-case excluded dir is pruned in both casings.
+      expect(cache).not.toContain('Projects/secret');
+      expect(cache).not.toContain('projects/secret');
+      expect(cache).not.toContain('Secret');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 }, 60000);

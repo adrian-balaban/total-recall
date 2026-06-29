@@ -9,7 +9,7 @@ import {
   VECTORS_DB,
   ensureDir,
 } from './paths.js';
-import { memIndex, errors } from './state.js';
+import { memIndex, recordError } from './state.js';
 import { contentCache } from './lru-cache.js';
 import { deleteVector } from './vectorStore.js';
 import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
@@ -288,7 +288,7 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // for up to the 30-min LRU TTL.
     contentCache.delete(key);
   } catch (e: any) {
-    errors.push({ time: new Date().toISOString(), msg: `indexFile ${filePath}: ${e.message}` });
+    recordError(`indexFile ${filePath}: ${e.message}`);
   }
 }
 

@@ -12,12 +12,20 @@ CACHE="$HOME/.total-recall/.index-cache.txt"
 # the SessionStart index that the MCP tools never surface.
 EXCLUDED_DIRS='projects templates .obsidian reference-docs in-progress completed'
 
-# Build a find prune clause: \( -name projects -o -name templates -o ... \) -prune
+# Build a find prune clause: \( -iname projects -o -iname templates -o ... \) -prune
 # Names are simple tokens (no spaces/glob metachars), so unquoted word-splitting of
 # $PRUNE into the find expression is safe and intentional.
+# -iname (case-insensitive), NOT -name: the TS reconcileIndex walk in
+# src/vault-scan.ts checks `EXCLUDED_DIRS.has(e.name.toLowerCase())`, so a
+# mixed-case dir like `Projects` or `.Obsidian` IS skipped by the MCP tools but
+# would NOT be pruned by a case-sensitive `find -name projects` — the cache
+# builder would then index its .md files and inject them into the SessionStart
+# index as memories the tools never surface (the exact desync this script's
+# header comment warns against). -iname matches the TS lowercasing so the two
+# stay in sync regardless of the on-disk casing.
 PRUNE=""
 for d in $EXCLUDED_DIRS; do
-  if [ -z "$PRUNE" ]; then PRUNE="-name $d"; else PRUNE="$PRUNE -o -name $d"; fi
+  if [ -z "$PRUNE" ]; then PRUNE="-iname $d"; else PRUNE="$PRUNE -o -iname $d"; fi
 done
 
 TMP=$(mktemp)
@@ -43,15 +51,46 @@ process_vault() {
     local rel="${mdfile#$base/}"
     local key="$prefix${rel%.md}"
     local in_fm=0
+    # Track an open block-sequence array (tags:\n  - a\n  - b). Only `tags` is
+    # surfaced by this cache, so only one block key is tracked at a time — same
+    # single-open-array assumption as src/frontmatter.ts parseYamlish.
+    local in_tags_block=0
     local title="" tags="" category=""
     category=$(dirname "$rel")
     [ "$category" = "." ] && category="knowledge"
 
     while IFS= read -r fmline; do
+      # CRLF line endings: a teammate on Windows can push a .md with CRLF to the
+      # shared org vault (git preserves the CR). `read -r` strips only the LF
+      # delimiter, leaving a trailing \r on fmline — which would then leak into
+      # the title/tags values (e.g. tags="kafka\r") and render as artifacts in
+      # the injected index. Strip a trailing CR before any matching. The TS
+      # parser splits on /\r?\n/ so it is immune; this keeps the shell cache in
+      # parity with what list_memories returns.
+      fmline="${fmline%$'\r'}"
       if [ "$fmline" = "---" ]; then
         [ $in_fm -eq 0 ] && { in_fm=1; continue; } || break
       fi
       [ $in_fm -eq 0 ] && continue
+      # Block-sequence item ("  - x") for the open block-array key (tags only,
+      # the only array field this cache surfaces). Mirrors the block-array branch
+      # in src/frontmatter.ts parseYamlish: a teammate-pushed or hand-edited
+      # memory may carry block-form tags (tags:\n  - a\n  - b) instead of the
+      # inline [a, b] the TS writer emits; without this branch the cache showed
+      # empty tags for those memories while list_memories showed the real ones.
+      # A non-indented line or a new `key:` closes the block (fall-through below).
+      if [ $in_tags_block -eq 1 ]; then
+        if [[ "$fmline" =~ ^[[:space:]]+-[[:space:]]+(.*)$ ]]; then
+          item="${BASH_REMATCH[1]}"
+          # strip one pair of surrounding single/double quotes (serializer emits single)
+          item="${item#\"}"; item="${item%\"}"
+          item="${item#\'}"; item="${item%\'}"
+          if [ -z "$tags" ]; then tags="$item"; else tags="$tags, $item"; fi
+          continue
+        else
+          in_tags_block=0
+        fi
+      fi
       case "$fmline" in
         title:*) title="${fmline#title: }"
                  # frontmatter.ts serializes string scalars as "..." — strip one
@@ -60,10 +99,18 @@ process_vault() {
                  # "Protected Org" with the literal quote characters).
                  title="${title#\"}"; title="${title%\"}"
                  title="${title#\'}"; title="${title%\'}" ;;
-        tags:*)  tags="${fmline#tags: }"
-                 # inline arrays serialize as [a, b, c] — strip the brackets so
-                 # the cache doesn't render "[kafka,  streaming]" with artifacts.
-                 tags="${tags#\[}"; tags="${tags%\]}" ;;
+        tags:*)  tags="${fmline#tags:}"
+                 tags="${tags# }"
+                 if [ -z "$tags" ]; then
+                   # Empty value → block-sequence form; following "  - x" lines
+                   # attach (handled above). Inline `[a, b]` is the else branch.
+                   in_tags_block=1
+                 else
+                   in_tags_block=0
+                   # inline arrays serialize as [a, b, c] — strip the brackets so
+                   # the cache doesn't render "[kafka,  streaming]" with artifacts.
+                   tags="${tags#\[}"; tags="${tags%\]}"
+                 fi ;;
       esac
     done < "$mdfile"
 
