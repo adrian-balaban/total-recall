@@ -1,0 +1,72 @@
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/privacy-filter.ts
+var privacy_filter_exports = {};
+__export(privacy_filter_exports, {
+  EMAIL_RE: () => EMAIL_RE,
+  SECRET_TOKEN_RE: () => SECRET_TOKEN_RE,
+  findSuspiciousEmail: () => findSuspiciousEmail,
+  isAllowedEmail: () => isAllowedEmail,
+  privacyCheck: () => privacyCheck,
+  sanitizeAllowedDomains: () => sanitizeAllowedDomains
+});
+module.exports = __toCommonJS(privacy_filter_exports);
+function sanitizeAllowedDomains(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (d) => typeof d === "string" && d.length > 0 && d.includes(".") && !d.startsWith(".") && !d.endsWith(".")
+  );
+}
+var EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+function isAllowedEmail(host, allowedDomains) {
+  if (!allowedDomains.length) return false;
+  const h = host.toLowerCase();
+  return allowedDomains.some((d) => {
+    const dl = d.toLowerCase();
+    return h === dl || h.endsWith("." + dl);
+  });
+}
+function findSuspiciousEmail(text, allowedDomains) {
+  EMAIL_RE.lastIndex = 0;
+  let m;
+  while ((m = EMAIL_RE.exec(text)) !== null) {
+    if (!isAllowedEmail(m[1], allowedDomains)) return m[0];
+  }
+  return null;
+}
+var SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
+function privacyCheck(data, content, allowedDomains = []) {
+  const tagText = Array.isArray(data.tags) ? data.tags.join(" ") : String(data.tags ?? "");
+  const title = String(data.title ?? "");
+  const author = String(data.author ?? "");
+  const text = `${title} ${author} ${tagText} ${content}`;
+  if (SECRET_TOKEN_RE.test(text)) return "secret token or API key detected";
+  if (findSuspiciousEmail(text, allowedDomains)) return "suspicious email address detected";
+  return null;
+}
+// Annotate the CommonJS export names for ESM import in node:
+0 && (module.exports = {
+  EMAIL_RE,
+  SECRET_TOKEN_RE,
+  findSuspiciousEmail,
+  isAllowedEmail,
+  privacyCheck,
+  sanitizeAllowedDomains
+});

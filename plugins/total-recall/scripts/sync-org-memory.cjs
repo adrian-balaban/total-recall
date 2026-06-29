@@ -8,6 +8,7 @@ const { execSync, spawnSync } = require('child_process');
 const crypto = require('crypto');
 
 const { parseFrontmatter, stringifyFrontmatter } = require('../dist/frontmatter.cjs');
+const { privacyCheck, sanitizeAllowedDomains } = require('../dist/privacy-filter.cjs');
 
 const TOTAL_RECALL_DIR = path.join(os.homedir(), '.total-recall');
 const PERSONAL_VAULT = path.join(TOTAL_RECALL_DIR, 'personal-vault');
@@ -73,104 +74,15 @@ function atomicWrite(p, data) {
   fs.renameSync(tmp, p);
 }
 
-// Allowed email domains — emails at these domains are treated as non-personal
-// and may be pushed to the shared org vault. Configurable via
-// `allowedEmailDomains` in ~/.total-recall/config.json (e.g. ["yourcompany.com"]).
-// Default: empty → fail-closed, EVERY email is flagged and blocked from org sync.
-// (A previous hardcoded employer-specific allowlist was unsafe for anyone else.)
-//
-// Sanitize the configured allowlist: drop non-strings, empties, and BARE TLDs.
-// A bare-TLD entry like "com" or "org" is a misconfiguration footgun: isAllowedEmail
-// treats the entry as a domain suffix (h === d || h.endsWith('.' + d)), so "com"
-// would match EVERY `*.com` host — silently allowlisting all of .com and gutting
-// the email filter for an entire TLD. Require at least one dot (a bare TLD has
-// none) and reject leading/trailing dots. This is fail-closed: a dropped
-// over-permissive entry makes MORE emails block, not fewer. The user notices and
-// fixes their config to e.g. ["theircompany.com"]. (Bundling the PSL to reject
-// public-suffix-only entries like "co.uk" is out of scope; if a user sets "co.uk"
-// they mean it.)
-function sanitizeAllowedDomains(list) {
-  if (!Array.isArray(list)) return [];
-  return list.filter(d => typeof d === 'string' && d.length && d.includes('.') && !d.startsWith('.') && !d.endsWith('.'));
-}
+// Allowed email domains — emails at these domains are treated as non-personal and may
+// be pushed to the shared org vault. Configurable via `allowedEmailDomains` in
+// ~/.total-recall/config.json (e.g. ["yourcompany.com"]). Default: empty → fail-closed,
+// every email is flagged and blocked from org sync. sanitizeAllowedDomains (imported
+// from dist/privacy-filter.cjs above) drops non-strings, empties, and bare TLDs — a
+// "com" entry would otherwise allowlist all of *.com. The filter itself (secret + email
+// checks) lives in src/privacy-filter.ts, built to dist/privacy-filter.cjs; the unit
+// tests import the SAME source, so the old KEEP-IN-SYNC replica is gone.
 const ALLOWED_DOMAINS = sanitizeAllowedDomains(config.allowedEmailDomains);
-
-// Role titles that look like person names but are OK
-const ROLE_TITLE_ALLOWLIST = ['product owner', 'tech lead', 'architect', 'scrum master'];
-
-// Match any email-shaped substring, then compare the full host part against the
-// allowlist in JS. A single negative-lookahead regex is unsafe here: a host like
-// "yourcompany.com.evil.com" passes `@(?!yourcompany\.com)` because the lookahead
-// sees "yourcompany.com" as a *prefix* of the host and fails to exclude it — a real
-// bypass. Comparing the whole host (=== d || endsWith('.' + d)) closes it and is
-// fail-closed when the allowlist is empty (every email is non-allowlisted → blocked).
-const EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
-
-function isAllowedEmail(host, allowedDomains) {
-  if (!allowedDomains.length) return false; // fail-closed
-  const h = host.toLowerCase();
-  return allowedDomains.some(d => {
-    const dl = d.toLowerCase();
-    return h === dl || h.endsWith('.' + dl); // allow the bare domain and its subdomains
-  });
-}
-
-function findSuspiciousEmail(text, allowedDomains) {
-  EMAIL_RE.lastIndex = 0;
-  let m;
-  while ((m = EMAIL_RE.exec(text)) !== null) {
-    if (!isAllowedEmail(m[1], allowedDomains)) return m[0];
-  }
-  return null;
-}
-const PERSONAL_PRONOUN_RE = /\b(my|our|i am|i'm|we are|we're)\b/i;
-// US/NANP: optional +country code, (xxx) xxx-xxxx or xxx-xxx-xxxx
-const US_PHONE_RE = /(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
-// International: +country code then 7-13 more digits with separators (E.164-ish, max 15 total)
-const INTL_PHONE_RE = /\+\d{1,3}[\s().-]*(?:\d[\s().-]*){6,12}\d/;
-const PHONE_RE = new RegExp(`(?:${INTL_PHONE_RE.source}|${US_PHONE_RE.source})`);
-// Common API keys / tokens — leaked credentials are the highest-risk PII for a public repo.
-// PEM private-key headers are matched separately (they contain no word boundary).
-// Covers: PEM keys, OpenAI sk-, Stripe live keys (sk_live_/rk_live_/pk_live_ — the
-// existing sk- alternation requires a hyphen and so misses Stripe's underscore form),
-// AWS access-key ids (AKIA + ASIA STS temporary creds), GitHub (gh[o/p/s/u]_,
-// github_pat_, xapp_), Slack xox, Google AIza, GitLab glpat, JWTs (eyJ…).
-// The `i` flag also catches uppercase env-style forms (AWS_SECRET_ACCESS_KEY, AKIA
-// lowercased, etc.) — broadening detection is fail-closed for a secret gate.
-// The AWS SECRET ACCESS KEY (the 40-char sensitive half of the credential pair) has
-// no fixed prefix, so a bare {40} would false-positive on SHA-1 hashes (40 hex chars,
-// hex ⊂ base64 charset) and base64 blobs; instead detect it only when LABELED
-// (`aws_secret_access_key = <40 base64 chars>`), which catches pasted
-// ~/.aws/credentials snippets with negligible FP. The negative lookahead ensures the
-// 40 chars aren't a prefix of a longer base64 run.
-const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|pk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
-
-// matterParse removed — now using shared parseFrontmatter from dist/frontmatter.cjs
-
-function privacyCheck(data, content) {
-  // Scan the union of title, author, tags, and body. Previously only title+body
-  // were scanned, so a secret or personal email smuggled into the `tags` array or
-  // the `author` field would sail past the filter into the shared org repo.
-  // Scan tags whether they parsed as an array OR as a raw scalar string. The TS
-  // writer (frontmatter.ts) always emits tags as an array, so a legitimately-stored
-  // memory has data.tags === string[]. But this gate's threat model includes
-  // teammate-pushed / hand-edited frontmatter (same model as the escapeRegExp
-  // ReDoS hardening and the numeric-title String() coercion): a scalar
-  // `tags: ghp_xxxxxxxx` (not `tags: [ghp_xxx]`) parses to a string, not an array,
-  // and the array branch alone would set tagText='' — leaving a secret smuggled
-  // into a scalar tag unscanned so it sails into the shared org repo. Scanning the
-  // raw string form is fail-closed: more text scanned, never less.
-  const tagText = Array.isArray(data.tags) ? data.tags.join(' ') : String(data.tags ?? '');
-  const text = `${data.title ?? ''} ${data.author ?? ''} ${tagText} ${content}`;
-  if (SECRET_TOKEN_RE.test(text)) return 'secret token or API key detected';
-  if (findSuspiciousEmail(text, ALLOWED_DOMAINS)) return 'suspicious email address detected';
-  if (PERSONAL_PRONOUN_RE.test(data.title ?? '')) {
-    const lc = (data.title ?? '').toLowerCase();
-    if (!ROLE_TITLE_ALLOWLIST.some(r => lc.includes(r))) return 'personal pronoun in title';
-  }
-  if (PHONE_RE.test(text)) return 'phone number detected';
-  return null;
-}
 
 function updateOrgIndex(key, data, content) {
   const indexPath = path.join(ORG_VAULT, 'index.json');
@@ -204,14 +116,14 @@ function removeFromOrgIndex(key) {
 // access can plant a symlink named `<relKey>.md` → any victim-readable file
 // (`~/.ssh/id_rsa`, `/etc/passwd`); `git pull` preserves symlinks. Without this guard,
 // readFileSync(orgFile) in store mode follows the link and reads the target into
-// `raw`; if the target's first 500 chars contain no secret/email/phone (e.g.
-// /etc/passwd), privacyCheck passes and updateOrgIndex commits that content as
-// `contentPreview` into the shared org index.json → a 500-char arbitrary-file leak to
-// every teammate. The PostToolUse sync fires on tool invocation including errors, so
-// this is reachable even when the originating store_memory threw on store.ts's own
-// lstat guard. lstatSync stats the entry itself (not the target) → a symlink is
-// rejected regardless of what it points at; realpathSync resolves through any link in
-// the path and we re-check containment against the realpath'd org vault root. ENOENT
+// `raw`; if the target's first 500 chars contain no secret/email (e.g. /etc/passwd),
+// privacyCheck passes and updateOrgIndex commits that content as `contentPreview`
+// into the shared org index.json → a 500-char arbitrary-file leak to every teammate.
+// The PostToolUse sync fires on tool invocation including errors, so this is
+// reachable even when the originating store_memory threw on store.ts's own lstat
+// guard. lstatSync stats the entry itself (not the target) → a symlink is rejected
+// regardless of what it points at; realpathSync resolves through any link in the path
+// and we re-check containment against the realpath'd org vault root. ENOENT
 // (missing file) returns true: delete mode no-ops, store mode is gated by existsSync.
 function orgFileIsSafe(p) {
   try {
@@ -225,6 +137,33 @@ function orgFileIsSafe(p) {
   return realFile === realBase || realFile.startsWith(realBase + path.sep);
 }
 
+// Stage, commit, and push the org-vault file + index. Returns true if a commit was
+// made and pushed, false if nothing was staged (idempotent: a repeat on an unchanged
+// or already-removed key is a no-op). On push failure the just-made commit is undone
+// with `reset --soft HEAD~1` (keeps the change staged for a retry) so the branch stays
+// clean for the next attempt; the error propagates to main()'s catch (logged to
+// .sync-errors.log, exit 0 — non-blocking for the hook). Dedup of the store/delete
+// commit-and-push dance.
+function commitAndPush(relFile, relIndex, message) {
+  git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true });
+  // Only commit if something actually staged (the file change and/or the index change).
+  // Idempotent: a repeat on an unchanged key (or an already-removed key in delete mode)
+  // is a no-op.
+  const staged = git(ORG_VAULT_DIR, ['diff', '--cached', '--name-only'], { quiet: true, allowFail: true }).trim();
+  if (!staged) return false;
+  git(ORG_VAULT_DIR, ['commit', '-m', message], { quiet: true });
+  try {
+    git(ORG_VAULT_DIR, ['push', 'origin', BRANCH], { quiet: true });
+    return true;
+  } catch (pushErr) {
+    // Undo exactly our commit (soft keeps the change staged for a retry). Only safe
+    // because we know HEAD advanced by one on the commit above; we never reach here if
+    // commit itself failed (it would have thrown before push).
+    git(ORG_VAULT_DIR, ['reset', '--soft', 'HEAD~1'], { quiet: true, allowFail: true });
+    throw pushErr;
+  }
+}
+
 async function main() {
   const key = process.argv[2];
   const deleteMode = process.argv.includes('--delete');
@@ -232,15 +171,19 @@ async function main() {
   if (!key) { console.error('Usage: sync-org-memory.cjs <key> [--delete]'); process.exit(1); }
 
   const relKey = key.replace(/^org\//, '');
-  // Path-traversal guard: `key` arrives from the hook (caller-supplied). A key
-  // like `org/../../etc/passwd` or an absolute path would resolve `orgFile`
-  // outside the org vault and let the script stage/commit/delete an arbitrary
-  // file. Reject any relKey that escapes the vault before joining.
-  if (relKey.includes('..') || relKey.includes('\0') || path.isAbsolute(relKey)) {
+  const orgFile = path.join(ORG_VAULT, relKey + '.md');
+  // Path-traversal guard: `key` arrives from the hook (caller-supplied). A key like
+  // `org/../../etc/passwd` or an absolute path would resolve `orgFile` outside the org
+  // vault and let the script stage/commit/delete an arbitrary file. The realpath
+  // containment check below subsumes the lexical `..` / isAbsolute arms (a `..` that
+  // escapes, or an absolute path that path.join turns into a subpath, both fail the
+  // startsWith containment), so they were redundant — kept only the explicit `\0`
+  // rejection (path.join/resolve behave oddly on embedded nulls) plus the containment
+  // check.
+  if (relKey.includes('\0')) {
     console.error(`Rejecting suspicious org key: ${key}`);
     process.exit(0);
   }
-  const orgFile = path.join(ORG_VAULT, relKey + '.md');
   const resolvedOrgFile = path.resolve(orgFile);
   if (!resolvedOrgFile.startsWith(path.resolve(ORG_VAULT) + path.sep)) {
     console.error(`Org key escapes vault: ${key}`);
@@ -293,22 +236,9 @@ async function main() {
       try { fs.unlinkSync(orgFile); } catch {}
     }
     removeFromOrgIndex(relKey);
-    git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true });
-    // Only commit if something actually staged (the file deletion and/or the index
-    // change). Idempotent: a repeat --delete on an already-removed key is a no-op.
-    const staged = git(ORG_VAULT_DIR, ['diff', '--cached', '--name-only'], { quiet: true, allowFail: true }).trim();
-    if (!staged) { console.log(`Nothing to delete for ${key}.`); return; }
-    git(ORG_VAULT_DIR, ['commit', '-m', `chore(total-recall): remove ${key}`], { quiet: true });
-    try {
-      git(ORG_VAULT_DIR, ['push', 'origin', BRANCH], { quiet: true });
-      console.log(`Removed ${key} from org vault.`);
-    } catch (pushErr) {
-      // Undo exactly our commit (soft keeps the change staged for a retry). Only safe
-      // because we know HEAD advanced by one on the commit above; we never reach here
-      // if commit itself failed (it would have thrown before push).
-      git(ORG_VAULT_DIR, ['reset', '--soft', 'HEAD~1'], { quiet: true, allowFail: true });
-      throw pushErr;
-    }
+    const pushed = commitAndPush(relFile, relIndex, `chore(total-recall): remove ${key}`);
+    if (!pushed) { console.log(`Nothing to delete for ${key}.`); return; }
+    console.log(`Removed ${key} from org vault.`);
     return;
   }
 
@@ -327,24 +257,16 @@ async function main() {
     return;
   }
 
-  const privacyIssue = privacyCheck(data, content);
+  const privacyIssue = privacyCheck(data, content, ALLOWED_DOMAINS);
   if (privacyIssue) {
     console.error(`Privacy filter blocked ${key}: ${privacyIssue}`);
     return;
   }
 
   updateOrgIndex(relKey, data, content);
-  git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true });
-  const staged = git(ORG_VAULT_DIR, ['diff', '--cached', '--name-only'], { quiet: true, allowFail: true }).trim();
-  if (!staged) { console.log(`Nothing to sync for ${key} (already up to date).`); return; }
-  git(ORG_VAULT_DIR, ['commit', '-m', `chore(total-recall): sync ${key}`], { quiet: true });
-  try {
-    git(ORG_VAULT_DIR, ['push', 'origin', BRANCH], { quiet: true });
-    console.log(`Synced ${key} to org vault.`);
-  } catch (pushErr) {
-    git(ORG_VAULT_DIR, ['reset', '--soft', 'HEAD~1'], { quiet: true, allowFail: true });
-    throw pushErr;
-  }
+  const pushed = commitAndPush(relFile, relIndex, `chore(total-recall): sync ${key}`);
+  if (!pushed) { console.log(`Nothing to sync for ${key} (already up to date).`); return; }
+  console.log(`Synced ${key} to org vault.`);
 }
 
 main().catch(e => {
