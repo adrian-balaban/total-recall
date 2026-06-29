@@ -28,7 +28,30 @@ set -uo pipefail
 export TR_SESSION="$(cat)"
 INSTALLED_FILE="$HOME/.claude/plugins/installed_plugins.json"
 
-node - "$INSTALLED_FILE" <<'NODE'
+# Resolve node on a stripped PATH. Claude Code spawns statusLine commands with
+# a minimal PATH that excludes nvm's shim dir (nvm only adds itself to PATH via
+# interactive shell init, e.g. ~/.bashrc), so a bare `node` is "command not
+# found" -> the heredoc below never runs -> empty stdout -> Claude Code falls
+# back to its DEFAULT status line and the plugin version never shows. Mirror
+# install.sh Step 3: prefer whatever is on PATH, else the highest-versioned
+# nvm node, else common system locations. If none is found, emit a degraded
+# line and exit 0 so Claude Code still renders our line instead of silently
+# falling back to the default.
+NODE_BIN="$(command -v node 2>/dev/null || true)"
+if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
+  NODE_BIN="$(ls "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)"
+fi
+if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
+  for p in /usr/local/bin/node /usr/bin/node /opt/homebrew/bin/node; do
+    [ -x "$p" ] && NODE_BIN="$p" && break
+  done
+fi
+if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
+  echo 'total-recall (node not found on statusLine PATH)'
+  exit 0
+fi
+
+"$NODE_BIN" - "$INSTALLED_FILE" <<'NODE'
 const fs = require('fs');
 const { execSync } = require('child_process');
 const installedFile = process.argv[2];
