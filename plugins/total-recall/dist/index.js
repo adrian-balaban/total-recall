@@ -15922,6 +15922,15 @@ function keyFromPath(filePath, isOrg) {
 function tokenEstimate(text) {
   return Math.ceil(text.length / 4);
 }
+function assertRegularFile(filePath, key) {
+  try {
+    if (!fs3.lstatSync(filePath).isFile()) {
+      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
+    }
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") throw e;
+  }
+}
 function reconcileIndex() {
   const before = new Set(Object.keys(memIndex));
   const seen = /* @__PURE__ */ new Set();
@@ -16276,6 +16285,7 @@ async function recallMemory(args) {
       let content = contentCache.get(r.key);
       if (!content) {
         try {
+          assertRegularFile(meta2.filePath, r.key);
           const raw = fs6.readFileSync(meta2.filePath, "utf8");
           content = parseFrontmatter(raw).content;
           contentCache.set(r.key, content);
@@ -16344,6 +16354,7 @@ function getMemoriesByKeys(args) {
     if (summary) {
       let content2 = "";
       try {
+        assertRegularFile(meta2.filePath, key);
         const raw = fs7.readFileSync(meta2.filePath, "utf8");
         content2 = parseFrontmatter(raw).content;
       } catch {
@@ -16357,6 +16368,7 @@ function getMemoriesByKeys(args) {
     let readOk = !!content;
     if (!content) {
       try {
+        assertRegularFile(meta2.filePath, key);
         const raw = fs7.readFileSync(meta2.filePath, "utf8");
         content = parseFrontmatter(raw).content;
         contentCache.set(key, content);
@@ -16413,6 +16425,7 @@ function getRelatedMemories(args) {
       try {
         const meta2 = memIndex[m.key];
         if (meta2) {
+          assertRegularFile(meta2.filePath, m.key);
           const raw = fs7.readFileSync(meta2.filePath, "utf8");
           content = parseFrontmatter(raw).content;
           contentCache.set(m.key, content);
@@ -16526,7 +16539,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.14" : null.version;
+var PLUGIN_VERSION = true ? "1.0.15" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

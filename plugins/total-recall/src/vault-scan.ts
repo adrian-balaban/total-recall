@@ -36,6 +36,33 @@ export function tokenEstimate(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// Assert the on-disk entry at `filePath` is a regular file, not a symlink or
+// directory. Used at read sites (recall.ts, query.ts) to close the post-index-swap
+// read leak that indexFile's scan-time lstat guard (Pass 1) does NOT cover. The MCP
+// server is long-lived and reconcileIndex runs only at boot, so a SessionStart
+// `git pull` on the shared org vault can swap an already-indexed regular file for a
+// symlink (`org/existing.md` -> `~/.ssh/id_rsa` or any victim-readable file) WITHOUT
+// re-scanning memIndex — the walk's e.isSymbolicLink() skip (above) never re-runs.
+// A subsequent readFileSync(meta.filePath) would follow the link and dump the
+// target into the MCP response (-> LLM context): the same Confidentiality class as
+// SEC-001 (closed at scan time) but via the post-swap window. lstatSync stats the
+// entry itself (not the target), so a symlink reports isFile()=false and is
+// rejected regardless of what it points at — the caller's existing catch returns
+// an error/empty fail-closed instead of following the link. ENOENT (the file was
+// removed since the index loaded) is allowed to fall through to readFileSync,
+// which throws a clear error the caller already handles. Mirrors the inline guards
+// in store.ts:122-136 and mutate.ts:32-38 (the write path Pass 1 / Pass 5 closed);
+// factored out so the read paths share one implementation.
+export function assertRegularFile(filePath: string, key: string): void {
+  try {
+    if (!fs.lstatSync(filePath).isFile()) {
+      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) — refusing to follow a possible planted link in the shared org vault.`);
+    }
+  } catch (e: any) {
+    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = file removed since load, fine
+  }
+}
+
 // ─── Full vault scan ─────────────────────────────────────────────────────────
 
 // Reconcile the in-memory index against disk: add new/updated files, drop keys

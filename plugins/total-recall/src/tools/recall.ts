@@ -9,6 +9,7 @@ import { scheduleSave } from '../persistence.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
+import { assertRegularFile } from '../vault-scan.js';
 
 export async function recallMemory(args: any): Promise<any> {
   const { query, full = false, since, before, minScore = 0, limit = 10, excludeJournal = true, hybrid = true } = args;
@@ -104,6 +105,15 @@ export async function recallMemory(args: any): Promise<any> {
       let content = contentCache.get(r.key);
       if (!content) {
         try {
+          // Symlink containment (mirrors store.ts/mutate.ts via
+          // assertRegularFile): meta.filePath is lexically inside the vault but
+          // can be a symlink a teammate swapped in via the org vault's git pull
+          // AFTER the boot-time reconcileIndex that rejects symlinks at scan. The
+          // MCP server is long-lived and does not re-scan mid-session, so without
+          // this guard readFileSync follows the link and leaks the target into
+          // `content` (-> MCP response -> LLM context). Fail closed into the
+          // catch below (content='') instead of following.
+          assertRegularFile(meta.filePath, r.key);
           const raw = fs.readFileSync(meta.filePath, 'utf8');
           content = parseFrontmatter(raw).content; // strip YAML frontmatter
           // Only cache successful reads — a transient read failure (race, lock)

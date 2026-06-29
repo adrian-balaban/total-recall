@@ -6,6 +6,7 @@ import { memIndex, errors, perfSamples } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
 import { isVectorAvailable } from '../embeddings.js';
+import { assertRegularFile } from '../vault-scan.js';
 
 export function listMemories(args: any): any {
   const { category, tag, limit = 50, offset = 0 } = args;
@@ -42,6 +43,13 @@ export function getMemoriesByKeys(args: any): any {
       // whole batch.
       let content = '';
       try {
+        // Symlink containment (assertRegularFile): meta.filePath is lexically
+        // inside the vault but can be a symlink a teammate swapped in via the org
+        // vault's git pull AFTER the boot-time reconcileIndex that rejects
+        // symlinks at scan. Without this guard readFileSync follows the link and
+        // the executive-summary fallback returns the target's body verbatim
+        // (-> MCP response -> LLM context). Fail closed into the catch below.
+        assertRegularFile(meta.filePath, key);
         const raw = fs.readFileSync(meta.filePath, 'utf8');
         content = parseFrontmatter(raw).content;
       } catch {
@@ -55,6 +63,12 @@ export function getMemoriesByKeys(args: any): any {
     let readOk = !!content;
     if (!content) {
       try {
+        // Symlink containment (assertRegularFile) — see the summary path above.
+        // Without this guard readFileSync follows a swapped symlink and leaks
+        // the target into `content` (and poisons the LRU with it for 30 min).
+        // Fail closed into the catch (content='', readOk stays false → no access
+        // bump, no cache poison).
+        assertRegularFile(meta.filePath, key);
         const raw = fs.readFileSync(meta.filePath, 'utf8');
         content = parseFrontmatter(raw).content; // strip YAML frontmatter
         // Only cache successful reads — a transient failure must not poison the
@@ -143,6 +157,10 @@ export function getRelatedMemories(args: any): any {
         try {
           const meta = memIndex[m.key];
           if (meta) {
+            // Symlink containment (assertRegularFile) — see get_memories_by_keys
+            // above. Without this guard readFileSync follows a swapped symlink
+            // and leaks the target into `content` (and the LRU). Fail closed.
+            assertRegularFile(meta.filePath, m.key);
             const raw = fs.readFileSync(meta.filePath, 'utf8');
             content = parseFrontmatter(raw).content;
             // Only cache successful reads — a transient read failure (race,

@@ -22,6 +22,8 @@ vi.hoisted(() => {
 import { loadIndexes, saveNow } from '../persistence.js';
 import { memIndex } from '../state.js';
 import { appendJournal } from '../journal.js';
+import { contentCache } from '../lru-cache.js';
+import { rebuildInvertedIndex } from '../tfidf.js';
 
 // ─── Test vault — unique per process ─────────────────────────────────────────
 
@@ -334,6 +336,104 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
       // Remove the planted symlink + the memIndex entry so later tests don't see
       // a dangling link / stale entry (vault-scan skips symlinks, but the in-memory
       // entry would persist without this delete).
+      fs.rmSync(filePath, { force: true });
+      delete memIndex[key];
+    }
+  });
+
+  it('recall_memory(full=true) refuses a symlinked target file (no victim-content leak)', async () => {
+    // Symmetric READ-side gap of the update_memory write fix above. Pass 1's
+    // indexFile/reconcileIndex reject symlinks at scan time, but the MCP server
+    // is long-lived and reconcileIndex runs only at boot — a SessionStart `git
+    // pull` on the shared org vault can swap an already-indexed regular file
+    // for a symlink (`org/existing.md` -> victim) WITHOUT re-scanning memIndex.
+    // A subsequent readFileSync(meta.filePath) on the recall_memory full path
+    // would follow the link and dump the target into the tool response
+    // (-> LLM context). The lstat guard fails closed (empty content) instead of
+    // following. Setup mirrors the update_memory test: store a real memory so
+    // memIndex holds its filePath, swap the file for a symlink -> victim with
+    // secret content, then recall. The `hit` assertion guarantees the memory
+    // surfaced (so a no-rank false-pass can't hide the leak).
+    const victim = path.join(OUTSIDE, 'recall-victim.txt');
+    fs.writeFileSync(victim, 'SECRET-VICTIM-CONTENT');
+    const storeRes = await callTool('store_memory', { title: 'recallleak', content: 'orig', tags: [], category: 'knowledge' });
+    expect(storeRes.isError).toBeFalsy();
+    const { key, filePath } = JSON.parse(storeRes.content[0].text);
+    // store_memory schedules the TF-IDF rebuild via a +2s debounce; force it now
+    // so the memory is in the inverted index when we recall. Done while the file
+    // is still the regular stored file (rebuildInvertedIndex reads memIndex meta,
+    // not disk, but keep the ordering obvious).
+    rebuildInvertedIndex();
+    try {
+      fs.rmSync(filePath, { force: true });
+      fs.symlinkSync(victim, filePath);
+      // store_memory populated contentCache with the safe 'orig' body (store.ts:204);
+      // evict it so the full read MISSES the cache and hits readFileSync(meta.filePath),
+      // which without the guard follows the symlink and leaks the victim.
+      contentCache.delete(key);
+      const res = await callTool('recall_memory', { query: 'recallleak', full: true });
+      const arr = JSON.parse(res.content[0].text);
+      const hit = Array.isArray(arr) ? arr.find((m: any) => m.key === key) : null;
+      expect(hit).toBeDefined();
+      expect(JSON.stringify(hit)).not.toContain('SECRET-VICTIM-CONTENT');
+      expect(fs.readFileSync(victim, 'utf8')).toBe('SECRET-VICTIM-CONTENT');
+    } finally {
+      fs.rmSync(filePath, { force: true });
+      delete memIndex[key];
+    }
+  });
+
+  it('get_memories_by_keys(summary=true) refuses a symlinked target file', async () => {
+    // Same read-side symlink-leak class on the summary path: without the guard,
+    // readFileSync follows the symlink and the executive-summary fallback
+    // (content.slice(0,500)) returns the victim's body verbatim. The guard
+    // throws -> the existing catch returns {key, error:'Failed to read memory
+    // file'} fail-closed. get_memories_by_keys always responds per-key, so the
+    // hit is guaranteed and the SECRET check is the discriminating assertion.
+    const victim = path.join(OUTSIDE, 'gmk-sum-victim.txt');
+    fs.writeFileSync(victim, 'SECRET-GMK-SUM-CONTENT');
+    const storeRes = await callTool('store_memory', { title: 'gmksumleak', content: 'orig', tags: [], category: 'knowledge' });
+    expect(storeRes.isError).toBeFalsy();
+    const { key, filePath } = JSON.parse(storeRes.content[0].text);
+    try {
+      fs.rmSync(filePath, { force: true });
+      fs.symlinkSync(victim, filePath);
+      const res = await callTool('get_memories_by_keys', { keys: [key], summary: true });
+      const arr = JSON.parse(res.content[0].text);
+      const hit = Array.isArray(arr) ? arr.find((m: any) => m.key === key) : null;
+      expect(hit).toBeDefined();
+      expect(JSON.stringify(hit)).not.toContain('SECRET-GMK-SUM-CONTENT');
+      expect(fs.readFileSync(victim, 'utf8')).toBe('SECRET-GMK-SUM-CONTENT');
+    } finally {
+      fs.rmSync(filePath, { force: true });
+      delete memIndex[key];
+    }
+  });
+
+  it('get_memories_by_keys(summary=false / full) refuses a symlinked target file', async () => {
+    // Same leak on the full-content path (cache-miss -> readFileSync). Without
+    // the guard, the victim's body is returned as `content` and cached. The
+    // guard throws -> catch sets content='' and readOk stays false (no access
+    // bump, no cache poison) -> the response carries empty content.
+    const victim = path.join(OUTSIDE, 'gmk-full-victim.txt');
+    fs.writeFileSync(victim, 'SECRET-GMK-FULL-CONTENT');
+    const storeRes = await callTool('store_memory', { title: 'gmkfullleak', content: 'orig', tags: [], category: 'knowledge' });
+    expect(storeRes.isError).toBeFalsy();
+    const { key, filePath } = JSON.parse(storeRes.content[0].text);
+    try {
+      fs.rmSync(filePath, { force: true });
+      fs.symlinkSync(victim, filePath);
+      // store_memory populated contentCache with the safe 'orig' body (store.ts:204);
+      // evict it so the full read MISSES the cache and hits readFileSync(meta.filePath),
+      // which without the guard follows the symlink and leaks the victim.
+      contentCache.delete(key);
+      const res = await callTool('get_memories_by_keys', { keys: [key], summary: false });
+      const arr = JSON.parse(res.content[0].text);
+      const hit = Array.isArray(arr) ? arr.find((m: any) => m.key === key) : null;
+      expect(hit).toBeDefined();
+      expect(JSON.stringify(hit)).not.toContain('SECRET-GMK-FULL-CONTENT');
+      expect(fs.readFileSync(victim, 'utf8')).toBe('SECRET-GMK-FULL-CONTENT');
+    } finally {
       fs.rmSync(filePath, { force: true });
       delete memIndex[key];
     }
