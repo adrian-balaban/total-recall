@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
+import { computeRetentionStrength, daysSince, clampImportanceScore } from '../ebbinghaus.js';
 
 describe('computeRetentionStrength', () => {
   it('returns importance value when daysSince=0 and accessCount=0', () => {
@@ -41,6 +41,50 @@ describe('computeRetentionStrength', () => {
 
   it('never returns negative', () => {
     expect(computeRetentionStrength(0, 9999, 0)).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe('clampImportanceScore', () => {
+  it('passes through an in-range number', () => {
+    expect(clampImportanceScore(0.7)).toBeCloseTo(0.7);
+    expect(clampImportanceScore(0)).toBe(0);
+    expect(clampImportanceScore(1)).toBe(1);
+  });
+
+  it('clamps values above 1 down to 1', () => {
+    expect(clampImportanceScore(5)).toBe(1);
+    expect(clampImportanceScore(1.0001)).toBe(1);
+  });
+
+  it('clamps negative values up to 0', () => {
+    expect(clampImportanceScore(-1)).toBe(0);
+    expect(clampImportanceScore(-0.01)).toBe(0);
+  });
+
+  it('accepts a quoted numeric string (teammate-pushed frontmatter)', () => {
+    // `importanceScore: '0.7'` parses to a string; Number('0.7') is finite.
+    expect(clampImportanceScore('0.7')).toBeCloseTo(0.7);
+    // a quoted out-of-range value still clamps, matching the unquoted case.
+    expect(clampImportanceScore('5')).toBe(1);
+  });
+
+  it('falls back to 0.5 for undefined / NaN / ±Infinity (the NaN hole)', () => {
+    // `Math.min(1, NaN) === NaN` — the Number.isFinite guard is the point: a
+    // non-numeric string like 'high' must fall back, not persist as NaN.
+    expect(clampImportanceScore('high')).toBe(0.5);
+    expect(clampImportanceScore(undefined)).toBe(0.5);
+    expect(clampImportanceScore(NaN)).toBe(0.5);
+    expect(clampImportanceScore(Infinity)).toBe(0.5);
+    expect(clampImportanceScore(-Infinity)).toBe(0.5);
+  });
+
+  it('null coerces to 0 (Number(null) === 0, finite — NOT the fallback)', () => {
+    expect(clampImportanceScore(null)).toBe(0);
+  });
+
+  it('honors a custom fallback for non-finite values', () => {
+    expect(clampImportanceScore('high', 0.3)).toBe(0.3);
+    expect(clampImportanceScore(NaN, 0.3)).toBe(0.3);
   });
 });
 

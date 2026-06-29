@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
+import { clampImportanceScore } from '../ebbinghaus.js';
 import { ORG_VAULT, PERSONAL_VAULT, VECTORS_DB, HOME, ensureDir } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate, deriveCategory } from '../vault-scan.js';
 import { memIndex } from '../state.js';
@@ -41,18 +42,11 @@ export function storeMemory(args: any): any {
   const { content, category = 'knowledge', sessionId, author, force = false } = args;
   const title = String(args.title ?? '');
   const tags = Array.isArray(args.tags) ? args.tags : [];
-  // Clamp + coerce importanceScore: mirrors mutate.ts:53. MCP does not enforce
-  // the tool's inputSchema (see the destructure comment above), so a caller can
-  // pass `importanceScore: 'high'` or `importanceScore: -5`. Ebbinghaus's own
-  // coerce-and-clamp handles the runtime read, but the bad value would still
-  // persist in memIndex + on disk and resurface in list_memories /
-  // get_related_memories / prune_memories output. Match mutate.ts so the two
-  // write paths are symmetric and the persisted value is always a finite
-  // number in [0, 1]. The Number.isFinite check is critical: `Math.min(1, NaN)`
-  // returns NaN (NaN propagates through Math.min/max), so without the guard a
-  // non-numeric string like 'high' would persist as NaN. Fall back to 0.5
-  // (the schema default) in that case, matching Ebbinghaus's own fallback.
-  const importanceScore = Math.max(0, Math.min(1, Number.isFinite(Number(args.importanceScore)) ? Number(args.importanceScore) : 0.5));
+  // Clamp + coerce importanceScore to a finite [0, 1] number — see
+  // clampImportanceScore in ebbinghaus.ts for the full rationale. Centralized
+  // so this write path and update_memory / indexFile / coerceMemEntry share one
+  // implementation instead of four copies of the clamp expression.
+  const importanceScore = clampImportanceScore(args.importanceScore);
   const isOrg = tags.includes('org');
   const isPersonal = tags.includes('personal');
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");

@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseFrontmatter } from './frontmatter.js';
+import { clampImportanceScore } from './ebbinghaus.js';
 import {
   PERSONAL_VAULT,
   ORG_VAULT,
@@ -182,16 +183,9 @@ export function indexFile(filePath: string, isOrg: boolean) {
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? now,
       updated: fm.updated ?? now,
-      // Coerce + clamp importanceScore: a hand-edited (or teammate-pushed)
-      // frontmatter with a QUOTED importanceScore (`importanceScore: '0.7'`)
-      // parses by coerceScalar into a string, not a number — and an UNQUOTED
-      // out-of-range value (`importanceScore: 5`) survives the parse as a
-      // Number. Both leak into memIndex and surface via list_memories /
-      // get_related_memories / prune_memories as a non-finite or
-      // out-of-range importanceScore. Ebbinghaus's own coerce-and-clamp
-      // handles the read-time math, but persist a normalized number so the
-      // exposed value is always in [0, 1].
-      importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(fm.importanceScore)) ? Number(fm.importanceScore) : 0.5)),
+      // Coerce + clamp importanceScore to a finite [0, 1] number — see
+      // clampImportanceScore in ebbinghaus.ts.
+      importanceScore: clampImportanceScore(fm.importanceScore),
       category: deriveCategory(filePath, isOrg),
       contentPreview: content.trim().slice(0, 500),
       accessCount: existing?.accessCount ?? 0,

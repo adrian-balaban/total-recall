@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
+import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB } from '../paths.js';
 import { reconcileIndex } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
@@ -67,15 +68,8 @@ export function updateMemory(args: any): any {
     // Matches indexFile's Array.isArray guard; without it, a scalar would crash
     // tfidfSearch's meta.tags.join and getRelatedMemories' Set(m.tags).
     tags: Array.isArray(tags ?? parsed.data.tags) ? (tags ?? parsed.data.tags) : [],
-    // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
-    // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
-    // MCP does not enforce the inputSchema (see store.ts destructure comment), so a
-    // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
-    // The Number.isFinite guard closes the NaN hole: `Math.min(1, NaN)` returns
-    // NaN (NaN propagates through Math.min/max), so a non-numeric string like
-    // 'high' would persist as NaN. Fall back to 0.5 (the schema default) in that
-    // case, matching Ebbinghaus's own fallback.
-    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(importanceScore ?? parsed.data.importanceScore)) ? Number(importanceScore ?? parsed.data.importanceScore) : 0.5)),
+    // Clamp to a finite [0, 1] number — see clampImportanceScore in ebbinghaus.ts.
+    importanceScore: clampImportanceScore(importanceScore ?? parsed.data.importanceScore),
     updated: now,
     sessions,
   };

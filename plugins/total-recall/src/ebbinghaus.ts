@@ -23,6 +23,23 @@ export function computeRetentionStrength(
   return Math.max(0, Math.min(1, strength));
 }
 
+// Clamp a raw importanceScore value — from MCP args, parsed frontmatter, or a
+// restored index.json entry — to a finite number in [0, 1]. MCP does not
+// enforce the tool's inputSchema, and a hand-edited / teammate-pushed (via the
+// shared org vault) / pre-v1.0.9 frontmatter can carry `importanceScore: 'high'`,
+// `5`, `-1`, or `NaN`. The Number.isFinite guard is critical: `Math.min(1, NaN)`
+// returns NaN (NaN propagates through Math.min/max), so without it a non-numeric
+// string would persist as NaN and then surface via list_memories /
+// get_related_memories / prune_memories. Fall back to 0.5 (the schema default),
+// matching computeRetentionStrength's own fallback. Centralized here so the
+// four write/restore/scan paths (store_memory, update_memory, indexFile,
+// coerceMemEntry) share one implementation instead of four copies of the clamp
+// expression and its rationale.
+export function clampImportanceScore(v: unknown, fallback = 0.5): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
 export function daysSince(date: string | Date): number {
   const d = typeof date === 'string' ? new Date(date) : date;
   if (isNaN(d.getTime())) return 0;

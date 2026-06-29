@@ -15487,12 +15487,6 @@ function ensureDir(p) {
 var fs2 = __toESM(require("fs"));
 var path2 = __toESM(require("path"));
 
-// src/state.ts
-var memIndex = {};
-var invertedIndex = {};
-var errors = [];
-var perfSamples = [];
-
 // src/ebbinghaus.ts
 function computeRetentionStrength(importance, daysSince2, accessCount) {
   const i = Number.isFinite(importance) ? Math.max(0, Math.min(1, importance)) : 0.5;
@@ -15502,11 +15496,21 @@ function computeRetentionStrength(importance, daysSince2, accessCount) {
   const strength = i * Math.exp(-lambda * d) * (1 + a * 0.2);
   return Math.max(0, Math.min(1, strength));
 }
+function clampImportanceScore(v, fallback = 0.5) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
 function daysSince(date3) {
   const d = typeof date3 === "string" ? new Date(date3) : date3;
   if (isNaN(d.getTime())) return 0;
   return (Date.now() - d.getTime()) / (1e3 * 60 * 60 * 24);
 }
+
+// src/state.ts
+var memIndex = {};
+var invertedIndex = {};
+var errors = [];
+var perfSamples = [];
 
 // src/tfidf.ts
 function tokenize(text) {
@@ -15614,13 +15618,9 @@ function coerceMemEntry(raw, key) {
     title: String(e.title ?? ""),
     tags: Array.isArray(e.tags) ? e.tags : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
-    // Clamp + coerce importanceScore: a pre-v1.0.9 install may have written a
-    // string (`'high'`) or out-of-range Number (`5`, `-1`) from a hand-edited
-    // file. Ebbinghaus's own coerce-and-clamp handles the read-time math, but
-    // the persisted value would still leak via list_memories /
-    // get_related_memories / prune_memories. Normalize on restore so the value
-    // surfaced from a loaded index is always a finite number in [0, 1].
-    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(e.importanceScore)) ? Number(e.importanceScore) : 0.5))
+    // Clamp + coerce importanceScore to a finite [0, 1] number — see
+    // clampImportanceScore in ebbinghaus.ts.
+    importanceScore: clampImportanceScore(e.importanceScore)
   };
 }
 function loadMemIndex() {
@@ -16004,16 +16004,9 @@ function indexFile(filePath, isOrg) {
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
       created: fm.created ?? now,
       updated: fm.updated ?? now,
-      // Coerce + clamp importanceScore: a hand-edited (or teammate-pushed)
-      // frontmatter with a QUOTED importanceScore (`importanceScore: '0.7'`)
-      // parses by coerceScalar into a string, not a number — and an UNQUOTED
-      // out-of-range value (`importanceScore: 5`) survives the parse as a
-      // Number. Both leak into memIndex and surface via list_memories /
-      // get_related_memories / prune_memories as a non-finite or
-      // out-of-range importanceScore. Ebbinghaus's own coerce-and-clamp
-      // handles the read-time math, but persist a normalized number so the
-      // exposed value is always in [0, 1].
-      importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(fm.importanceScore)) ? Number(fm.importanceScore) : 0.5)),
+      // Coerce + clamp importanceScore to a finite [0, 1] number — see
+      // clampImportanceScore in ebbinghaus.ts.
+      importanceScore: clampImportanceScore(fm.importanceScore),
       category: deriveCategory(filePath, isOrg),
       contentPreview: content.trim().slice(0, 500),
       accessCount: existing?.accessCount ?? 0,
@@ -16098,7 +16091,7 @@ function storeMemory(args) {
   const { content, category = "knowledge", sessionId, author, force = false } = args;
   const title = String(args.title ?? "");
   const tags = Array.isArray(args.tags) ? args.tags : [];
-  const importanceScore = Math.max(0, Math.min(1, Number.isFinite(Number(args.importanceScore)) ? Number(args.importanceScore) : 0.5));
+  const importanceScore = clampImportanceScore(args.importanceScore);
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
@@ -16485,15 +16478,8 @@ function updateMemory(args) {
     // Matches indexFile's Array.isArray guard; without it, a scalar would crash
     // tfidfSearch's meta.tags.join and getRelatedMemories' Set(m.tags).
     tags: Array.isArray(tags ?? parsed.data.tags) ? tags ?? parsed.data.tags : [],
-    // Clamp to [0, 1]: importanceScore drives the Ebbinghaus retention formula
-    // and out-of-range values (>1 inflate retention indefinitely, <0 inverts it).
-    // MCP does not enforce the inputSchema (see store.ts destructure comment), so a
-    // caller-supplied 5 or -1 would otherwise be persisted and distort pruning.
-    // The Number.isFinite guard closes the NaN hole: `Math.min(1, NaN)` returns
-    // NaN (NaN propagates through Math.min/max), so a non-numeric string like
-    // 'high' would persist as NaN. Fall back to 0.5 (the schema default) in that
-    // case, matching Ebbinghaus's own fallback.
-    importanceScore: Math.max(0, Math.min(1, Number.isFinite(Number(importanceScore ?? parsed.data.importanceScore)) ? Number(importanceScore ?? parsed.data.importanceScore) : 0.5)),
+    // Clamp to a finite [0, 1] number — see clampImportanceScore in ebbinghaus.ts.
+    importanceScore: clampImportanceScore(importanceScore ?? parsed.data.importanceScore),
     updated: now,
     sessions
   };
@@ -16539,7 +16525,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.16" : null.version;
+var PLUGIN_VERSION = true ? "1.0.17" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
