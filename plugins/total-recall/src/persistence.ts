@@ -10,6 +10,7 @@ import {
 } from './paths.js';
 import { memIndex, invertedIndex } from './state.js';
 import { rebuildInvertedIndex } from './tfidf.js';
+import * as crypto from 'crypto';
 
 // Debounce timers live here (only this module touches them).
 let indexSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -22,7 +23,12 @@ let idfTimer: ReturnType<typeof setTimeout> | null = null;
 // the index and lose all metadata on the next boot). rename is atomic on POSIX.
 function atomicWrite(p: string, data: string) {
   ensureDir(path.dirname(p));
-  const tmp = `${p}.tmp`;
+  // Random tmp suffix (not a predictable `${p}.tmp`): a local attacker who can
+  // write the vault dir could pre-plant a symlink at the predictable tmp path
+  // pointing at an outside file, and writeFileSync(tmp) would follow it and
+  // clobber the target. randomBytes makes the tmp path unguessable, closing the
+  // symlink-race escalation (write-to-vault → clobber-any-user-writable-file).
+  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
   fs.writeFileSync(tmp, data);
   try {
     fs.renameSync(tmp, p);

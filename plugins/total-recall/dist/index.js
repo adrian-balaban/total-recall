@@ -15561,11 +15561,12 @@ function tfidfSearch(query, excludeJournal = true) {
 }
 
 // src/persistence.ts
+var crypto = __toESM(require("crypto"));
 var indexSaveTimer = null;
 var idfTimer = null;
 function atomicWrite(p, data) {
   ensureDir(path2.dirname(p));
-  const tmp = `${p}.tmp`;
+  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
   fs2.writeFileSync(tmp, data);
   try {
     fs2.renameSync(tmp, p);
@@ -15763,6 +15764,7 @@ function parseYamlish(body) {
     if (!kv) continue;
     const key = kv[1];
     const val = kv[2];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
     if (val === "") {
       data[key] = [];
       continue;
@@ -16034,6 +16036,11 @@ function appendJournal(action, key, title) {
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
   const journalPath = path4.join(PERSONAL_VAULT, "journal", `${today}.md`);
   ensureDir(path4.dirname(journalPath));
+  try {
+    if (fs4.lstatSync(journalPath).isSymbolicLink()) return;
+  } catch (e) {
+    if (e && e.code !== "ENOENT") throw e;
+  }
   const entry = `
 - ${(/* @__PURE__ */ new Date()).toISOString()} [${action}] **${title}** (\`${key}\`)
 `;
@@ -16512,7 +16519,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.12" : null.version;
+var PLUGIN_VERSION = true ? "1.0.13" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

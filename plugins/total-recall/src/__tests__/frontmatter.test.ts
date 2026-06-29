@@ -176,4 +176,26 @@ describe('frontmatter — DoS immunity', () => {
     expect(data['(a+)+']).toEqual([]); // explicit `[]` must be KEPT, not dropped
     expect(ms).toBeLessThan(100);
   });
+
+  it('drops __proto__/constructor/prototype keys (no prototype pollution)', () => {
+    // A teammate can push frontmatter with a crafted __proto__/constructor/
+    // prototype key via the shared org vault. parseYamlish must drop these
+    // fail-closed so they can't reassign the returned object's prototype: a
+    // `__proto__:` line preset to `[]` invokes the Object.prototype __proto__
+    // setter, making that array the object's [[Prototype]] (instance pollution
+    // — currently inert since known keys are read via direct prop access /
+    // Object.keys, which exclude inherited, but a known YAML-parser vuln class).
+    const raw = `---\n__proto__:\n  - polluted\nconstructor: evil\nprototype: x\ntitle: Real\n---\nbody\n`;
+    const { data } = parseFrontmatter(raw);
+    expect(data.title).toBe('Real');
+    // __proto__ must NOT have replaced data's prototype with the array.
+    expect(Object.getPrototypeOf(data)).toBe(Object.prototype);
+    // constructor/prototype must NOT have landed as own enumerable props.
+    expect(Object.keys(data)).toEqual(['title']);
+    // The block item `- polluted` is an orphan (no prior array key to attach to
+    // once __proto__ is dropped), and an array-prototype adds no readable
+    // .polluted/.length on data — document that the current threat is structural.
+    expect((data as any).polluted).toBeUndefined();
+    expect((data as any).length).toBeUndefined();
+  });
 });

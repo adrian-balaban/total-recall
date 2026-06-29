@@ -19,13 +19,27 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-test-' + process.pid;
 });
 
-import { loadIndexes } from '../persistence.js';
+import { loadIndexes, saveNow } from '../persistence.js';
 import { memIndex } from '../state.js';
+import { appendJournal } from '../journal.js';
 
 // ─── Test vault — unique per process ─────────────────────────────────────────
 
 const TEST_HOME = process.env.HOME!;
 const VAULT = path.join(TEST_HOME, '.total-recall');
+
+// Symlinks are needed to plant the Pass 4 symlink-race fixtures (a planted
+// symlink at a predictable write/append path). Skip those tests on a FS that
+// disallows symlinks — mirrors the CAN_SYMLINK guard in hook-scripts.test.ts /
+// sync-org-memory.e2e.test.ts.
+const CAN_SYMLINK = (() => {
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sym-'));
+    fs.symlinkSync('nonexistent-target', path.join(d, 'link'));
+    fs.rmSync(d, { recursive: true, force: true });
+    return true;
+  } catch { return false; }
+})();
 
 // ─── MCP SDK mock — must use regular function (not arrow) for `new Server()` ─
 
@@ -1767,5 +1781,99 @@ describe('indexFile — quoted string importanceScore in frontmatter', () => {
     expect(typeof found!.importanceScore).toBe('number');
     expect(Number.isFinite(found!.importanceScore)).toBe(true);
     expect(found!.importanceScore).toBe(0.7);
+  });
+});
+
+// ─── Pass 4: appendJournal refuses to append through a planted symlink ───────
+
+describe('appendJournal — symlink containment (Pass 4)', () => {
+  const sym = CAN_SYMLINK ? it : it.skip;
+
+  sym('skips the append when journal/<today>.md is a symlink (no target corruption)', () => {
+    // appendFileSync follows a symlink at journal/<today>.md and would write the
+    // journal entry to the symlink's target (corrupting it). The personal vault is
+    // local-only (never git-synced), so there's no remote planting vector, but
+    // every other write path now lstats — this closes the last append-without-lstat
+    // gap. Silent skip: the journal is a best-effort side-effect and must never
+    // throw into a store_memory call.
+    const today = new Date().toISOString().slice(0, 10);
+    const journalDir = path.join(VAULT, 'personal-vault', 'journal');
+    fs.mkdirSync(journalDir, { recursive: true });
+    const journalPath = path.join(journalDir, `${today}.md`);
+    // Victim OUTSIDE the journal dir that the planted symlink targets.
+    const victim = path.join(os.tmpdir(), `tr-journal-victim-${process.pid}.txt`);
+    fs.writeFileSync(victim, 'PRECIOUS');
+    try {
+      // Clear any journal/<today>.md left by a prior test, then plant the symlink.
+      fs.rmSync(journalPath, { force: true });
+      fs.symlinkSync(victim, journalPath);
+      appendJournal('store', 'knowledge/symlink-test', 'Symlink Test');
+      // The victim must NOT have the journal entry appended through the symlink.
+      expect(fs.readFileSync(victim, 'utf8')).toBe('PRECIOUS');
+      // The symlink is left in place (appendJournal didn't write through it).
+      expect(fs.lstatSync(journalPath).isSymbolicLink()).toBe(true);
+    } finally {
+      // Remove the symlink so a later test's writeFileSync creates a fresh
+      // regular file (not following a stale symlink → no cross-test clobber).
+      fs.rmSync(journalPath, { force: true });
+      fs.rmSync(victim, { force: true });
+    }
+  });
+
+  sym('still appends normally when journal/<today>.md is a regular file or absent', () => {
+    // Complement: the lstat guard must NOT break the happy path. First append of
+    // the day (ENOENT) creates the file; a second append appends to the regular
+    // file (lstat says not-a-symlink → fall through to appendFileSync).
+    const today = new Date().toISOString().slice(0, 10);
+    const journalDir = path.join(VAULT, 'personal-vault', 'journal');
+    fs.mkdirSync(journalDir, { recursive: true });
+    const journalPath = path.join(journalDir, `${today}.md`);
+    fs.rmSync(journalPath, { force: true });
+    try {
+      appendJournal('store', 'knowledge/append-first', 'First');
+      expect(fs.existsSync(journalPath)).toBe(true);
+      expect(fs.lstatSync(journalPath).isSymbolicLink()).toBe(false);
+      const firstLen = fs.readFileSync(journalPath, 'utf8').length;
+      appendJournal('store', 'knowledge/append-second', 'Second');
+      expect(fs.readFileSync(journalPath, 'utf8').length).toBeGreaterThan(firstLen);
+    } finally {
+      fs.rmSync(journalPath, { force: true });
+    }
+  });
+});
+
+// ─── Pass 4: atomicWrite uses an unpredictable tmp path ───────────────────────
+
+describe('atomicWrite — random tmp path defeats predictable-tmp symlink race (Pass 4)', () => {
+  const sym = CAN_SYMLINK ? it : it.skip;
+
+  sym('saveNow does not follow a symlink planted at the predictable index.json.tmp', () => {
+    // Threat: a local attacker who can write ~/.total-recall/ pre-plants a symlink
+    // at the PREDICTABLE atomicWrite tmp path (index.json.tmp → an outside file).
+    // The old `${p}.tmp` name was fully predictable, so writeFileSync(tmp) would
+    // follow the symlink and clobber the outside target; the rename would then
+    // replace index.json with the symlink. The random tmp suffix makes the path
+    // unguessable, so the planted symlink is never touched. Tested via the public
+    // saveNow(), which atomicWrites INDEX_PATH unconditionally.
+    const INDEX_PATH = path.join(VAULT, 'index.json');
+    const predictableTmp = `${INDEX_PATH}.tmp`;
+    const victim = path.join(os.tmpdir(), `tr-aw-victim-${process.pid}.txt`);
+    fs.writeFileSync(victim, 'PRECIOUS');
+    try {
+      fs.rmSync(INDEX_PATH, { force: true });
+      fs.rmSync(predictableTmp, { force: true });
+      // Plant the symlink at the OLD predictable tmp name → victim.
+      fs.symlinkSync(victim, predictableTmp);
+      saveNow();
+      // victim must be untouched — the random tmp never followed the symlink.
+      expect(fs.readFileSync(victim, 'utf8')).toBe('PRECIOUS');
+      // index.json was still written (via a random, unguessable tmp path).
+      expect(fs.existsSync(INDEX_PATH)).toBe(true);
+      // The predictable symlink is left in place (not followed, not renamed away).
+      expect(fs.lstatSync(predictableTmp).isSymbolicLink()).toBe(true);
+    } finally {
+      fs.rmSync(predictableTmp, { force: true });
+      fs.rmSync(victim, { force: true });
+    }
   });
 });

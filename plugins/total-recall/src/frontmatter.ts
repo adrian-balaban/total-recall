@@ -117,6 +117,15 @@ function parseYamlish(body: string): Record<string, unknown> {
     if (!kv) continue;
     const key = kv[1];
     const val = kv[2];
+    // Prototype-pollution guard: a crafted `__proto__:` / `constructor:` /
+    // `prototype:` key in frontmatter (a teammate can push one via the shared
+    // org vault) would invoke the Object.prototype __proto__ setter on `data`
+    // (e.g. a `__proto__:` preset to `[]` reassigns data's [[Prototype]] to an
+    // array — instance pollution). Known keys are read via direct prop access
+    // and Object.keys (which exclude inherited), so the impact is currently
+    // inert, but this is a known YAML-parser vuln class; drop the key fail-closed
+    // rather than let a teammate control the shape of a parsed object.
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
     if (val === '' ) {
       // Could be a block sequence (value on following lines) — preset an array
       // so subsequent "  - x" items attach to it. If no items follow, drop it.

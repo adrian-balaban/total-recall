@@ -17,6 +17,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { stringifyFrontmatter } = require('../../dist/frontmatter.cjs');
 
 const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
@@ -27,7 +28,11 @@ const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 // crashed extract silently blocks future captures of the same learning.
 // Atomic rename guarantees the file only appears once it's fully written.
 function atomicWrite(p, data) {
-  const tmp = `${p}.tmp.${process.pid}`;
+  // Random tmp suffix: see scripts/sync-org-memory.cjs — process.pid is
+  // enumerable (ps), so a planted symlink at `${p}.tmp.<pid>` could be followed
+  // by writeFileSync and clobber an outside file. randomBytes makes the tmp
+  // path unguessable.
+  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
   fs.writeFileSync(tmp, data);
   fs.renameSync(tmp, p);
 }

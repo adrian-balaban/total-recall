@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execSync, spawnSync } = require('child_process');
+const crypto = require('crypto');
 
 const { parseFrontmatter, stringifyFrontmatter } = require('../dist/frontmatter.cjs');
 
@@ -63,7 +64,11 @@ function git(cwd, args, opts = {}) {
 // PostToolUse hook backgrounds this script, so a SIGTERM mid-write is a real
 // risk); a corrupt index.json breaks the next SessionStart index injection.
 function atomicWrite(p, data) {
-  const tmp = `${p}.tmp.${process.pid}`;
+  // Random tmp suffix: process.pid is enumerable (a local attacker can read it
+  // via ps), so a planted symlink at `${p}.tmp.<pid>` could be followed by
+  // writeFileSync and clobber an outside file. randomBytes makes the tmp path
+  // unguessable, closing the predictable-tmp symlink race.
+  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
   fs.writeFileSync(tmp, data);
   fs.renameSync(tmp, p);
 }

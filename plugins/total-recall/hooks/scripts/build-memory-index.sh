@@ -99,7 +99,13 @@ mkdir -p "$(dirname "$CACHE")"
 # truncated/interrupted `> "$CACHE"` left a partial cache that the SessionStart
 # hook then injected as context; the rename is atomic on POSIX so readers never
 # see a half-written file. Use a distinct temp from the body `$TMP`.
-CACHE_TMP="${CACHE}.tmp.$$"
+# Random tmp name via mktemp (a sibling of $CACHE so the rename is atomic on the
+# same FS): a predictable `${CACHE}.tmp.$$` lets a local attacker who can write
+# the vault dir pre-plant a symlink at that path → an outside file, and `>
+# "$CACHE_TMP"` would follow it and clobber the target. mktemp's random suffix
+# makes the path unguessable, closing the symlink race. Mirrors the TS/.cjs
+# atomicWrite random-tmp fix.
+CACHE_TMP=$(mktemp "${CACHE}.tmp.XXXXXXXXXX")
 { echo "$COUNT"; cat "$TMP"; } > "$CACHE_TMP"
 mv -f "$CACHE_TMP" "$CACHE"
 rm -f "$TMP"

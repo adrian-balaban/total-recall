@@ -99,6 +99,7 @@ function parseYamlish(body) {
     if (!kv) continue;
     const key = kv[1];
     const val = kv[2];
+    if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
     if (val === "") {
       data[key] = [];
       continue;
