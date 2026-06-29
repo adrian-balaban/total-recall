@@ -308,6 +308,37 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     expect(fs.readFileSync(victim, 'utf8')).toBe('VICTIM-INTACT');
   });
 
+  it('update_memory rejects a symlinked target file (no clobber of a victim file)', async () => {
+    // Same planted-symlink write-escape as the store_memory test above, but on
+    // the update path: meta.filePath (re-derived from the key by coerceMemEntry,
+    // so lexically inside the vault) can still be a symlink a teammate planted
+    // via the org vault's git pull. Without an lstat guard, writeFileSync
+    // (meta.filePath) would follow the link and clobber the target. store_memory
+    // got the guard in Pass 1; update_memory missed it — this pins the parallel
+    // fix. Setup: store a real memory so memIndex holds its filePath, then swap
+    // the file for a symlink → victim, then attempt the update.
+    const victim = path.join(OUTSIDE, 'update-victim.txt');
+    fs.writeFileSync(victim, 'VICTIM-INTACT');
+    const storeRes = await callTool('store_memory', { title: 'updateclobber', content: 'orig', tags: [], category: 'knowledge' });
+    expect(storeRes.isError).toBeFalsy();
+    const { key, filePath } = JSON.parse(storeRes.content[0].text);
+    try {
+      fs.rmSync(filePath, { force: true });
+      fs.symlinkSync(victim, filePath);
+      const res = await callTool('update_memory', { key, content: 'ATTACK' });
+      expect(res.isError).toBe(true);
+      expect(res.content[0].text).toContain('symlink');
+      // The victim must NOT have been clobbered through the symlink.
+      expect(fs.readFileSync(victim, 'utf8')).toBe('VICTIM-INTACT');
+    } finally {
+      // Remove the planted symlink + the memIndex entry so later tests don't see
+      // a dangling link / stale entry (vault-scan skips symlinks, but the in-memory
+      // entry would persist without this delete).
+      fs.rmSync(filePath, { force: true });
+      delete memIndex[key];
+    }
+  });
+
   it('loadIndexes re-derives filePath from the key (drops a poisoned filePath)', () => {
     const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
     fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({

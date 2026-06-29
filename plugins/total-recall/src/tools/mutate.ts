@@ -16,6 +16,27 @@ export function updateMemory(args: any): any {
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
+  // Symlink containment (mirrors store.ts:122-136): coerceMemEntry re-derives
+  // meta.filePath from the validated key (Pass 1), so it's lexically inside the
+  // vault — but the filesystem entry at that path can still be a symlink a
+  // teammate planted via the org vault's `git pull` (the org vault is a shared
+  // repo, and `git pull` preserves symlinks). The lexical path check does NOT
+  // detect symlinks, so without this guard readFileSync(meta.filePath) below
+  // follows the link and reads the target into `raw`, and writeFileSync
+  // (meta.filePath, ...) further down follows it and CLOBBERS the target — the
+  // same planted-symlink write-escape Pass 1 closed for store_memory, missed on
+  // the parallel update path. lstatSync stats the entry itself (not the target)
+  // → a symlink reports isFile()=false and is rejected regardless of what it
+  // points at. ENOENT (the file was removed since the index loaded) falls
+  // through to the readFileSync, which throws a clear error.
+  try {
+    if (!fs.lstatSync(meta.filePath).isFile()) {
+      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) — refusing to follow a possible planted link in the shared org vault.`);
+    }
+  } catch (e: any) {
+    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = file removed since load, fine
+  }
+
   const raw = fs.readFileSync(meta.filePath, 'utf8');
   const parsed = parseFrontmatter(raw);
   const now = new Date().toISOString();

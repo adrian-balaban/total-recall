@@ -16443,6 +16443,13 @@ function updateMemory(args) {
   const { key, content, tags, importanceScore, sessionId } = args;
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
+  try {
+    if (!fs8.lstatSync(meta2.filePath).isFile()) {
+      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
+    }
+  } catch (e) {
+    if (!e || e.code !== "ENOENT") throw e;
+  }
   const raw = fs8.readFileSync(meta2.filePath, "utf8");
   const parsed = parseFrontmatter(raw);
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -16519,7 +16526,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.13" : null.version;
+var PLUGIN_VERSION = true ? "1.0.14" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }

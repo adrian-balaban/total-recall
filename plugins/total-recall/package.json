@@ -1,6 +1,6 @@
 {
   "name": "total-recall",
-  "version": "1.0.13",
+  "version": "1.0.14",
   "description": "Persistent memory MCP server for Claude Code",
   "main": "dist/index.js",
   "scripts": {
