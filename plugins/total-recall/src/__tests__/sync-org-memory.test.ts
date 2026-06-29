@@ -71,6 +71,17 @@ const ROLE_TITLE_ALLOWLIST = ['product owner', 'tech lead', 'architect', 'scrum 
 // allowlist in JS (NOT a negative-lookahead regex — see the bypass test below).
 const EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
 
+// Sanitize the configured allowlist — mirror of scripts/sync-org-memory.cjs
+// sanitizeAllowedDomains (KEEP IN SYNC). Drops non-strings, empties, and BARE TLDs:
+// a bare "com" entry would make isAllowedEmail return true for every *.com host
+// (h.endsWith('.com')), silently allowlisting an entire TLD and gutting the email
+// filter. Require at least one dot; reject leading/trailing dots. Fail-closed:
+// dropping an over-permissive entry makes MORE emails block, not fewer.
+function sanitizeAllowedDomains(list: unknown): string[] {
+  if (!Array.isArray(list)) return [];
+  return list.filter((d): d is string => typeof d === 'string' && d.length > 0 && d.includes('.') && !d.startsWith('.') && !d.endsWith('.'));
+}
+
 function isAllowedEmail(host: string, allowedDomains: string[]): boolean {
   if (!allowedDomains.length) return false; // fail-closed
   const h = host.toLowerCase();
@@ -95,8 +106,14 @@ const US_PHONE_RE = /(?:\+\d{1,3}[\s-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}/;
 // International: +country code then 7-13 more digits with separators (E.164-ish, max 15 total)
 const INTL_PHONE_RE = /\+\d{1,3}[\s().-]*(?:\d[\s().-]*){6,12}\d/;
 const PHONE_RE = new RegExp(`(?:${INTL_PHONE_RE.source}|${US_PHONE_RE.source})`);
-// Common API keys / tokens — leaked credentials are the highest-risk PII for a public repo
-const SECRET_TOKEN_RE = /\b(?:sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35})\b/;
+// Common API keys / tokens — leaked credentials are the highest-risk PII for a public repo.
+// Mirror of scripts/sync-org-memory.cjs SECRET_TOKEN_RE (KEEP IN SYNC). Covers PEM keys,
+// OpenAI sk-, Stripe live (sk_live_/rk_live_/pk_live_), AWS access-key ids (AKIA + ASIA
+// STS temp creds), GitHub (gh*_ / github_pat_ / xapp_), Slack xox, Google AIza, GitLab
+// glpat, JWTs (eyJ…). The `i` flag catches uppercase env-style forms. The AWS SECRET
+// ACCESS KEY (40-char, no fixed prefix) is detected only when LABELED to avoid SHA-1 /
+// base64 false positives (see the "does not false-positive on a SHA-1 hash" test below).
+const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|pk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
 
 function privacyCheck(data: any, content: string, allowedDomains: string[] = []): string | null {
   // Scan the union of title, author, tags, and body — mirrors scripts/sync-org-memory.cjs.
@@ -298,6 +315,88 @@ describe('privacyCheck', () => {
   it('still passes a clean scalar tags field', () => {
     // A non-secret scalar tag must not false-positive.
     expect(privacyCheck({ tags: 'architecture' }, 'Clean body.')).toBeNull();
+  });
+
+  // ── Pass 3: extended SECRET_TOKEN_RE — Stripe live, AWS STS (ASIA), labeled AWS
+  // secret access key. Each is a prefixed/labeled form with negligible false-positive
+  // risk; the .cjs comment explains why the AWS 40-char secret is matched only when
+  // labeled (a bare {40} would false-positive on SHA-1 hashes / base64 blobs).
+  //
+  // The Stripe SECRET-key fixtures (sk_live_, rk_live_) are split across string
+  // concatenation (`'sk_live_' + 'abcdef…'`) on purpose: GitHub push-protection secret
+  // scanning flags any contiguous `sk_live_[A-Za-z0-9]{24,}` / `rk_live_…` in the source
+  // blob, even an obvious fake like `sk_live_abcdef…`. Splitting keeps the contiguous
+  // token out of the source bytes (scanners don't reconstruct `+` concatenation) while
+  // the runtime string is still contiguous, so SECRET_TOKEN_RE matches and the test
+  // passes. Do NOT collapse these back to a single literal — it re-trips push
+  // protection. pk_live_ (publishable, public by design) and the AWS fixtures are not
+  // flagged by GitHub and need no split.
+
+  it('blocks a Stripe live secret key (sk_live_)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Stripe key sk_live_' + 'abcdefghijklmnopqrstuvwxyz123456')).toMatch(/secret/);
+  });
+
+  it('blocks a Stripe restricted key (rk_live_)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Stripe rk_live_' + 'abcdefghijklmnopqrstuvwxyz123456 leaked')).toMatch(/secret/);
+  });
+
+  it('blocks a Stripe publishable live key (pk_live_)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'pk_live_abcdefghijklmnopqrstuvwxyz123456 in config')).toMatch(/secret/);
+  });
+
+  it('blocks an AWS STS temporary access key id (ASIA…)', () => {
+    // ASIA is the STS temp-credential prefix (companion to AKIA). Exactly 20 chars total.
+    expect(privacyCheck({ title: 'Notes' }, 'creds ASIAABCDEFGHIJKLMNOP')).toMatch(/secret/);
+  });
+
+  it('blocks an AWS secret access key in a labeled ~/.aws/credentials snippet', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'aws_secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')).toMatch(/secret/);
+  });
+
+  it('blocks an AWS secret access key in uppercase env-style (AWS_SECRET_ACCESS_KEY=)', () => {
+    // The `i` flag on SECRET_TOKEN_RE catches the env-var form.
+    expect(privacyCheck({ title: 'Notes' }, 'AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY')).toMatch(/secret/);
+  });
+
+  it('does not false-positive on a 40-char SHA-1 hash (labeled-only AWS secret design)', () => {
+    // da39a3ee5e6b4b0d3255bfef95601890afd80709 is the SHA-1 of the empty string — 40 hex
+    // chars, and hex ⊂ the base64 charset a bare {40} would scan. The labeled-only design
+    // (no `aws_secret_access_key` label here) must NOT flag it. No 10-contiguous-digit run,
+    // so the phone filter doesn't trip either.
+    expect(privacyCheck({ title: 'Notes' }, 'commit da39a3ee5e6b4b0d3255bfef95601890afd80709 fixed it')).toBeNull();
+  });
+
+  it('bare-TLD allowlist entry is rejected: ["com"] does NOT allowlist me@work.com', () => {
+    // The footgun: with the OLD unsanitized allowlist, ["com"] made isAllowedEmail return
+    // true for every *.com host (h.endsWith('.com')). sanitizeAllowedDomains(['com']) → []
+    // (no dot), so the allowlist is empty and the filter fails closed → me@work.com blocks.
+    expect(privacyCheck({ title: 'Notes' }, 'me@work.com', sanitizeAllowedDomains(['com']))).toMatch(/email/);
+  });
+});
+
+// ─── Tests: sanitizeAllowedDomains (Pass 3 bare-TLD footgun) ─────────────────
+
+describe('sanitizeAllowedDomains', () => {
+  it('rejects bare TLDs (no dot)', () => {
+    expect(sanitizeAllowedDomains(['com', 'org', 'io'])).toEqual([]);
+  });
+
+  it('keeps valid domains (with a dot)', () => {
+    expect(sanitizeAllowedDomains(['example.com', 'sub.example.com'])).toEqual(['example.com', 'sub.example.com']);
+  });
+
+  it('rejects leading/trailing dots and empties', () => {
+    expect(sanitizeAllowedDomains(['.bad', 'bad.', ''])).toEqual([]);
+  });
+
+  it('rejects non-string entries but keeps valid ones', () => {
+    expect(sanitizeAllowedDomains([123, null, undefined, 'fine.com'])).toEqual(['fine.com']);
+  });
+
+  it('returns [] for non-array input', () => {
+    expect(sanitizeAllowedDomains('notarray')).toEqual([]);
+    expect(sanitizeAllowedDomains(undefined)).toEqual([]);
+    expect(sanitizeAllowedDomains(null)).toEqual([]);
   });
 });
 

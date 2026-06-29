@@ -73,9 +73,22 @@ function atomicWrite(p, data) {
 // `allowedEmailDomains` in ~/.total-recall/config.json (e.g. ["yourcompany.com"]).
 // Default: empty → fail-closed, EVERY email is flagged and blocked from org sync.
 // (A previous hardcoded employer-specific allowlist was unsafe for anyone else.)
-const ALLOWED_DOMAINS = Array.isArray(config.allowedEmailDomains)
-  ? config.allowedEmailDomains.filter(d => typeof d === 'string' && d.length)
-  : [];
+//
+// Sanitize the configured allowlist: drop non-strings, empties, and BARE TLDs.
+// A bare-TLD entry like "com" or "org" is a misconfiguration footgun: isAllowedEmail
+// treats the entry as a domain suffix (h === d || h.endsWith('.' + d)), so "com"
+// would match EVERY `*.com` host — silently allowlisting all of .com and gutting
+// the email filter for an entire TLD. Require at least one dot (a bare TLD has
+// none) and reject leading/trailing dots. This is fail-closed: a dropped
+// over-permissive entry makes MORE emails block, not fewer. The user notices and
+// fixes their config to e.g. ["theircompany.com"]. (Bundling the PSL to reject
+// public-suffix-only entries like "co.uk" is out of scope; if a user sets "co.uk"
+// they mean it.)
+function sanitizeAllowedDomains(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(d => typeof d === 'string' && d.length && d.includes('.') && !d.startsWith('.') && !d.endsWith('.'));
+}
+const ALLOWED_DOMAINS = sanitizeAllowedDomains(config.allowedEmailDomains);
 
 // Role titles that look like person names but are OK
 const ROLE_TITLE_ALLOWLIST = ['product owner', 'tech lead', 'architect', 'scrum master'];
@@ -113,8 +126,19 @@ const INTL_PHONE_RE = /\+\d{1,3}[\s().-]*(?:\d[\s().-]*){6,12}\d/;
 const PHONE_RE = new RegExp(`(?:${INTL_PHONE_RE.source}|${US_PHONE_RE.source})`);
 // Common API keys / tokens — leaked credentials are the highest-risk PII for a public repo.
 // PEM private-key headers are matched separately (they contain no word boundary).
-// Added: GitLab PAT (glpat-), GitHub xApp token (xapp-), JWTs (eyJ…), and PEM keys.
-const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|AKIA[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b/;
+// Covers: PEM keys, OpenAI sk-, Stripe live keys (sk_live_/rk_live_/pk_live_ — the
+// existing sk- alternation requires a hyphen and so misses Stripe's underscore form),
+// AWS access-key ids (AKIA + ASIA STS temporary creds), GitHub (gh[o/p/s/u]_,
+// github_pat_, xapp_), Slack xox, Google AIza, GitLab glpat, JWTs (eyJ…).
+// The `i` flag also catches uppercase env-style forms (AWS_SECRET_ACCESS_KEY, AKIA
+// lowercased, etc.) — broadening detection is fail-closed for a secret gate.
+// The AWS SECRET ACCESS KEY (the 40-char sensitive half of the credential pair) has
+// no fixed prefix, so a bare {40} would false-positive on SHA-1 hashes (40 hex chars,
+// hex ⊂ base64 charset) and base64 blobs; instead detect it only when LABELED
+// (`aws_secret_access_key = <40 base64 chars>`), which catches pasted
+// ~/.aws/credentials snippets with negligible FP. The negative lookahead ensures the
+// 40 chars aren't a prefix of a longer base64 run.
+const SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|pk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[opsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
 
 // matterParse removed — now using shared parseFrontmatter from dist/frontmatter.cjs
 
