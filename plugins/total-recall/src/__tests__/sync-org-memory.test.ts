@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { privacyCheck, sanitizeAllowedDomains } from '../privacy-filter.js';
 
 // The org-sync privacy filter (secret-token + email checks) and the email-allowlist
-// sanitizer live in src/privacy-filter.ts, built to dist/privacy-filter.cjs and
-// required by scripts/sync-org-memory.cjs. Importing the SAME source here (not a
+// sanitizer live in src/privacy-filter.ts, built to dist/privacy-filter.mjs and
+// imported by scripts/sync-org-memory.mjs. Importing the SAME source here (not a
 // replica) means the unit tests and the live hook can no longer silently diverge —
 // the old "KEEP IN SYNC with the .cjs" replica is gone. Personal-pronoun and phone-
 // number blockers were removed (high false-positive rate; see privacy-filter.ts),

@@ -1,6 +1,4 @@
 #!/usr/bin/env node
-'use strict';
-
 // PreCompact helper: writes extracted learnings directly to the personal vault as
 // frontmatter .md files. Reads one JSON object per line on stdin (fields: title,
 // content, tags, category, importanceScore) and writes each to
@@ -14,11 +12,11 @@
 // Existing memories are NEVER overwritten — if a slug already exists, the line is
 // skipped (the extract prompt may re-surface similar learnings across sessions).
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
-const { stringifyFrontmatter } = require('../../dist/frontmatter.cjs');
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import crypto from 'node:crypto';
+import { stringifyFrontmatter } from '../../dist/frontmatter.mjs';
 
 const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 
@@ -28,7 +26,7 @@ const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 // crashed extract silently blocks future captures of the same learning.
 // Atomic rename guarantees the file only appears once it's fully written.
 function atomicWrite(p, data) {
-  // Random tmp suffix: see scripts/sync-org-memory.cjs — process.pid is
+  // Random tmp suffix: see scripts/sync-org-memory.mjs — process.pid is
   // enumerable (ps), so a planted symlink at `${p}.tmp.<pid>` could be followed
   // by writeFileSync and clobber an outside file. randomBytes makes the tmp
   // path unguessable.
@@ -46,7 +44,7 @@ function slugify(s) {
     .slice(0, 80) || 'untitled';
 }
 
-// yamlScalar/fmStringify removed — now using shared stringifyFrontmatter from dist/frontmatter.cjs
+// yamlScalar/fmStringify removed — now using shared stringifyFrontmatter from dist/frontmatter.mjs
 
 let input = '';
 process.stdin.on('data', (d) => { input += d; });

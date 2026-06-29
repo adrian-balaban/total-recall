@@ -298,7 +298,7 @@ sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers
 extract-and-store-memories.sh
   ├─ reads transcript_path from the hook's stdin JSON (common hook input)
   ├─ asks Claude to extract 0–3 key learnings as JSON lines
-  └─ pipes to store-learning.cjs
+  └─ pipes to store-learning.mjs
        └─ writes .md files directly to personal-vault (no MCP round-trip)
             └─ never overwrites existing files
             └─ skips lines whose title/tags contain a newline (frontmatter-injection guard)
@@ -310,7 +310,7 @@ extract-and-store-memories.sh
 
 ## Org Vault Sync & Privacy Filter
 
-`scripts/sync-org-memory.cjs` runs after every org write. Before pushing it applies a fail-closed privacy filter that blocks:
+`scripts/sync-org-memory.mjs` runs after every org write. Before pushing it applies a fail-closed privacy filter that blocks:
 
 - Secret-looking tokens (high-entropy strings, `key=value` patterns)
 - All email addresses (unless the domain is in `allowedEmailDomains` in `~/.total-recall/config.json`)

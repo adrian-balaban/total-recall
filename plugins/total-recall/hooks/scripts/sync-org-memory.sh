@@ -95,12 +95,12 @@ case "$KEY" in
     if [ "$DELETE_FLAG" = "1" ]; then
       (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY" --delete
+        node "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     else
       (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        node "$PLUGIN_ROOT/scripts/sync-org-memory.cjs" "$KEY"
+        node "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY"
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     fi
     ;;

@@ -8,17 +8,16 @@ import { spawnSync } from 'child_process';
 // PostToolUse JSON from STDIN (not argv), extract `key` from tool_response (handling the
 // MCP envelope shape {content:[{type:"text",text:"<json>"}]} AND the unwrapped shape),
 // fall back to tool_input.key when the response carries none, and pass --delete when the
-// tool is delete_memory. We run the real .sh against a fake plugin tree with a stub .cjs
+// tool is delete_memory. We run the real .sh against a fake plugin tree with a stub .mjs
 // that records its argv, isolating the hook's parsing logic from the real git sync.
 
 const REAL_SH = path.resolve(__dirname, '..', '..', 'hooks', 'scripts', 'sync-org-memory.sh');
 
-// Stub .cjs: records process.argv.slice(2) (the key + optional --delete) to a file named by
-// TR_HOOK_ARGS_FILE. Lets us assert exactly what the hook invoked without running git.
-const STUB_CJS = `#!/usr/bin/env node
-'use strict';
-const fs = require('fs');
-const path = require('path');
+// Stub .mjs: records process.argv.slice(2) (the key + optional --delete) to a file named
+// by TR_HOOK_ARGS_FILE. Lets us assert exactly what the hook invoked without running git.
+const STUB_MJS = `#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
 const argsFile = process.env.TR_HOOK_ARGS_FILE;
 if (argsFile) {
   fs.mkdirSync(path.dirname(argsFile), { recursive: true });
@@ -81,7 +80,7 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     fs.mkdirSync(path.join(fakeRoot, 'scripts'), { recursive: true });
     fs.copyFileSync(REAL_SH, shPath);
     fs.chmodSync(shPath, 0o755);
-    fs.writeFileSync(path.join(fakeRoot, 'scripts', 'sync-org-memory.cjs'), STUB_CJS);
+    fs.writeFileSync(path.join(fakeRoot, 'scripts', 'sync-org-memory.mjs'), STUB_MJS);
     // The .sh backgrounds build-memory-index.sh; keep it a harmless no-op.
     const bmi = path.join(fakeRoot, 'hooks', 'scripts', 'build-memory-index.sh');
     fs.writeFileSync(bmi, '#!/usr/bin/env bash\nexit 0\n');

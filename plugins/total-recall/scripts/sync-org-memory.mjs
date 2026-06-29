@@ -1,14 +1,12 @@
 #!/usr/bin/env node
-'use strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { execSync, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
-const { execSync, spawnSync } = require('child_process');
-const crypto = require('crypto');
-
-const { parseFrontmatter, stringifyFrontmatter } = require('../dist/frontmatter.cjs');
-const { privacyCheck, sanitizeAllowedDomains } = require('../dist/privacy-filter.cjs');
+import { parseFrontmatter, stringifyFrontmatter } from '../dist/frontmatter.mjs';
+import { privacyCheck, sanitizeAllowedDomains } from '../dist/privacy-filter.mjs';
 
 const TOTAL_RECALL_DIR = path.join(os.homedir(), '.total-recall');
 const PERSONAL_VAULT = path.join(TOTAL_RECALL_DIR, 'personal-vault');
@@ -78,9 +76,9 @@ function atomicWrite(p, data) {
 // be pushed to the shared org vault. Configurable via `allowedEmailDomains` in
 // ~/.total-recall/config.json (e.g. ["yourcompany.com"]). Default: empty → fail-closed,
 // every email is flagged and blocked from org sync. sanitizeAllowedDomains (imported
-// from dist/privacy-filter.cjs above) drops non-strings, empties, and bare TLDs — a
+// from dist/privacy-filter.mjs above) drops non-strings, empties, and bare TLDs — a
 // "com" entry would otherwise allowlist all of *.com. The filter itself (secret + email
-// checks) lives in src/privacy-filter.ts, built to dist/privacy-filter.cjs; the unit
+// checks) lives in src/privacy-filter.ts, built to dist/privacy-filter.mjs; the unit
 // tests import the SAME source, so the old KEEP-IN-SYNC replica is gone.
 const ALLOWED_DOMAINS = sanitizeAllowedDomains(config.allowedEmailDomains);
 
@@ -168,7 +166,7 @@ async function main() {
   const key = process.argv[2];
   const deleteMode = process.argv.includes('--delete');
 
-  if (!key) { console.error('Usage: sync-org-memory.cjs <key> [--delete]'); process.exit(1); }
+  if (!key) { console.error('Usage: sync-org-memory.mjs <key> [--delete]'); process.exit(1); }
 
   const relKey = key.replace(/^org\//, '');
   const orgFile = path.join(ORG_VAULT, relKey + '.md');

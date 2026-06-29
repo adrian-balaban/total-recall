@@ -32,7 +32,7 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 Run all three, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
 
 1. **Increase the version.** Bump the version in **both** `package.json` **and** `.claude-plugin/plugin.json` — they MUST stay in sync (package.json is the source the SessionStart hook reads; plugin.json is what Claude Code displays). `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__`, so the version must be set **before** step 2.
-2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.cjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
+2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.mjs` + `dist/privacy-filter.mjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
 3. **Test all.** `npm test` (208 unit/component tests, `maxWorkers=1`) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
 
 Only after all three are green: `git add -A && git commit` from the plugin root, then push.
@@ -60,7 +60,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 
 **Dual vault routing:**
 - Personal vault: `~/.total-recall/personal-vault/` — default for all memories
-- Org vault: `~/.total-recall/org/org-vault/` — used when tag `org` is present; synced to the repo configured via `orgRepo` in `~/.total-recall/config.json` (branch `org-vault`) via `scripts/sync-org-memory.cjs`
+- Org vault: `~/.total-recall/org/org-vault/` — used when tag `org` is present; synced to the repo configured via `orgRepo` in `~/.total-recall/config.json` (branch `org-vault`) via `scripts/sync-org-memory.mjs`
 - Keys are relative paths from vault root; org keys are prefixed `org/`
 - Org sync runs a privacy filter: blocks secret tokens, all email addresses (fail-closed by default; allow your company domain via `allowedEmailDomains` in `~/.total-recall/config.json`), personal pronouns, and phone numbers before any push
 
@@ -80,7 +80,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 **Hooks** (`hooks/hooks.json`):
 - `SessionStart`: pull org vault → rebuild index cache → inject memory index → inject open questions
 - `PostToolUse` (store/update/delete): sync to org vault if tagged `org`
-- `PreCompact`: extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.cjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)
+- `PreCompact`: extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.mjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)
 
 ## Memory Workflow
 

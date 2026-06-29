@@ -1,6 +1,6 @@
 // Org-sync privacy filter — the gate that decides whether a memory may be pushed to
 // the shared org vault. Pure functions, no I/O: the org-sync hook script
-// (scripts/sync-org-memory.cjs) requires the esbuild bundle dist/privacy-filter.cjs,
+// (scripts/sync-org-memory.mjs) requires the esbuild bundle dist/privacy-filter.mjs,
 // and the unit tests (src/__tests__/sync-org-memory.test.ts) import this source
 // directly — the SAME code, eliminating the old "KEEP IN SYNC" replica that drifted.
 //

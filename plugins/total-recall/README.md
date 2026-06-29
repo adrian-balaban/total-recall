@@ -140,7 +140,7 @@ claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(p
 
 ## Org Vault
 
-Memories tagged `org` are synced to a shared git repo via `scripts/sync-org-memory.cjs`. Privacy filters block secret tokens, personal emails, pronouns, and phone numbers before any push.
+Memories tagged `org` are synced to a shared git repo via `scripts/sync-org-memory.mjs`. Privacy filters block secret tokens, personal emails, pronouns, and phone numbers before any push.
 
 The email filter is **fail-closed by default**: every email address is blocked from org sync. If your team legitimately syncs work contacts, allow your company domain in `~/.total-recall/config.json`:
 

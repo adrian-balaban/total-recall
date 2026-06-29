@@ -1,12 +1,13 @@
 {
   "name": "total-recall",
-  "version": "1.0.22",
+  "version": "1.0.23",
   "description": "Persistent memory MCP server for Claude Code",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
-    "build:esbuild": "./node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=cjs --outfile=dist/index.js --define:__PLUGIN_VERSION__=\"\\\"$npm_package_version\\\"\" --external:fsevents --external:@huggingface/transformers --external:sqlite-vec --external:better-sqlite3",
-    "build:frontmatter": "./node_modules/.bin/esbuild src/frontmatter.ts --bundle --platform=node --format=cjs --outfile=dist/frontmatter.cjs",
-    "build:privacy-filter": "./node_modules/.bin/esbuild src/privacy-filter.ts --bundle --platform=node --format=cjs --outfile=dist/privacy-filter.cjs",
+    "build:esbuild": "./node_modules/.bin/esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --define:__PLUGIN_VERSION__=\"\\\"$npm_package_version\\\"\" --external:fsevents --external:@huggingface/transformers --external:sqlite-vec --external:better-sqlite3",
+    "build:frontmatter": "./node_modules/.bin/esbuild src/frontmatter.ts --bundle --platform=node --format=esm --outfile=dist/frontmatter.mjs",
+    "build:privacy-filter": "./node_modules/.bin/esbuild src/privacy-filter.ts --bundle --platform=node --format=esm --outfile=dist/privacy-filter.mjs",
     "build": "npm run build:esbuild && npm run build:frontmatter && npm run build:privacy-filter",
     "build:watch": "npm run build:esbuild -- --watch",
     "dev": "tsx src/index.ts",

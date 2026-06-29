@@ -4,14 +4,14 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawnSync } from 'child_process';
 
-// End-to-end test of scripts/sync-org-memory.cjs against a real (local, bare) git
+// End-to-end test of scripts/sync-org-memory.mjs against a real (local, bare) git
 // remote. Proves the #1 fix — org sync actually commits+pushes the file already on
 // disk in the org-vault working tree — plus the delete, skip, and privacy-block
 // paths. No network: the remote is a local bare repo; HOME is redirected so the
 // script reads a temp config and `gh auth token` fails closed (no real token touched).
 
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
-const SCRIPT = path.join(REPO_ROOT, 'scripts', 'sync-org-memory.cjs');
+const SCRIPT = path.join(REPO_ROOT, 'scripts', 'sync-org-memory.mjs');
 
 const GIT_ENV: NodeJS.ProcessEnv = {
   ...process.env,
@@ -56,7 +56,7 @@ function writeMkdir(p: string, contents: string) {
   fs.writeFileSync(p, contents);
 }
 
-function runCjs(key: string, extra: string[] = []): { stdout: string; stderr: string } {
+function runMjs(key: string, extra: string[] = []): { stdout: string; stderr: string } {
   const env: NodeJS.ProcessEnv = { ...GIT_ENV, HOME: tmpHome };
   delete env.GH_TOKEN;
   delete env.GITHUB_TOKEN;
@@ -77,7 +77,7 @@ function writeOrgMemory(relKey: string, fm: Record<string, unknown>, body: strin
 
 const suite = OK ? describe : describe.skip;
 
-suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', () => {
+suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', () => {
   beforeAll(() => {
     prevHome = process.env.HOME;
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-e2e-'));
@@ -110,7 +110,7 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
   it('commits and pushes an org-tagged memory to the remote', () => {
     const key = 'org/architecture/flink-cdc';
     writeOrgMemory('architecture/flink-cdc', { title: 'Flink CDC Pipeline', tags: ['org', 'architecture'], author: 'tester', importanceScore: 0.7 }, '## Executive Summary\n\nOutbox + CDC pattern via Flink.\n');
-    runCjs(key);
+    runMjs(key);
     const tree = remoteTree();
     expect(tree).toContain('org-vault/architecture/flink-cdc.md');
     expect(tree).toContain('org-vault/index.json');
@@ -119,16 +119,16 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
   it('removes a memory from the remote when invoked with --delete', () => {
     const key = 'org/decisions/adopt-kafka';
     writeOrgMemory('decisions/adopt-kafka', { title: 'Adopt Kafka', tags: ['org'], author: 'tester' }, '## Executive Summary\n\nUse Kafka for the event bus.\n');
-    runCjs(key);
+    runMjs(key);
     expect(remoteTree()).toContain('org-vault/decisions/adopt-kafka.md');
-    runCjs(key, ['--delete']);
+    runMjs(key, ['--delete']);
     expect(remoteTree()).not.toContain('org-vault/decisions/adopt-kafka.md');
   });
 
   it('skips (does not push) a memory that is not tagged org', () => {
     const key = 'org/architecture/not-org-tagged';
     writeOrgMemory('architecture/not-org-tagged', { title: 'Internal Notes', tags: ['team'], author: 'tester' }, '## Executive Summary\n\nSome notes.\n');
-    const res = runCjs(key);
+    const res = runMjs(key);
     expect(res.stdout).toContain('not tagged org');
     expect(remoteTree()).not.toContain('org-vault/architecture/not-org-tagged.md');
   });
@@ -136,7 +136,7 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
   it('blocks (does not push) a memory containing a non-allowlisted email', () => {
     const key = 'org/architecture/leaky';
     writeOrgMemory('architecture/leaky', { title: 'Leaky Doc', tags: ['org'], author: 'tester' }, '## Executive Summary\n\nContact user@gmail.com for access.\n');
-    const res = runCjs(key);
+    const res = runMjs(key);
     expect(res.stderr).toContain('Privacy filter blocked');
     expect(remoteTree()).not.toContain('org-vault/architecture/leaky.md');
   });
@@ -153,7 +153,7 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
     const body = '## Executive Summary\n\nBlock-array frontmatter doc.\n';
     const file = path.join(orgVault, 'architecture/block-tags.md');
     writeMkdir(file, `---\ntitle: Block Array Doc\ntags:\n  - org\n  - architecture\nauthor: tester\n---\n${body}`);
-    runCjs(key);
+    runMjs(key);
     expect(remoteTree()).toContain('org-vault/architecture/block-tags.md');
   });
 
@@ -178,7 +178,7 @@ suite('sync-org-memory.cjs end-to-end (#1: org sync actually commits+pushes)', (
     fs.mkdirSync(path.dirname(linkPath), { recursive: true });
     fs.symlinkSync(victimPath, linkPath);
 
-    const res = runCjs('org/architecture/leak');
+    const res = runMjs('org/architecture/leak');
     // The guard's rejection message names the symlink / outside-vault reason.
     expect(res.stderr).toMatch(/symlink|outside the org vault/i);
     // The symlinked file is never staged/committed (no symlink blob pushed).
