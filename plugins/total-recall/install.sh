@@ -9,6 +9,7 @@
 #   3. Register the MCP server
 #   4. Build the initial index
 #   5. Wire hooks into ~/.claude/settings.json   (standalone installs only)
+#   5b. Statusline         (optional, --statusline)
 #   6. Org vault            (optional)
 #   7. Vector search        (optional)
 #   8. Verify
@@ -25,6 +26,11 @@
 #   --standalone              Wire hooks into ~/.claude/settings.json.
 #                             Skip this for plugin installs — `claude plugin
 #                             install` auto-loads hooks/hooks.json.
+#   --statusline              Install the total-recall status line: copies
+#                             statusline.sh to ~/.claude/total-recall-statusline.sh
+#                             and wires `statusLine` into ~/.claude/settings.json
+#                             (shows the plugin version in the bottom bar). Skipped
+#                             if a statusLine is already configured.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -56,6 +62,10 @@
 #      PreCompact entries (mirroring hooks/hooks.json) into
 #      ~/.claude/settings.json (preserves build → load ordering). Plugin
 #      installs skip it.
+#   5b. Statusline (optional, --statusline) — copies statusline.sh to
+#      ~/.claude/total-recall-statusline.sh and wires `statusLine` into
+#      ~/.claude/settings.json (shows the plugin version in the bottom bar).
+#      Skipped if a statusLine is already configured.
 #   6. Org vault (optional) — prompts or --org-repo/--allowed-email-domain;
 #      writes config.json, runs pull-org-vault.sh.
 #   7. Vector search (optional) — prompts or --vector/--no-vector;
@@ -78,6 +88,7 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 # Defaults / flag state
 PLUGIN_ROOT=""
 STANDALONE=0
+STATUSLINE=0
 ORG_REPO=""
 ORG_DOMAIN=""
 VECTOR=""        # "" = ask, "yes" = install, "no" = skip
@@ -129,6 +140,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-root)         PLUGIN_ROOT="${2:?--plugin-root needs a path}"; shift 2;;
     --standalone)          STANDALONE=1; shift;;
+    --statusline)          STATUSLINE=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector)              VECTOR="yes"; shift;;
@@ -289,6 +301,55 @@ NODE
     note "Hooks wired into settings.json (standalone)."
   else
     warn "Hook wiring failed — wire hooks manually to mirror hooks/hooks.json."
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# Step 5b — Statusline (optional, --statusline)
+# --------------------------------------------------------------------------
+step "Step 5b — Statusline (optional)"
+if [ "$STATUSLINE" -ne 1 ]; then
+  ok "Statusline skipped. (Pass --statusline to show the total-recall version in the bottom bar.)"
+elif [ ! -f "$PLUGIN_ROOT/statusline.sh" ]; then
+  warn "statusline.sh not found at $PLUGIN_ROOT/statusline.sh — skipping."
+  note "Statusline skipped (source missing)."
+else
+  LAUNCHER="$HOME/.claude/total-recall-statusline.sh"
+  mkdir -p "$(dirname "$LAUNCHER")"
+  if cp -f "$PLUGIN_ROOT/statusline.sh" "$LAUNCHER" && chmod +x "$LAUNCHER"; then
+    ok "Installed statusline launcher: $LAUNCHER"
+  else
+    warn "Could not install $LAUNCHER — statusline wiring skipped."
+    note "Statusline skipped (copy failed)."
+    LAUNCHER=""
+  fi
+  if [ -n "$LAUNCHER" ]; then
+    # Wire `statusLine` into settings.json idempotently — skip if the user
+    # already has any statusLine configured (don't clobber a custom one).
+    # Mirrors the Step 5 hook-wiring node block: JSON.stringify guarantees
+    # valid JSON regardless of the launcher path content.
+    node - "$SETTINGS_FILE" "$LAUNCHER" <<'NODE'
+const fs = require('fs');
+const path = require('path');
+const [, , settingsPath, launcher] = process.argv;
+let s = {};
+try { s = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (_) {}
+if (s.statusLine && s.statusLine.command) {
+  console.log('SKIP: a statusLine is already configured in settings.json.');
+  process.exit(0);
+}
+s.statusLine = { type: 'command', command: launcher };
+fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
+fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n');
+console.log('WROTE: statusLine wired into settings.json.');
+NODE
+    if [ $? -eq 0 ]; then
+      ok "Wired statusLine into $SETTINGS_FILE"
+      note "Statusline installed (shows total-recall version in the bottom bar)."
+    else
+      warn "settings.json wiring failed — add statusLine manually (see README)."
+      note "Statusline launcher installed but settings wiring failed."
+    fi
   fi
 fi
 
