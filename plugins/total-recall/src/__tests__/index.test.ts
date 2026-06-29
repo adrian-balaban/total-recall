@@ -1971,6 +1971,29 @@ describe('appendJournal — symlink containment (Pass 4)', () => {
       fs.rmSync(journalPath, { force: true });
     }
   });
+
+  it('skips the append when journal/<today>.md is a directory (no EISDIR throw into store_memory)', () => {
+    // Behavior change from reusing assertRegularFile (E1): the former
+    // isSymbolicLink check let a directory fall through to appendFileSync, which
+    // threw EISDIR up into the store_memory call — violating the invariant that
+    // the best-effort journal never throws. assertRegularFile treats a directory
+    // as not-a-regular-file (lstat → isFile()=false → throws) and appendJournal
+    // now catches and skips. This test fails on the old code (the appendJournal
+    // call would throw EISDIR) and passes on the new (silent skip).
+    const today = new Date().toISOString().slice(0, 10);
+    const journalDir = path.join(VAULT, 'personal-vault', 'journal');
+    fs.mkdirSync(journalDir, { recursive: true });
+    const journalPath = path.join(journalDir, `${today}.md`);
+    fs.rmSync(journalPath, { force: true });
+    fs.mkdirSync(journalPath, { recursive: true });
+    try {
+      expect(() => appendJournal('store', 'knowledge/dir-test', 'Dir Test')).not.toThrow();
+      // The directory is left untouched — not replaced by a file, no entry written.
+      expect(fs.lstatSync(journalPath).isDirectory()).toBe(true);
+    } finally {
+      fs.rmSync(journalPath, { recursive: true, force: true });
+    }
+  });
 });
 
 // ─── Pass 4: atomicWrite uses an unpredictable tmp path ───────────────────────

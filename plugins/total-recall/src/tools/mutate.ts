@@ -3,7 +3,7 @@ import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB } from '../paths.js';
-import { reconcileIndex } from '../vault-scan.js';
+import { reconcileIndex, assertRegularFile } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -17,26 +17,17 @@ export function updateMemory(args: any): any {
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
-  // Symlink containment (mirrors store.ts:122-136): coerceMemEntry re-derives
-  // meta.filePath from the validated key (Pass 1), so it's lexically inside the
-  // vault — but the filesystem entry at that path can still be a symlink a
-  // teammate planted via the org vault's `git pull` (the org vault is a shared
-  // repo, and `git pull` preserves symlinks). The lexical path check does NOT
-  // detect symlinks, so without this guard readFileSync(meta.filePath) below
-  // follows the link and reads the target into `raw`, and writeFileSync
-  // (meta.filePath, ...) further down follows it and CLOBBERS the target — the
-  // same planted-symlink write-escape Pass 1 closed for store_memory, missed on
-  // the parallel update path. lstatSync stats the entry itself (not the target)
-  // → a symlink reports isFile()=false and is rejected regardless of what it
-  // points at. ENOENT (the file was removed since the index loaded) falls
-  // through to the readFileSync, which throws a clear error.
-  try {
-    if (!fs.lstatSync(meta.filePath).isFile()) {
-      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) — refusing to follow a possible planted link in the shared org vault.`);
-    }
-  } catch (e: any) {
-    if (!e || e.code !== 'ENOENT') throw e; // ENOENT = file removed since load, fine
-  }
+  // Symlink containment (mirrors store.ts:122-136): meta.filePath is re-derived
+  // from the validated key (Pass 1), so it's lexically inside the vault — but the
+  // entry at that path can still be a symlink a teammate planted via the org
+  // vault's `git pull` (the org vault is shared; `git pull` preserves symlinks).
+  // assertRegularFile lstats the entry itself (a symlink reports isFile()=false →
+  // throws the same "not a regular file" error the inlined guard threw), so the
+  // readFileSync + writeFileSync below never follow a planted link and clobber its
+  // target — the write-escape Pass 1 closed for store_memory, missed here until
+  // Pass 5. ENOENT (file removed since load) is let through to readFileSync, which
+  // throws a clear error. See assertRegularFile in vault-scan.ts.
+  assertRegularFile(meta.filePath, key);
 
   const raw = fs.readFileSync(meta.filePath, 'utf8');
   const parsed = parseFrontmatter(raw);

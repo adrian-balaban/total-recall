@@ -16048,9 +16048,9 @@ function appendJournal(action, key, title) {
   const journalPath = path4.join(PERSONAL_VAULT, "journal", `${today}.md`);
   ensureDir(path4.dirname(journalPath));
   try {
-    if (fs4.lstatSync(journalPath).isSymbolicLink()) return;
-  } catch (e) {
-    if (e && e.code !== "ENOENT") throw e;
+    assertRegularFile(journalPath, key);
+  } catch {
+    return;
   }
   const entry = `
 - ${(/* @__PURE__ */ new Date()).toISOString()} [${action}] **${title}** (\`${key}\`)
@@ -16435,13 +16435,7 @@ function updateMemory(args) {
   const { key, content, tags, importanceScore, sessionId } = args;
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
-  try {
-    if (!fs6.lstatSync(meta2.filePath).isFile()) {
-      throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
-    }
-  } catch (e) {
-    if (!e || e.code !== "ENOENT") throw e;
-  }
+  assertRegularFile(meta2.filePath, key);
   const raw = fs6.readFileSync(meta2.filePath, "utf8");
   const parsed = parseFrontmatter(raw);
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -16511,7 +16505,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.19" : null.version;
+var PLUGIN_VERSION = true ? "1.0.20" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   { capabilities: { tools: {} } }
