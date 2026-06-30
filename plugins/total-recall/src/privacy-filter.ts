@@ -51,7 +51,17 @@ export function sanitizeAllowedDomains(list: unknown): string[] {
 // "yourcompany.com" as a *prefix* of the host and fails to exclude it — a real bypass.
 // Comparing the whole host (=== d || endsWith('.' + d)) closes it and is fail-closed
 // when the allowlist is empty (every email is non-allowlisted → blocked).
-export const EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+//
+// The host class includes non-ASCII (IDN) chars (` -￿`): an ASCII-only host
+// class `[A-Za-z0-9.-]+` never matched `user@münchen.de` / `kunde@exämple.com`, so a
+// personal email at an internationalized host sailed past findSuspiciousEmail and the
+// filter didn't block it. The range is the BMP above ASCII — covers Latin-with-
+// diacritics, Cyrillic, CJK, Arabic (the realistic IDN hosts); excludes ASCII
+// punctuation (comma/quotes/brackets stay out, so `user@example.com,` does not drag
+// the comma into the host). The local part stays ASCII (personal emails at IDN hosts
+// are the realistic leak shape; quoted-unicode locals are not). The host still flows
+// through isAllowedEmail, so an allowlisted IDN domain (e.g. `münchen.de`) is honored.
+export const EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.\u00A0-\uFFFF-]+\.[A-Za-z0-9\u00A0-\uFFFF-]{2,})/g;
 
 export function isAllowedEmail(host: string, allowedDomains: string[]): boolean {
   if (!allowedDomains.length) return false; // fail-closed

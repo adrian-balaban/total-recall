@@ -5,7 +5,7 @@ function sanitizeAllowedDomains(list) {
     (d) => typeof d === "string" && d.length > 0 && d.includes(".") && !d.startsWith(".") && !d.endsWith(".")
   );
 }
-var EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g;
+var EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.\u00A0-\uFFFF-]+\.[A-Za-z0-9\u00A0-\uFFFF-]{2,})/g;
 function isAllowedEmail(host, allowedDomains) {
   if (!allowedDomains.length) return false;
   const h = host.toLowerCase();
