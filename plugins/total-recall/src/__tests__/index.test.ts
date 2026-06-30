@@ -1350,6 +1350,30 @@ describe('store_memory — duplicate key protection', () => {
     expect((raw3.match(/sess-a/g) || []).length).toBe(1);
     expect((raw3.match(/sess-b/g) || []).length).toBe(1);
   });
+
+  it('force=true caps sessions at the last 50 (mirrors update_memory)', async () => {
+    // store_memory(force=true) dedupe-merges carried-over sessions with the current
+    // sessionId — without the .slice(-50) it grew unbounded, violating the documented
+    // "capped at 50" invariant on this write path (#2). 2-digit padded IDs are
+    // collision-free for substring checks (sess-01 is not a substring of sess-10..51).
+    let filePath = '';
+    result(await callTool('store_memory', {
+      title: 'Cap Test', content: 'V1', tags: [], category: 'knowledge', sessionId: 'sess-01',
+    }));
+    for (let i = 2; i <= 51; i++) {
+      const sid = 'sess-' + String(i).padStart(2, '0');
+      const r = result(await callTool('store_memory', {
+        title: 'Cap Test', content: 'V' + i, tags: [], category: 'knowledge', sessionId: sid, force: true,
+      }));
+      filePath = r.filePath;
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    // Oldest dropped, most-recent kept.
+    expect(raw).not.toContain('sess-01');
+    expect(raw).toContain('sess-51');
+    // Exactly 50 session entries persisted (sess-02 .. sess-51).
+    expect((raw.match(/sess-\d{2}/g) || []).length).toBe(50);
+  });
 });
 
 // ─── updateMemory: org author protection ─────────────────────────────────────

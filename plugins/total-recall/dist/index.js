@@ -16253,7 +16253,7 @@ function storeMemory(args) {
   const sessions = [.../* @__PURE__ */ new Set([
     ...preservedSessions ?? [],
     ...sessionId ? [sessionId] : []
-  ])];
+  ])].slice(-50);
   const fm = {
     title,
     tags,
@@ -16554,7 +16554,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.29" : null.version;
+var PLUGIN_VERSION = true ? "1.0.30" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

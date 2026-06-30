@@ -157,11 +157,14 @@ export function storeMemory(args: any): any {
   const now = new Date().toISOString();
   // Dedupe-merge the carried-over session history with the current session. Like
   // update_memory, keep only the unique set (order: prior then current) so a
-  // force-overwrite extends the history rather than wiping it.
+  // force-overwrite extends the history rather than wiping it. Cap at the last 50
+  // (mutate.ts:49) — repeated force-overwrites with distinct session IDs would grow
+  // `sessions` without bound otherwise, violating the documented "capped at 50"
+  // invariant on this write path too.
   const sessions = [...new Set([
     ...(preservedSessions ?? []),
     ...(sessionId ? [sessionId] : []),
-  ])];
+  ])].slice(-50);
   const fm: MemoryFrontmatter = {
     title,
     tags,
