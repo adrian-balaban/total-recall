@@ -220,7 +220,7 @@ Four implementations share the "total-recall" name or solve the same problem. He
 | | **This plugin** | **strvmarv** | **davegoldblatt** | **thedotmack** |
 |---|---|---|---|---|
 | Hooks | SessionStart, PostToolUse, PreCompact | UserPromptSubmit | SessionStart, PreCompact | 5-stage pipeline |
-| Skills | 1 (memory-workflow) + `install.sh` setup script | Auto-discovered | 10 slash commands | 1 (mem-search) |
+| Skills | 2 (memory-workflow, review-fix-ship) + `install.sh` setup script | Auto-discovered | 10 slash commands | 1 (mem-search) |
 | Auto-capture | LLM extracts 0–3 learnings at PreCompact | Compaction + decay | PreCompact timestamp only | Captures everything automatically |
 | Token injection | Memory index + open questions at SessionStart | Pinned tier (always) + Hot tier (4 000-token budget) | CLAUDE.local.md (~1 500 words) | Filtered search results |
 
