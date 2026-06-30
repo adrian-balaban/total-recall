@@ -1,0 +1,268 @@
+# total-recall plugin — review of improvements & fixes
+
+Review of `plugins/total-recall/` (v1.0.28). No code changes made — this is a findings list only.
+Each finding was adversarially verified against the actual source (file:line cited). Spot-checked
+by the reviewer: #1, #2, #3, #6 all confirmed in code.
+
+31 confirmed findings: 0 critical, 1 high, 8 medium, 22 low.
+
+Findings are sorted by severity. "Verify" lines are the adversarial verifier's notes (confidence +
+refinements/corrections to the original finding).
+
+---
+
+## HIGH
+
+### 1. Hooks invoke `node` directly with no PATH resolution — silent failure on nvm-only systems
+- File: `hooks/scripts/load-memory-index.sh:15,50` (also `pull-org-vault.sh:12`, `sync-org-memory.sh:23,98,103`, `extract-and-store-memories.sh:16,57`, `load-open-questions.sh:32`)
+- Category: bug / infra
+- The `statusline.sh` PATH fix (commit 5827d46) added an nvm-aware `node` resolver (lines 40–49) because Claude Code spawns subprocesses with a minimal PATH that excludes nvm's shim dir. **None of the hook scripts have that resolver** (grep for `command -v node`/`nvm`/`NODE_BIN` under `hooks/scripts/` returns nothing). On an nvm-only install launched from a stripped-PATH context (desktop app, IDE launcher), `node` is not found. `load-memory-index.sh` degrades via `||` fallbacks into emitting `{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":""}}` — the injected memory index (the plugin's core feature) silently never reaches Claude. Worse failure mode than an abort: it looks successful.
+- Fix: Extract `statusline.sh`'s resolver (lines 40–49) into a shared `hooks/scripts/_resolve-node.sh`; source it at the top of every hook that calls `node`, assign `NODE_BIN`, replace bare `node` with `"$NODE_BIN"`. Alternative: prepend a PATH-fix block to each hook.
+- Verify (high): All cited call sites confirmed. Mechanism correction: hooks do NOT abort under `set -euo pipefail` (the `||` fallbacks prevent it) — they emit *empty* `additionalContext`, which is harder to notice. Conclusion unchanged.
+
+---
+
+## MEDIUM
+
+### 2. `store_memory` force-overwrite does not cap `sessions` at 50 (uncapped growth)
+- File: `src/tools/store.ts:161-164` (vs correct `src/tools/mutate.ts:49`)
+- Category: bug / correctness
+- `store_memory(force=true)` dedupe-merges `preservedSessions` with `sessionId` (comment says it mirrors `update_memory`) but omits the `.slice(-50)` cap that `update_memory` applies. Repeated force-overwrites with distinct session IDs grow the `sessions` array without bound, violating the documented "sessions capped at 50" invariant on this write path.
+- Fix: Append `.slice(-50)` to match `mutate.ts:49`:
+  `const sessions = [...new Set([...(preservedSessions ?? []), ...(sessionId ? [sessionId] : [])])].slice(-50);`
+- Verify (high): Confirmed `store.ts:161-164` has no slice; `mutate.ts:49` does. One-liner fix is correct.
+
+### 3. Fire-and-forget `embedAndUpsert` is lost on SIGTERM/SIGINT — vectors for last-write memories never land, no backfill on boot
+- File: `src/embeddings.ts:56-60` (also `src/index.ts:14-15`, `src/persistence.ts:193-208`, `src/vault-scan.ts:201-207`)
+- Category: bug / concurrency
+- `store_memory`/`update_memory` call `embedAndUpsert(key, content)` fire-and-forget (`embed().then(vec => { if (vec) upsertVector(...) }).catch(()=>{})`). On SIGTERM/SIGINT, `index.ts` runs `flushPending(); process.exit(0)`. `flushPending` only writes `memIndex` + `invertedIndex` synchronously — it does NOT await in-flight embed/upsert promises. `process.exit(0)` kills the process before `upsertVector` runs. On next boot `reconcileIndex` only *deletes* vectors for vanished `.md` files; there is no backfill for keys present in `memIndex` but missing from `vec_memories`. Result: a permanent hole in the vector index (memory findable via TF-IDF but invisible to hybrid/vector search) — the same silent-drop class the v1.0.28 concurrent-load fix addressed, but via the exit path. `ARCHITECTURE.md:238`'s "no changes are lost" claim is false for the vector store.
+- Fix: (a) Track pending embed promises in a module-level `Set` in `embeddings.ts` (push in `embedAndUpsert`, remove in `.finally`); add `flushEmbeddings()` awaited with a short timeout before `flushPending` on the SIGTERM/SIGINT path. (b) More robustly, add a boot-time backfill in `reconcileIndex` that upserts vectors for `memIndex` keys missing from `vec_memories` (rate-limited/lazy). Implement both — (b) also covers the silent null-skip case (transient model-load failure cached as null at `embeddings.ts:36-39`, no retry).
+- Verify (high): All file:line confirmed. The `beforeExit` path (index.ts:16) is already safe (event loop stays alive). Fix needs to cover SIGTERM/SIGINT only; backfill is strictly more robust. Note: SIGTERM test (`index.test.ts:1418-1525`) only asserts `embedAndUpsert` was *called*, not that the vector landed.
+
+### 4. Reads trigger a full inverted-index rebuild + `invertedIndex.json` rewrite
+- File: `src/persistence.ts:144-175` (via `src/state.ts:41-45` `bumpAccess`)
+- Category: performance
+- `bumpAccess()` (on every read: `recall_memory(full=true)`, `get_memories_by_keys`) calls `scheduleSave()`, which unconditionally calls `scheduleIdfRecalc()` → full `rebuildInvertedIndex()` over all `memIndex` + atomic write of `invertedIndex.json`. The inverted index is built from title+tags+contentPreview — none of which change on a read — so the rebuild is pure waste. Any read spaced >3s from the last triggers a full O(N) tokenize + disk write.
+- Fix: Split the save path — `bumpAccess` calls a lighter `scheduleAccessSave()` that writes `index.json` (to persist `accessCount`/`lastAccessed`) WITHOUT `scheduleIdfRecalc()`. Reserve `scheduleIdfRecalc()` for write paths (`store.ts:201`, `mutate.ts:83/103/113`). Alternative: gate `scheduleIdfRecalc()` on a `dirtyTokens` flag set only by store/update/delete/reconcile.
+- Verify (high): Real waste, bounded by debounce; not a correctness issue. Split-fix is sound.
+
+### 5. `pull-org-vault.sh` — security-critical git-clone hook has zero test coverage
+- File: `src/__tests__/hook-scripts.test.ts:1-316`
+- Category: test
+- `hook-scripts.test.ts` covers load-memory-index/build-memory-index/load-open-questions/extract-and-store-memories/install.sh but NOT `pull-org-vault.sh`, which does `gh repo clone`/`git clone` of a remote URL into the user's home and carries security-critical defenses: `GIT_CONFIG_KEY protocol.ext.allow=never` (ext:: command-exec defense), `--no-recurse-submodules`, https://|git@ URL validation, `GIT_TERMINAL_PROMPT=0`. None are asserted. A regression dropping `protocol.ext.allow=never` or `--no-recurse-submodules` would pass CI silently. The e2e test invokes `sync-org-memory.mjs` directly, never `pull-org-vault.sh`.
+- Fix: Add spawn-based tests: (1) stub `gh`/`git`, assert exit 0 with `{continue:true}`+hookSpecificOutput when `orgRepo` unset; (2) assert skip message for `file://`/local-path orgRepo; (3) assert `GIT_CONFIG_KEY_0=protocol.ext.allow` exported; (4) assert `--no-recurse-submodules` passed to `git clone`.
+- Verify (high): Defenses at `pull-org-vault.sh:22-25,29,40-42,49/50/65`. Tests reasonable, mirror existing pattern.
+
+### 6. Docs claim privacy filter blocks pronouns and phones; code removed those blockers
+- File: `ARCHITECTURE.md:317-318` (also `CLAUDE.md:65`, `README.md:18,143`)
+- Category: docs
+- All four doc surfaces state the org-sync privacy filter blocks "personal pronouns, and phone numbers." But `src/privacy-filter.ts:12-15` explicitly removed both ("both had false-positive rates high enough to block legitimate org memories"). Tests correctly exercise only secrets + emails. A user relying on the docs believes pronouns/phones are scrubbed before push when they are not — a real privacy-expectation gap.
+- Fix: Update all four doc surfaces to state the filter blocks secret tokens + email addresses only (fail-closed), noting pronouns/phones were intentionally removed for FP reasons. Add a regression test asserting a body with pronouns/phones is NOT blocked.
+- Verify (high): Four drift surfaces confirmed. Not exploitable (removed blockers had high FP rates; mutual personal/org tag exclusion is the real PII guard) but a real expectation gap.
+
+### 7. Hybrid RRF search path in `recall.ts` is never exercised end-to-end
+- File: `src/__tests__/index.test.ts:66-75` (mock), `src/tools/recall.ts:48-50` (re-filter)
+- Category: test
+- `index.test.ts` mocks `embed→null` / `isVectorAvailable→false`, so `recall.ts`'s hybrid branch (RRF fusion, the `excludeJournal` re-filter after RRF, minScore on fused scores) is never executed. `rrf.test.ts` only unit-tests the RRF primitive. A regression deleting the 3-line `recall.ts:48-50` re-filter would pass the entire suite while leaking journal entries through hybrid search (the documented gotcha).
+- Fix: Mock `embed()` to return a real vector and `searchVector` to return a journal-key entry; assert `recall_memory({hybrid:true, excludeJournal:true})` does NOT return it. Add a minScore test on the fused (tiny RRF) scale.
+- Verify (high, sev adjusted high→medium): Runtime code is correct today; pure test-coverage gap. Hybrid also requires optional deps many users lack.
+
+### 8. LRU cache TTL expiry is never tested
+- File: `src/__tests__/index.test.ts:1140-1158` (only maxSize eviction)
+- Category: test
+- `index.test.ts:1140` tests only the `maxSize` eviction path. The TTL path (`lru-cache.ts:11` `Date.now() > entry.expiry`, `:33` `expiry: Date.now() + ttlMs`; `contentCache` ttlMs=30min) has no test. A regression dropping the expiry check would pass every test.
+- Fix: Use `vi.useFakeTimers()`+`setSystemTime`: prime `contentCache`, advance past 30min, assert a subsequent get returns `undefined` (miss). Mirrors `ebbinghaus.test.ts:93`.
+- Verify (high): Genuine test gap; no live bug. Staleness matters when `.md` files are edited outside update/delete.
+
+### 9. `install.sh --vector` adds optional deps to `dependencies` (npm default), breaking the optional-deps invariant if committed
+- File: `install.sh:417`
+- Category: maintainability / infra
+- Step 7 runs `npm install @huggingface/transformers sqlite-vec better-sqlite3 && npm run build`. These are in `package.json` `optionalDependencies` (lines 31-35) so the bundle stays externalized and the plugin loads without them. `npm install <pkg>` (npm 7+) defaults to `--save`, moving/duplicating them into `dependencies`. If the maintainer ever commits the locally-mutated `package.json`, consumers' `claude plugin update` would treat them as required — defeating graceful degradation.
+- Fix: Use `npm install --no-save ...` (cleanest; leaves `package.json` untouched since deps are already declared in `optionalDependencies`) or `--save-optional`. Add a pre-commit check rejecting `package.json` dependency additions.
+- Verify (high): Not a runtime bug today (clean tree); real foot-gun with concrete consumer-install failure consequences.
+
+---
+
+## LOW
+
+### 10. `indexFile` resets `created`/`updated` to now on every reconcile for files missing those frontmatter fields
+- File: `src/vault-scan.ts:269-270`
+- Category: bug / correctness
+- `indexFile` uses `created: fm.created ?? now` / `updated: fm.updated ?? now`. For legacy/hand-edited/teammate-pushed org files lacking those fields, `created` drifts to the boot timestamp on every reconcile (silent data-loss of original creation date) and `updated` drifts to now (defeats `since`/timeline date filters — these files always appear "recently updated"). Unlike `accessCount`/`lastAccessed` (preserved from `existing` on lines 276-277), `created`/`updated` are NOT preserved from the prior index entry.
+- Fix: `created: fm.created ?? existing?.created ?? now,` and `updated: fm.updated ?? existing?.updated ?? now,` (mirrors lines 276-277).
+- Verify (high): Claim 3 (perpetual max-retention) is inaccurate — `lastAccessed` IS preserved (line 277) so Ebbinghaus decay does progress. Core data-loss claim holds.
+
+### 11. Doc drift: CLAUDE.md references a `since` date filter in `list_memories` that does not exist
+- File: `CLAUDE.md:103` (also comments `src/dates.ts:38`, `src/tools/recall.ts:53`)
+- Category: docs
+- CLAUDE.md "Key Gotchas" states "`since` date filter in `list_memories` silently excludes memories with a missing `updated` field." But `list_memories` has no `since`/`before` params (schema `server.ts:88-97` is only `{category, tag, limit, offset}`; impl `query.ts:8-20`). The since-filter behavior lives in `recall_memory`/`search_index`/`get_timeline`.
+- Fix: Remove/correct the gotcha — apply the since-filter note to `recall_memory`/`search_index`/`get_timeline` instead. Fix the "mirrors list_memories" comments in `dates.ts:38` and `recall.ts:53`.
+- Verify (high): Confirmed drift + misleading code comments.
+
+### 12. Privacy filter does not scan arbitrary/custom frontmatter keys — secret or email in a non-standard key evades the org-sync gate
+- File: `src/privacy-filter.ts:103-115`
+- Category: security
+- `privacyCheck` reads only `data.title/author/tags/sessions` + body `content`. `parseFrontmatter` populates `data` with ALL keys, including arbitrary custom keys a teammate can push via the shared org vault (e.g. `apikey: ghp_…`, `contact: me@personal.com`). Those custom keys are in `data` but never concatenated into the scanned `text`, and are NOT part of `content`. So a secret/personal email planted in a custom frontmatter key passes the filter. Reachable via `update_memory` which spreads `...parsed.data` (mutate.ts:51-52), preserving the custom key, then re-commits via the PostToolUse sync.
+- Fix: Scan the full raw frontmatter text (or `JSON.stringify(data)`, or join all `Object.values(data)`) in addition to the named fields. `sync-org-memory.mjs:245` already has `raw` available to pass in.
+- Verify (high): Kept low. `store_memory` constructs `fm` from only known fields (would STRIP custom keys); only `update_memory` preserves them. Realistic vector: teammate pushes secret-laden file directly via git (bypassing filter) → local user updates → sync re-commits. Incremental harm real but marginal.
+
+### 13. `EMAIL_RE` host class excludes non-ASCII/IDN domains — personal emails at internationalized hosts evade the org-sync filter
+- File: `src/privacy-filter.ts:54`
+- Category: security
+- `EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.-]+\.[A-Za-z]{2,})/g` restricts the host to ASCII. A personal email at `user@münchen.de` / `user@exämple.com` is not matched at all, so `findSuspiciousEmail` never returns it and `privacyCheck` doesn't block it. Fail-closed only holds for strings the regex recognizes as emails.
+- Fix: Broaden the host class to include non-ASCII (e.g. `[^\s@<>"']+` for the host, then route through `isAllowedEmail`), or add a Unicode-aware pattern with the `/u` flag, still passing the host through `isAllowedEmail` to preserve allowlist semantics.
+- Verify (high): Confirmed bypass. Narrow edge (most leaks are ASCII gmail/company, which ARE caught).
+
+### 14. `embeddings.ts` comment claims `upsertVector` logs transient failures — it does not; failures are silently swallowed
+- File: `src/embeddings.ts:50-60` (also `src/vectorStore.ts:37-44`, `src/state.ts:26-29`)
+- Category: docs / concurrency
+- Comment (lines 50-55) states "a transient embed or upsert failure is logged via the upsertVector path." False: `upsertVector` has no try/catch and no logging; a throw propagates to `embedAndUpsert`'s `.catch(() => {})` (line 59) which silently swallows it with no `recordError`, no stderr. Combined with the absence of boot backfill (#3), a single transient sqlite error permanently holes the vector index with zero observability — `get_stats.vectorSearchEnabled` still reports true.
+- Fix: `.catch(e => recordError(`embedAndUpsert(${key}): ${e.message}`))` instead of `.catch(() => {})`. `recordError` (state.ts:26-29) is the right sink (bounded, surfaced via `get_stats.recentErrors`).
+- Verify (high): Confirmed. "Permanently holes" mildly overstated — a later store/update at the same key re-attempts INSERT OR REPLACE — but the false-comment + silent-swallow claim is accurate.
+
+### 15. Cross-process lost-update: two concurrent MCP sessions clobber each other's `index.json` flush
+- File: `src/persistence.ts:183-208`
+- Category: concurrency
+- `memIndex`/`index.json` is shared file-backed state with no file lock / CAS. Multiple Claude Code windows each spawn their own total-recall stdio process; both load `memIndex` at boot, mutate in memory, and `flushPending` via `atomicWrite` (write-tmp + rename) on exit. Last rename wins; the earlier process's flush is silently discarded. Runtime-only fields (`accessCount`, `lastAccessed`) are NOT re-derivable from disk and are lost. `ARCHITECTURE.md:238` ("no changes are lost") overstates the guarantee.
+- Fix: Document the single-writer assumption in CLAUDE.md/ARCHITECTURE.md. Real fix: persist `accessCount`/`lastAccessed` into `.md` frontmatter on flush (making them disk-durable like `sessions`), or use a `flock`/lockfile around `index.json` writes.
+- Verify (medium): Correction — `sessions` IS disk-durable (written to frontmatter by `mutate.ts:65,72`, read back by `reconcileIndex`). Only `accessCount`/`lastAccessed` are truly at risk (soft Ebbinghaus signals). Impact limited.
+
+### 16. Stale vector row persists after `delete_memory` if process exits before fire-and-forget `deleteVector` resolves
+- File: `src/tools/mutate.ts:102`
+- Category: concurrency
+- `delete_memory` calls `deleteVector(VECTORS_DB, key).catch(()=>{})` fire-and-forget, then `delete memIndex[key]` + `scheduleSave`. If the process exits before `deleteVector` resolves, the row persists in `vec_memories`. On next boot `reconcileIndex` builds `before` from `memIndex` (which no longer has the key) so its loop never considers the stale vector — never deleted. Harmless to results (recall.ts:80-81 filters `if (!meta) return null`), but sqlite bloat / wasted search work. Same fire-and-forget-without-flush class as #3.
+- Fix: Same as #3 (track pending `deleteVector` promises, await in `flushPending`). Cheaper: in `reconcileIndex`, sweep `vec_memories` for keys absent from `memIndex` and delete them on boot.
+- Verify (high): Exact lines confirmed. The delete case is the one worth fixing (store/update self-heals on next content update; delete does not).
+
+### 17. `fs.realpathSync(base)` re-resolved once per vault file during scan
+- File: `src/vault-scan.ts:227-229`
+- Category: performance
+- `indexFile()` calls `fs.realpathSync(base)` for every `.md` file, but `base` is one of two constants (PERSONAL_VAULT/ORG_VAULT) — its realpath is identical for every file in the walk. N redundant lstat+readlink syscalls. (`realpathSync(filePath)` at line 228 is per-file and necessary.)
+- Fix: Memoize the realpath of each vault root at module scope (or hoist into `reconcileIndex` and pass `realBase` into `indexFile`).
+- Verify (high): Exact location confirmed.
+
+### 18. `invertedIndex.json` loaded at boot is immediately discarded by `rebuildInvertedIndex`
+- File: `src/persistence.ts:139-142` (also `src/server.ts:253-258`, `src/tfidf.ts:26`)
+- Category: performance
+- `loadIndexes()` reads + JSON.parses `invertedIndex.json` into the singleton. `main()` then calls `rebuildInvertedIndex()`, which clears the singleton and rebuilds from `memIndex`. Because `main()` is synchronous until `server.connect`, no query can arrive between load and rebuild — the load is dead I/O at every boot. Additionally `scheduleSave()` at `server.ts:258` schedules a SECOND rebuild via `scheduleIdfRecalc` at +3s, so the index is built twice at boot.
+- Fix: Drop `loadIndex(invertedIndex, INVERTED_INDEX_PATH)` from `loadIndexes()`. After the sync `rebuildInvertedIndex()`, also write `invertedIndex.json` + `buildIndexCache()` so the +3s `scheduleIdfRecalc` has no work (or set a freshness flag so it no-ops).
+- Verify (high): The +3s recalc isn't entirely wasted — it performs the first persistence of `invertedIndex.json` + `.index-cache.txt` at boot (which the sync rebuild skips). Only the rebuild computation is redundant.
+
+### 19. Boot `reconcileIndex` always full-re-reads every `.md`, ignoring `index.json` contentPreview
+- File: `src/vault-scan.ts:231`
+- Category: performance
+- `reconcileIndex` calls `indexFile` for every `.md`, which does `readFileSync` of the FULL file + `parseFrontmatter`, even though `index.json` already carries `contentPreview`/`title`/`tags`/`updated`/`tokenEstimate`. The reconcile is needed to surface new/deleted/externally-edited files, but unchanged files are re-read entirely to recompute a 500-char preview. No mtime/size stored to skip unchanged files. Dominant boot cost, linear in file count + size.
+- Fix: Store `mtimeMs`/`size` in `MemoryMetadata` (types.ts), populate via `fs.statSync` in `indexFile`. Stat the file; if mtime+size match the existing entry, skip `readFileSync` and keep cached `contentPreview`/`tokenEstimate` (still re-validate path containment). Caveat: mtime is filesystem-local, so the skip only helps same-machine session-to-session boots (not after a git pull).
+- Verify (high): Downgraded medium→low — pure perf optimization; vaults are personal-scale.
+
+### 20. `list_memories` and `get_timeline` re-sort the full filtered set on every page
+- File: `src/tools/query.ts:10-19,82-89`
+- Category: performance
+- Each pagination request re-filters and re-sorts the whole `memIndex`. The sort comparator constructs two `new Date` objects per comparison, so an N=2000 vault paginated 50-at-a-time does ~2000·log(2000) Date allocations per page.
+- Fix: Schwartzian transform — map to `[ms, m]`, sort by `ms`, map back. Or maintain a by-`updated` sorted view invalidated on writes.
+- Verify (high): Real but low-impact; not a bug.
+
+### 21. `perfSamples.shift()` and `errors.shift()` are O(N) per call after the cap
+- File: `src/state.ts:26-29` (also `src/server.ts:237-238`)
+- Category: performance
+- After warmup every tool call pays O(1000) to drop one element (`shift` re-indexes). Classic O(N²) accumulation over a long-lived session. `recordError` uses the same pattern.
+- Fix: Ring buffer (head index modulo maxSize), or push/pop from the end (reverse semantics) for O(1). Same for `errors`.
+- Verify (high): N capped at 1000 (~8KB memmove, sub-microsecond in V8); legitimate micro-optimization, not a bottleneck. `recordError` rarely hits the cap.
+
+### 22. `tfidfSearch` recomputes Ebbinghaus decay per (token, doc) pair instead of once per doc
+- File: `src/tfidf.ts:62-67`
+- Category: performance
+- `computeRetentionStrength` (which calls `daysSince` → `new Date`) is computed inside the inner loop over `entry.docs` for each query token. A doc matching K tokens has decay recomputed K times though importance/lastAccessed/accessCount are constant for the query.
+- Fix: Accumulate raw `tf*idf` scores per doc across all tokens (`scores[doc.key] += score` without decay), then multiply each by `computeRetentionStrength(...)` once after the token loop before sorting. Algebraically identical (decay is a per-doc scalar multiplier).
+- Verify (high): The "changes the math slightly" hedge is WRONG — it's algebraically identical, not an approximation. Drop the hedge.
+
+### 23. `tfidfSearch` sorts all matched docs before caller slices to `limit`
+- File: `src/tfidf.ts:71-73`
+- Category: performance
+- `tfidfSearch` returns the full matched set sorted, then `recall.ts:77,123` slices to `limit` (10/20). A broad query matching most of the vault fully sorts N matches when only top-K are needed. O(N log N) per query vs O(N + limit log limit).
+- Fix: Pass `limit` into `tfidfSearch` and use partial selection (quickselect / size-limit heap) before a final sort of K. Only worth doing beyond a few thousand memories.
+- Verify (high): Arguably invalid as actionable at personal scale (sort of a few hundred numbers is sub-ms, dwarfed by MCP round-trip + hybrid embed cost).
+
+### 24. `hookEventName:'SessionStart'` presence not asserted in hook output tests
+- File: `src/__tests__/hook-scripts.test.ts:71-76`
+- Category: test
+- The documented invariant "additionalContext requires hookEventName:SessionStart" is not enforced by any test. The `load-memory-index.sh` test parses `out.hookSpecificOutput.additionalContext` and asserts the version string, but never asserts `out.hookSpecificOutput.hookEventName === 'SessionStart'`. If `load-memory-index.sh:51` dropped `hookEventName`, the test would pass but Claude Code would silently drop the entire context injection.
+- Fix: Add `expect(out.hookSpecificOutput.hookEventName).toBe('SessionStart')` to the `load-memory-index.sh` test. Note: `build-memory-index.sh` does NOT emit hookSpecificOutput (no parallel assertion there). The `load-open-questions.sh` additionalContext branch (line 37) is entirely untested — add a test exercising it with the same assertion.
+- Verify (high): Two inaccuracies in original fix corrected (build-memory-index emits no hookSpecificOutput; OQ additionalContext branch is entirely untested, not merely missing the assertion).
+
+### 25. `sessions` cap of 50 (`mutate.ts slice(-50)`) has no test
+- File: `src/tools/mutate.ts:49`
+- Category: test
+- The invariant is only half-tested: `index.test.ts:1330` tests dedup + preservation across `force=true`, but no test supplies >50 sessions to verify the cap truncates to the last 50. A regression changing `.slice(-50)` to `.slice(0,50)` (drops most-recent instead of oldest) or removing the slice would pass.
+- Fix: Pre-seed a memory with 51 session IDs and assert the persisted array has exactly 50, keeping the most recent (51st).
+- Verify (high): Sound. Incidental: confirms #2 — `store.ts:161-164` lacks the slice entirely.
+
+### 26. Integration test stubs org config with a fake `.git` dir; never exercises org author guard / path traversal / mutual-exclusion over real transport
+- File: `src/__tests__/integration/server.integration.test.ts:44-57`
+- Category: test
+- `server.integration.test.ts` stubs the org-config guard with `fs.mkdirSync(...org/.git)` and only checks happy-path store/recall/search/list. The org author guard, path-traversal rejection, and mutually-exclusive tags are tested only in the mocked-transport `index.test.ts`, never over the real stdio wire. A dispatch regression specific to the real server path is barely covered.
+- Fix: Add integration cases (over stdio): org store blocked by author guard (pre-seed org file authored by 'other-user', assert `store_memory` with `force` returns isError containing 'other-user'); path-traversal category rejected; mutually-exclusive-tag rejection.
+- Verify (high): Test gap, not code defect. Reasonable fix.
+
+### 27. `install.sh --standalone` hook command strings word-split on spaces in `$PLUGIN_ROOT` and drift from `hooks.json`
+- File: `install.sh:294`
+- Category: bug / infra
+- The standalone hook-wiring node block builds `'bash ' + plugin + '/hooks/scripts/' + p`. A `$PLUGIN_ROOT` containing spaces word-splits (`bash /Users/My` is the script, `Name/plugins/...` an argument). `hooks.json` avoids this with `${CLAUDE_PLUGIN_ROOT}/hooks/scripts/<script>.sh` (no `bash` prefix, single-token variable). CLAUDE.md warns to "keep that block in sync with hooks/hooks.json" — but the two differ in both the `bash` prefix and the path form.
+- Fix: Drop the `bash ` prefix and use `${CLAUDE_PLUGIN_ROOT}/hooks/scripts/<script>.sh` to match `hooks.json` exactly (scripts have shebangs + exec bits, so direct invocation works). Removes space-fragility.
+- Verify (high): Exact line confirmed.
+
+### 28. `atomicWrite` in `sync-org-memory.mjs` and `store-learning.mjs` leaks `.tmp` file on SIGTERM between write and rename
+- File: `scripts/sync-org-memory.mjs:65-73` (also `hooks/scripts/store-learning.mjs:28-36`)
+- Category: bug / infra
+- `atomicWrite` does `writeFileSync(tmp)` then `renameSync(tmp, p)` with no `SIGTERM`/`SIGINT`/`exit` trap to remove `$tmp` if killed in the window between. `sync-org-memory.mjs` is backgrounded by the PostToolUse hook and the comment at line 62-64 acknowledges "a SIGTERM mid-write is a real risk." Killed processes leave `index.json.tmp.<hex>` / `<slug>.md.tmp.<hex>` forever; accumulate one per interrupted sync. Not a correctness bug (rename is atomic), but a slow leak.
+- Fix: Register `process.on('SIGTERM'/'SIGINT', () => { try { fs.existsSync(tmp) && fs.unlinkSync(tmp); } catch{} process.exit(1); })` before writeFileSync, or wrap in `try/finally`. Mirrors the `trap cleanup EXIT` pattern in `build-memory-index.sh:35-36`.
+- Verify (low): Accurate, honestly scoped. Narrow window; leaked files are inert.
+
+### 29. CLAUDE.md cites "208 unit/component tests" but the suite has 292
+- File: `CLAUDE.md:36`
+- Category: docs
+- The pre-commit checklist states `npm test` runs "208 unit/component tests." Actual: 292 passing tests across 15 files. Drifted by ~84 over the hardening rounds. A contributor may believe tests were lost or the suite is misconfigured.
+- Fix: Drop the hardcoded count; replace with "all unit/component tests (see `npm test` output)" so it cannot drift again.
+- Verify (high): Confirmed 292 vs 208.
+
+### 30. README comparison table claims "Skills | 1 (memory-workflow)" but 2 skills ship
+- File: `README.md:223`
+- Category: docs
+- `skills/` contains TWO skills: `memory-workflow` and `review-fix-ship`. The "1" is stale and understates the surface area.
+- Fix: Update to "2 (memory-workflow, review-fix-ship) + install.sh setup script".
+- Verify (high): Cosmetic drift; no behavior impact.
+
+### 31. `review-fix-ship` skill is entirely undocumented across all docs
+- File: `skills/review-fix-ship/SKILL.md:1`
+- Category: docs
+- A second skill ships (drives a closed review→fix→version-bump→commit→push loop until git status is clean) but is mentioned nowhere in README/CLAUDE.md/ARCHITECTURE.md. Works via auto-discovery at runtime, but a user reading the docs would never know it exists, and a maintainer could delete it as apparently-orphaned. `plugin.json` has no `skills` field (auto-discovered).
+- Fix: Add a short Skills section to README listing both skills; reference `review-fix-ship` in CLAUDE.md alongside the existing `memory-workflow` reference.
+- Verify (high): Downgraded medium→low (works via auto-discovery; impact is doc accuracy only).
+
+---
+
+## Suggested fix priority (if/when changes are made)
+
+1. **#1** (high) — hook `node` PATH resolver; silently breaks the core feature on nvm. Same fix class already shipped for statusline.
+2. **#3 + #16** (medium) — fire-and-forget vector ops lost on exit; add `flushEmbeddings()` + boot backfill. Fixes a permanent silent vector-index hole.
+3. **#6, #11, #29, #30, #31** (docs) — doc/code drift batch; cheap, prevents false user expectations.
+4. **#2** (medium, one-liner) — `store.ts` sessions cap.
+5. **#9, #27** (infra) — `install.sh` `--vector` save flag + standalone hook command shape.
+6. **#5, #7, #8, #24, #25, #26** (tests) — close coverage gaps on security-critical hooks, hybrid RRF, LRU TTL, hookEventName, sessions cap, integration invariants.
+7. **#4, #17, #18, #19, #20, #21, #22, #23** (perf) — mostly low-impact micro-optimizations; #4 (read-triggered IDF rebuild) and #18 (dead boot load) are the most worthwhile.
+8. **#10, #12, #13, #14, #15, #28** (low) — minor correctness/security/observability edge cases.
+
+---
+
+## Notes on the review process
+
+- 7 review dimensions (correctness, security, concurrency, performance, tests, infra, docs), each
+  finding adversarially verified against the actual source by an independent agent.
+- The plugin's ARCHITECTURE.md/CLAUDE.md list many already-handled invariants; findings were filtered
+  against that list so documented-and-enforced concerns were not re-reported.
+- Verifiers corrected several inaccuracies in the original findings (noted in each "Verify" line):
+  the headline #1's failure mode is empty-context not abort; #3's `beforeExit` path is already safe;
+  #10's perpetual-max-retention claim is wrong; #15's `sessions` IS disk-durable; #22's fix is
+  algebraically exact, not an approximation; #24's build-memory-index emits no hookSpecificOutput.
+- 0 critical findings. The plugin is well-hardened; most findings are test gaps, doc drift, and
+  low-impact perf/edge cases.

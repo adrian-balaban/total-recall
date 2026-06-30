@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
+
 ORG_VAULT="$HOME/.total-recall/org"
 BRANCH="org-vault"
 CONFIG_FILE="$HOME/.total-recall/config.json"
@@ -9,7 +11,7 @@ CONFIG_FILE="$HOME/.total-recall/config.json"
 # Pass $CONFIG_FILE to node via env, not by interpolating it into the JS string
 # literal (mirrors load-memory-index.sh): a quote/backtick in $HOME would break
 # the readFileSync literal and silently skip org sync. env-pass is injection-safe.
-ORG_REPO=$(CONFIG_FILE="$CONFIG_FILE" node -e "try{process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')).orgRepo||''))}catch{}" 2>/dev/null || echo "")
+ORG_REPO=$(CONFIG_FILE="$CONFIG_FILE" "$NODE_BIN" -e "try{process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')).orgRepo||''))}catch{}" 2>/dev/null || echo "")
 if [ -z "$ORG_REPO" ]; then
   echo '{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Org vault skipped: orgRepo not set in ~/.total-recall/config.json"}}'
   exit 0

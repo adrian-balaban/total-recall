@@ -2,6 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+. "$SCRIPT_DIR/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe; see statusline.sh)
 CACHE="$HOME/.total-recall/.index-cache.txt"
 
 # Plugin version — single-sourced from package.json (same source the MCP server
@@ -12,7 +13,7 @@ PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR/../..}"
 # literal: a single quote or backtick in the install path would break the
 # `require('...')` literal (silent 'unknown' today) and is a JS-injection vector
 # if the path were ever attacker-controlled. env-pass is injection-safe.
-VERSION=$(PLUGIN_ROOT="$PLUGIN_ROOT" node -e "try{process.stdout.write(String(require(process.env.PLUGIN_ROOT+'/package.json').version||'unknown'))}catch{process.stdout.write('unknown')}" 2>/dev/null || echo unknown)
+VERSION=$(PLUGIN_ROOT="$PLUGIN_ROOT" "$NODE_BIN" -e "try{process.stdout.write(String(require(process.env.PLUGIN_ROOT+'/package.json').version||'unknown'))}catch{process.stdout.write('unknown')}" 2>/dev/null || echo unknown)
 
 # Announce the version on every session start, even before any memories exist.
 if [ -f "$CACHE" ] && [ -r "$CACHE" ]; then
@@ -47,5 +48,5 @@ $INDEX_CONTENT"
 # silently dropped (verified against the Claude Code hooks reference). Without it,
 # the injected memory index — the plugin's core feature — never reached Claude.
 # JSON-encode via node (node is this plugin's hard dependency; python3 is not).
-ADDCONTEXT=$(printf '%s' "$INSTRUCTIONS" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))') || ADDCONTEXT='""'
+ADDCONTEXT=$(printf '%s' "$INSTRUCTIONS" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))') || ADDCONTEXT='""'
 echo "{\"continue\":true,\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":$ADDCONTEXT}}"

@@ -12,6 +12,10 @@ import { spawnSync } from 'child_process';
 // that records its argv, isolating the hook's parsing logic from the real git sync.
 
 const REAL_SH = path.resolve(__dirname, '..', '..', 'hooks', 'scripts', 'sync-org-memory.sh');
+// sync-org-memory.sh now sources _resolve-node.sh (nvm/stripped-PATH-safe node resolver,
+// mirroring statusline.sh) — the fake tree must mirror the real layout or `set -e` aborts
+// the script on the missing source. See finding #1 in review-fix.tmp.
+const REAL_HELPER = path.resolve(__dirname, '..', '..', 'hooks', 'scripts', '_resolve-node.sh');
 
 // Stub .mjs: records process.argv.slice(2) (the key + optional --delete) to a file named
 // by TR_HOOK_ARGS_FILE. Lets us assert exactly what the hook invoked without running git.
@@ -80,6 +84,10 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     fs.mkdirSync(path.join(fakeRoot, 'scripts'), { recursive: true });
     fs.copyFileSync(REAL_SH, shPath);
     fs.chmodSync(shPath, 0o755);
+    // Mirror the real scripts/ layout: the .sh sources _resolve-node.sh from its own dir.
+    const helperPath = path.join(fakeRoot, 'hooks', 'scripts', '_resolve-node.sh');
+    fs.copyFileSync(REAL_HELPER, helperPath);
+    fs.chmodSync(helperPath, 0o755);
     fs.writeFileSync(path.join(fakeRoot, 'scripts', 'sync-org-memory.mjs'), STUB_MJS);
     // The .sh backgrounds build-memory-index.sh; keep it a harmless no-op.
     const bmi = path.join(fakeRoot, 'hooks', 'scripts', 'build-memory-index.sh');

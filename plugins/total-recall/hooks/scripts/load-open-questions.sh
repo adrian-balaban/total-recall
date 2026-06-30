@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
+
 PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
 # `|| true` is load-bearing under `set -euo pipefail`: (1) if the personal vault
 # dir is absent (fresh install before any store_memory), find exits non-zero and
@@ -29,7 +31,7 @@ CONTENT=$(cat "$OQ_FILE")
 # hookSpecificOutput REQUIRES hookEventName:"SessionStart" or additionalContext is
 # silently dropped (verified against the Claude Code hooks reference). JSON-encode
 # via node (node is this plugin's hard dependency; python3 is not guaranteed).
-ADDCONTEXT=$(printf '## Ambient Curiosity — Open Technical Questions\n\n%s' "$CONTENT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))' 2>/dev/null) || ADDCONTEXT='""'
+ADDCONTEXT=$(printf '## Ambient Curiosity — Open Technical Questions\n\n%s' "$CONTENT" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.stringify(s)))' 2>/dev/null) || ADDCONTEXT='""'
 # Guard against an empty ADDCONTEXT (node missing/failed): a bare
 # "additionalContext:" in the JSON below would make the hook output unparseable
 # and silently drop the whole SessionStart context. Match load-memory-index.sh.

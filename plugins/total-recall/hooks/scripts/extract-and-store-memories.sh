@@ -8,12 +8,14 @@
 # explicit rebuild_index.
 set -euo pipefail
 
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
+
 # Claude Code passes hook input as JSON on stdin; transcript_path is a common
 # field there (NOT a CLAUDE_TRANSCRIPT_PATH env var — that env var is never set,
 # so the previous version always exited here and PreCompact was a permanent
 # no-op that stored nothing). Read stdin once, parse transcript_path via node.
 HOOK_INPUT=$(cat)
-TRANSCRIPT=$(printf '%s' "$HOOK_INPUT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).transcript_path||"")}catch{}})' 2>/dev/null || echo "")
+TRANSCRIPT=$(printf '%s' "$HOOK_INPUT" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(JSON.parse(s).transcript_path||"")}catch{}})' 2>/dev/null || echo "")
 
 if [ -z "$TRANSCRIPT" ] || [ ! -f "$TRANSCRIPT" ]; then
   echo '{"continue":true}'
@@ -54,6 +56,6 @@ Rules:
 # final {"continue":true}); only stderr is tee'd to the log.
 EXTRACT_LOG="$HOME/.total-recall/.extract.log"
 claude -p "$EXTRACT_PROMPT" < "$TRANSCRIPT" 2>/dev/null \
-  | node "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
+  | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
 
 echo '{"continue":true}'

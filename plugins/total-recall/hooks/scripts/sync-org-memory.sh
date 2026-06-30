@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
+
 # Claude Code delivers the PostToolUse payload as JSON on STDIN, not as argv.
 # The old code read "$1" (always empty here) and then a nonexistent "tool_result"
 # field, so KEY was always empty, the early-return fired, and org sync was a
@@ -20,7 +22,7 @@ HOOK_INPUT=$(cat)
 # Parse via node (node is this plugin's hard dependency; python3 is not guaranteed,
 # so a python3 parser would silently no-op org sync on python3-less systems — the
 # same silent-no-op class the other hooks were fixed to avoid).
-PARSED=$(printf '%s' "$HOOK_INPUT" | node -e '
+PARSED=$(printf '%s' "$HOOK_INPUT" | "$NODE_BIN" -e '
 let s = "";
 process.stdin.on("data", d => s += d).on("end", () => {
   let d = {};
@@ -95,12 +97,12 @@ case "$KEY" in
     if [ "$DELETE_FLAG" = "1" ]; then
       (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        node "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
+        "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     else
       (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        node "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY"
+        "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY"
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     fi
     ;;
