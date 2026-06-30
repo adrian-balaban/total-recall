@@ -22,7 +22,7 @@ vi.hoisted(() => {
 import { loadIndexes, saveNow } from '../persistence.js';
 import { memIndex } from '../state.js';
 import { appendJournal } from '../journal.js';
-import { contentCache } from '../lru-cache.js';
+import { contentCache, LRUCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
@@ -1218,6 +1218,52 @@ describe('LRU cache eviction (>100 entries)', () => {
     }
     const stats = result(await callTool('get_stats'));
     expect(stats.cache.size).toBeLessThanOrEqual(100);
+  });
+});
+
+// ─── LRU cache TTL expiry (#8) ───────────────────────────────────────────────
+// The eviction test above only covers the maxSize path. The TTL path
+// (lru-cache.ts `Date.now() > entry.expiry`) had NO test — a regression dropping
+// the expiry check would pass every test. Exercise it directly on a fresh
+// LRUCache instance (not the shared contentCache singleton) with fake timers so
+// no real-time wait is needed and no other suite is polluted.
+describe('LRU cache TTL expiry (#8)', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('returns a value before TTL expires', () => {
+    const cache = new LRUCache<string, string>(10, 30 * 60 * 1000); // 30 min
+    cache.set('k', 'v');
+    expect(cache.get('k')).toBe('v'); // hit
+  });
+
+  it('returns undefined (miss) after the TTL expires', () => {
+    const cache = new LRUCache<string, string>(10, 30 * 60 * 1000); // 30 min
+    cache.set('k', 'v');
+    // Advance just past the 30-minute TTL. setSystemTime makes Date.now() reflect
+    // the jump (lru-cache.ts reads Date.now() on both set() and get()).
+    vi.setSystemTime(Date.now() + 30 * 60 * 1000 + 1);
+    expect(cache.get('k')).toBeUndefined(); // expired → miss
+  });
+
+  it('counts the expired entry as a miss and drops it from the cache', () => {
+    const cache = new LRUCache<string, string>(10, 1000); // 1s TTL
+    cache.set('k', 'v');
+    vi.setSystemTime(Date.now() + 1001);
+    cache.get('k');
+    const s = cache.stats();
+    expect(s.misses).toBe(1);
+    expect(s.hits).toBe(0);
+    expect(s.size).toBe(0); // expired entry is deleted, not just skipped
+  });
+
+  it('a fresh set() after expiry re-populates the cache (re-insert, not permanent eviction)', () => {
+    const cache = new LRUCache<string, string>(10, 1000);
+    cache.set('k', 'old');
+    vi.setSystemTime(Date.now() + 1001);
+    expect(cache.get('k')).toBeUndefined();
+    cache.set('k', 'new'); // re-inserts at MRU with a fresh expiry
+    expect(cache.get('k')).toBe('new');
   });
 });
 
