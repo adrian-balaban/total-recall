@@ -4,6 +4,7 @@
  */
 import { VECTORS_DB } from './paths.js';
 import { upsertVector } from './vectorStore.js';
+import { recordError } from './state.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[]>) | null> | null = null;
@@ -50,9 +51,13 @@ export async function embed(text: string): Promise<number[] | null> {
 // Fire-and-forget embed → upsert. Centralized so the two write paths (store +
 // update) share one implementation, and so the lazy load, the no-op-when-deps-
 // absent path, and the null-skip when the model returns nothing are owned
-// in one place. The `.catch(() => {})` matches the original inline sites:
-// a transient embed or upsert failure is logged via the upsertVector path
-// (vectorStore.ts) and never blocks the caller's response.
+// in one place. A transient embed or upsert failure (e.g. a sqlite I/O error
+// mid-upsert) is recorded via `recordError` — the bounded sink surfaced through
+// `get_stats.recentErrors` — so a holed vector index is observable rather than
+// silently swallowed. It still never blocks the caller's response. A later
+// store/update at the same key re-attempts INSERT OR REPLACE, so a transient
+// failure does not permanently hole the index; reconcileIndex's boot backfill
+// (vault-scan.ts) closes any pre-existing hole.
 //
 // The promise is tracked in `pendingEmbeds` so flushEmbeddings() — awaited on
 // the SIGTERM/SIGINT exit path (index.ts) before process.exit — can land the
@@ -67,7 +72,7 @@ const pendingEmbeds = new Set<Promise<void>>();
 export function embedAndUpsert(key: string, text: string): void {
   const p = embed(text)
     .then(vec => { if (vec) return upsertVector(VECTORS_DB, key, vec); })
-    .catch(() => {});
+    .catch(e => { recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`); });
   pendingEmbeds.add(p);
   p.finally(() => pendingEmbeds.delete(p));
 }

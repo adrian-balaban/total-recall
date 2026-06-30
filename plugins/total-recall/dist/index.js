@@ -16023,7 +16023,8 @@ var pendingEmbeds = /* @__PURE__ */ new Set();
 function embedAndUpsert(key, text) {
   const p = embed(text).then((vec) => {
     if (vec) return upsertVector(VECTORS_DB, key, vec);
-  }).catch(() => {
+  }).catch((e) => {
+    recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`);
   });
   pendingEmbeds.add(p);
   p.finally(() => pendingEmbeds.delete(p));
@@ -16600,7 +16601,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.41" : null.version;
+var PLUGIN_VERSION = true ? "1.0.42" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

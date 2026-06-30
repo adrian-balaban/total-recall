@@ -227,3 +227,64 @@ describe('embeddings — flushEmbeddings drains pending upserts (#3)', () => {
     gate.resolve!();
   });
 });
+
+// ─── #14: a transient embed/upsert failure is recorded, not silently swallowed ─
+// Before #14, embedAndUpsert's `.catch(() => {})` discarded any upsertVector
+// rejection (e.g. a sqlite I/O error mid-write) with no recordError, no stderr —
+// a holed vector index with zero observability while get_stats still advertised
+// vectorSearchEnabled. The catch now routes through recordError (the bounded sink
+// surfaced via get_stats.recentErrors). A later store/update at the same key
+// re-attempts INSERT OR REPLACE, so this is observability, not a permanent hole.
+
+describe('embeddings — transient upsert failure is recorded (#14)', () => {
+  beforeEach(() => vi.resetModules());
+
+  it('records via recordError when upsertVector rejects', async () => {
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: vi.fn().mockResolvedValue(
+        vi.fn().mockResolvedValue({ data: new Float32Array(384).fill(0.7) })
+      ),
+    }));
+    vi.doMock('../vectorStore.js', () => ({
+      VECTORS_DB: '/tmp/tr-err-test.db',
+      upsertVector: vi.fn(async () => { throw new Error('sqlite I/O'); }),
+      searchVector: vi.fn().mockResolvedValue([]),
+      deleteVector: vi.fn().mockResolvedValue(undefined),
+      listVectorKeys: vi.fn().mockResolvedValue(null),
+    }));
+    const { embedAndUpsert, flushEmbeddings } = await import('../embeddings.js');
+    const { errors } = await import('../state.js');
+    const before = errors.length;
+    embedAndUpsert('knowledge/holed', 'text');
+    await flushEmbeddings();
+    // The fire-and-forget catch ran during the drain; the error is now in the
+    // shared sink with the offending key in the message.
+    const newErrors = errors.slice(before);
+    expect(newErrors.length).toBe(1);
+    expect(newErrors[0]!.msg).toContain('embedAndUpsert(knowledge/holed)');
+    expect(newErrors[0]!.msg).toContain('sqlite I/O');
+  });
+
+  it('records when the embed step itself rejects', async () => {
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: vi.fn().mockResolvedValue(
+        vi.fn().mockRejectedValue(new Error('inference blew up'))
+      ),
+    }));
+    vi.doMock('../vectorStore.js', () => ({
+      VECTORS_DB: '/tmp/tr-err-test.db',
+      upsertVector: vi.fn().mockResolvedValue(undefined),
+      searchVector: vi.fn().mockResolvedValue([]),
+      deleteVector: vi.fn().mockResolvedValue(undefined),
+      listVectorKeys: vi.fn().mockResolvedValue(null),
+    }));
+    const { embedAndUpsert, flushEmbeddings } = await import('../embeddings.js');
+    const { errors } = await import('../state.js');
+    const before = errors.length;
+    embedAndUpsert('knowledge/embed-fail', 'text');
+    await flushEmbeddings();
+    const newErrors = errors.slice(before);
+    expect(newErrors.length).toBe(1);
+    expect(newErrors[0]!.msg).toContain('embedAndUpsert(knowledge/embed-fail)');
+  });
+});
