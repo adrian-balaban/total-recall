@@ -94,6 +94,10 @@ When using total-recall tools, follow the retrieval order in `skills/memory-work
 
 Every stored memory must include a `## Executive Summary` section (answers WHY it matters, not just WHAT). Call `store_memory` from the main agent, never a subagent. Check for duplicates with `search_index` before storing. Set `importanceScore` (0.3=low, 0.7=high, 1.0=critical).
 
+## Review-Fix-Ship Loop
+
+For iterative hardening of a git repository ("review and fix", "harden and ship", "iterate until clean"), follow `skills/review-fix-ship/SKILL.md`. One pass = review with `file:line` citations -> apply all fixes -> run the pre-commit checklist above (bump version -> build -> test -> typecheck) -> commit -> push; repeat the pass until a full pass produces no changes (`git diff --stat` empty). Stop after the review step if the user only asked for a review (no fixes/shipping authorized) — do NOT enter the loop.
+
 ## Key Gotchas
 
 - `org` tag routes to the shared vault

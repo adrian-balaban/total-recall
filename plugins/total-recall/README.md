@@ -77,6 +77,13 @@ Three Claude Code lifecycle hooks in `hooks/hooks.json`:
 | PostToolUse | After store/update/delete | If tagged `org`, sync to org git repo |
 | PreCompact | Before context compaction | Extract 0-3 learnings from transcript -> write as `.md` files to personal vault (never overwrites existing) |
 
+### Skills
+
+Two Claude Code skills ship with the plugin (auto-discovered from `skills/`):
+
+- **`memory-workflow`** — the retrieval-order protocol for the 12 MCP tools (check the injected index -> `get_memories_by_keys` -> `search_index` -> `recall_memory`), plus the write rules (executive summary, `importanceScore`, dedup before store).
+- **`review-fix-ship`** — a closed review -> fix -> version-bump -> commit -> push loop for a git repository: review with `file:line` citations, apply all fixes, run the project's pre-commit checks, bump the version, commit, push, then repeat the pass until a full pass produces no changes (`git diff` empty).
+
 ### Module Map
 
 ```
