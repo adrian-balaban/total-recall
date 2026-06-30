@@ -41,7 +41,16 @@ export function rebuildInvertedIndex() {
 
 export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: string; score: number }> {
   const tokens = tokenize(query);
-  const scores: Record<string, number> = {};
+  // #22: accumulate RAW tf×idf (with per-token title/tag boosts) per doc across
+  // all query tokens, then multiply by the Ebbinghaus decay ONCE per doc after
+  // the token loop. The decay is a per-doc scalar — it depends only on
+  // importanceScore / lastAccessed / accessCount, none of which vary with the
+  // token — so `Σ_t (score_t × decay) == decay × Σ_t score_t`. The prior code
+  // recomputed computeRetentionStrength (→ daysSince → new Date) inside the
+  // inner (token, doc) loop, so a doc matching K query tokens paid K decay
+  // recomputations for the same constant multiplier. Algebraically identical
+  // output (not an approximation); just one decay eval per matched doc.
+  const rawScores: Record<string, number> = {};
 
   for (const token of tokens) {
     const entry = invertedIndex[token];
@@ -55,20 +64,25 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
       let score = doc.tf * entry.idf;
       if (meta.title.toLowerCase().includes(token)) score *= 2;
       if (meta.tags.some(t => t.toLowerCase().includes(token))) score *= 1.5;
-      // Decay from lastAccessed (a real retrieval), not `updated` — otherwise a
-      // memory never recalled after creation decays from its creation date and a
-      // frequently-recalled one never decays at all, both defeating the Ebbinghaus
-      // model. Fall back to `updated` for legacy index entries lacking lastAccessed.
-      const decay = computeRetentionStrength(
-        meta.importanceScore,
-        daysSince(meta.lastAccessed || meta.updated),
-        meta.accessCount
-      );
-      scores[doc.key] = (scores[doc.key] ?? 0) + score * decay;
+      rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }
 
-  return Object.entries(scores)
-    .map(([key, score]) => ({ key, score }))
-    .sort((a, b) => b.score - a.score);
+  // Apply the per-doc Ebbinghaus decay once. Decay from lastAccessed (a real
+  // retrieval), not `updated` — otherwise a memory never recalled after creation
+  // decays from its creation date and a frequently-recalled one never decays at
+  // all, both defeating the model. Fall back to `updated` for legacy index
+  // entries lacking lastAccessed.
+  const scores: Array<{ key: string; score: number }> = [];
+  for (const key of Object.keys(rawScores)) {
+    const meta = memIndex[key]!;
+    const decay = computeRetentionStrength(
+      meta.importanceScore,
+      daysSince(meta.lastAccessed || meta.updated),
+      meta.accessCount
+    );
+    scores.push({ key, score: rawScores[key]! * decay });
+  }
+
+  return scores.sort((a, b) => b.score - a.score);
 }

@@ -15559,7 +15559,7 @@ function rebuildInvertedIndex() {
 }
 function tfidfSearch(query, excludeJournal = true) {
   const tokens = tokenize(query);
-  const scores = {};
+  const rawScores = {};
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
@@ -15570,15 +15570,20 @@ function tfidfSearch(query, excludeJournal = true) {
       let score = doc.tf * entry.idf;
       if (meta2.title.toLowerCase().includes(token)) score *= 2;
       if (meta2.tags.some((t) => t.toLowerCase().includes(token))) score *= 1.5;
-      const decay = computeRetentionStrength(
-        meta2.importanceScore,
-        daysSince(meta2.lastAccessed || meta2.updated),
-        meta2.accessCount
-      );
-      scores[doc.key] = (scores[doc.key] ?? 0) + score * decay;
+      rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }
-  return Object.entries(scores).map(([key, score]) => ({ key, score })).sort((a, b) => b.score - a.score);
+  const scores = [];
+  for (const key of Object.keys(rawScores)) {
+    const meta2 = memIndex[key];
+    const decay = computeRetentionStrength(
+      meta2.importanceScore,
+      daysSince(meta2.lastAccessed || meta2.updated),
+      meta2.accessCount
+    );
+    scores.push({ key, score: rawScores[key] * decay });
+  }
+  return scores.sort((a, b) => b.score - a.score);
 }
 
 // src/persistence.ts
@@ -16654,7 +16659,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.49" : null.version;
+var PLUGIN_VERSION = true ? "1.0.50" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
