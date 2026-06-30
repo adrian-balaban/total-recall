@@ -24,6 +24,8 @@ import { memIndex } from '../state.js';
 import { appendJournal } from '../journal.js';
 import { contentCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
+import { embed } from '../embeddings.js';
+import { searchVector } from '../vectorStore.js';
 
 // ─── Test vault — unique per process ─────────────────────────────────────────
 
@@ -568,6 +570,67 @@ describe('recall_memory', () => {
     expect(baseline.length).toBeGreaterThan(0);
     const strict = result(await callTool('recall_memory', { query: 'kafka', minScore: 1e9 }));
     expect(strict.length).toBe(0);
+  });
+});
+
+// ─── recall_memory — hybrid RRF path (#7) ────────────────────────────────────
+// The default module mocks (embed→null, searchVector→[]) force recall.ts down its
+// TF-IDF-only fallback, so the hybrid branch — RRF fusion, the excludeJournal
+// RE-filter after fusion (recall.ts:48-50), and minScore on the fused tiny RRF
+// scale — is never executed. These tests override the mocks to run a real vector
+// through the branch end-to-end. A regression deleting the 3-line re-filter would
+// leak journal entries through hybrid search; a regression mis-scaling minScore
+// would let a TF-IDF-scale threshold silently drop fused results (or vice-versa).
+describe('recall_memory — hybrid RRF path (#7)', () => {
+  beforeEach(async () => {
+    await callTool('store_memory', {
+      title: 'Kafka Connect Architecture',
+      content: 'Kafka Connect is used for CDC. Debezium reads binlog.',
+      tags: ['kafka'], category: 'architecture',
+    });
+    // A journal-category memory. tfidfSearch excludes it (excludeJournal default
+    // true), but searchVector does not — so RRF fuses it back in. The recall.ts
+    // re-filter is what must drop it.
+    await callTool('store_memory', {
+      title: 'Kafka Journal', content: 'kafka notes', tags: [], category: 'journal',
+    });
+    await callTool('rebuild_index');
+  });
+
+  afterEach(() => {
+    // Restore the default module-mock behavior so this suite can't leak into others.
+    vi.mocked(embed).mockReset();
+    vi.mocked(embed).mockResolvedValue(null);
+    vi.mocked(searchVector).mockReset();
+    vi.mocked(searchVector).mockResolvedValue([]);
+  });
+
+  it('re-applies excludeJournal after RRF fusion (journal leaked via vector rank is dropped)', async () => {
+    const journalKey = Object.keys(memIndex).find(k => memIndex[k]?.category === 'journal');
+    expect(journalKey).toBeTruthy();
+    // embed returns a real vector → the hybrid branch runs searchVector + RRF.
+    vi.mocked(embed).mockResolvedValue([0.1, 0.2, 0.3]);
+    // searchVector returns ONLY the journal entry at rank 0. tfidfSearch already
+    // excluded it; without the recall.ts:48-50 re-filter it would survive fusion.
+    vi.mocked(searchVector).mockResolvedValue([{ key: journalKey!, score: 0.9 }]);
+    const res = result(await callTool('recall_memory', { query: 'kafka', hybrid: true, excludeJournal: true }));
+    expect(res.every((r: any) => r.category !== 'journal')).toBe(true);
+  });
+
+  it('minScore operates on the fused (tiny RRF) scale, not the raw TF-IDF scale', async () => {
+    const archKey = Object.keys(memIndex).find(k => memIndex[k]?.category === 'architecture');
+    expect(archKey).toBeTruthy();
+    vi.mocked(embed).mockResolvedValue([0.1, 0.2, 0.3]);
+    // Rank 0 in BOTH lists → fused score = 2 × 1/(60+1) ≈ 0.0328. Tiny, because
+    // RRF rescales everything onto the ~1/(60+rank) range.
+    vi.mocked(searchVector).mockResolvedValue([{ key: archKey!, score: 0.9 }]);
+    const fused = result(await callTool('recall_memory', { query: 'kafka', hybrid: true }));
+    expect(fused.length).toBeGreaterThan(0);
+    expect(fused[0].score).toBeLessThan(0.5); // fused RRF scale, not raw TF-IDF
+    // A 0.5 floor is trivial on the TF-IDF scale but impossible on the fused
+    // scale — so it drops every result, proving minScore is applied post-fusion.
+    const floored = result(await callTool('recall_memory', { query: 'kafka', hybrid: true, minScore: 0.5 }));
+    expect(floored.length).toBe(0);
   });
 });
 
