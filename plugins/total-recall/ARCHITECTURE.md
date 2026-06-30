@@ -314,8 +314,8 @@ extract-and-store-memories.sh
 
 - Secret-looking tokens (high-entropy strings, `key=value` patterns)
 - All email addresses (unless the domain is in `allowedEmailDomains` in `~/.total-recall/config.json`)
-- Personal pronouns
-- Phone numbers
+
+Personal pronouns and phone numbers were intentionally removed from the filter: both had false-positive rates high enough to block legitimate org memories (pronoun titles like "We are migrating…"; any 10-digit run such as unix timestamps, AWS account ids, or git SHA fragments tripped the phone regex). The real "this is personal, don't sync" guard is the mutual-exclusion of the `personal` and `org` tags enforced in the sync script.
 
 Configuration in `~/.total-recall/config.json`:
 

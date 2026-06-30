@@ -15,7 +15,7 @@ Two separate vaults live under `~/.total-recall/`:
 | Personal | `~/.total-recall/personal-vault/` | Default for all memories |
 | Org | `~/.total-recall/org/org-vault/` | When tagged `org` |
 
-The org vault syncs to a remote git repo (`orgRepo` in `~/.total-recall/config.json`, branch `org-vault`) via a privacy filter that blocks secret tokens, email addresses, personal pronouns (in the title only), and phone numbers before any push.
+The org vault syncs to a remote git repo (`orgRepo` in `~/.total-recall/config.json`, branch `org-vault`) via a privacy filter that blocks secret tokens and email addresses before any push. (Pronouns and phone numbers were intentionally removed — both had false-positive rates high enough to block legitimate org memories; the real "personal, don't sync" guard is the mutual-exclusion of the `personal` and `org` tags.)
 
 ### The 12 MCP Tools
 
@@ -140,7 +140,7 @@ claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(p
 
 ## Org Vault
 
-Memories tagged `org` are synced to a shared git repo via `scripts/sync-org-memory.mjs`. Privacy filters block secret tokens, personal emails, pronouns, and phone numbers before any push.
+Memories tagged `org` are synced to a shared git repo via `scripts/sync-org-memory.mjs`. Privacy filters block secret tokens and email addresses before any push. (Pronouns and phone numbers were intentionally removed — both had false-positive rates high enough to block legitimate org memories; the real "personal, don't sync" guard is the mutual-exclusion of the `personal` and `org` tags.)
 
 The email filter is **fail-closed by default**: every email address is blocked from org sync. If your team legitimately syncs work contacts, allow your company domain in `~/.total-recall/config.json`:
 

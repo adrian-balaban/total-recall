@@ -51,6 +51,20 @@ describe('privacyCheck', () => {
     expect(privacyCheck({ title: 'Notes' }, 'See https://example.com/docs')).toBeNull();
   });
 
+  it('does NOT block personal pronouns in titles/body (#6 regression)', () => {
+    // Pronouns were intentionally removed from the filter (high false-positive rate;
+    // a title like "We are migrating…" used to be blocked). A title/body full of
+    // pronouns must pass clean.
+    expect(privacyCheck({ title: 'We are migrating our services to Kubernetes' }, 'He and she agreed they would handle it themselves.')).toBeNull();
+  });
+
+  it('does NOT block phone-like digit runs (#6 regression)', () => {
+    // Phone-number detection was intentionally removed (high false-positive rate;
+    // any 10-digit run — unix timestamps, AWS account ids, git SHA fragments —
+    // tripped the phone regex). A body carrying such runs must pass clean.
+    expect(privacyCheck({ title: 'Notes' }, 'Timestamp 1719705600 and account id 1234567890 in this note.')).toBeNull();
+  });
+
   // ── author & tags scanning (regression tests keeping the filter honest: it scans
   // title + author + tags + body). Without author/tags in the scanned `text`, a secret
   // or email smuggled into those fields would sail through.
