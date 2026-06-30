@@ -53,10 +53,40 @@ export async function embed(text: string): Promise<number[] | null> {
 // in one place. The `.catch(() => {})` matches the original inline sites:
 // a transient embed or upsert failure is logged via the upsertVector path
 // (vectorStore.ts) and never blocks the caller's response.
+//
+// The promise is tracked in `pendingEmbeds` so flushEmbeddings() — awaited on
+// the SIGTERM/SIGINT exit path (index.ts) before process.exit — can land the
+// vector for a write whose fire-and-forget upsert hadn't resolved yet. Without
+// it, exiting between a store_memory and its embed landing permanently holed
+// the vector index for that key (findable via TF-IDF, invisible to hybrid
+// search) — the same silent-drop class the v1.0.28 concurrent-load fix
+// addressed, but via the exit path. reconcileIndex's boot backfill
+// (vault-scan.ts) closes pre-existing holes; this closes new ones.
+const pendingEmbeds = new Set<Promise<void>>();
+
 export function embedAndUpsert(key: string, text: string): void {
-  embed(text).then(vec => {
-    if (vec) upsertVector(VECTORS_DB, key, vec);
-  }).catch(() => {});
+  const p = embed(text)
+    .then(vec => { if (vec) return upsertVector(VECTORS_DB, key, vec); })
+    .catch(() => {});
+  pendingEmbeds.add(p);
+  p.finally(() => pendingEmbeds.delete(p));
+}
+
+// Await in-flight embed/upsert promises, bounded by `timeoutMs`, so the
+// SIGTERM/SIGINT handler can land last-write vectors before process.exit. A
+// promise that exceeds the timeout is left to settle in the background; its
+// key is backfilled on the next boot if it still misses. No-op when nothing is
+// pending (the common exit path — keeps shutdown fast).
+export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
+  if (pendingEmbeds.size === 0) return;
+  const snapshot = [...pendingEmbeds];
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<void>(r => { timer = setTimeout(r, timeoutMs); });
+  try {
+    await Promise.race([Promise.allSettled(snapshot), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // Honest signal: true only once the pipeline has actually loaded. Used for

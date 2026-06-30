@@ -138,3 +138,92 @@ describe('embeddings — concurrent load race (Pass 7 fix #1)', () => {
     expect((r2 as number[]).length).toBe(384);
   }, 15000);
 });
+
+// ─── #3: flushEmbeddings drains fire-and-forget embeds on the exit path ───────
+// embedAndUpsert is fire-and-forget; before #3, a SIGTERM between a store_memory
+// and its embed landing killed the upsert mid-flight, permanently holing the
+// vector index for that key (findable via TF-IDF, invisible to hybrid search).
+// flushEmbeddings tracks the in-flight promise set and is awaited by index.ts's
+// shutdown() before process.exit. These tests drive the REAL embeddings module
+// (doMock + dynamic import) so the pendingEmbeds Set is exercised, mocking only
+// the HF pipeline + the vectorStore upsert.
+
+describe('embeddings — flushEmbeddings drains pending upserts (#3)', () => {
+  beforeEach(() => vi.resetModules());
+
+  it('awaits a pending embed→upsert before resolving', async () => {
+    const upserted: Array<{ key: string; vec: number[] }> = [];
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: vi.fn().mockResolvedValue(
+        vi.fn().mockResolvedValue({ data: new Float32Array(384).fill(0.7) })
+      ),
+    }));
+    vi.doMock('../vectorStore.js', () => ({
+      VECTORS_DB: '/tmp/tr-flush-test.db',
+      upsertVector: vi.fn(async (_db: string, key: string, vec: number[]) => {
+        upserted.push({ key, vec });
+      }),
+      searchVector: vi.fn().mockResolvedValue([]),
+      deleteVector: vi.fn().mockResolvedValue(undefined),
+      listVectorKeys: vi.fn().mockResolvedValue(null),
+    }));
+    const { embedAndUpsert, flushEmbeddings } = await import('../embeddings.js');
+    embedAndUpsert('knowledge/x', 'some text');
+    // Before #3 there was no way to await the fire-and-forget upsert; the drain
+    // must land it before resolving.
+    await flushEmbeddings();
+    expect(upserted.length).toBe(1);
+    expect(upserted[0]!.key).toBe('knowledge/x');
+    expect(upserted[0]!.vec.length).toBe(384);
+  });
+
+  it('returns promptly when nothing is pending (size===0 fast path)', async () => {
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: vi.fn().mockResolvedValue(
+        vi.fn().mockResolvedValue({ data: new Float32Array(384).fill(0.7) })
+      ),
+    }));
+    vi.doMock('../vectorStore.js', () => ({
+      VECTORS_DB: '/tmp/tr-flush-test.db',
+      upsertVector: vi.fn().mockResolvedValue(undefined),
+      searchVector: vi.fn().mockResolvedValue([]),
+      deleteVector: vi.fn().mockResolvedValue(undefined),
+      listVectorKeys: vi.fn().mockResolvedValue(null),
+    }));
+    const { flushEmbeddings } = await import('../embeddings.js');
+    // No embedAndUpsert called → pending set empty → the size===0 guard returns
+    // immediately, without ever arming the 2s timeout (a clean shutdown stays fast).
+    const start = Date.now();
+    await flushEmbeddings();
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  it('is bounded by the timeout when an upsert never resolves', async () => {
+    const gate: { resolve: (() => void) | null } = { resolve: null };
+    vi.doMock('@huggingface/transformers', () => ({
+      pipeline: vi.fn().mockResolvedValue(
+        vi.fn().mockResolvedValue({ data: new Float32Array(384).fill(0.7) })
+      ),
+    }));
+    vi.doMock('../vectorStore.js', () => ({
+      VECTORS_DB: '/tmp/tr-flush-test.db',
+      upsertVector: vi.fn(async () => {
+        await new Promise<void>((r) => { gate.resolve = r; });
+      }),
+      searchVector: vi.fn().mockResolvedValue([]),
+      deleteVector: vi.fn().mockResolvedValue(undefined),
+      listVectorKeys: vi.fn().mockResolvedValue(null),
+    }));
+    const { embedAndUpsert, flushEmbeddings } = await import('../embeddings.js');
+    embedAndUpsert('knowledge/stuck', 'text');
+    // The stuck upsert hangs forever; flushEmbeddings must give up at the timeout
+    // and resolve anyway — the exit path can't block indefinitely on one embed.
+    const start = Date.now();
+    await flushEmbeddings(50);
+    const elapsed = Date.now() - start;
+    expect(elapsed).toBeGreaterThanOrEqual(40);
+    expect(elapsed).toBeLessThan(1500);
+    // Release the stuck promise so the test leaves no dangling pending handle.
+    gate.resolve!();
+  });
+});

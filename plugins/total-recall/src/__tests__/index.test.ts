@@ -66,12 +66,14 @@ vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
 vi.mock('../embeddings.js', () => ({
   embed: vi.fn().mockResolvedValue(null),
   embedAndUpsert: vi.fn(),
+  flushEmbeddings: vi.fn().mockResolvedValue(undefined),
   isVectorAvailable: vi.fn().mockReturnValue(false),
 }));
 vi.mock('../vectorStore.js', () => ({
   upsertVector: vi.fn().mockResolvedValue(undefined),
   searchVector: vi.fn().mockResolvedValue([]),
   deleteVector: vi.fn().mockResolvedValue(undefined),
+  listVectorKeys: vi.fn().mockResolvedValue(null),
 }));
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -1443,14 +1445,22 @@ describe('flushPending — drains pending timers synchronously', () => {
   it('writes index.json and invertedIndex.json when timers are pending', async () => {
     // Store a memory (schedules a save timer) then emit SIGTERM which calls flushPending
     await callTool('store_memory', { title: 'Flush Pending', content: 'X', tags: [], category: 'knowledge' });
-    // Emit SIGTERM; the once() handler calls flushPending() + process.exit(0).
-    // Catch the exit so the test process stays alive.
-    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    // shutdown() is async: flushPending() runs synchronously during emit (writes
+    // index.json + invertedIndex.json before the first await), then awaits
+    // flushEmbeddings() before calling process.exit(0). Hold flushEmbeddings
+    // unresolved so shutdown never reaches process.exit — the exit path itself
+    // (flushEmbeddings drains pending upserts before exit) is covered in
+    // embeddings.test.ts. This keeps the assertion on what this test is FOR:
+    // that the synchronous flushPending() in the handler lands the index files.
+    const emb = await import('../embeddings.js');
+    vi.mocked(emb.flushEmbeddings).mockImplementation(() => new Promise(() => {}));
     process.emit('SIGTERM', 'SIGTERM');
-    exitSpy.mockRestore();
     // INDEX_PATH = ~/.total-recall/index.json = VAULT/index.json
     expect(fs.existsSync(path.join(VAULT, 'index.json'))).toBe(true);
     expect(fs.existsSync(path.join(VAULT, 'invertedIndex.json'))).toBe(true);
+    // shutdown reached the drain step → flushPending ran first, then flushEmbeddings
+    // was invoked (proving the handler orders flush-then-drain).
+    expect(emb.flushEmbeddings).toHaveBeenCalled();
   });
 });
 

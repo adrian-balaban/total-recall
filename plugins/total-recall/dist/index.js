@@ -15974,6 +15974,64 @@ async function deleteVector(dbPath, key) {
   if (!d) return;
   d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
 }
+async function listVectorKeys(dbPath) {
+  const d = await getDb(dbPath);
+  if (!d) return null;
+  const rows = d.prepare(`SELECT key FROM vec_memories`).all();
+  return rows.map((r) => r.key);
+}
+
+// src/embeddings.ts
+var pipeline = null;
+var loadPromise = null;
+async function getEmbedder() {
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    try {
+      const { pipeline: hfPipeline } = await import("@huggingface/transformers");
+      const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+      pipeline = async (text) => {
+        const output = await extractor(text, { pooling: "mean", normalize: true });
+        return Array.from(output.data);
+      };
+      return pipeline;
+    } catch {
+      pipeline = null;
+      return null;
+    }
+  })();
+  return loadPromise;
+}
+async function embed(text) {
+  const embedder = await getEmbedder();
+  if (!embedder) return null;
+  return embedder(text);
+}
+var pendingEmbeds = /* @__PURE__ */ new Set();
+function embedAndUpsert(key, text) {
+  const p = embed(text).then((vec) => {
+    if (vec) return upsertVector(VECTORS_DB, key, vec);
+  }).catch(() => {
+  });
+  pendingEmbeds.add(p);
+  p.finally(() => pendingEmbeds.delete(p));
+}
+async function flushEmbeddings(timeoutMs = 2e3) {
+  if (pendingEmbeds.size === 0) return;
+  const snapshot = [...pendingEmbeds];
+  let timer;
+  const timeout = new Promise((r) => {
+    timer = setTimeout(r, timeoutMs);
+  });
+  try {
+    await Promise.race([Promise.allSettled(snapshot), timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+function isVectorAvailable() {
+  return pipeline !== null;
+}
 
 // src/vault-scan.ts
 function slugify2(title) {
@@ -16058,6 +16116,18 @@ function reconcileIndex() {
       deleteVector(VECTORS_DB, key).catch(() => {
       });
     }
+  }
+  backfillMissingVectors().catch(() => {
+  });
+}
+async function backfillMissingVectors() {
+  const existing = await listVectorKeys(VECTORS_DB);
+  if (existing === null) return;
+  const have = new Set(existing);
+  for (const key of Object.keys(memIndex)) {
+    if (have.has(key)) continue;
+    const meta2 = memIndex[key];
+    if (meta2?.contentPreview) embedAndUpsert(key, meta2.contentPreview);
   }
 }
 function indexFile(filePath, isOrg) {
@@ -16145,42 +16215,6 @@ function appendJournal(action, key, title) {
     fs4.appendFileSync(journalPath, entry);
   } catch {
   }
-}
-
-// src/embeddings.ts
-var pipeline = null;
-var loadPromise = null;
-async function getEmbedder() {
-  if (loadPromise) return loadPromise;
-  loadPromise = (async () => {
-    try {
-      const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-      const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-      pipeline = async (text) => {
-        const output = await extractor(text, { pooling: "mean", normalize: true });
-        return Array.from(output.data);
-      };
-      return pipeline;
-    } catch {
-      pipeline = null;
-      return null;
-    }
-  })();
-  return loadPromise;
-}
-async function embed(text) {
-  const embedder = await getEmbedder();
-  if (!embedder) return null;
-  return embedder(text);
-}
-function embedAndUpsert(key, text) {
-  embed(text).then((vec) => {
-    if (vec) upsertVector(VECTORS_DB, key, vec);
-  }).catch(() => {
-  });
-}
-function isVectorAvailable() {
-  return pipeline !== null;
 }
 
 // src/tools/store.ts
@@ -16554,7 +16588,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.30" : null.version;
+var PLUGIN_VERSION = true ? "1.0.31" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16761,14 +16795,16 @@ async function main() {
 }
 
 // src/index.ts
-process.once("SIGTERM", () => {
+async function shutdown() {
   flushPending();
+  try {
+    await flushEmbeddings();
+  } catch {
+  }
   process.exit(0);
-});
-process.once("SIGINT", () => {
-  flushPending();
-  process.exit(0);
-});
+}
+process.once("SIGTERM", shutdown);
+process.once("SIGINT", shutdown);
 process.on("beforeExit", flushPending);
 main().catch((e) => {
   console.error(e);

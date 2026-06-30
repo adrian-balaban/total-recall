@@ -65,3 +65,16 @@ export async function deleteVector(dbPath: string, key: string): Promise<void> {
   if (!d) return;
   d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
 }
+
+// All keys currently present in the vector store. Returns null when the optional
+// sqlite-vec deps are absent (getDb resolves to null) — callers treat null as
+// "no vector store, skip vector work" rather than "empty store". Used by
+// reconcileIndex's boot backfill (vault-scan.ts) to find memIndex keys that
+// have a .md file but no vec_memories row — left by a prior SIGTERM that killed
+// a fire-and-forget embedAndUpsert before it landed (#3).
+export async function listVectorKeys(dbPath: string): Promise<string[] | null> {
+  const d = await getDb(dbPath);
+  if (!d) return null;
+  const rows = d.prepare(`SELECT key FROM vec_memories`).all() as Array<{ key: string }>;
+  return rows.map(r => r.key);
+}

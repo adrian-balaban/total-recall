@@ -10,9 +10,25 @@
 
 import { main } from './server.js';
 import { flushPending } from './persistence.js';
+import { flushEmbeddings } from './embeddings.js';
 
-process.once('SIGTERM', () => { flushPending(); process.exit(0); });
-process.once('SIGINT', () => { flushPending(); process.exit(0); });
+// Exit handler. flushPending() runs FIRST and synchronously (it writes index.json
+// + invertedIndex.json to disk before the first await), so the memIndex state
+// always lands even if the flushEmbeddings await or the bounded timeout delays
+// the exit. flushEmbeddings then drains in-flight embed→upsert promises (#3) so a
+// store_memory whose fire-and-forget vector hadn't landed yet is not killed by
+// process.exit — closing the silent-drop path that left a memory findable via
+// TF-IDF but invisible to hybrid search. The remaining holes (an embed that
+// exceeds the 2s timeout, or pre-existed this boot) are closed by
+// reconcileIndex's backfill on the next start.
+async function shutdown(): Promise<void> {
+  flushPending();
+  try { await flushEmbeddings(); } catch {}
+  process.exit(0);
+}
+
+process.once('SIGTERM', shutdown);
+process.once('SIGINT', shutdown);
 process.on('beforeExit', flushPending);
 
 main().catch(e => { console.error(e); process.exit(1); });
