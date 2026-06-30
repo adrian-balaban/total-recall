@@ -291,7 +291,29 @@ if (JSON.stringify(s.hooks).includes('hooks/scripts/build-memory-index.sh')) {
 // and a backtick or `${` sequence in that path would break the template literal
 // and abort the hook-wiring heredoc (silent: hooks never get wired). Plain
 // concat is immune to path-content injection.
-const cmd = (p, timeout) => ({ type: 'command', command: 'bash ' + plugin + '/hooks/scripts/' + p, timeout });
+//
+// #27: two corrections vs. the prior `'bash ' + plugin + ...` form:
+//   1. Drop the `bash ` prefix. The hook scripts ship with
+//      `#!/usr/bin/env bash` shebangs + exec bits, so direct invocation works
+//      and matches the canonical hooks/hooks.json form (which invokes the
+//      script path directly, no `bash ` wrapper).
+//   2. Shell-quote the absolute path. Claude Code runs a hook `command` via
+//      `sh -c "<command>"`, so an unquoted path containing spaces (e.g.
+//      "/Users/My Name/plugins/total-recall") word-splits — `bash /Users/My`
+//      was the command and `Name/plugins/.../x.sh` its (ignored) argument,
+//      silently breaking every hook. Wrapping in single quotes (with embedded
+//      single quotes escaped) makes the path one shell token regardless of
+//      spaces.
+//
+// We CANNOT use hooks.json's `${CLAUDE_PLUGIN_ROOT}` here: --standalone wires
+// into ~/.claude/settings.json OUTSIDE any plugin context, and that variable
+// is plugin-manifest-only (it does not resolve in user settings.json — only
+// ${CLAUDE_PROJECT_DIR} does, and we are not project-relative here). The
+// literal absolute $PLUGIN_ROOT is the correct standalone equivalent; the
+// only deliberate difference from hooks.json is variable-vs-literal, forced
+// by the scope difference.
+const quote = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
+const cmd = (p, timeout) => ({ type: 'command', command: quote(plugin + '/hooks/scripts/' + p), timeout });
 (s.hooks.SessionStart = s.hooks.SessionStart || []).push({ hooks: [
   cmd('pull-org-vault.sh', 30),
   cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh
