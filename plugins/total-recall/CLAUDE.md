@@ -54,7 +54,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 - `src/tools/{store,recall,query,mutate}.ts` — the 12 tool implementations
 
 **Data flow:**
-1. On boot, loads `~/.total-recall/index.json` + `invertedIndex.json` into memory. Always scans both vaults (unconditional; reconciles against disk to surface newly pulled org memories and catch missed flushes).
+1. On boot, loads `~/.total-recall/index.json` into `memIndex` (invertedIndex.json is NOT loaded — `main()` rebuilds the inverted index synchronously via `recalcIdfNow` right after `reconcileIndex`, so the disk copy was a dead read; `markIndexFresh` then gates the debounced recalc so the boot timer doesn't redo it). Always scans both vaults (unconditional; reconciles against disk to surface newly pulled org memories and catch missed flushes).
 2. All tool calls operate against the in-memory `memIndex` (Record<key, MemoryMetadata>).
 3. Writes are debounced: `scheduleSave()` waits 1s → writes index → triggers `scheduleIdfRecalc()` at +2s → rebuilds TF-IDF inverted index → writes `.index-cache.txt`.
 

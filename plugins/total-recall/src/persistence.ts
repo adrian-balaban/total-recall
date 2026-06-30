@@ -71,13 +71,6 @@ function atomicWrite(p: string, data: string) {
   }
 }
 
-function loadIndex<T extends Record<string, unknown>>(target: T, p: string) {
-  // Clear-then-populate the shared singleton (formerly `target = JSON.parse(...)`).
-  for (const k of Object.keys(target)) delete (target as any)[k];
-  // nosemgrep: insecure-object-assign — `p` is the plugin's OWN index.json (plugin-written, not user input); reviewed.
-  try { Object.assign(target, JSON.parse(fs.readFileSync(p, 'utf8'))); } catch { /* empty */ }
-}
-
 // Per-entry coercion on the memIndex restore path. A pre-v1.0.6 install may
 // have written a Number title (`title: 2026` from a teammate-pushed org file
 // before indexFile's String() coercion landed) or a scalar-string tags value
@@ -152,7 +145,14 @@ function loadMemIndex() {
 
 export function loadIndexes() {
   loadMemIndex();
-  loadIndex(invertedIndex, INVERTED_INDEX_PATH);
+  // #18: do NOT load invertedIndex.json here. main() rebuilds the inverted index
+  // synchronously from memIndex right after reconcileIndex (recalcIdfNow), so
+  // the on-disk copy is dead I/O at every boot — JSON.parse + populate, then
+  // immediately clear-then-rebuild. main() is synchronous until server.connect,
+  // so no query can arrive between a hypothetical load and the rebuild; the load
+  // can never serve a read. Reconcile + recalcIdfNow repopulate from the source
+  // of truth (the .md files via memIndex), so dropping the load changes nothing
+  // observable except boot time.
 }
 
 // Write path (store/update/delete/reconcile): tokens changed, so the inverted
@@ -225,6 +225,19 @@ export function recalcIdfNow() {
   rebuildInvertedIndex();
   atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
   buildIndexCache();
+}
+
+// #18: Clear the dirtyTokens flag after the boot sync-rebuild. main() calls
+// recalcIdfNow() (synchronous rebuild + persist of invertedIndex.json + cache)
+// right after reconcileIndex, then scheduleSave() to flush index.json, then
+// this. The 1s-later scheduleIndexSave callback sees dirtyTokens=false, writes
+// index.json, and does NOT chain scheduleIdfRecalc — the +3s boot recalc that
+// previously re-derived the same inverted index (the dead load's only
+// side-effect) is skipped. Tokens did not change between the sync rebuild and
+// the timer fire (no tool call can arrive: main() is synchronous until
+// server.connect), so clearing the flag loses nothing.
+export function markIndexFresh() {
+  dirtyTokens = false;
 }
 
 export function flushPending() {

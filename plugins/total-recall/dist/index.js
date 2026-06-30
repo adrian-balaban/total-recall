@@ -15600,13 +15600,6 @@ function atomicWrite(p, data) {
     }
   }
 }
-function loadIndex(target, p) {
-  for (const k of Object.keys(target)) delete target[k];
-  try {
-    Object.assign(target, JSON.parse(fs2.readFileSync(p, "utf8")));
-  } catch {
-  }
-}
 function deriveFilePathFromKey(key) {
   if (typeof key !== "string" || !key) return null;
   if (key.includes("\0") || key.includes("\\")) return null;
@@ -15657,7 +15650,6 @@ function loadMemIndex() {
 }
 function loadIndexes() {
   loadMemIndex();
-  loadIndex(invertedIndex, INVERTED_INDEX_PATH);
 }
 function scheduleSave() {
   dirtyTokens = true;
@@ -15707,6 +15699,9 @@ function recalcIdfNow() {
   rebuildInvertedIndex();
   atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
   buildIndexCache();
+}
+function markIndexFresh() {
+  dirtyTokens = false;
 }
 function flushPending() {
   if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
@@ -16619,7 +16614,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.45" : null.version;
+var PLUGIN_VERSION = true ? "1.0.46" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16819,8 +16814,9 @@ async function main() {
   for (const cat of DEFAULT_CATEGORIES) ensureDir(path6.join(PERSONAL_VAULT, cat));
   loadIndexes();
   reconcileIndex();
-  rebuildInvertedIndex();
+  recalcIdfNow();
   scheduleSave();
+  markIndexFresh();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

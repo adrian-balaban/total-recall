@@ -6,9 +6,8 @@ import {
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js';
 import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './paths.js';
-import { loadIndexes, scheduleSave } from './persistence.js';
+import { loadIndexes, scheduleSave, recalcIdfNow, markIndexFresh } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
-import { rebuildInvertedIndex } from './tfidf.js';
 import { perfSamples, recordError } from './state.js';
 import { storeMemory } from './tools/store.js';
 import { recallMemory, searchIndex } from './tools/recall.js';
@@ -254,8 +253,19 @@ export async function main() {
   // Always reconcile against disk so orphaned files (from a missed flush on a
   // previous exit) and newly pulled org memories surface. Preserves access stats.
   reconcileIndex();
-  rebuildInvertedIndex();
+  // #18: synchronously rebuild + persist the inverted index + cache at boot.
+  // loadIndexes no longer reads invertedIndex.json (a dead load — JSON.parse +
+  // populate that the immediately-following rebuild discards), so this is the
+  // single source that materializes the inverted index from the reconciled
+  // memIndex. Persists invertedIndex.json + .index-cache.txt now, before any
+  // tool call can arrive.
+  recalcIdfNow();
+  // Flush the reconciled memIndex to index.json (debounced 1s). The +2s
+  // scheduleIdfRecalc chain is gated on dirtyTokens; markIndexFresh clears it
+  // so the boot timer writes index.json only and skips the now-redundant
+  // inverted-index rebuild (recalcIdfNow just did it synchronously).
   scheduleSave();
+  markIndexFresh();
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

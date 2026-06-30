@@ -89,10 +89,16 @@ org:      same but prefixed with "org/"
 main()
  ├─ ensureDir(PERSONAL_VAULT, ORG_VAULT)
  ├─ ensureDir(<PERSONAL_VAULT>/<each DEFAULT_CATEGORIES>)
- ├─ loadIndexes()        ← reads index.json + invertedIndex.json into shared singletons
+ ├─ loadIndexes()        ← reads index.json ONLY into memIndex (#18: invertedIndex.json
+ │                        is no longer loaded — a dead read, since the immediately-
+ │                        following recalcIdfNow rebuilds it from memIndex and main()
+ │                        is synchronous until server.connect, so nothing can read it
+ │                        in between)
  ├─ reconcileIndex()     ← always; full vault scan, preserves accessCount/lastAccessed
- ├─ rebuildInvertedIndex()
- ├─ scheduleSave()       ← debounced 1s → index.json, then +2s → IDF recalc + buildIndexCache
+ ├─ recalcIdfNow()       ← synchronous rebuild + persist of invertedIndex.json + .index-cache.txt
+ ├─ scheduleSave()       ← debounced 1s → index.json write
+ ├─ markIndexFresh()     ← clear dirtyTokens so the boot timer skips the +2s IDF recalc
+ │                        (recalcIdfNow already did it; tokens did not change in between)
  └─ server.connect(StdioServerTransport)
 ```
 

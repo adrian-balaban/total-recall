@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "total-recall",
-  "version": "1.0.45",
+  "version": "1.0.46",
   "description": "Persistent knowledge management for Claude Code. Stores memories as markdown files, exposes 12 MCP tools, and uses Claude Code hooks to inject context automatically.",
   "author": {
     "name": "Adrian Balaban"
