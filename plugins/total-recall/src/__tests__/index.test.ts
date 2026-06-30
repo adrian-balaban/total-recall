@@ -24,8 +24,8 @@ import { memIndex } from '../state.js';
 import { appendJournal } from '../journal.js';
 import { contentCache, LRUCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
-import { embed } from '../embeddings.js';
-import { searchVector } from '../vectorStore.js';
+import { embed, embedAndUpsert } from '../embeddings.js';
+import { searchVector, deleteVector, listVectorKeys } from '../vectorStore.js';
 
 // ─── Test vault — unique per process ─────────────────────────────────────────
 
@@ -1769,6 +1769,82 @@ describe('embed callback — embedAndUpsert called on write', () => {
     vi.mocked(embedMod.embedAndUpsert).mockClear();
     await callTool('update_memory', { key, tags: ['newtag'] });
     expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
+  });
+});
+
+// ─── #16: boot reconcileVectors sweeps stale vec_memories rows ───────────────
+// delete_memory calls deleteVector fire-and-forget; if the process exits before
+// it resolves, the row persists in vec_memories. On the next boot the vanished-
+// file branch iterates `before` (memIndex keys), which no longer holds the deleted
+// key, so the stale row is never reached. reconcileVectors sweeps keys present in
+// vec_memories but absent from memIndex. Symmetric with the #3 backfill (keys in
+// memIndex missing from vec_memories). Both directions share one listVectorKeys
+// call.
+
+describe('reconcileVectors — boot sweep of stale vector rows (#16)', () => {
+  // Stabilize memIndex against on-disk state before each assertion: a prior
+  // test's store_memory leaves a key in the live memIndex whose .md file the
+  // next beforeEach wipes, so reconcileIndex's vanished-file branch would call
+  // deleteVector for it and pollute the count. A pre-stabilizing rebuild_index
+  // (with listVectorKeys still null from afterEach → reconcileVectors no-op)
+  // clears those stale memIndex entries via the vanished branch FIRST; we then
+  // clear the deleteVector spy and run the assertion rebuild with the test's
+  // listVectorKeys mock, so the only deleteVector calls observed are from the
+  // sweep under test.
+  afterEach(() => {
+    vi.mocked(listVectorKeys).mockResolvedValue(null);
+    vi.mocked(deleteVector).mockClear();
+    vi.mocked(embedAndUpsert).mockClear();
+  });
+
+  it('deletes vector rows whose key is absent from memIndex', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Sweep Keeper', content: 'stays', tags: [], category: 'knowledge',
+    }));
+    await callTool('rebuild_index'); // stabilize: memIndex == {key}
+    vi.mocked(deleteVector).mockClear();
+    // Simulate a stale row left by a delete_memory whose fire-and-forget
+    // deleteVector lost the race with process exit, PLUS the live key's row.
+    vi.mocked(listVectorKeys).mockResolvedValue([key, 'knowledge/ghost-from-prior-delete']);
+    await callTool('rebuild_index');
+    // reconcileVectors is fire-and-forget; let its deleteVector microtasks settle.
+    await new Promise((r) => setTimeout(r, 30));
+    const deletedKeys = vi.mocked(deleteVector).mock.calls.map(([, k]) => k);
+    expect(deletedKeys).toContain('knowledge/ghost-from-prior-delete');
+    // The keeper's row must NOT be swept — it has a memIndex entry.
+    expect(deletedKeys).not.toContain(key);
+  });
+
+  it('still backfills keys present in memIndex but missing from vec_memories (#3)', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Backfill Hole', content: 're-embed me', tags: [], category: 'knowledge',
+    }));
+    await callTool('rebuild_index'); // stabilize: memIndex == {key}
+    vi.mocked(deleteVector).mockClear();
+    vi.mocked(embedAndUpsert).mockClear();
+    // memIndex has `key`; vec_memories reports an empty set → hole to backfill.
+    vi.mocked(listVectorKeys).mockResolvedValue([]);
+    await callTool('rebuild_index');
+    await new Promise((r) => setTimeout(r, 30));
+    // No keys in vec_memories → nothing to sweep.
+    expect(vi.mocked(deleteVector).mock.calls.length).toBe(0);
+    // embedAndUpsert was driven for the missing key (backfill path).
+    const backfillKeys = vi.mocked(embedAndUpsert).mock.calls.map(([k]) => k);
+    expect(backfillKeys).toContain(key);
+  });
+
+  it('no-ops when sqlite-vec deps are absent (listVectorKeys → null)', async () => {
+    await callTool('store_memory', {
+      title: 'No Vector Deps', content: 'x', tags: [], category: 'knowledge',
+    });
+    await callTool('rebuild_index'); // stabilize: memIndex == {key}
+    vi.mocked(deleteVector).mockClear();
+    vi.mocked(listVectorKeys).mockResolvedValue(null);
+    await callTool('rebuild_index');
+    await new Promise((r) => setTimeout(r, 30));
+    // Vanished branch has nothing to delete (memIndex == {key}, file on disk),
+    // and reconcileVectors returns early on null → zero deleteVector calls.
+    expect(vi.mocked(deleteVector).mock.calls.length).toBe(0);
   });
 });
 

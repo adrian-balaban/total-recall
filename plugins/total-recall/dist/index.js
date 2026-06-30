@@ -16130,14 +16130,19 @@ function reconcileIndex() {
       });
     }
   }
-  backfillMissingVectors().catch(() => {
+  reconcileVectors().catch(() => {
   });
 }
-async function backfillMissingVectors() {
+async function reconcileVectors() {
   const existing = await listVectorKeys(VECTORS_DB);
   if (existing === null) return;
   const have = new Set(existing);
-  for (const key of Object.keys(memIndex)) {
+  const want = new Set(Object.keys(memIndex));
+  for (const key of existing) {
+    if (!want.has(key)) deleteVector(VECTORS_DB, key).catch(() => {
+    });
+  }
+  for (const key of want) {
     if (have.has(key)) continue;
     const meta2 = memIndex[key];
     if (meta2?.contentPreview) embedAndUpsert(key, meta2.contentPreview);
@@ -16601,7 +16606,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.43" : null.version;
+var PLUGIN_VERSION = true ? "1.0.44" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -206,29 +206,46 @@ export function reconcileIndex() {
       deleteVector(VECTORS_DB, key).catch(() => {});
     }
   }
-  // Close pre-existing vector-index holes before any hybrid search can miss them.
-  // Fire-and-forget: the re-embeddings are tracked + drained by flushEmbeddings()
-  // on the next exit (index.ts), so a SIGTERM racing this loop only re-opens the
-  // hole (re-closed on the boot after that).
-  backfillMissingVectors().catch(() => {});
+  // Close pre-existing vector-index holes before any hybrid search can miss them,
+  // and sweep stale rows the exit path may have left behind. Fire-and-forget: the
+  // re-embeddings are tracked + drained by flushEmbeddings() on the next exit
+  // (index.ts), so a SIGTERM racing this loop only re-opens the hole (re-closed on
+  // the boot after that).
+  reconcileVectors().catch(() => {});
 }
 
-// Boot backfill for the vector index (#3). flushEmbeddings (index.ts) closes holes
-// created by an exit mid-write going forward, but pre-existing holes — left by a
-// prior SIGTERM that killed a fire-and-forget embedAndUpsert before it landed, or
-// by a transient model-load failure cached as null with no retry — were never
-// closed: the loop above only DELETES vectors for vanished .md files, never
-// backfilling keys present in memIndex but missing from vec_memories. Re-embed
-// those keys (tracked + drained by flushEmbeddings on the next exit). No-op when
-// the optional sqlite-vec deps are absent (listVectorKeys returns null): no vector
-// search runs in that case, so holes don't matter. Embeds the contentPreview (first
-// ~500 chars) — MiniLM-L6 truncates to 256 tokens, so the preview and the full body
-// produce an equivalent vector (no need to re-read the whole file).
-async function backfillMissingVectors(): Promise<void> {
+// Boot reconciliation for the vector index — two directions, one listVectorKeys
+// call. No-op when the optional sqlite-vec deps are absent (listVectorKeys returns
+// null): no vector search runs in that case, so neither holes nor stale rows
+// matter.
+//
+// #3 (backfill): flushEmbeddings (index.ts) closes holes created by an exit
+// mid-write going forward, but pre-existing holes — left by a prior SIGTERM that
+// killed a fire-and-forget embedAndUpsert before it landed, or by a transient
+// model-load failure cached as null with no retry — were never closed: the loop
+// above only DELETES vectors for vanished .md files, never backfilling keys
+// present in memIndex but missing from vec_memories. Re-embed those keys (tracked
+// + drained by flushEmbeddings on the next exit). Embeds the contentPreview (first
+// ~500 chars) — MiniLM-L6 truncates to 256 tokens, so the preview and the full
+// body produce an equivalent vector (no need to re-read the whole file).
+//
+// #16 (stale sweep): delete_memory calls deleteVector fire-and-forget, then
+// `delete memIndex[key]` + scheduleSave. If the process exits before deleteVector
+// resolves, the row persists in vec_memories. On the next boot the loop above
+// iterates `before` (memIndex keys) — the deleted key is no longer there, so its
+// stale vector is never reached by the vanished-file branch. A store/update at the
+// same key self-heals (INSERT OR REPLACE), but a deleted key is never rewritten,
+// so the row bloats vec_memories forever and wastes search work. Sweep keys that
+// exist in vec_memories but not in memIndex and delete them.
+async function reconcileVectors(): Promise<void> {
   const existing = await listVectorKeys(VECTORS_DB);
   if (existing === null) return;
   const have = new Set(existing);
-  for (const key of Object.keys(memIndex)) {
+  const want = new Set(Object.keys(memIndex));
+  for (const key of existing) {
+    if (!want.has(key)) deleteVector(VECTORS_DB, key).catch(() => {});
+  }
+  for (const key of want) {
     if (have.has(key)) continue;
     const meta = memIndex[key];
     if (meta?.contentPreview) embedAndUpsert(key, meta.contentPreview);
