@@ -287,9 +287,16 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // path. (A teammate can plant a symlink via the org vault's `git pull`, which
     // preserves symlinks; the privacy filter never runs on pulled content.)
     const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+    // #19: capture the lstat once and reuse it for both the symlink guard and
+    // the mtimeMs/size identity check below (one syscall per file instead of
+    // two). lstatSync stats the path itself, not the target — a symlink
+    // returns isSymbolicLink()=true and is rejected, so readFileSync can't
+    // follow a link out of the vault and leak the target into contentPreview.
+    let st: fs.Stats;
     try {
-      if (fs.lstatSync(filePath).isSymbolicLink()) return;
+      st = fs.lstatSync(filePath);
     } catch { return; }
+    if (st.isSymbolicLink()) return;
     // #17: `base` is one of two constants (PERSONAL_VAULT/ORG_VAULT), so its
     // realpath is identical for every file in the walk — resolve it once per
     // vault root and memoize, instead of an lstat+readlink syscall per .md.
@@ -301,15 +308,34 @@ export function indexFile(filePath: string, isOrg: boolean) {
     const realFile = fs.realpathSync(filePath);
     if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
 
-    const raw = fs.readFileSync(filePath, 'utf8');
-    const { data, content } = parseFrontmatter(raw);
-    const fm = data as Partial<MemoryFrontmatter>;
     const key = keyFromPath(filePath, isOrg);
     // Re-index from disk but preserve runtime stats (accessCount, lastAccessed)
     // accumulated since the last scan. Applies to personal AND org memories — org
     // entries are now refreshed too (previously skipped via the !memIndex[key] guard,
     // which left org contentPreview/tags stale after a git pull).
     const existing = memIndex[key];
+    // #19: skip the readFileSync + parseFrontmatter when the file is unchanged
+    // since the last scan. mtimeMs+size identify the file body cheaply from the
+    // lstat above; an unchanged file has the same contentPreview/tokenEstimate/
+    // tags/title/updated as the cached entry, so re-reading + re-parsing is pure
+    // boot cost (the dominant cost at personal scale — linear in file count ×
+    // size). Path containment is already re-validated above (realpath check), so
+    // refreshing filePath and keeping the cached body is safe. Caveat: mtime is
+    // filesystem-local, so the skip only helps same-machine session-to-session
+    // boots — a git pull changes mtime and forces a re-read (correct: pulled
+    // content must be re-indexed). Pre-#19 index.json entries have mtimeMs=0/
+    // size=0 (coerceMemEntry default), so the first reconcile after upgrade
+    // re-reads once and backfills real values; subsequent boots skip. The 0
+    // sentinel never matches a real file, so corrupt/missing stats always force
+    // a full read — the skip never fires on stale data.
+    if (existing && existing.mtimeMs === st.mtimeMs && existing.size === st.size) {
+      memIndex[key] = { ...existing, filePath };
+      return;
+    }
+
+    const raw = fs.readFileSync(filePath, 'utf8');
+    const { data, content } = parseFrontmatter(raw);
+    const fm = data as Partial<MemoryFrontmatter>;
     // Single scan-time "now" per file. Without this, `created`, `updated`, and
     // `lastAccessed` each call `new Date()` independently — across an N-file
     // reconcileIndex sweep, two fallbacks in the same file can land on either
@@ -350,6 +376,8 @@ export function indexFile(filePath: string, isOrg: boolean) {
       lastAccessed: existing?.lastAccessed ?? now,
       tokenEstimate: tokenEstimate(raw),
       isOrg,
+      mtimeMs: st.mtimeMs,
+      size: st.size,
     };
     if (fm.author !== undefined) meta.author = fm.author;
     memIndex[key] = meta;

@@ -25,7 +25,7 @@ const mkMeta = (): MemoryMetadata => ({
   created: '2025-01-01T00:00:00.000Z', updated: '2025-01-01T00:00:00.000Z',
   importanceScore: 0.5, category: 'knowledge', contentPreview: '',
   accessCount: 0, lastAccessed: '2025-01-01T00:00:00.000Z', tokenEstimate: 0,
-  isOrg: false,
+  isOrg: false, mtimeMs: 0, size: 0,
 });
 
 afterEach(() => {

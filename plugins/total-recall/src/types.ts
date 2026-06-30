@@ -20,6 +20,19 @@ export interface MemoryMetadata extends MemoryFrontmatter {
   tokenEstimate: number;
   importanceScore: number;
   isOrg: boolean;
+  // #19: filesystem identity of the last-indexed file body, captured via
+  // lstatSync in indexFile. reconcileIndex compares these against the current
+  // stat to skip the readFileSync + parseFrontmatter when the file is unchanged
+  // since the last scan (the dominant boot cost at personal scale). mtime is
+  // filesystem-local, so the skip only helps same-machine session-to-session
+  // boots — a git pull changes mtime and forces a re-read (correct: pulled
+  // content must be re-indexed). coerceMemEntry defaults missing values to 0,
+  // so a pre-#19 index.json re-reads once on the first reconcile after upgrade
+  // and backfills real values. Mutated by indexFile only; never used at search
+  // time. `0` is the "no stat recorded" sentinel — it never matches a real
+  // file's mtimeMs/size, so a missing stat always forces a full read.
+  mtimeMs: number;
+  size: number;
 }
 
 export type Index = Record<string, MemoryMetadata>;

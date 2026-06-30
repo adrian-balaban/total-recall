@@ -184,6 +184,14 @@ export function storeMemory(args: any): any {
   fs.writeFileSync(filePath, fileContent);
 
   const existing = memIndex[key];
+  // #19: capture the just-written file's stat so the next reconcileIndex can
+  // skip re-reading it. statSync follows symlinks, but store_memory already
+  // rejected symlinked target paths upstream (the planted-symlink guard), so
+  // the path is a regular file we just wrote. Best-effort: a throw here
+  // (shouldn't happen — we just wrote the file) leaves 0/0, which forces a
+  // re-read on the next reconcile — harmless, just no skip.
+  let mtimeMs = 0, size = 0;
+  try { const st = fs.statSync(filePath); mtimeMs = st.mtimeMs; size = st.size; } catch { /* best-effort */ }
   const meta: MemoryMetadata = {
     key, filePath, title, tags,
     created: fm.created, updated: now, importanceScore, category: deriveCategory(filePath, isOrg),
@@ -191,6 +199,7 @@ export function storeMemory(args: any): any {
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,
     tokenEstimate: tokenEstimate(fileContent), isOrg,
+    mtimeMs, size,
   };
   // exactOptionalPropertyTypes: conditionally attach optional fields only when
   // defined; assigning `undefined` to `author?: string` is a type error under EOPT

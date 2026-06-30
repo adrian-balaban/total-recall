@@ -1095,6 +1095,41 @@ describe('rebuild_index', () => {
   });
 });
 
+// ─── #19: reconcileIndex skips unchanged files via mtimeMs/size ──────────────
+describe('reconcileIndex skips unchanged files (#19)', () => {
+  it('skips readFileSync for an unchanged .md (cache survives) and re-reads after an edit (cache invalidated)', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Skip Probe Nineteen',
+      content: 'original body marker alpha',
+      tags: [], category: 'knowledge',
+    }));
+    // store_memory populates memIndex[key].mtimeMs/size from a statSync of the
+    // just-written file, and primes contentCache with the body. A reconcile that
+    // re-reads would call contentCache.delete(key) at the end of indexFile; the
+    // skip path returns before that line. So cache survival across a rebuild is
+    // the behavioral fingerprint of the skip.
+    await callTool('rebuild_index');
+    const filePath = memIndex[key]!.filePath;
+    expect(memIndex[key]!.mtimeMs).toBeGreaterThan(0);
+    expect(memIndex[key]!.size).toBeGreaterThan(0);
+    expect(memIndex[key]!.contentPreview).toContain('original body marker alpha');
+    expect(contentCache.get(key)).toBeDefined(); // store_memory primed it
+
+    // Unchanged file: rebuild skips indexFile's read branch → cache NOT deleted.
+    await callTool('rebuild_index');
+    expect(contentCache.get(key)).toBeDefined();
+    expect(memIndex[key]!.contentPreview).toContain('original body marker alpha');
+
+    // External edit (append changes mtime + size without going through the MCP
+    // tool, so memIndex is now stale). rebuild must take the re-read branch:
+    // contentCache.delete runs and contentPreview refreshes from the new body.
+    fs.appendFileSync(filePath, '\n\nedited body marker beta\n');
+    await callTool('rebuild_index');
+    expect(contentCache.get(key)).toBeUndefined(); // re-read branch invalidated it
+    expect(memIndex[key]!.contentPreview).toContain('edited body marker beta');
+  });
+});
+
 // ─── list_tools ───────────────────────────────────────────────────────────────
 
 describe('ListToolsRequestSchema', () => {

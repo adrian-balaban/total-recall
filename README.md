@@ -1,4 +1,4 @@
-# my-claude-plugins
+# claude-plugins
 
 Claude Code plugin repository.
 

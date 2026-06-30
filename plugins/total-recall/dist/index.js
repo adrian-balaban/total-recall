@@ -15631,7 +15631,14 @@ function coerceMemEntry(raw, key) {
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
-    importanceScore: clampImportanceScore(e.importanceScore)
+    importanceScore: clampImportanceScore(e.importanceScore),
+    // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
+    // unchanged files across boots. A pre-#19 index.json (or a corrupted
+    // non-numeric value) yields 0 — the "no stat" sentinel that forces a
+    // full re-read on the next reconcile, so the skip path never fires on
+    // stale/corrupt data.
+    mtimeMs: typeof e.mtimeMs === "number" && Number.isFinite(e.mtimeMs) ? e.mtimeMs : 0,
+    size: typeof e.size === "number" && Number.isFinite(e.size) ? e.size : 0
   };
 }
 function loadMemIndex() {
@@ -16158,20 +16165,26 @@ async function reconcileVectors() {
 function indexFile(filePath, isOrg) {
   try {
     const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+    let st;
     try {
-      if (fs3.lstatSync(filePath).isSymbolicLink()) return;
+      st = fs3.lstatSync(filePath);
     } catch {
       return;
     }
+    if (st.isSymbolicLink()) return;
     const realBase = realBaseFor(base);
     if (realBase === null) return;
     const realFile = fs3.realpathSync(filePath);
     if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
+    const key = keyFromPath(filePath, isOrg);
+    const existing = memIndex[key];
+    if (existing && existing.mtimeMs === st.mtimeMs && existing.size === st.size) {
+      memIndex[key] = { ...existing, filePath };
+      return;
+    }
     const raw = fs3.readFileSync(filePath, "utf8");
     const { data, content } = parseFrontmatter(raw);
     const fm = data;
-    const key = keyFromPath(filePath, isOrg);
-    const existing = memIndex[key];
     const now = (/* @__PURE__ */ new Date()).toISOString();
     const meta2 = {
       key,
@@ -16201,7 +16214,9 @@ function indexFile(filePath, isOrg) {
       accessCount: existing?.accessCount ?? 0,
       lastAccessed: existing?.lastAccessed ?? now,
       tokenEstimate: tokenEstimate(raw),
-      isOrg
+      isOrg,
+      mtimeMs: st.mtimeMs,
+      size: st.size
     };
     if (fm.author !== void 0) meta2.author = fm.author;
     memIndex[key] = meta2;
@@ -16327,6 +16342,13 @@ function storeMemory(args) {
   const fileContent = stringifyFrontmatter(body, fm);
   fs5.writeFileSync(filePath, fileContent);
   const existing = memIndex[key];
+  let mtimeMs = 0, size = 0;
+  try {
+    const st = fs5.statSync(filePath);
+    mtimeMs = st.mtimeMs;
+    size = st.size;
+  } catch {
+  }
   const meta2 = {
     key,
     filePath,
@@ -16340,7 +16362,9 @@ function storeMemory(args) {
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,
     tokenEstimate: tokenEstimate(fileContent),
-    isOrg
+    isOrg,
+    mtimeMs,
+    size
   };
   if (fm.author !== void 0) meta2.author = fm.author;
   if (fm.sessions !== void 0) meta2.sessions = fm.sessions;
@@ -16614,7 +16638,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.46" : null.version;
+var PLUGIN_VERSION = true ? "1.0.47" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -70,7 +70,7 @@ Each memory is a Markdown file with a YAML frontmatter block:
 
 ### In-memory index (`MemoryMetadata`)
 
-Extends frontmatter with runtime stats: `key`, `filePath`, `category`, `contentPreview` (first 500 chars of body), `accessCount`, `lastAccessed`, `tokenEstimate`, `isOrg`.
+Extends frontmatter with runtime stats: `key`, `filePath`, `category`, `contentPreview` (first 500 chars of body), `accessCount`, `lastAccessed`, `tokenEstimate`, `isOrg`, `mtimeMs`/`size` (filesystem identity of the last-indexed body — `reconcileIndex` compares these against the current `lstatSync` to skip `readFileSync`+`parseFrontmatter` for unchanged files; filesystem-local, so the skip helps same-machine session-to-session boots, not after a `git pull` which changes mtime).
 
 ### Key derivation
 
@@ -94,7 +94,9 @@ main()
  │                        following recalcIdfNow rebuilds it from memIndex and main()
  │                        is synchronous until server.connect, so nothing can read it
  │                        in between)
- ├─ reconcileIndex()     ← always; full vault scan, preserves accessCount/lastAccessed
+ ├─ reconcileIndex()     ← always; full vault scan, preserves accessCount/lastAccessed;
+ │                        skips readFileSync+parseFrontmatter for files whose
+ │                        mtimeMs+size match the cached entry (#19)
  ├─ recalcIdfNow()       ← synchronous rebuild + persist of invertedIndex.json + .index-cache.txt
  ├─ scheduleSave()       ← debounced 1s → index.json write
  ├─ markIndexFresh()     ← clear dirtyTokens so the boot timer skips the +2s IDF recalc

@@ -129,6 +129,13 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(e.importanceScore),
+    // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
+    // unchanged files across boots. A pre-#19 index.json (or a corrupted
+    // non-numeric value) yields 0 — the "no stat" sentinel that forces a
+    // full re-read on the next reconcile, so the skip path never fires on
+    // stale/corrupt data.
+    mtimeMs: typeof e.mtimeMs === 'number' && Number.isFinite(e.mtimeMs) ? e.mtimeMs : 0,
+    size: typeof e.size === 'number' && Number.isFinite(e.size) ? e.size : 0,
   };
 }
 
