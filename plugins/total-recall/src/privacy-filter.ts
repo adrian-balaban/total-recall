@@ -109,8 +109,32 @@ export function privacyCheck(
   const sessionText = Array.isArray(data.sessions) ? data.sessions.join(' ') : String(data.sessions ?? '');
   const title = String(data.title ?? '');
   const author = String(data.author ?? '');
-  const text = `${title} ${author} ${tagText} ${sessionText} ${content}`;
+  // Scan the WHOLE parsed frontmatter object, not just the named fields above. The
+  // named fields (title/author/tags/sessions) cover the TS writer's output, but a
+  // teammate can push a memory with ARBITRARY custom frontmatter keys via the shared
+  // org vault (`apikey: ghp_…`, `contact: me@personal.com`), and `update_memory`
+  // spreads `...parsed.data` (mutate.ts), preserving those custom keys through the
+  // PostToolUse re-sync. Without this scan, a secret/personal email planted in a non-
+  // standard key passes the filter and lands in the shared repo. `JSON.stringify(data)`
+  // captures every key's value (named ones are re-scanned, harmlessly), and survives
+  // parseFrontmatter's round-trip — the ground truth is the parsed `data`, which is
+  // exactly what gets re-committed. Scanning more text is fail-closed.
+  const allValues = safeStringify(data);
+  const text = `${title} ${author} ${tagText} ${sessionText} ${allValues} ${content}`;
   if (SECRET_TOKEN_RE.test(text)) return 'secret token or API key detected';
   if (findSuspiciousEmail(text, allowedDomains)) return 'suspicious email address detected';
   return null;
+}
+
+// JSON.stringify that can't throw on oddities a teammate might hand-edit into the
+// shared org vault frontmatter (circular refs, BigInt). A thrown stringify here would
+// let a secret-laden file sail through the filter by crashing it; fall back to empty
+// (the named-field text already in `text` still covers the standard keys) — fail-
+// closed means never crash-open.
+function safeStringify(value: unknown): string {
+  try {
+    return JSON.stringify(value) ?? '';
+  } catch {
+    return '';
+  }
 }

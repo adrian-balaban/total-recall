@@ -118,6 +118,22 @@ describe('privacyCheck', () => {
     expect(privacyCheck({ sessions: ['abc-123', 'def-456'] }, 'Clean body.')).toBeNull();
   });
 
+  // #12: a teammate can push a memory with ARBITRARY custom frontmatter keys via the
+  // shared org vault, and update_memory preserves them (...parsed.data). The named
+  // fields alone would miss a secret/email planted in a non-standard key. The filter
+  // must scan the whole parsed `data` object so custom-key values are covered too.
+  it('blocks a secret token in a CUSTOM frontmatter key (#12 regression)', () => {
+    expect(privacyCheck({ title: 'Notes', apikey: 'sk-abcdefghijklmnopqrstuvwxyz123456' } as any, 'Clean body.')).toMatch(/secret/);
+  });
+
+  it('blocks a personal email in a CUSTOM frontmatter key (#12 regression)', () => {
+    expect(privacyCheck({ title: 'Notes', contact: 'me@personal.com' } as any, 'Clean body.')).toMatch(/email/);
+  });
+
+  it('still passes a clean custom frontmatter key', () => {
+    expect(privacyCheck({ title: 'Notes', customField: 'just some context' } as any, 'Clean body.')).toBeNull();
+  });
+
   // ── SECRET_TOKEN_RE — Stripe live, AWS STS (ASIA), labeled AWS secret access key.
   // Each is a prefixed/labeled form with negligible false-positive risk; the
   // privacy-filter.ts comment explains why the AWS 40-char secret is matched only when

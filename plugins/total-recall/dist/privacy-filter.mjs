@@ -29,10 +29,18 @@ function privacyCheck(data, content, allowedDomains = []) {
   const sessionText = Array.isArray(data.sessions) ? data.sessions.join(" ") : String(data.sessions ?? "");
   const title = String(data.title ?? "");
   const author = String(data.author ?? "");
-  const text = `${title} ${author} ${tagText} ${sessionText} ${content}`;
+  const allValues = safeStringify(data);
+  const text = `${title} ${author} ${tagText} ${sessionText} ${allValues} ${content}`;
   if (SECRET_TOKEN_RE.test(text)) return "secret token or API key detected";
   if (findSuspiciousEmail(text, allowedDomains)) return "suspicious email address detected";
   return null;
+}
+function safeStringify(value) {
+  try {
+    return JSON.stringify(value) ?? "";
+  } catch {
+    return "";
+  }
 }
 export {
   EMAIL_RE,
