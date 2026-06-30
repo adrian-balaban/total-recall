@@ -17,6 +17,27 @@ import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// #17: Memoized realpath of each vault root. indexFile is called once per .md
+// in the walk, and `base` is one of two constants (PERSONAL_VAULT/ORG_VAULT), so
+// realpathSync(base) resolved the identical string N times — N redundant
+// lstat+readlink syscalls per scan. Resolve once per root and cache. A null
+// entry means "realpath threw" (the vault root vanished mid-scan, or is on a
+// FS that can't resolve it); indexFile treats null as "bail". The cache lives
+// for the process — vault roots don't move — but is rebuilt if a root is seen
+// null then later exists (e.g. ensureDir created it between scans).
+const realBaseCache = new Map<string, string | null>();
+function realBaseFor(base: string): string | null {
+  if (realBaseCache.has(base)) return realBaseCache.get(base) ?? null;
+  let resolved: string | null;
+  try {
+    resolved = fs.realpathSync(base);
+  } catch {
+    resolved = null;
+  }
+  realBaseCache.set(base, resolved);
+  return resolved;
+}
+
 export function slugify(title: string): string {
   const slug = title
     .toLowerCase()
@@ -269,7 +290,14 @@ export function indexFile(filePath: string, isOrg: boolean) {
     try {
       if (fs.lstatSync(filePath).isSymbolicLink()) return;
     } catch { return; }
-    const realBase = fs.realpathSync(base);
+    // #17: `base` is one of two constants (PERSONAL_VAULT/ORG_VAULT), so its
+    // realpath is identical for every file in the walk — resolve it once per
+    // vault root and memoize, instead of an lstat+readlink syscall per .md.
+    // realpathSync(filePath) below stays per-file (it IS per-file). realpathSync
+    // throws ENOENT/TMPRESOLVED if the vault root vanished mid-scan; treat that
+    // as "nothing to index here" and bail, matching the lstat guard's swallow.
+    const realBase = realBaseFor(base);
+    if (realBase === null) return;
     const realFile = fs.realpathSync(filePath);
     if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
 

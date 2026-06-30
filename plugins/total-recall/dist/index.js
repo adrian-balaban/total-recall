@@ -16047,6 +16047,18 @@ function isVectorAvailable() {
 }
 
 // src/vault-scan.ts
+var realBaseCache = /* @__PURE__ */ new Map();
+function realBaseFor(base) {
+  if (realBaseCache.has(base)) return realBaseCache.get(base) ?? null;
+  let resolved;
+  try {
+    resolved = fs3.realpathSync(base);
+  } catch {
+    resolved = null;
+  }
+  realBaseCache.set(base, resolved);
+  return resolved;
+}
 function slugify2(title) {
   const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
   return slug || "untitled";
@@ -16156,7 +16168,8 @@ function indexFile(filePath, isOrg) {
     } catch {
       return;
     }
-    const realBase = fs3.realpathSync(base);
+    const realBase = realBaseFor(base);
+    if (realBase === null) return;
     const realFile = fs3.realpathSync(filePath);
     if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
     const raw = fs3.readFileSync(filePath, "utf8");
@@ -16606,7 +16619,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.44" : null.version;
+var PLUGIN_VERSION = true ? "1.0.45" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
