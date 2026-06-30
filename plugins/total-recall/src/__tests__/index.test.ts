@@ -1677,11 +1677,14 @@ describe('flushPending — drains pending timers synchronously', () => {
   });
 });
 
-// ─── perf sample trimming (>1000 samples) ────────────────────────────────────
+// ─── perf sample trimming (bounded append) ───────────────────────────────────
 
 describe('perf samples — trim when exceeding 1000', () => {
   it('get_stats still works after more than 1000 tool calls', async () => {
-    // Make 1001 lightweight calls to push perfSamples past 1000 and trigger the shift()
+    // Make 1001 lightweight calls to push perfSamples past CAP. Under #21's
+    // batched trim the buffer grows past CAP and only snaps back at 2×CAP, but
+    // get_stats' [...perfSamples].sort percentile calc works at any length in
+    // [CAP, 2×CAP] — this just asserts it doesn't choke on a >CAP buffer.
     for (let i = 0; i < 1001; i++) {
       await callTool('get_stats');
     }

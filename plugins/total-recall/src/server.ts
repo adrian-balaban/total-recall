@@ -8,7 +8,7 @@ import {
 import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './paths.js';
 import { loadIndexes, scheduleSave, recalcIdfNow, markIndexFresh } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
-import { perfSamples, recordError } from './state.js';
+import { recordError, recordPerfSample } from './state.js';
 import { storeMemory } from './tools/store.js';
 import { recallMemory, searchIndex } from './tools/recall.js';
 import {
@@ -233,8 +233,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     // first `args.x` access — caught here and returned as isError, surfacing as
     // a spurious tool failure on a valid no-arg call. Default to `{}`.
     const result = await handler(args ?? {});
-    perfSamples.push(Date.now() - start);
-    if (perfSamples.length > 1000) perfSamples.shift();
+    // #21: route through the shared bounded-append helper (amortized-O(1) trim)
+    // instead of the inline `push; if (>1000) shift` that re-indexed the whole
+    // array on every call past the cap. perfSamples itself is read only by
+    // getStats (query.ts) for the percentile calc.
+    recordPerfSample(Date.now() - start);
     return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
   } catch (e: any) {
     recordError(`${name}: ${e.message}`);

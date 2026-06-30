@@ -15510,9 +15510,18 @@ var memIndex = {};
 var invertedIndex = {};
 var errors = [];
 var perfSamples = [];
+var ERROR_CAP = 1e3;
+var PERF_CAP = 1e3;
+function trimTo(arr, cap) {
+  if (arr.length > cap * 2) arr.splice(0, arr.length - cap);
+}
 function recordError(msg) {
   errors.push({ time: (/* @__PURE__ */ new Date()).toISOString(), msg });
-  if (errors.length > 1e3) errors.shift();
+  trimTo(errors, ERROR_CAP);
+}
+function recordPerfSample(ms) {
+  perfSamples.push(ms);
+  trimTo(perfSamples, PERF_CAP);
 }
 function bumpAccess(meta2) {
   meta2.accessCount++;
@@ -16645,7 +16654,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.48" : null.version;
+var PLUGIN_VERSION = true ? "1.0.49" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16829,8 +16838,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const handler = TOOL_HANDLERS[name];
     if (!handler) throw new Error(`Unknown tool: ${name}`);
     const result = await handler(args ?? {});
-    perfSamples.push(Date.now() - start);
-    if (perfSamples.length > 1e3) perfSamples.shift();
+    recordPerfSample(Date.now() - start);
     return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
   } catch (e) {
     recordError(`${name}: ${e.message}`);

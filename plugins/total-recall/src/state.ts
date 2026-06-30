@@ -15,17 +15,46 @@ export const invertedIndex: InvertedIndex = {};
 export const errors: Array<{ time: string; msg: string }> = [];
 export const perfSamples: number[] = [];
 
-// Append to the shared `errors` singleton with a cap. A long-lived stdio server
-// (one process per Claude Code session, potentially days) with a recurring error
-// — a misbehaving client hitting an unknown tool, or a teammate-pushed malformed
-// org file failing indexFile on every reconcile — would otherwise grow `errors`
-// without limit. Mirror the perfSamples cap (server.ts shifts perfSamples > 1000).
-// getStats only returns the last 10, so the cap is invisible to consumers.
-// Centralize here so every push site (server.ts dispatch catch, vault-scan
-// indexFile catch, persistence debounce/flush catches) is bounded uniformly.
+// #21: amortized-O(1) bounded append. The prior `if (length > CAP) shift()`
+// re-indexed the whole array on every push past the cap — O(N) per push, O(N²)
+// over a long-lived session (one process per Claude Code session, potentially
+// days of recurring errors / tool calls). `shift` is a single cap-sized memmove
+// each time; doing it every push moves the same tail over and over. Instead let
+// the buffer grow to 2×CAP, then splice down to CAP in one shot: each element is
+// memmoved at most once over its lifetime, so amortized cost per push is O(1)
+// (one cap-sized memmove every CAP pushes). The buffer oscillates in [CAP, 2×CAP],
+// so tail reads (errors.slice(-10) in getStats, [...perfSamples].sort for
+// percentiles) see only the most-recent entries — semantically identical to the
+// per-push shift, just with up to 2×CAP held momentarily between trims.
+// N is capped at 1000 (~8KB), so this is a micro-optimization, not a bottleneck —
+// but it removes the O(N²) shape that would bite only in a pathological
+// error-storm / multi-day session. getStats only returns the last 10 errors, so
+// the exact cap is invisible to consumers either way.
+const ERROR_CAP = 1000;
+const PERF_CAP = 1000;
+function trimTo<T>(arr: T[], cap: number): void {
+  if (arr.length > cap * 2) arr.splice(0, arr.length - cap);
+}
+
+// Append to the shared `errors` singleton with a cap (see trimTo above). A
+// long-lived stdio server with a recurring error — a misbehaving client hitting
+// an unknown tool, or a teammate-pushed malformed org file failing indexFile on
+// every reconcile — would otherwise grow `errors` without limit. Centralized
+// here so every push site (server.ts dispatch catch, vault-scan indexFile catch,
+// persistence debounce/flush catches) is bounded uniformly.
 export function recordError(msg: string): void {
   errors.push({ time: new Date().toISOString(), msg });
-  if (errors.length > 1000) errors.shift();
+  trimTo(errors, ERROR_CAP);
+}
+
+// Record a tool-call latency sample with the same bounded-append policy as
+// recordError. server.ts' CallTool handler is the only producer; getStats
+// derives p50/p95/p99 from [...perfSamples].sort. Centralized so the cap + trim
+// live in one place (the prior inline `push; if (>1000) shift` in server.ts was
+// a second copy of the same O(N²) pattern).
+export function recordPerfSample(ms: number): void {
+  perfSamples.push(ms);
+  trimTo(perfSamples, PERF_CAP);
 }
 
 // Bump the access-tracking fields (accessCount + lastAccessed) on a memory entry

@@ -37,21 +37,25 @@ afterEach(() => {
 });
 
 describe('recordError', () => {
-  // state.ts caps `errors` at 1000 (mirrors the perfSamples cap in server.ts).
-  // A long-lived stdio server with a recurring error (misbehaving client hitting
-  // an unknown tool, or a teammate-pushed malformed org file failing indexFile on
-  // every reconcile) would otherwise grow `errors` without bound. get_stats only
-  // returns the last 10, so the cap is invisible to consumers — but without it,
-  // memory grows unbounded over a multi-day session.
-  it('caps the errors array at 1000 entries (FIFO shift)', () => {
+  // #21: trimTo trims only when length > 2×CAP (amortized-O(1): one cap-sized
+  // splice every CAP pushes instead of a shift per push). So the buffer grows
+  // past CAP and only snaps back to CAP at the 2×CAP boundary — the invariant is
+  // "bounded, newest preserved at the tail", not "exactly CAP after CAP+1
+  // pushes". Push 2×CAP+1 to cross the trim boundary and assert the snap-back.
+  it('bounds the errors array at CAP via amortized batched trim (newest preserved)', () => {
     const base = errors.length;
-    for (let i = 0; i < 1001; i++) recordError(`err-${i}`);
-    expect(errors.length).toBe(1000);
-    // The oldest entry was shifted out; the array head is the 2nd-pushed entry
-    // and the tail is the last-pushed.
-    expect(errors[0]!.msg).toBe('err-1');
-    expect(errors[999]!.msg).toBe('err-1000');
-    // Sanity: exactly one entry was dropped relative to the 1001 pushes (+ base).
+    const cap = 1000;
+    // Below the 2×CAP boundary: no trim, the buffer just grows.
+    for (let i = 0; i < cap + 1; i++) recordError(`err-${i}`);
+    expect(errors.length).toBe(cap + 1);
+    // Cross 2×CAP: one splice drops the oldest CAP entries, snapping to CAP.
+    for (let i = cap + 1; i < 2 * cap + 1; i++) recordError(`err-${i}`);
+    expect(errors.length).toBe(cap);
+    // The head is the entry just past the dropped window; the tail is the last
+    // push — newest preserved at the end (what getStats' errors.slice(-10) sees).
+    expect(errors[0]!.msg).toBe(`err-${cap + 1}`);
+    expect(errors[cap - 1]!.msg).toBe(`err-${2 * cap}`);
+    // Sanity: the test starts from an empty buffer.
     expect(base).toBe(0);
   });
 
