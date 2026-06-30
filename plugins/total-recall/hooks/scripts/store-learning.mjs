@@ -15,24 +15,26 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import crypto from 'node:crypto';
 import { stringifyFrontmatter } from '../../dist/frontmatter.mjs';
+import { atomicWrite, cleanupInFlightTmp } from '../../scripts/atomic-write.mjs';
 
 const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
 
-// Atomic write (write-`.tmp` + rename): a partial write of a memory .md would
-// leave a corrupt frontmatter on disk. The existsSync guard below would then
-// treat the partial file as "existing" and skip re-extraction forever — so a
-// crashed extract silently blocks future captures of the same learning.
-// Atomic rename guarantees the file only appears once it's fully written.
-function atomicWrite(p, data) {
-  // Random tmp suffix: see scripts/sync-org-memory.mjs — process.pid is
-  // enumerable (ps), so a planted symlink at `${p}.tmp.<pid>` could be followed
-  // by writeFileSync and clobber an outside file. randomBytes makes the tmp
-  // path unguessable.
-  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
-  fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, p);
+// Atomic write (write-`.tmp` + rename) for the memory .md is shared via
+// scripts/atomic-write.mjs. A partial write would leave a corrupt frontmatter
+// on disk; the existsSync guard below would then treat the partial file as
+// "existing" and skip re-extraction forever — so a crashed extract silently
+// blocks future captures of the same learning. Atomic rename guarantees the
+// file only appears once it's fully written.
+//
+// #28: if killed between writeFileSync and renameSync, unlink the in-flight
+// .tmp before exiting so a partial .md can't leak AND can't be mistaken for a
+// finished memory by the next run's existsSync guard (which would permanently
+// block that learning from re-extraction). Registered once at module load,
+// before any atomicWrite call; cleanupInFlightTmp is a no-op when no write is
+// in flight. Mirrors the `trap cleanup EXIT` pattern in build-memory-index.sh.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(sig, () => { cleanupInFlightTmp(); process.exit(1); });
 }
 
 function slugify(s) {

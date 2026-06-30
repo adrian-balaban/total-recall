@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync, spawnSync } from 'node:child_process';
-import crypto from 'node:crypto';
 
 import { parseFrontmatter, stringifyFrontmatter } from '../dist/frontmatter.mjs';
 import { privacyCheck, sanitizeAllowedDomains } from '../dist/privacy-filter.mjs';
+import { atomicWrite, cleanupInFlightTmp } from './atomic-write.mjs';
 
 const TOTAL_RECALL_DIR = path.join(os.homedir(), '.total-recall');
 const PERSONAL_VAULT = path.join(TOTAL_RECALL_DIR, 'personal-vault');
@@ -57,19 +57,19 @@ function git(cwd, args, opts = {}) {
   return result.stdout ?? '';
 }
 
-// Atomic write (write-`.tmp` + rename) for the org index.json — mirrors the
-// persistence.ts atomicWrite rule. A plain writeFileSync could leave a
-// half-written index.json if the process is interrupted mid-write (the
-// PostToolUse hook backgrounds this script, so a SIGTERM mid-write is a real
-// risk); a corrupt index.json breaks the next SessionStart index injection.
-function atomicWrite(p, data) {
-  // Random tmp suffix: process.pid is enumerable (a local attacker can read it
-  // via ps), so a planted symlink at `${p}.tmp.<pid>` could be followed by
-  // writeFileSync and clobber an outside file. randomBytes makes the tmp path
-  // unguessable, closing the predictable-tmp symlink race.
-  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
-  fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, p);
+// Atomic write for the org index.json is shared via scripts/atomic-write.mjs
+// (write-`.tmp` + rename, with #28 throw/signal leak cleanup). See that module.
+// A plain writeFileSync could leave a half-written index.json if the process is
+// interrupted mid-write (the PostToolUse hook backgrounds this script, so a
+// SIGTERM mid-write is a real risk); a corrupt index.json breaks the next
+// SessionStart index injection.
+//
+// #28: if killed between writeFileSync and renameSync, unlink the in-flight
+// .tmp before exiting so it can't leak (one `index.json.tmp.<hex>` per
+// interrupted sync otherwise). Registered once at module load, before any
+// atomicWrite call; cleanupInFlightTmp is a no-op when no write is in flight.
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
+  process.on(sig, () => { cleanupInFlightTmp(); process.exit(1); });
 }
 
 // Allowed email domains — emails at these domains are treated as non-personal and may
