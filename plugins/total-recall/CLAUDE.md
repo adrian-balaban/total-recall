@@ -33,7 +33,7 @@ Run all three, in order, **before every commit** that touches source or the plug
 
 1. **Increase the version.** Bump the version in **`package.json` only** — it is the single source of truth. Do **not** edit `.claude-plugin/plugin.json`'s version by hand: the `npm run build` step (below) runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into `plugin.json` automatically, so the two can never drift. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`), so the version must be set **before** step 2.
 2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.mjs` + `dist/privacy-filter.mjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
-3. **Test all.** `npm test` (208 unit/component tests, `maxWorkers=1`) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
+3. **Test all.** `npm test` (the full unit/component suite, `maxWorkers=1` — see the run output for the current count) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
 
 Only after all three are green: `git add -A && git commit` from the plugin root, then push.
 
