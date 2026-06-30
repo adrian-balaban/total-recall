@@ -68,6 +68,13 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(r.status).toBe(0);
     const out = JSON.parse(r.stdout);
     const ctx = out.hookSpecificOutput.additionalContext;
+    // #24: Claude Code DROPS additionalContext whose hookSpecificOutput lacks
+    // hookEventName:"SessionStart" — the whole context injection fails silently.
+    // The version-string assertions below would still pass if the script dropped
+    // hookEventName (the field is orthogonal to the version banner), so pin it
+    // explicitly: a regression removing hookEventName from load-memory-index.sh
+    // must turn this red, not pass.
+    expect(out.hookSpecificOutput.hookEventName).toBe('SessionStart');
     expect(ctx).toContain('v9.9.9');
     expect(ctx).not.toContain('vunknown');
   });
@@ -120,6 +127,65 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     // Fresh empty HOME — no .total-recall/personal-vault → find's root is missing.
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-oq-novault-'));
     try {
+      const r = spawnSync('bash', [OQ_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout)).toEqual({ continue: true });
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // #24: the additionalContext branch (load-open-questions.sh line 39) — taken
+  // when an open-questions file IS found and ≤3KB — was entirely untested. The
+  // no-vault test above only covers the `{"continue":true}` fallback. This pins
+  // the documented invariant for the injection branch: the hookSpecificOutput
+  // MUST carry hookEventName:"SessionStart" or Claude Code silently drops the
+  // injected context (the script's own comment at line 31-33 calls this out).
+  // A regression removing hookEventName from the echo on line 39 would pass the
+  // no-vault test but break real context injection; this turns red instead.
+  it('load-open-questions.sh: emits SessionStart additionalContext when an OQ file is present', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-oq-present-'));
+    try {
+      const vault = path.join(home, '.total-recall', 'personal-vault', 'knowledge');
+      fs.mkdirSync(vault, { recursive: true });
+      // Filename matches the `*open*question*` glob; body under the 3KB cap.
+      fs.writeFileSync(
+        path.join(vault, 'open-questions.md'),
+        '- Why is the cache rebuild debounced?\n- Should vector search be on by default?\n',
+      );
+      const r = spawnSync('bash', [OQ_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const out = JSON.parse(r.stdout);
+      expect(out.continue).toBe(true);
+      expect(out.hookSpecificOutput.hookEventName).toBe('SessionStart');
+      // The wrapper header the script prepends + the file body both land in ctx.
+      const ctx = out.hookSpecificOutput.additionalContext;
+      expect(ctx).toContain('Ambient Curiosity — Open Technical Questions');
+      expect(ctx).toContain('Why is the cache rebuild debounced?');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // #24: the >3KB branch (load-open-questions.sh line 25) emits the bare
+  // `{"continue":true}` fallback so an oversized OQ file can't blow up the
+  // SessionStart context budget. Pin the size cap: a 4KB file must fall back,
+  // not inject.
+  it('load-open-questions.sh: falls back to continue:true when the OQ file exceeds 3KB', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-oq-oversize-'));
+    try {
+      const vault = path.join(home, '.total-recall', 'personal-vault', 'knowledge');
+      fs.mkdirSync(vault, { recursive: true });
+      // 4KB of content — over the 3072-byte cap.
+      fs.writeFileSync(path.join(vault, 'open-questions.md'), 'x'.repeat(4096) + '\n');
       const r = spawnSync('bash', [OQ_SCRIPT], {
         encoding: 'utf8',
         stdio: 'pipe',
