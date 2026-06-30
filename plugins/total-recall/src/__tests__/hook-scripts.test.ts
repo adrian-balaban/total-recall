@@ -314,3 +314,127 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     }
   });
 }, 60000);
+
+// ─── #5: pull-org-vault.sh — security-critical git-clone hook coverage ──────
+// pull-org-vault.sh does `gh repo clone` / `git clone` of a config-supplied
+// remote URL into the user's home and carries security-critical defenses:
+// GIT_CONFIG protocol.ext.allow=never (ext:: command-exec), GIT_TERMINAL_PROMPT=0,
+// https://|git@ URL validation, and --no-recurse-submodules (pushed-.gitmodules
+// fetch). Before #5 none were asserted, so a regression dropping any defense
+// (e.g. protocol.ext.allow=never or --no-recurse-submodules) would pass CI
+// silently. These spawn-based tests mirror the hook-scripts suite's pattern.
+const PULL_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'pull-org-vault.sh');
+
+function writeOrgConfig(home: string, orgRepo: string): void {
+  fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+  fs.writeFileSync(
+    path.join(home, '.total-recall', 'config.json'),
+    JSON.stringify({ orgRepo }),
+  );
+}
+
+const pullSuite = OK ? describe : describe.skip;
+pullSuite('pull-org-vault.sh (#5)', () => {
+  it('exits 0 with continue:true + SessionStart hookSpecificOutput when orgRepo is unset', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-norepo-'));
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    // No config.json → node readFileSync throws → catch writes '' → ORG_REPO empty.
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const out = JSON.parse(r.stdout);
+      expect(out.continue).toBe(true);
+      expect(out.hookSpecificOutput.hookEventName).toBe('SessionStart');
+      expect(out.hookSpecificOutput.additionalContext).toContain('orgRepo not set');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('skips with a clear message for a file:// / local-path orgRepo', () => {
+    // Only https:// and git@ SSH URLs are valid remotes; a file:// or local path
+    // could hand `git clone` an unintended source. The case guard rejects early.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-fileurl-'));
+    writeOrgConfig(home, 'file:///etc');
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx).toContain('not an https:// or git@ SSH URL');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('exports GIT_CONFIG protocol.ext.allow=never to the gh clone subprocess', () => {
+    // ext:: submodule URLs are literal command execution (never legitimate). The
+    // script exports GIT_CONFIG_KEY_0=protocol.ext.allow / =never BEFORE invoking
+    // gh, and gh spawns git inheriting this env — so the defense covers the gh
+    // clone path. Stub `gh repo clone` to dump its inherited env + exit 0 (→ the
+    // "Org vault cloned." branch), then assert the ext-allow block is present.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-extdef-'));
+    writeOrgConfig(home, 'https://github.com/o/r');
+    const capture = path.join(home, 'env.txt');
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'gh'), [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = auth ] && [ "$2" = token ]; then exit 1; fi',
+      'if [ "$1" = repo ] && [ "$2" = clone ]; then env | grep "^GIT_CONFIG" > "$CAPTURE_FILE"; exit 0; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'gh'), 0o755);
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home, CAPTURE_FILE: capture,
+               PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx).toContain('Org vault cloned');
+      const envDump = fs.readFileSync(capture, 'utf8');
+      expect(envDump).toContain('GIT_CONFIG_KEY_0=protocol.ext.allow');
+      expect(envDump).toContain('GIT_CONFIG_VALUE_0=never');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('passes --no-recurse-submodules to git clone on the gh-fallback path', () => {
+    // A pushed .gitmodules must never be fetched. The direct `git clone` fallback
+    // (taken when `gh repo clone` fails) carries --no-recurse-submodules. Stub gh
+    // to fail on `repo clone` (force the fallback) and git to capture its args +
+    // exit 0 (→ "Org vault cloned."), then assert the flag is present.
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-nosubmod-'));
+    writeOrgConfig(home, 'https://github.com/o/r');
+    const capture = path.join(home, 'git-args.txt');
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'gh'), [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = auth ] && [ "$2" = token ]; then exit 1; fi',
+      'if [ "$1" = repo ] && [ "$2" = clone ]; then exit 1; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.writeFileSync(path.join(binDir, 'git'), [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = clone ]; then printf "%s\\n" "$@" > "$GIT_CAPTURE"; exit 0; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'gh'), 0o755);
+    fs.chmodSync(path.join(binDir, 'git'), 0o755);
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home, GIT_CAPTURE: capture,
+               PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx).toContain('Org vault cloned');
+      const gitArgs = fs.readFileSync(capture, 'utf8');
+      expect(gitArgs).toContain('--no-recurse-submodules');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+}, 60000);
