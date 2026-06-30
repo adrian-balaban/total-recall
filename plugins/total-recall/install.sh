@@ -414,7 +414,14 @@ if [ -z "$VECTOR" ]; then
 fi
 if [ "$VECTOR" = "yes" ]; then
   info "Installing vector-search dependencies in $PLUGIN_ROOT ..."
-  if ( cd "$PLUGIN_ROOT" && npm install @huggingface/transformers sqlite-vec better-sqlite3 && npm run build ); then
+  # --no-save: these deps are ALREADY declared in package.json `optionalDependencies`
+  # (so the bundle externalizes them and the plugin loads without them). A bare
+  # `npm install <pkg>` (npm 7+) defaults to --save, which would duplicate them into
+  # `dependencies` — and if the maintainer ever committed that locally-mutated
+  # package.json, consumers' `claude plugin update` would treat them as required,
+  # defeating graceful degradation. --no-save installs into node_modules only,
+  # leaving package.json untouched.
+  if ( cd "$PLUGIN_ROOT" && npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3 && npm run build ); then
     ok "Vector search enabled (TF-IDF + embeddings via RRF)."
     note "Vector search enabled."
   else

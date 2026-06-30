@@ -313,6 +313,19 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
       fs.rmSync(home, { recursive: true, force: true });
     }
   });
+
+  // #9: install.sh --vector installs the optional vector deps. A bare `npm install
+  // <pkg>` (npm 7+) defaults to --save, which would duplicate them into
+  // `dependencies` and break graceful degradation if the mutated package.json were
+  // ever committed. Static-assert the --no-save guard is on the install line (a
+  // real --vector run would pull ~200 MB and is too heavy for a unit test).
+  it('install.sh: --vector installs optional deps with --no-save (never mutates package.json)', () => {
+    const src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');
+    const vectorLine = src.split('\n').find(l => l.includes('npm install') && l.includes('@huggingface/transformers'));
+    expect(vectorLine, 'expected an npm install line pulling @huggingface/transformers').toBeDefined();
+    expect(vectorLine).toContain('--no-save');
+    expect(vectorLine).not.toMatch(/npm install\s+--save\b/);
+  });
 }, 60000);
 
 // ─── #5: pull-org-vault.sh — security-critical git-clone hook coverage ──────
