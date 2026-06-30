@@ -235,7 +235,9 @@ any write operation
                                               → buildIndexCache()  (.index-cache.txt)
 ```
 
-`flushPending()` (called on SIGTERM/exit) cancels pending timers and runs both synchronously so no changes are lost when the MCP client disconnects.
+`flushPending()` (called on SIGTERM/exit) cancels pending timers and runs both synchronously so no debounced write is lost when the MCP client disconnects.
+
+**Single-writer assumption (cross-process caveat).** `index.json` is file-backed shared state with no file lock / CAS. Each Claude Code window spawns its own total-recall stdio process; both load `memIndex` at boot, mutate in memory, and `flushPending` via `atomicWrite` (write-`.tmp` + rename) on exit. Last rename wins; an earlier process's flush is silently discarded. The disk-durable fields (`title`, `tags`, `content`, `sessions` — `sessions` is written to frontmatter by `mutate.ts` and read back by `reconcileIndex`) are re-derived from the `.md` files on the next boot, so a clobbered `index.json` does not lose them. The fields genuinely at risk are the runtime-only `accessCount` / `lastAccessed` (soft Ebbinghaus-retention signals not stored in frontmatter) — a concurrent-session clobber resets those to whatever the last writer had in memory. Impact is limited to retention-decay accuracy, not memory content. A real fix would persist `accessCount`/`lastAccessed` into `.md` frontmatter on flush or guard `index.json` writes with a `flock`; neither is implemented today.
 
 ---
 
