@@ -84,5 +84,19 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
     scores.push({ key, score: rawScores[key]! * decay });
   }
 
+  // #23: full sort, not partial top-K selection. Two reasons this is intentional:
+  //   1. recall_memory feeds the FULL ranked list into Reciprocal Rank Fusion
+  //      (rrf.ts) against the vector nearest-neighbour ranks. RRF needs every
+  //      tfidf rank — a doc ranked 15th by TF-IDF but 1st by vector must survive
+  //      to be fused. Truncating to the caller's `limit` (10) before fusion would
+  //      silently drop cross-method matches and degrade hybrid recall, so the
+  //      caller-side `limit` cannot be pushed down into tfidfSearch.
+  //   2. search_index does slice to `limit` (20), but at personal scale this is
+  //      sorting a few hundred numbers — sub-ms, dwarfed by the MCP stdio
+  //      round-trip and the optional hybrid embed cost. A partial-selection
+  //      (quickselect / size-limited heap) path would only pay off beyond a few
+  //      thousand memories and adds non-trivial ranking-correctness risk for a
+  //      sub-ms win. Verified not actionable at personal scale; revisit only if
+  //      vault size grows into the thousands.
   return scores.sort((a, b) => b.score - a.score);
 }
