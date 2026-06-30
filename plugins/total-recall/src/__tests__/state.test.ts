@@ -1,19 +1,22 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 
-// bumpAccess is a one-liner over memIndex + scheduleSave — test it through its
-// observable contract: it mutates the meta in place (so the same reference
-// stays current in memIndex) and calls scheduleSave exactly once. We mock
-// scheduleSave at the module boundary (vi.mock), and substitute a real Map for
-// memIndex via vi.mock on the state module so the test can't leak entries
-// into the real shared singleton.
-vi.mock('../persistence.js', () => ({ scheduleSave: vi.fn() }));
+// bumpAccess is a one-liner over memIndex + scheduleAccessSave — test it through
+// its observable contract: it mutates the meta in place (so the same reference
+// stays current in memIndex) and calls scheduleAccessSave exactly once. #4 split
+// the save path: bumpAccess is the READ path, so it calls scheduleAccessSave
+// (persist accessCount/lastAccessed WITHOUT rebuilding the inverted index),
+// NOT scheduleSave (which sets the dirtyTokens flag and triggers the rebuild).
+// We mock scheduleAccessSave at the module boundary (vi.mock), and substitute a
+// real Map for memIndex via vi.mock on the state module so the test can't leak
+// entries into the real shared singleton.
+vi.mock('../persistence.js', () => ({ scheduleAccessSave: vi.fn() }));
 vi.mock('../state.js', async () => {
   const actual = await vi.importActual<any>('../state.js');
   return { ...actual, memIndex: {} };
 });
 
 import { bumpAccess, recordError, errors } from '../state.js';
-import { scheduleSave } from '../persistence.js';
+import { scheduleAccessSave } from '../persistence.js';
 import type { MemoryMetadata } from '../types.js';
 
 const mkMeta = (): MemoryMetadata => ({
@@ -26,7 +29,7 @@ const mkMeta = (): MemoryMetadata => ({
 });
 
 afterEach(() => {
-  vi.mocked(scheduleSave).mockClear();
+  vi.mocked(scheduleAccessSave).mockClear();
   // recordError mutates the REAL shared `errors` singleton (the vi.mock above
   // spreads `actual`, so `errors` is the live array other suites' get_stats
   // reads). Reset it so the cap test below can't pollute the cross-test index.
@@ -74,7 +77,7 @@ describe('bumpAccess', () => {
     bumpAccess(m);
     bumpAccess(m);
     bumpAccess(m);
-    expect(scheduleSave).toHaveBeenCalledTimes(3);
+    expect(scheduleAccessSave).toHaveBeenCalledTimes(3);
   });
 
   it('mutates the passed-in object — does not replace it', () => {

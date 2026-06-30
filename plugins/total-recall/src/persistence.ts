@@ -17,6 +17,20 @@ import * as crypto from 'crypto';
 let indexSaveTimer: ReturnType<typeof setTimeout> | null = null;
 let idfTimer: ReturnType<typeof setTimeout> | null = null;
 
+// #4: gate for the inverted-index rebuild. Set ONLY by the write path
+// (scheduleSave → store/update/delete/reconcile); the read path
+// (scheduleAccessSave → bumpAccess) leaves it false. The index-save timer
+// consults this flag when it fires: a write (tokens changed) schedules the
+// idf recalc + invertedIndex.json rewrite + cache rebuild; a read
+// (only accessCount/lastAccessed moved) writes index.json and stops — no
+// re-tokenization, no invertedIndex.json rewrite, no cache rebuild. Before #4,
+// bumpAccess ran the SAME scheduleSave() as a store_memory, so every
+// recall_memory(full) / get_memories_by_keys hit rebuilt the whole inverted
+// index + rewrote invertedIndex.json on disk — O(N) work + disk I/O per read
+// for a mutation that changes zero tokens. Reset to false once the recalc has
+// reflected it (timer fires, or flushPending on exit).
+let dirtyTokens = false;
+
 // ─── Index persistence ───────────────────────────────────────────────────────
 
 // Write-then-rename so a SIGKILL / power loss mid-write can't leave index.json,
@@ -141,7 +155,27 @@ export function loadIndexes() {
   loadIndex(invertedIndex, INVERTED_INDEX_PATH);
 }
 
+// Write path (store/update/delete/reconcile): tokens changed, so the inverted
+// index + cache are stale — flag dirty so the save timer schedules an idf
+// recalc when it flushes. The recalc is still debounced (+2s after the 1s
+// index write) so a burst of writes does one rebuild, not N.
 export function scheduleSave() {
+  dirtyTokens = true;
+  scheduleIndexSave();
+}
+
+// Read path (bumpAccess in state.ts): only accessCount/lastAccessed moved on
+// disk — tokens unchanged, the inverted index + cache stay valid. Persist the
+// access bump WITHOUT rebuilding the inverted index. See the dirtyTokens flag
+// comment above for the full rationale.
+export function scheduleAccessSave() {
+  scheduleIndexSave();
+}
+
+// Shared 1s-debounced index.json write, shared by the write and read paths.
+// The dirtyTokens gate decides whether the (expensive) inverted-index rebuild
+// follows: writes set it, reads don't, so a read never triggers the rebuild.
+function scheduleIndexSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
     // A throw inside a setTimeout callback fires uncaughtException (index.ts
@@ -152,7 +186,10 @@ export function scheduleSave() {
     // recordError) and never rethrow from an async timer.
     try {
       atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-      scheduleIdfRecalc();
+      if (dirtyTokens) {
+        dirtyTokens = false;
+        scheduleIdfRecalc();
+      }
     } catch (e) {
       recordError(`scheduleSave: ${(e as Error).message}`);
       try { console.error(e); } catch { /* stderr closed — ignore */ }
@@ -191,11 +228,18 @@ export function recalcIdfNow() {
 }
 
 export function flushPending() {
-  if (!indexSaveTimer && !idfTimer) return;
+  if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
+  // flushPending always runs saveNow + recalcIdfNow (the once-per-session
+  // correctness backstop): even a read-only exit rebuilds the inverted index
+  // so the on-disk index.json + invertedIndex.json never lag the .md files.
+  // recalcIdfNow reflects the current memIndex tokens, so the dirty flag is
+  // satisfied — clear it so a subsequent (theoretical) same-process save
+  // doesn't carry a stale "tokens changed" into an unneeded rebuild.
+  dirtyTokens = false;
   // Isolate the two writes: if saveNow throws (transient I/O), recalcIdfNow
   // must still run, and the throw must not propagate out of the SIGTERM/SIGINT
   // handler in index.ts (which would skip process.exit(0) and die via

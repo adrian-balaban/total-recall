@@ -15517,7 +15517,7 @@ function recordError(msg) {
 function bumpAccess(meta2) {
   meta2.accessCount++;
   meta2.lastAccessed = (/* @__PURE__ */ new Date()).toISOString();
-  scheduleSave();
+  scheduleAccessSave();
 }
 
 // src/tfidf.ts
@@ -15576,6 +15576,7 @@ function tfidfSearch(query, excludeJournal = true) {
 import * as crypto from "crypto";
 var indexSaveTimer = null;
 var idfTimer = null;
+var dirtyTokens = false;
 function atomicWrite(p, data) {
   ensureDir(path2.dirname(p));
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
@@ -15659,11 +15660,21 @@ function loadIndexes() {
   loadIndex(invertedIndex, INVERTED_INDEX_PATH);
 }
 function scheduleSave() {
+  dirtyTokens = true;
+  scheduleIndexSave();
+}
+function scheduleAccessSave() {
+  scheduleIndexSave();
+}
+function scheduleIndexSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
     try {
       atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-      scheduleIdfRecalc();
+      if (dirtyTokens) {
+        dirtyTokens = false;
+        scheduleIdfRecalc();
+      }
     } catch (e) {
       recordError(`scheduleSave: ${e.message}`);
       try {
@@ -15698,11 +15709,12 @@ function recalcIdfNow() {
   buildIndexCache();
 }
 function flushPending() {
-  if (!indexSaveTimer && !idfTimer) return;
+  if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
+  dirtyTokens = false;
   try {
     saveNow();
   } catch (e) {
@@ -16588,7 +16600,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.31" : null.version;
+var PLUGIN_VERSION = true ? "1.0.32" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -2090,3 +2090,51 @@ describe('CallTool dispatch — no-arguments call (Pass 5)', () => {
     expect(list.items[0].title).toBe('NoArg Memory');
   });
 });
+
+// ─── #4: reads must not trigger an inverted-index rebuild ────────────────────
+// bumpAccess (state.ts) is the READ path: only accessCount/lastAccessed move.
+// Before #4 it called scheduleSave(), whose timer unconditionally fired
+// scheduleIdfRecalc() — rebuildInvertedIndex (re-tokenize the whole vault) +
+// atomicWrite(invertedIndex.json) + buildIndexCache — on every
+// recall_memory(full) / get_memories_by_keys hit. A read changes zero tokens,
+// so the rebuild + disk rewrite was pure waste. #4 splits the save path:
+// scheduleSave (writes) sets a dirtyTokens flag → timer schedules the recalc;
+// scheduleAccessSave (reads) leaves the flag false → timer writes index.json
+// only. This test observes the on-disk effect with fake timers: after a read,
+// index.json is rewritten (access bump persisted) but invertedIndex.json is
+// NOT (no rebuild). The initial store_memory + flush establishes both files
+// on disk AND serves as the contrast (a write DID rewrite invertedIndex.json).
+describe('scheduleAccessSave — reads do not rebuild the inverted index (#4)', () => {
+  it('a read persists accessCount to index.json without rewriting invertedIndex.json', async () => {
+    vi.useFakeTimers();
+    try {
+      // Write path: store + full debounce writes BOTH files (the contrast).
+      const storeRes = result(await callTool('store_memory', {
+        title: 'Rebuild Probe', content: 'alpha tokens here', tags: [], category: 'knowledge',
+      }));
+      const key = storeRes.key;
+      // 1s index-save timer + 2s idf timer → both fire by 3000ms.
+      await vi.advanceTimersByTimeAsync(3000);
+
+      const idxPath = path.join(VAULT, 'index.json');
+      const invPath = path.join(VAULT, 'invertedIndex.json');
+      expect(fs.existsSync(invPath)).toBe(true); // write DID build it (contrast)
+      const invBefore = fs.statSync(invPath).mtimeMs;
+      const idxBefore = fs.statSync(idxPath).mtimeMs;
+
+      // READ path: get_memories_by_keys(full) → bumpAccess → scheduleAccessSave.
+      await callTool('get_memories_by_keys', { keys: [key], summary: false });
+      // accessSave timer fires at 1s; dirtyTokens is false → NO idf recalc.
+      await vi.advanceTimersByTimeAsync(3000);
+
+      const invAfter = fs.statSync(invPath).mtimeMs;
+      const idxAfter = fs.statSync(idxPath).mtimeMs;
+      // index.json rewritten — accessCount/lastAccessed persisted...
+      expect(idxAfter).toBeGreaterThan(idxBefore);
+      // ...invertedIndex.json NOT rewritten — tokens unchanged, no rebuild.
+      expect(invAfter).toBe(invBefore);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
