@@ -193,4 +193,68 @@ describe('total-recall over real stdio', () => {
     expect(Array.isArray(listed.items)).toBe(true);
     expect(listed.items.length).toBeGreaterThan(0);
   });
+
+  // #26: the security guards (org author protection, path-traversal category
+  // rejection, mutual-exclusion of personal/org tags) were only exercised in the
+  // mocked-transport index.test.ts, never over the real stdio wire. A dispatch
+  // regression specific to the real server path (e.g. the CallTool catch swallowing
+  // the throw shape, or isError not propagating over stdio) would slip past those
+  // mocked tests. These three cases exercise each guard end-to-end through the
+  // real MCP client → server → handler → thrown Error → isError response path.
+
+  it('org author guard: store_memory(force) on another author\'s org memory is rejected over stdio', async () => {
+    // Pre-seed an org memory authored by a foreign user. The guard compares
+    // existingFm.author against os.userInfo().username (the real OS user running
+    // this test), which is not 'other-user', so force=true must still be refused.
+    const orgArch = path.join(VAULT, 'org', 'org-vault', 'architecture');
+    fs.mkdirSync(orgArch, { recursive: true });
+    fs.writeFileSync(
+      path.join(orgArch, 'guarded-org.md'),
+      '---\ntitle: "Guarded Org"\nauthor: other-user\ntags: [org]\n' +
+      'created: 2026-01-01T00:00:00Z\nupdated: 2026-01-01T00:00:00Z\nimportanceScore: 0.5\n---\n\nBody.\n',
+    );
+    const res = await client.callTool({
+      name: 'store_memory',
+      arguments: {
+        title: 'Guarded Org',
+        content: 'Attempted takeover.',
+        tags: ['org'],
+        category: 'architecture',
+        force: true,
+      },
+    });
+    expect(res.isError).toBe(true);
+    // The error surfaces the foreign author so the caller knows whose memory it is.
+    expect(text(res)).toContain('other-user');
+    // And the original body was NOT overwritten.
+    expect(fs.readFileSync(path.join(orgArch, 'guarded-org.md'), 'utf8')).toContain('Body.');
+  });
+
+  it('path-traversal category is rejected over stdio', async () => {
+    const res = await client.callTool({
+      name: 'store_memory',
+      arguments: {
+        title: 'Traversal',
+        content: 'Should not escape the vault.',
+        tags: ['traversal'],
+        category: '../../../tmp',
+      },
+    });
+    expect(res.isError).toBe(true);
+    expect(text(res)).toContain('resolves outside the vault');
+  });
+
+  it('mutually-exclusive org+personal tags are rejected over stdio', async () => {
+    const res = await client.callTool({
+      name: 'store_memory',
+      arguments: {
+        title: 'MutEx Tags',
+        content: 'A memory cannot be both org and personal.',
+        tags: ['org', 'personal'],
+        category: 'knowledge',
+      },
+    });
+    expect(res.isError).toBe(true);
+    expect(text(res)).toContain("both 'org' and 'personal'");
+  });
 });
