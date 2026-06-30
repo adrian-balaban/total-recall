@@ -50,7 +50,7 @@ export async function recallMemory(args: any): Promise<any> {
   }
 
   // Date filters silently exclude memories with a missing/Invalid `updated` —
-  // mirrors `list_memories` (see CLAUDE.md "Key Gotchas"). inDateWindow resolves
+  // mirrors `search_index` / `get_timeline` (see CLAUDE.md "Key Gotchas"). inDateWindow resolves
   // the cutoffs ONCE (toCutoff throws on a bad bound, same throw point as the old
   // per-block calls) and applies the [since, before) window in a single pass; a
   // missing `updated` returns false (the drop is the safest fallback for

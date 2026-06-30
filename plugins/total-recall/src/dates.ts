@@ -35,7 +35,7 @@ export function toCutoff(expr: string): Date {
 // the whole result set, so the per-item work stays one `new Date` + two compares
 // (resolving the bound inside the predicate would call toCutoff N times). Either
 // bound may be null for a one-sided or unbounded window. A missing or unparseable
-// `updated` returns false — mirrors list_memories / recall_memory / search_index,
+// `updated` returns false — mirrors recall_memory / search_index / get_timeline,
 // which silently drop memories lacking a valid `updated` when a date filter is
 // active (see CLAUDE.md "Key Gotchas": every memory SHOULD carry `updated`; the
 // drop is the safest fallback for externally-authored files that predate the

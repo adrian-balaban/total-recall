@@ -1123,6 +1123,19 @@ describe('ListToolsRequestSchema', () => {
       'rebuild_index', 'recall_memory', 'search_index', 'store_memory', 'update_memory',
     ]);
   });
+
+  // #11: list_memories has NO date filter — only category/tag/limit/offset. The
+  // since/before behavior lives in recall_memory/search_index/get_timeline. A prior
+  // CLAUDE.md gotcha + code comments claimed list_memories had a `since` filter,
+  // which was false. Pin the schema so a future addition of `since`/`before` to
+  // list_memories is caught (and the doc drift can't silently re-appear).
+  it('list_memories schema has only category/tag/limit/offset (no since/before date filter) (#11)', async () => {
+    const handler = registeredHandlers.get('ListToolsRequestSchema')!;
+    const { tools } = await handler({ params: {} });
+    const lm = tools.find((t: any) => t.name === 'list_memories');
+    const props = Object.keys(lm.inputSchema.properties ?? {}).sort();
+    expect(props).toEqual(['category', 'limit', 'offset', 'tag']);
+  });
 });
 
 // ─── error handling ───────────────────────────────────────────────────────────

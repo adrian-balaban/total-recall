@@ -100,7 +100,7 @@ Every stored memory must include a `## Executive Summary` section (answers WHY i
 - `EXCLUDED_DIRS` in `src/paths.ts` skips `projects`, `templates`, `.obsidian`, etc. during vault scan
 - `category` is derived from the first subdirectory under the vault root; files at vault root get category `knowledge`
 - `journal` entries are auto-appended on `store_memory` only (personal memories only — org stores are skipped); `update_memory` and `delete_memory` do NOT write journal entries; never store to `journal` manually
-- `since` date filter in `list_memories` silently excludes memories with a missing `updated` field (by design)
+- `since`/`before` date filters in `recall_memory` / `search_index` / `get_timeline` silently exclude memories with a missing `updated` field (by design); `list_memories` has no date filter
 - `rebuild_index` preserves `accessCount`/`lastAccessed` — safe to run anytime
 - `store_memory` `force=true` — overwrites an existing memory at the same key, preserving `created` and `accessCount`; without it, a duplicate key throws
 - Org memory author protection — both `store_memory` (even with `force=true`) and `update_memory` throw if the existing org memory's `author` field differs from the current OS user; personal memories have no author guard
