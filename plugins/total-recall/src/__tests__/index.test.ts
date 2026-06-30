@@ -1316,6 +1316,62 @@ describe('indexFile error handling — corrupt .md triggers catch', () => {
   });
 });
 
+// ─── #10: indexFile preserves created/updated for files missing those fields ─
+// For legacy/hand-edited/teammate-pushed org files lacking created/updated
+// frontmatter, indexFile fell back to `now` on EVERY reconcile — so created
+// drifted to the boot timestamp (silent data-loss of the original creation date)
+// and updated drifted to now (defeats since/timeline date filters, which always
+// treat the file as "recently updated"). The fix mirrors the accessCount/
+// lastAccessed preservation: fall back to the prior index entry before `now`.
+describe('indexFile preserves created/updated for files missing those fields (#10)', () => {
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('does not drift created/updated to boot-time on re-reconcile', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'));
+    const dir = path.join(VAULT, 'personal-vault', 'knowledge');
+    // No created/updated frontmatter fields → indexFile must fall back to `now`.
+    fs.writeFileSync(path.join(dir, 'no-dates.md'),
+      `---\ntitle: "No Dates"\ntags: [nodates]\n---\n\nBody.\n`);
+    await callTool('rebuild_index');
+    const before = result(await callTool('get_memories_by_keys', { keys: ['knowledge/no-dates'], summary: false }));
+    expect(before[0].created).toBe('2026-01-01T00:00:00.000Z');
+    expect(before[0].updated).toBe('2026-01-01T00:00:00.000Z');
+
+    // Advance 10 days and re-reconcile. Without the #10 fix, created/updated
+    // would drift to the new boot time (2026-01-11) on every reconcile.
+    vi.setSystemTime(new Date('2026-01-11T00:00:00.000Z'));
+    await callTool('rebuild_index');
+    const after = result(await callTool('get_memories_by_keys', { keys: ['knowledge/no-dates'], summary: false }));
+    expect(after[0].created).toBe('2026-01-01T00:00:00.000Z'); // preserved from prior entry
+    expect(after[0].updated).toBe('2026-01-01T00:00:00.000Z'); // preserved from prior entry
+  });
+
+  it('still falls back to now when the file is brand-new (no prior index entry)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-02-01T00:00:00.000Z'));
+    const dir = path.join(VAULT, 'personal-vault', 'knowledge');
+    fs.writeFileSync(path.join(dir, 'brand-new.md'),
+      `---\ntitle: "Brand New"\ntags: [new]\n---\n\nBody.\n`);
+    await callTool('rebuild_index');
+    const res = result(await callTool('get_memories_by_keys', { keys: ['knowledge/brand-new'], summary: false }));
+    expect(res[0].created).toBe('2026-02-01T00:00:00.000Z');
+    expect(res[0].updated).toBe('2026-02-01T00:00:00.000Z');
+  });
+
+  it('frontmatter-provided created/updated still win (not overwritten by prior entry)', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-03-01T00:00:00.000Z'));
+    const dir = path.join(VAULT, 'personal-vault', 'knowledge');
+    fs.writeFileSync(path.join(dir, 'fm-dates.md'),
+      `---\ntitle: "FM Dates"\ntags: [fm]\ncreated: 2020-01-01T00:00:00.000Z\nupdated: 2020-06-01T00:00:00.000Z\n---\n\nBody.\n`);
+    await callTool('rebuild_index');
+    const res = result(await callTool('get_memories_by_keys', { keys: ['knowledge/fm-dates'], summary: false }));
+    expect(res[0].created).toBe('2020-01-01T00:00:00.000Z');
+    expect(res[0].updated).toBe('2020-06-01T00:00:00.000Z');
+  });
+});
+
 describe('recall_memory full=true — cache miss path', () => {
   it('reads file from disk when content is not in LRU cache', async () => {
     result(await callTool('store_memory', {

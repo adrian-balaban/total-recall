@@ -294,8 +294,8 @@ export function indexFile(filePath: string, isOrg: boolean) {
       // the same externally-authored threat model as the numeric-title coercion.
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
-      created: fm.created ?? now,
-      updated: fm.updated ?? now,
+      created: fm.created ?? existing?.created ?? now,
+      updated: fm.updated ?? existing?.updated ?? now,
       // Coerce + clamp importanceScore to a finite [0, 1] number — see
       // clampImportanceScore in ebbinghaus.ts.
       importanceScore: clampImportanceScore(fm.importanceScore),
