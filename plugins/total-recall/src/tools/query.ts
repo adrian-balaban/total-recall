@@ -4,12 +4,30 @@ import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable } from '../embeddings.js';
 import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
+import type { MemoryMetadata } from '../types.js';
+
+// #20: Schwartzian transform for the by-`updated`-descending sort shared by
+// list_memories and get_timeline. The prior inline comparator constructed two
+// `new Date` objects per comparison — ~2·N·log N Date allocations per
+// paginated call (and the same work repeats on every page, since both tools
+// re-filter + re-sort the whole memIndex each request). Parse `updated` to ms
+// once per doc, sort by the precomputed number, then map back to the metadata.
+// `new Date(m.updated).getTime()` is NaN for a missing/garbage `updated`; NaN
+// sorts to the end under `b[0] - a[0]` (NaN comparisons return false → elements
+// keep their relative order), matching the prior comparator's behavior.
+function sortByUpdatedDesc(metas: MemoryMetadata[]): MemoryMetadata[] {
+  return metas
+    .map(m => [new Date(m.updated).getTime(), m] as const)
+    .sort((a, b) => b[0] - a[0])
+    .map(pair => pair[1]);
+}
 
 export function listMemories(args: any): any {
   const { category, tag, limit = 50, offset = 0 } = args;
-  const filtered = Object.values(memIndex)
-    .filter(m => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
-    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const filtered = sortByUpdatedDesc(
+    Object.values(memIndex)
+      .filter(m => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
+  );
   const total = filtered.length;
   const items = filtered
     .slice(offset, offset + limit)
@@ -79,9 +97,10 @@ export function getTimeline(args: any): any {
   // `upper` is the symmetric exclusive upper bound; combine for a date-range window.
   const cutoff = since ? toCutoff(since) : new Date(0);
   const upper = before ? toCutoff(before) : null;
-  const filtered = Object.values(memIndex)
-    .filter(m => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category))
-    .sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const filtered = sortByUpdatedDesc(
+    Object.values(memIndex)
+      .filter(m => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category))
+  );
   const total = filtered.length;
   const items = filtered
     .slice(offset, offset + limit)

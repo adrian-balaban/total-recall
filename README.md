@@ -1,6 +1,6 @@
-# claude-plugins
+# claude-plugins-total-recall
 
-Claude Code plugin repository.
+Claude Code plugin repository with total-recall plugin.
 
 ## Plugins
 

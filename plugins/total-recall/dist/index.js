@@ -16477,9 +16477,14 @@ function searchIndex(args) {
 }
 
 // src/tools/query.ts
+function sortByUpdatedDesc(metas) {
+  return metas.map((m) => [new Date(m.updated).getTime(), m]).sort((a, b) => b[0] - a[0]).map((pair) => pair[1]);
+}
 function listMemories(args) {
   const { category, tag, limit = 50, offset = 0 } = args;
-  const filtered = Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag))).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const filtered = sortByUpdatedDesc(
+    Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
+  );
   const total = filtered.length;
   const items = filtered.slice(offset, offset + limit).map(({ key, title, category: category2, tags, updated, importanceScore, tokenEstimate: tokenEstimate2 }) => ({
     key,
@@ -16529,7 +16534,9 @@ function getTimeline(args) {
   const { since, before, limit = 50, offset = 0, category } = args;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
-  const filtered = Object.values(memIndex).filter((m) => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category)).sort((a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime());
+  const filtered = sortByUpdatedDesc(
+    Object.values(memIndex).filter((m) => inDateWindow(m.updated, cutoff, upper) && (!category || m.category === category))
+  );
   const total = filtered.length;
   const items = filtered.slice(offset, offset + limit).map((m) => ({ key: m.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated }));
   return { items, total, hasMore: offset + limit < total };
@@ -16638,7 +16645,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.47" : null.version;
+var PLUGIN_VERSION = true ? "1.0.48" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
