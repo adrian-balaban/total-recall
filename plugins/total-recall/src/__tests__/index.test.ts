@@ -728,6 +728,29 @@ describe('update_memory', () => {
     expect(raw).toContain('sess-abc');
   });
 
+  // #25: update_memory's `.slice(-50)` cap (mutate.ts:49) had no test supplying
+  // >50 sessions. The existing append test above only covers the 1-session case,
+  // and the store_memory(force=true) cap test covers the OTHER write path. A
+  // regression flipping `.slice(-50)` to `.slice(0,50)` (keeps oldest, drops
+  // most-recent) or removing the slice would pass both. Pre-seed 51 distinct
+  // session IDs via update_memory and assert exactly 50 persisted, oldest
+  // dropped, most-recent kept. 2-digit padded IDs are collision-free for
+  // substring checks (sess-01 is not a substring of sess-10..51).
+  it('caps the sessions array at the last 50 across repeated update_memory calls', async () => {
+    const { key, filePath } = result(await callTool('store_memory', {
+      title: 'Upd Cap', content: 'C', tags: [], category: 'knowledge', sessionId: 'sess-01',
+    }));
+    for (let i = 2; i <= 51; i++) {
+      await callTool('update_memory', { key, sessionId: 'sess-' + String(i).padStart(2, '0') });
+    }
+    const raw = fs.readFileSync(filePath, 'utf8');
+    // Oldest dropped, most-recent kept.
+    expect(raw).not.toContain('sess-01');
+    expect(raw).toContain('sess-51');
+    // Exactly 50 session entries persisted (sess-02 .. sess-51).
+    expect((raw.match(/sess-\d{2}/g) || []).length).toBe(50);
+  });
+
   it('returns error for unknown key', async () => {
     const res = await callTool('update_memory', { key: 'nope/key' });
     expect(res.isError).toBe(true);
