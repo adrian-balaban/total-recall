@@ -169,6 +169,22 @@ describe('stringifyFrontmatter', () => {
     expect(out).toContain("title: '''quoted'''");
     expect(parseFrontmatter(out).data.title).toBe("'quoted'");
   });
+
+  // T4: serializeArrayItem throws if an inline-array item contains a CR/LF.
+  // A literal newline in `tags: [a\nb]` would terminate the frontmatter line
+  // and inject the following text as a new key on re-parse (frontmatter-key
+  // injection from an array value). The scalar newline rejection is tested
+  // elsewhere; the array-item arm (frontmatter.ts:215) was not. Pin both the
+  // LF and CR cases, and that the throw mentions the array item.
+  it('throws on a newline in an inline-array item (T4, frontmatter-key injection guard)', () => {
+    expect(() => stringifyFrontmatter('body', { title: 'T', tags: ['a\nb'] })).toThrow(/array item/);
+    expect(() => stringifyFrontmatter('body', { title: 'T', tags: ['a\rb'] })).toThrow(/array item/);
+    // A multi-element array where only ONE item carries a newline still throws
+    // (the map runs serializeArrayItem per item; the bad one trips it).
+    expect(() => stringifyFrontmatter('body', { title: 'T', tags: ['ok', 'bad\nx'] })).toThrow(/array item/);
+    // Clean items still serialize fine (no false positive).
+    expect(stringifyFrontmatter('body', { title: 'T', tags: ['ok', 'fine'] })).toContain('tags: [ok, fine]');
+  });
 });
 
 describe('frontmatter — DoS immunity', () => {
