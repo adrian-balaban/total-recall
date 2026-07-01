@@ -15666,7 +15666,10 @@ function loadMemIndex() {
   let parsed;
   try {
     parsed = JSON.parse(fs2.readFileSync(INDEX_PATH, "utf8"));
-  } catch {
+  } catch (e) {
+    if (e.code !== "ENOENT") {
+      recordError(`loadMemIndex parse failed (rebuilding from .md files): ${e.message}`);
+    }
     return;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
@@ -16672,7 +16675,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.65" : null.version;
+var PLUGIN_VERSION = true ? "1.0.66" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

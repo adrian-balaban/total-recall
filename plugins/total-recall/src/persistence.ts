@@ -142,7 +142,23 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
 function loadMemIndex() {
   for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
   let parsed: unknown;
-  try { parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); } catch { return; }
+  try { parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); }
+  catch (e) {
+    // ENOENT is the expected cold start (no index.json yet — the first store
+    // creates it); stay silent so a fresh install doesn't log a spurious error.
+    // Any OTHER failure (corrupt JSON from an interrupted atomicWrite, a bad
+    // manual edit, an EACCES on the file) is worth surfacing: the personal
+    // index is self-healing (reconcileIndex rebuilds from the .md files next),
+    // but the user would otherwise have NO signal that their index.json is
+    // corrupt and that the rebuild just discarded the runtime-only
+    // accessCount/lastAccessed fields. Distinct from the org-index guard (#2),
+    // which throws on a corrupt committed index that propagates via git; this
+    // is local-only and benign, but the silent discard hides a real condition.
+    if ((e as NodeJS.ErrnoException).code !== 'ENOENT') {
+      recordError(`loadMemIndex parse failed (rebuilding from .md files): ${(e as Error).message}`);
+    }
+    return;
+  }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
   for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
     const coerced = coerceMemEntry(v, k);
