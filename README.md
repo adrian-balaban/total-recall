@@ -101,7 +101,7 @@ After cloning the marketplace repo and building once (`cd plugins/total-recall &
 ### What you lose without the hooks
 
 - **No injected memory index at session start** — you must call `search_index` / `recall_memory` / `list_memories` explicitly to find anything; the index isn't pre-loaded into context.
-- **No org-vault auto-sync** — store/update/delete on `org`-tagged memories won't push to the shared GitHub repo automatically. Run `node scripts/sync-org-memory.cjs` by hand if you need it.
+- **No org-vault auto-sync** — store/update/delete on `org`-tagged memories won't push to the shared GitHub repo automatically. Run `node scripts/sync-org-memory.mjs` by hand if you need it.
 - **No PreCompact learning extraction** — and note this hook also shells out to the `claude` CLI binary, so it's Claude-Code-bound on two counts (the hook *and* the `claude -p` extractor).
 
 The MCP tools alone are still a capable manual memory store — they're just not zero-touch.
