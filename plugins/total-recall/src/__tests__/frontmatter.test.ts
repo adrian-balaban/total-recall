@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFrontmatter, stringifyFrontmatter } from '../frontmatter.js';
+import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 
 describe('parseFrontmatter', () => {
   it('parses inline arrays and coerces numbers', () => {
@@ -238,5 +238,41 @@ describe('frontmatter — DoS immunity', () => {
     // .polluted/.length on data — document that the current threat is structural.
     expect((data as any).polluted).toBeUndefined();
     expect((data as any).length).toBeUndefined();
+  });
+});
+
+// T5: withExecutiveSummary is idempotent. Re-applying it to content that ALREADY
+// begins with the `## Executive Summary` header must NOT prepend a second copy —
+// otherwise a caller that normalizes user-supplied content via withExecutiveSummary
+// (e.g. update_memory on a body that already shipped) would double the header on
+// every edit, growing the file. The check is `content.trimStart().startsWith('## Executive Summary')`;
+// pinning the three cases (header at start, after leading whitespace, after leading
+// newline) guards against a future "simplify the trim" refactor that re-introduces
+// the doubling. store_memory's first-time path (no header yet) is covered by the
+// store tests; this pins the re-apply path.
+describe('withExecutiveSummary', () => {
+  it('prepends the header when the content has none (first-time write path)', () => {
+    const out = withExecutiveSummary('Just a body.');
+    expect(out).toBe('\n## Executive Summary\n\nJust a body.');
+  });
+
+  it('does NOT double the header when called on content that already starts with it (T5 idempotency)', () => {
+    const body = '## Executive Summary\n\nExisting body.';
+    const out = withExecutiveSummary(body);
+    // trimStart() trims leading whitespace, so the result keeps the single header
+    // and adds a leading newline so the on-disk body matches parseFrontmatter's
+    // yielded content (see withExecutiveSummary in frontmatter.ts).
+    expect(out).toBe('\n' + body);
+    // Critical: exactly ONE header — a regression that drops the trimStart check
+    // would yield two `## Executive Summary` lines.
+    expect(out.split('## Executive Summary').length - 1).toBe(1);
+  });
+
+  it('handles leading whitespace before the existing header (trimStart cover)', () => {
+    const body = '## Executive Summary\n\nAfter whitespace.';
+    const out = withExecutiveSummary('   \n\n' + body);
+    expect(out.split('## Executive Summary').length - 1).toBe(1);
+    expect(out).toContain('## Executive Summary');
+    expect(out).toContain('After whitespace.');
   });
 });
