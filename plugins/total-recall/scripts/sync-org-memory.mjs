@@ -82,10 +82,34 @@ for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
 // tests import the SAME source, so the old KEEP-IN-SYNC replica is gone.
 const ALLOWED_DOMAINS = sanitizeAllowedDomains(config.allowedEmailDomains);
 
+// Load the shared org index.json, bailing (throwing) when it EXISTS but is corrupt,
+// rather than catch-wiping it. A teammate's interrupted atomicWrite, a bad manual edit,
+// or a git-merge conflict marker left in index.json would parse to undefined → the old
+// bare `catch {}` set `index = {}` and the function then wrote a one-entry (store) or
+// empty (delete) index and commitAndPush committed it to the shared org-vault branch —
+// every teammate's next pull replaced their full org index with the single-entry/empty
+// one. Unlike the personal-vault loadMemIndex (self-healing via reconcileIndex from .md
+// files), the org index.json IS the source of truth that gets committed, so a silent
+// wipe propagates. The throw propagates to main().catch (logs to ~/.total-recall/org/
+// .sync-errors.log, exit 0 — non-blocking for the hook); the file on disk is left
+// untouched for manual recovery. Cold start (no index.json yet) returns {} — there is
+// nothing to corrupt, and the first sync must be allowed to create it.
+function loadOrgIndex(indexPath) {
+  if (!fs.existsSync(indexPath)) return {};
+  try {
+    const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('org index.json is not a JSON object');
+    }
+    return parsed;
+  } catch (e) {
+    throw new Error(`refusing to rewrite org index (parse failed: ${e.message})`);
+  }
+}
+
 function updateOrgIndex(key, data, content) {
   const indexPath = path.join(ORG_VAULT, 'index.json');
-  let index = {};
-  try { index = JSON.parse(fs.readFileSync(indexPath, 'utf8')); } catch {}
+  const index = loadOrgIndex(indexPath);
   const now = new Date().toISOString();
   index[key] = {
     key,
@@ -102,8 +126,7 @@ function updateOrgIndex(key, data, content) {
 
 function removeFromOrgIndex(key) {
   const indexPath = path.join(ORG_VAULT, 'index.json');
-  let index = {};
-  try { index = JSON.parse(fs.readFileSync(indexPath, 'utf8')); } catch {}
+  const index = loadOrgIndex(indexPath);
   delete index[key];
   atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }

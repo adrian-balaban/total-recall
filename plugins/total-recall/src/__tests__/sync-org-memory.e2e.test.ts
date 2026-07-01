@@ -188,4 +188,31 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     try { indexJson = git(['show', 'org-vault:org-vault/index.json'], { cwd: remote }); } catch { /* no index.json pushed yet */ }
     expect(indexJson).not.toContain(SENTINEL);
   });
+
+  // #2: a corrupt org index.json (interrupted atomicWrite, bad manual edit, or a git-
+  // merge conflict marker) used to parse to undefined → the bare `catch {}` set
+  // `index = {}` → updateOrgIndex wrote a one-entry index and commitAndPush committed
+  // it to the shared org-vault branch, wiping every teammate's full org index on their
+  // next pull. loadOrgIndex now throws when the file EXISTS but is corrupt (cold start
+  // — no index.json — still returns {}); the throw propagates to main().catch which
+  // logs to ~/.total-recall/org/.sync-errors.log and exits 0, leaving the file on disk
+  // untouched for manual recovery. Runs LAST and restores index.json from HEAD so the
+  // corrupt fixture can't leak into earlier tests' shared org-vault state.
+  it('refuses to rewrite a corrupt org index.json (no wipe, logs the error) (#2)', () => {
+    const indexPath = path.join(orgVault, 'index.json');
+    // A prior test committed a valid index.json to HEAD; corrupt the working-tree copy.
+    const GARBAGE = '<<<<<<< HEAD\nnot valid json\n=======\nstill not json\n>>>>>>> branch\n';
+    fs.writeFileSync(indexPath, GARBAGE);
+    // Store mode on the existing org-tagged flink-cdc file reaches updateOrgIndex,
+    // which calls loadOrgIndex and must throw BEFORE atomicWrite.
+    const res = runMjs('org/architecture/flink-cdc');
+    expect(res.stderr).toMatch(/refusing to rewrite org index/i);
+    // The corrupt file on disk is NOT rewritten (no single-entry/empty wipe).
+    expect(fs.readFileSync(indexPath, 'utf8')).toBe(GARBAGE);
+    // The error was logged to the persistent sync-errors log (main().catch).
+    const logPath = path.join(tmpHome, '.total-recall', 'org', '.sync-errors.log');
+    expect(fs.readFileSync(logPath, 'utf8')).toMatch(/refusing to rewrite org index/i);
+    // Restore the valid committed index.json so the corrupt fixture doesn't leak.
+    git(['checkout', '--', path.relative(orgDir, indexPath)], { cwd: orgDir });
+  });
 }, 60000);
