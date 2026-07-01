@@ -29,6 +29,17 @@ async function shutdown(): Promise<void> {
 
 process.once('SIGTERM', shutdown);
 process.once('SIGINT', shutdown);
+// Claude Code closes the MCP child's stdio streams on session end (it does NOT
+// send SIGTERM). The 'end' and 'close' events on process.stdin are what we
+// actually see; SIGTERM/SIGINT only fire on a manual kill. beforeExit does
+// NOT fire while stdin is held open (the readable stream keeps the event loop
+// alive), so without these two listeners the 1s scheduleSave debounce + the
+// 2s scheduleIdfRecalc debounce are killed mid-flight and the in-memory
+// memIndex mutations from the last store_memory are lost until the next boot
+// reconciles. Reuse the SIGTERM/SIGINT path so flushPending → flushEmbeddings
+// → process.exit(0) all run.
+process.stdin.on('end', shutdown);
+process.stdin.on('close', shutdown);
 process.on('beforeExit', flushPending);
 
 main().catch(e => { console.error(e); process.exit(1); });

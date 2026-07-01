@@ -16687,7 +16687,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.68" : null.version;
+var PLUGIN_VERSION = true ? "1.0.69" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16904,6 +16904,8 @@ async function shutdown() {
 }
 process.once("SIGTERM", shutdown);
 process.once("SIGINT", shutdown);
+process.stdin.on("end", shutdown);
+process.stdin.on("close", shutdown);
 process.on("beforeExit", flushPending);
 main().catch((e) => {
   console.error(e);

@@ -13,6 +13,7 @@ const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const LOAD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'load-memory-index.sh');
 const BUILD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'build-memory-index.sh');
 const OQ_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'load-open-questions.sh');
+const SESSION_END_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'session-end.sh');
 
 function has(bin: string): boolean {
   return spawnSync(bin, ['--version'], { stdio: 'ignore' }).status === 0;
@@ -515,5 +516,36 @@ pullSuite('pull-org-vault.sh (#5)', () => {
       const gitArgs = fs.readFileSync(capture, 'utf8');
       expect(gitArgs).toContain('--no-recurse-submodules');
     } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  // session-end.sh: SessionEnd hook. Must (a) emit a valid JSON envelope on
+  // stdout with hookEventName:"SessionEnd" (Claude Code DROPS envelopes that
+  // omit it — see #24), (b) append a session-end marker to .session-end.log,
+  // and (c) NOT crash if no MCP child is running. The MCP child discovery
+  // uses ps + ppid which is mocked by the synthetic spawn env, so the kill
+  // path is best-effort and may be a no-op in the test.
+  it('session-end.sh: emits SessionEnd envelope, writes log, exits 0 with no MCP child', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sessend-'));
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe',
+      env: { ...process.env, HOME: home, PPID: '999999' /* no such process */ },
+    });
+    expect(r.status).toBe(0);
+    // (a) envelope
+    const env = JSON.parse(r.stdout);
+    expect(env.hookSpecificOutput.hookEventName).toBe('SessionEnd');
+    expect(env.hookSpecificOutput.additionalContext).toContain('total-recall session end');
+    // (b) log written
+    const log = path.join(home, '.total-recall', '.session-end.log');
+    expect(fs.existsSync(log)).toBe(true);
+    const lines = fs.readFileSync(log, 'utf8').trim().split('\n');
+    expect(lines.length).toBe(1);
+    // The script reads PPID from the shell's built-in (which overrides the
+    // env var — bash exports PPID automatically and it's read-only). So the
+    // logged ppid is the actual parent PID of the spawned bash, not the env
+    // we set. Just assert the line shape.
+    expect(lines[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z pid=\d+ ppid=\d+ claude_session_id=unknown$/);
+    fs.rmSync(home, { recursive: true, force: true });
   });
 }, 60000);
