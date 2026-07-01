@@ -51,6 +51,15 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
   // recomputations for the same constant multiplier. Algebraically identical
   // output (not an approximation); just one decay eval per matched doc.
   const rawScores: Record<string, number> = {};
+  // #5: memoize the lowercased title + tags per doc. The boost checks below call
+  // toLowerCase on meta.title and every meta.tags entry once per (token, doc)
+  // match, but the lower casings are constant per doc — a query with Q tokens
+  // matching D docs paid Q·D title toLowerCase + Q·D·|tags| tag toLowerCase
+  // allocations, all recomputing the same per-doc strings. `token` is already
+  // lowercased by tokenize, so caching the lowercased title/tags and comparing
+  // with .includes(token) is algebraically identical output, just one toLowerCase
+  // per doc per query instead of one per (token, doc).
+  const lowCache = new Map<string, { titleLow: string; tagsLow: string[] }>();
 
   for (const token of tokens) {
     const entry = invertedIndex[token];
@@ -62,8 +71,13 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
       // tf is precomputed in rebuildInvertedIndex over title + tags + contentPreview,
       // so a tag-only match retains its tf here (no re-tokenization, no silent drop).
       let score = doc.tf * entry.idf;
-      if (meta.title.toLowerCase().includes(token)) score *= 2;
-      if (meta.tags.some(t => t.toLowerCase().includes(token))) score *= 1.5;
+      let low = lowCache.get(doc.key);
+      if (!low) {
+        low = { titleLow: meta.title.toLowerCase(), tagsLow: meta.tags.map(t => t.toLowerCase()) };
+        lowCache.set(doc.key, low);
+      }
+      if (low.titleLow.includes(token)) score *= 2;
+      if (low.tagsLow.some(t => t.includes(token))) score *= 1.5;
       rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }

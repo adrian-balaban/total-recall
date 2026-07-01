@@ -15560,6 +15560,7 @@ function rebuildInvertedIndex() {
 function tfidfSearch(query, excludeJournal = true) {
   const tokens = tokenize(query);
   const rawScores = {};
+  const lowCache = /* @__PURE__ */ new Map();
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
@@ -15568,8 +15569,13 @@ function tfidfSearch(query, excludeJournal = true) {
       if (!meta2) continue;
       if (excludeJournal && meta2.category === "journal") continue;
       let score = doc.tf * entry.idf;
-      if (meta2.title.toLowerCase().includes(token)) score *= 2;
-      if (meta2.tags.some((t) => t.toLowerCase().includes(token))) score *= 1.5;
+      let low = lowCache.get(doc.key);
+      if (!low) {
+        low = { titleLow: meta2.title.toLowerCase(), tagsLow: meta2.tags.map((t) => t.toLowerCase()) };
+        lowCache.set(doc.key, low);
+      }
+      if (low.titleLow.includes(token)) score *= 2;
+      if (low.tagsLow.some((t) => t.includes(token))) score *= 1.5;
       rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }
@@ -16666,7 +16672,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.63" : null.version;
+var PLUGIN_VERSION = true ? "1.0.64" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

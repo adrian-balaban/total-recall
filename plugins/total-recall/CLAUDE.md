@@ -66,7 +66,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 
 **Search pipeline:**
 - Primary: TF-IDF (`invertedIndex.json`) × Ebbinghaus retention decay (`src/ebbinghaus.ts`)
-- TF-IDF tokenizes over `title + tags + contentPreview` (first ~500 chars of body stored in the index, not the full file)
+- TF-IDF tokenizes over `title + tags + contentPreview` (first ~500 chars of body stored in the index, not the full file); the boost path (`×2` title match, `×1.5` tag match) memoizes the lowercased title + tags per doc-key across the query-token loop, so a Q-token query matching D docs pays one `toLowerCase` per doc, not Q·D — never re-introduce a per-(token, doc) `toLowerCase` in `tfidfSearch`
 - Optional hybrid: TF-IDF + vector embeddings fused via Reciprocal Rank Fusion (`src/rrf.ts`)
 - Vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`); gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
 
