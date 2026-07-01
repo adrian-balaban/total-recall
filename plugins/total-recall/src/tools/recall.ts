@@ -1,7 +1,7 @@
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
 import { toCutoff, inDateWindow } from '../dates.js';
-import { memIndex, bumpAccess } from '../state.js';
+import { memIndex, bumpAccess, recordError } from '../state.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
@@ -32,7 +32,14 @@ export async function recallMemory(args: any): Promise<any> {
       } else {
         ranked = tfidfResults;
       }
-    } catch {
+    } catch (e) {
+      // Every other write-path catch in the plugin routes through the bounded
+      // error sink (state.ts recordError, surfaced via get_stats.recentErrors);
+      // this read-path catch is the outlier. A recurring vector failure (corrupt
+      // vectors.db, an optional dep that loaded once then broke) would otherwise
+      // be invisible — the only signal "hybrid quietly degraded to TF-IDF". Log
+      // it, then fall back to the TF-IDF ranking so the query still answers.
+      recordError(`recall_memory hybrid: ${e instanceof Error ? e.message : String(e)}`);
       ranked = tfidfResults;
     }
   } else {

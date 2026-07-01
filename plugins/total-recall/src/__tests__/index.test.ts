@@ -20,7 +20,7 @@ vi.hoisted(() => {
 });
 
 import { loadIndexes, saveNow } from '../persistence.js';
-import { memIndex } from '../state.js';
+import { memIndex, errors } from '../state.js';
 import { appendJournal } from '../journal.js';
 import { contentCache, LRUCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
@@ -631,6 +631,25 @@ describe('recall_memory — hybrid RRF path (#7)', () => {
     // scale — so it drops every result, proving minScore is applied post-fusion.
     const floored = result(await callTool('recall_memory', { query: 'kafka', hybrid: true, minScore: 0.5 }));
     expect(floored.length).toBe(0);
+  });
+
+  // #1: the hybrid try/catch is the one read-path catch that did NOT route through
+  // recordError. A recurring vector failure (corrupt vectors.db, sqlite-vec I/O
+  // error, RRF throw) used to silently fall back to TF-IDF with no signal in
+  // get_stats.recentErrors. The fix records the error before degrading. This test
+  // stubs searchVector to reject, asserts (a) the result still equals the TF-IDF
+  // ranking (graceful degradation) and (b) the error was recorded to the sink.
+  it('records via recordError and falls back to TF-IDF when the vector path throws (#1)', async () => {
+    vi.mocked(embed).mockResolvedValue([0.1, 0.2, 0.3]);
+    vi.mocked(searchVector).mockRejectedValue(new Error('sqlite-vec I/O boom'));
+    const before = errors.length;
+    const res = result(await callTool('recall_memory', { query: 'kafka', hybrid: true }));
+    // (a) graceful degradation: the TF-IDF ranking still answers (the arch doc).
+    expect(res.length).toBeGreaterThan(0);
+    expect(res.every((r: any) => r.category !== 'journal')).toBe(true);
+    // (b) the vector-path error was recorded, not swallowed.
+    expect(errors.length).toBeGreaterThan(before);
+    expect(errors[errors.length - 1]!.msg).toMatch(/recall_memory hybrid.*sqlite-vec I\/O boom/);
   });
 });
 

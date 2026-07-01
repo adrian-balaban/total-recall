@@ -68,7 +68,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 - Primary: TF-IDF (`invertedIndex.json`) × Ebbinghaus retention decay (`src/ebbinghaus.ts`)
 - TF-IDF tokenizes over `title + tags + contentPreview` (first ~500 chars of body stored in the index, not the full file)
 - Optional hybrid: TF-IDF + vector embeddings fused via Reciprocal Rank Fusion (`src/rrf.ts`)
-- Vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`); gracefully degrades
+- Vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`); gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
 
 **Supporting modules:**
 - `src/frontmatter.ts` — minimal YAML-frontmatter parse/stringify (replaces gray-matter; handles inline + block arrays, immune to the js-yaml merge-key DoS)

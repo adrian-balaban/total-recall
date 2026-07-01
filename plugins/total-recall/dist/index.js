@@ -16444,7 +16444,8 @@ async function recallMemory(args) {
       } else {
         ranked = tfidfResults;
       }
-    } catch {
+    } catch (e) {
+      recordError(`recall_memory hybrid: ${e instanceof Error ? e.message : String(e)}`);
       ranked = tfidfResults;
     }
   } else {
@@ -16659,7 +16660,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.59" : null.version;
+var PLUGIN_VERSION = true ? "1.0.60" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
