@@ -133,7 +133,7 @@ After cloning the marketplace repo and building once (`cd plugins/total-recall &
 ### What you lose without the hooks (Codex, same as Copilot)
 
 - **No injected memory index at session start** — call `search_index` / `recall_memory` / `list_memories` explicitly.
-- **No org-vault auto-sync** — run `node scripts/sync-org-memory.cjs` by hand after `org`-tagged store/update/delete.
+- **No org-vault auto-sync** — run `node scripts/sync-org-memory.mjs` by hand after `org`-tagged store/update/delete.
 - **No PreCompact learning extraction** — doubly Claude-bound (the hook *and* the `claude -p` extractor).
 
 ### One Codex-specific note
