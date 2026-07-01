@@ -297,7 +297,7 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 
 ```
 sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers it
-                       unconditionally); delegates the `org`-tag gate to the .cjs:
+                       unconditionally); delegates the `org`-tag gate to the .mjs:
                        apply privacy filter → git add/commit/push org-vault branch
                      — also re-runs build-memory-index.sh to refresh .index-cache.txt
 ```
