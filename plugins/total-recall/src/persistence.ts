@@ -253,12 +253,18 @@ export function flushPending() {
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
-  // flushPending always runs saveNow + recalcIdfNow (the once-per-session
-  // correctness backstop): even a read-only exit rebuilds the inverted index
-  // so the on-disk index.json + invertedIndex.json never lag the .md files.
-  // recalcIdfNow reflects the current memIndex tokens, so the dirty flag is
-  // satisfied — clear it so a subsequent (theoretical) same-process save
-  // doesn't carry a stale "tokens changed" into an unneeded rebuild.
+  // Gate the O(N) recalc on whether tokens actually changed OR a recalc was
+  // already queued. The old "always recalc as a once-per-session backstop" paid
+  // a full rebuildInvertedIndex + invertedIndex.json write + cache rebuild on
+  // EVERY exit — including a pure read-only session whose only pending timer was
+  // a scheduleAccessSave (an accessCount bump: zero token changes). When
+  // dirtyTokens is false and no idfTimer was queued, the inverted index already
+  // reflects memIndex's tokens, so the backstop is redundant. saveNow still runs
+  // (it persists the accessCount/lastAccessed bumps to index.json). recalcIdfNow
+  // reflects the current memIndex tokens, so when it does run the dirty flag is
+  // satisfied — clear it either way so a subsequent (theoretical) same-process
+  // save doesn't carry a stale "tokens changed" into an unneeded rebuild.
+  const needRecalc = dirtyTokens || idfTimer !== null;
   dirtyTokens = false;
   // Isolate the two writes: if saveNow throws (transient I/O), recalcIdfNow
   // must still run, and the throw must not propagate out of the SIGTERM/SIGINT
@@ -268,7 +274,9 @@ export function flushPending() {
   // rebuildInvertedIndex/buildIndexCache). Log to stderr + record; both writes
   // are best-effort and reconcileIndex rebuilds on next boot.
   try { saveNow(); } catch (e) { recordError(`flushPending saveNow: ${(e as Error).message}`); try { console.error('flushPending saveNow:', e); } catch { /* stderr closed */ } }
-  try { recalcIdfNow(); } catch (e) { recordError(`flushPending recalcIdfNow: ${(e as Error).message}`); try { console.error('flushPending recalcIdfNow:', e); } catch { /* stderr closed */ } }
+  if (needRecalc) {
+    try { recalcIdfNow(); } catch (e) { recordError(`flushPending recalcIdfNow: ${(e as Error).message}`); try { console.error('flushPending recalcIdfNow:', e); } catch { /* stderr closed */ } }
+  }
 }
 
 // ─── Index cache (shell-readable) ────────────────────────────────────────────

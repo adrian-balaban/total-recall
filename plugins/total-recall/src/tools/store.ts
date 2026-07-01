@@ -17,7 +17,7 @@ import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 // Whether the shared org vault has been configured (config `orgRepo` set, or the
 // repo cloned). See A3 guard in storeMemory. Reads config.json defensively — a
 // missing/corrupt config is treated as "not configured".
-function orgVaultConfigured(): boolean {
+export function orgVaultConfigured(): boolean {
   try {
     const cfgPath = path.join(HOME, '.total-recall', 'config.json');
     const raw = fs.readFileSync(cfgPath, 'utf8');

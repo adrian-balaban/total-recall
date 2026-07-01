@@ -15730,6 +15730,7 @@ function flushPending() {
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
+  const needRecalc = dirtyTokens || idfTimer !== null;
   dirtyTokens = false;
   try {
     saveNow();
@@ -15740,13 +15741,15 @@ function flushPending() {
     } catch {
     }
   }
-  try {
-    recalcIdfNow();
-  } catch (e) {
-    recordError(`flushPending recalcIdfNow: ${e.message}`);
+  if (needRecalc) {
     try {
-      console.error("flushPending recalcIdfNow:", e);
-    } catch {
+      recalcIdfNow();
+    } catch (e) {
+      recordError(`flushPending recalcIdfNow: ${e.message}`);
+      try {
+        console.error("flushPending recalcIdfNow:", e);
+      } catch {
+      }
     }
   }
 }
@@ -16663,7 +16666,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.62" : null.version;
+var PLUGIN_VERSION = true ? "1.0.63" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
