@@ -16131,7 +16131,10 @@ function reconcileIndex() {
     let entries;
     try {
       entries = fs3.readdirSync(dir, { withFileTypes: true });
-    } catch {
+    } catch (e) {
+      if (e && e.code !== "ENOENT") {
+        recordError(`reconcile readdirSync(${dir}): ${e.message}`);
+      }
       return;
     }
     for (const e of entries) {
@@ -16660,7 +16663,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.61" : null.version;
+var PLUGIN_VERSION = true ? "1.0.62" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

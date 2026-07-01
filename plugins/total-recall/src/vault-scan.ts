@@ -179,7 +179,19 @@ export function reconcileIndex() {
   const seen = new Set<string>();
   const walk = (dir: string, isOrg: boolean) => {
     let entries: fs.Dirent[];
-    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch (e) {
+      // ENOENT (dir gone since walk scheduled) is fine — skip silently. A NON-ENOENT
+      // error (EACCES on a chmod'd subdir, EMFILE on fd exhaustion) silently pruned
+      // the whole subtree from the index with no signal, so memories "vanished" from
+      // search with no recordError. Surface those so the condition is observable in
+      // get_stats.recentErrors; the subtree is still skipped (return) either way.
+      if (e && (e as NodeJS.ErrnoException).code !== 'ENOENT') {
+        recordError(`reconcile readdirSync(${dir}): ${(e as Error).message}`);
+      }
+      return;
+    }
     for (const e of entries) {
       // Skip symlinks entirely. `git pull` preserves symlinks, so a teammate
       // with push access to the shared org vault can plant a symlink named

@@ -291,6 +291,36 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     expect(allPreviews.every((p: string) => !p.includes('TOPSECRET-DIR'))).toBe(true);
   });
 
+  // #3: the reconcile walk did `try { readdirSync } catch { return; }`, silently
+  // pruning the whole subtree on ANY error. A non-ENOENT error (EACCES on a chmod'd
+  // subdir, EMFILE on fd exhaustion) made memories "vanish" from search with no
+  // signal in get_stats.recentErrors. The catch now records non-ENOENT errors
+  // (ENOENT — dir gone since the walk scheduled — still skips silently) and returns.
+  it('reconcileIndex records a non-ENOENT readdirSync error (EACCES subtree) (#3)', async () => {
+    // A real chmod 000 makes readdirSync throw EACCES (no vi.spyOn — the `fs` ESM
+    // namespace isn't configurable, so mocking it errors). Runs as the vault owner
+    // (non-root), so the unreadable dir genuinely can't be listed. The walk hits
+    // personal-vault/locked → readdirSync throws → the catch records the non-ENOENT
+    // error and returns. ENOENT (dir gone since the walk scheduled it) still skips
+    // silently — only unexpected errors surface to get_stats.recentErrors.
+    const blockedDir = path.join(VAULT, 'personal-vault', 'locked');
+    fs.mkdirSync(blockedDir, { recursive: true });
+    fs.writeFileSync(path.join(blockedDir, 'secret.md'), '---\ntitle: Locked\n---\nbody\n');
+    fs.chmodSync(blockedDir, 0o000);
+    try {
+      const before = errors.length;
+      await callTool('rebuild_index');
+      // The EACCES error was recorded, not swallowed.
+      expect(errors.length).toBeGreaterThan(before);
+      expect(errors[errors.length - 1]!.msg).toMatch(/reconcile readdirSync.*EACCES/);
+      // The unreadable subtree was still skipped (no 'locked/secret' key).
+      expect(memIndex['locked/secret']).toBeUndefined();
+    } finally {
+      // Restore rwx so beforeEach's VAULT wipe can recurse into + remove the dir.
+      fs.chmodSync(blockedDir, 0o700);
+    }
+  });
+
   it('store_memory rejects a symlinked category directory (no vault-escape write)', async () => {
     const outsideDir = path.join(OUTSIDE, 'evil-target');
     fs.mkdirSync(outsideDir, { recursive: true });
