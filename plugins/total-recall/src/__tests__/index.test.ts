@@ -147,6 +147,37 @@ describe('store_memory', () => {
     expect(res.content[0].text).toContain('cannot have both');
   });
 
+  it('rejects a personal (no org tag) memory with the reserved "org" category (#12 regression)', async () => {
+    // The exact-string form. The personal-vault "org/" subtree is skipped by
+    // reconcileIndex, so a personal write there is never indexed — a silent
+    // data-loss footgun the store-time guard must reject before any disk write.
+    const res = await callTool('store_memory', {
+      title: 'Reserved Org Cat', content: 'X', tags: ['personal'], category: 'org',
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('reserved');
+    // Nothing written or created — the guard runs before ensureDir/writeFileSync.
+    expect(fs.existsSync(path.join(VAULT, 'personal-vault', 'org'))).toBe(false);
+  });
+
+  it('rejects a personal memory with an "org/"-PREFIXED category (#12 regression)', async () => {
+    // The prefix form is the actual #12 bug: `category: 'org/architecture'`
+    // (no org tag) is NOT caught by a bare `=== 'org'` guard, so it writes under
+    // personal-vault/org/architecture/foo.md, reconcileIndex skips the whole
+    // personal-vault "org/" subtree, and the file is orphaned — written, never
+    // findable. The guard must catch the prefix too (startsWith('org/')), not
+    // just the exact string.
+    const res = await callTool('store_memory', {
+      title: 'Prefix Org Cat', content: 'X', tags: [], category: 'org/architecture',
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('reserved');
+    expect(res.content[0].text).toContain('org/architecture');
+    // No stray file/dir under the reserved personal-vault "org/" subtree.
+    expect(fs.existsSync(path.join(VAULT, 'personal-vault', 'org', 'architecture'))).toBe(false);
+    expect(fs.existsSync(path.join(VAULT, 'personal-vault', 'org', 'architecture', 'prefix-org-cat.md'))).toBe(false);
+  });
+
   it('refuses an org store when the org vault is not configured (A3)', async () => {
     // mkVaultDirs provisions config.json; remove it (and any cloned .git) so the
     // A3 guard sees an unconfigured org vault. Nothing else in this run touches

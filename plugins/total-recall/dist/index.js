@@ -16303,9 +16303,9 @@ function storeMemory(args) {
   const isOrg = tags.includes("org");
   const isPersonal = tags.includes("personal");
   if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
-  if (!isOrg && category === "org") {
+  if (!isOrg && (category === "org" || category.startsWith("org/"))) {
     throw new Error(
-      'Category "org" is reserved for the shared org vault. Use a different category, or tag the memory "org" to route it to the org vault.'
+      'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
     );
   }
   if (isOrg && !orgVaultConfigured()) {
@@ -16672,7 +16672,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.64" : null.version;
+var PLUGIN_VERSION = true ? "1.0.65" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

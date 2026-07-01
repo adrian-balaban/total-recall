@@ -55,10 +55,16 @@ export function storeMemory(args: any): any {
   // `org`). A personal memory (no `org` tag) with `category: 'org'` would write to
   // `personal-vault/org/<slug>.md` → key `org/<slug>`, colliding with org-vault keys
   // AND being dropped on the next reconcile (the personal walk skips `org/`) — a
-  // silent data-loss footgun. Reject it; route to the org vault via the `org` tag.
-  if (!isOrg && category === 'org') {
+  // silent data-loss footgun. The same trap fires for any `org/`-PREFIXED category
+  // (e.g. `org/architecture`): it writes under `personal-vault/org/...`, reconcile
+  // skips the whole `org/` subtree of the personal vault, and the file is never
+  // indexed — written, invisible to every search/recall/list tool, orphaned until
+  // the user manually moves it. Catch the prefix too (not just the exact string),
+  // so `category: 'org/something'` is rejected at the source instead of silently
+  // lost. Route org memories via the `org` tag, not a reserved `org/` category.
+  if (!isOrg && (category === 'org' || category.startsWith('org/'))) {
     throw new Error(
-      'Category "org" is reserved for the shared org vault. Use a different category, or tag the memory "org" to route it to the org vault.'
+      'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
     );
   }
 
