@@ -86,11 +86,11 @@ command -v flock >/dev/null 2>&1 || echo "warning: 'flock' not found; org sync r
 # still discoverable at ~/.total-recall/org/.sync.log.
 #
 # Only org-tagged memories live in the shared git vault (their keys are prefixed
-# `org/`). A personal memory store/update/delete must NOT spawn the cjs git
-# sync — the cjs would treat a non-org key as missing from the org vault and
+# `org/`). A personal memory store/update/delete must NOT spawn the mjs git
+# sync — the mjs would treat a non-org key as missing from the org vault and
 # (attempt to) push a deletion / no-op, wasting a lock+spawn per personal write
 # and, for --delete, removing an unrelated entry if a path collision occurred.
-# Short-circuit personal keys: skip the cjs entirely but still rebuild the cache
+# Short-circuit personal keys: skip the mjs entirely but still rebuild the cache
 # below (personal writes must reflect in the injected index).
 case "$KEY" in
   org/*)
