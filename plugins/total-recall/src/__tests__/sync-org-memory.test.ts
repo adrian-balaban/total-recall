@@ -18,6 +18,29 @@ describe('privacyCheck', () => {
     expect(privacyCheck({ title: 'Notes' }, 'Contact user@gmail.com for details.')).toMatch(/email/);
   });
 
+  // #6 / review-fix #13: the EMAIL_RE host class must include non-ASCII (IDN)
+  // chars ( -￿), not ASCII-only `[A-Za-z0-9.-]+`. An ASCII-only host
+  // class never matched `user@münchen.de` / `kunde@exämple.com`, so a personal
+  // email at an internationalized host sailed past findSuspiciousEmail into the
+  // shared org repo. This pins the IDN host class so a future "simplify the
+  // regex" refactor that narrows it back to ASCII-only is caught at npm test,
+  // not in a teammate's leaked email. Fail-closed (empty allowlist) blocks them.
+  it('blocks IDN/non-ASCII host emails (review-fix #13 regression, #6 test-gap)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Contact user@münchen.de for help.')).toMatch(/email/);
+    expect(privacyCheck({ title: 'Notes' }, 'Reach kunde@exämple.com.')).toMatch(/email/);
+    // Cyrillic and CJK hosts are covered by the same BMP-above-ASCII range.
+    // (Local parts stay ASCII by design — the IDN fix targets the HOST class —
+    // so use an ASCII local part with an IDN host, the realistic leak shape.)
+    expect(privacyCheck({ title: 'Notes' }, 'Пишите мне at user@пример.рф.')).toMatch(/email/);
+    expect(privacyCheck({ title: 'Notes' }, 'Mail to user@example.日本.')).toMatch(/email/);
+  });
+
+  it('honors an allowlisted IDN domain (the host still flows through isAllowedEmail)', () => {
+    // The IDN fix is not "block all non-ASCII hosts" — the host still flows
+    // through isAllowedEmail, so a company at an IDN domain can be allowlisted.
+    expect(privacyCheck({ title: 'Notes' }, 'Contact ops@münchen.de for help.', ['münchen.de'])).toBeNull();
+  });
+
   it('fail-closed: empty allowlist blocks every email, including work domains', () => {
     // Default config (no allowedEmailDomains) → no email is safe to push.
     expect(privacyCheck({ title: 'Notes' }, 'Contact ops@example.com for help.')).toMatch(/email/);
