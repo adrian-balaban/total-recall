@@ -13,7 +13,7 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-rmc-' + process.pid;
 });
 
-import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
+import { readMemoryContent, readCachedOrFresh, slugify } from '../vault-scan.js';
 import { contentCache } from '../lru-cache.js';
 
 const TMP = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-rmc-'));
@@ -165,5 +165,36 @@ describe('readCachedOrFresh', () => {
     contentCache.set(key, '');
     const r = readCachedOrFresh(key, fp);
     expect(r).toEqual({ status: 'hit', content: '' });
+  });
+});
+
+// ─── T1: slugify empty/punctuation-only title fallback to 'untitled' ─────────
+// slugify collapses to '' for an empty or all-punctuation title; without the
+// `slug || 'untitled'` fallback the file would be `knowledge/.md` with key
+// `knowledge/` (a path-shaped collision footgun). Pin the fallback so a future
+// "simplify slugify" refactor that drops the `|| 'untitled'` is caught.
+describe('slugify empty-title fallback (T1)', () => {
+  it('falls back to "untitled" for an empty title', () => {
+    expect(slugify('')).toBe('untitled');
+    expect(slugify('   ')).toBe('untitled');
+  });
+
+  it('falls back to "untitled" for a punctuation-only title', () => {
+    expect(slugify('!!!')).toBe('untitled');
+    expect(slugify('...---...')).toBe('untitled');
+    expect(slugify('@@@')).toBe('untitled');
+  });
+
+  it('produces a real slug for a title with at least one alnum char', () => {
+    expect(slugify('Hello World!')).toBe('hello-world');
+    // A single alnum survives; the surrounding punctuation is stripped but the
+    // slug is non-empty so the fallback does NOT fire.
+    expect(slugify('!a!')).toBe('a');
+  });
+
+  it('caps the slug at 80 chars (fallback only fires when the slug is EMPTY)', () => {
+    const long = 'a'.repeat(120);
+    expect(slugify(long)).toBe('a'.repeat(80));
+    expect(slugify('-'.repeat(120))).toBe('untitled');
   });
 });

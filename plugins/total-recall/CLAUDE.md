@@ -103,6 +103,7 @@ For iterative hardening of a git repository ("review and fix", "harden and ship"
 - `org` tag routes to the shared vault
 - `EXCLUDED_DIRS` in `src/paths.ts` skips `projects`, `templates`, `.obsidian`, etc. during vault scan
 - `category` is derived from the first subdirectory under the vault root; files at vault root get category `knowledge`
+- `slugify` (vault-scan.ts) collapses an empty or all-punctuation title to `''`, then falls back to the literal slug `'untitled'` (`slug || 'untitled'`) — without it an empty title would produce `knowledge/.md` with the path-shaped key `knowledge/`. Pinned by `slugify` tests in `vault-scan.test.ts`; never drop the `|| 'untitled'` fallback
 - `journal` entries are auto-appended on `store_memory` only (personal memories only — org stores are skipped); `update_memory` and `delete_memory` do NOT write journal entries; never store to `journal` manually
 - `since`/`before` date filters in `recall_memory` / `search_index` / `get_timeline` silently exclude memories with a missing `updated` field (by design); `list_memories` has no date filter
 - `rebuild_index` preserves `accessCount`/`lastAccessed` — safe to run anytime
