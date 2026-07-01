@@ -54,11 +54,23 @@ export function updateMemory(args: any): any {
     // against a file that never had the field can't leave tags/importanceScore as
     // `undefined` in memIndex — that would crash tfidfSearch/list filters (~3s
     // later via the debounced rebuildInvertedIndex) on meta.tags.join/.includes.
-    // Coerce tags to an array: a caller may pass a scalar, or the existing file
-    // may carry a scalar `tags` from a hand-edited/teammate-pushed frontmatter.
-    // Matches indexFile's Array.isArray guard; without it, a scalar would crash
-    // tfidfSearch's meta.tags.join and getRelatedMemories' Set(m.tags).
-    tags: Array.isArray(tags ?? parsed.data.tags) ? (tags ?? parsed.data.tags) : [],
+    // Coerce tags to an array: the existing file may carry a scalar `tags` from a
+    // hand-edited/teammate-pushed frontmatter; matches indexFile's Array.isArray
+    // guard, without which a scalar would crash tfidfSearch's meta.tags.join and
+    // getRelatedMemories' Set(m.tags).
+    //
+    // T3 (option b — lenient): a caller-supplied SCALAR `tags` (non-array) is
+    // IGNORED and the existing tags are kept, NOT used to wipe the field to [].
+    // The MCP schema (server.ts) declares `tags` as `array`, so a well-behaved
+    // client never sends a scalar; but a direct caller or malformed request can,
+    // and the pre-fix code (`Array.isArray(tags ?? parsed.data.tags) ? ... : []`)
+    // wiped the whole tags field on a scalar — silent data loss on an update that
+    // meant to leave tags alone (e.g. only changing `content`). Strict (throw)
+    // would match the schema but break a caller that passed a scalar by mistake;
+    // lenient preserves the user's existing tags. So: array → use it; undefined
+    // OR scalar → keep existing (coerced to [] if the existing value is itself a
+    // scalar, same as indexFile).
+    tags: Array.isArray(tags) ? tags : (Array.isArray(parsed.data.tags) ? parsed.data.tags : []),
     // Clamp to a finite [0, 1] number — see clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(importanceScore ?? parsed.data.importanceScore),
     updated: now,

@@ -831,6 +831,51 @@ describe('update_memory', () => {
     expect((raw.match(/sess-\d{2}/g) || []).length).toBe(50);
   });
 
+  // T3 (option b — lenient): a caller-supplied SCALAR `tags` (non-array) must
+  // NOT wipe the existing tags to []. The MCP schema declares `tags` as array,
+  // so a well-behaved client never sends a scalar, but a direct/malformed
+  // caller can. Pre-fix, `Array.isArray(tags ?? parsed.data.tags) ? ... : []`
+  // saw the scalar, failed Array.isArray, and reset tags to [] — silent data
+  // loss on an update that meant to leave tags alone (e.g. only changing
+  // content). Option (b) ignores the scalar field and keeps the existing tags.
+  it('ignores a scalar tags arg and keeps existing tags (T3 lenient, no wipe)', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Scalar Tags Keep', content: 'Original', tags: ['kafka', 'cdc'], category: 'knowledge',
+    }));
+    // Caller passes a scalar `tags: 'flink'` alongside a content change. The
+    // scalar must be IGNORED (not used, not wiped) — existing tags preserved.
+    await callTool('update_memory', { key, tags: 'flink', content: 'New body' });
+    const [mem] = result(await callTool('get_memories_by_keys', { keys: [key] }));
+    expect(mem.tags).toEqual(['kafka', 'cdc']);
+    expect(mem.tags).not.toContain('flink');
+    expect(mem.content).toContain('New body');
+  });
+
+  it('a proper array tags arg still replaces tags (T3: scalar is the only lenient case)', async () => {
+    // The lenient branch fires ONLY for a scalar; a real array still wins so a
+    // caller can intentionally retag. (Guards against an over-broad "ignore
+    // tags always" misread of the fix.)
+    const { key } = result(await callTool('store_memory', {
+      title: 'Array Tags Replace', content: 'C', tags: ['old'], category: 'knowledge',
+    }));
+    await callTool('update_memory', { key, tags: ['new', 'tags'] });
+    const [mem] = result(await callTool('get_memories_by_keys', { keys: [key] }));
+    expect(mem.tags).toEqual(['new', 'tags']);
+  });
+
+  it('omitting tags entirely keeps existing tags (T3: undefined ≠ scalar)', async () => {
+    // `tags` undefined (arg not supplied) must keep existing — the pre-fix
+    // code did this via `tags ?? parsed.data.tags`; the T3 fix must preserve
+    // it (undefined falls through to "keep existing", same as the scalar case
+    // now, NOT to []).
+    const { key } = result(await callTool('store_memory', {
+      title: 'Omit Tags Keep', content: 'C', tags: ['persist-me'], category: 'knowledge',
+    }));
+    await callTool('update_memory', { key, content: 'Changed body only' });
+    const [mem] = result(await callTool('get_memories_by_keys', { keys: [key] }));
+    expect(mem.tags).toEqual(['persist-me']);
+  });
+
   it('returns error for unknown key', async () => {
     const res = await callTool('update_memory', { key: 'nope/key' });
     expect(res.isError).toBe(true);
