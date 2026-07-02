@@ -90,6 +90,28 @@ describe('parseFrontmatter', () => {
     const { data } = parseFrontmatter(raw);
     expect(data).toEqual({ title: 'Foo' });
   });
+
+  it('parses inline arrays and scalars with trailing comments', () => {
+    const raw = `---\ntitle: Foo\ntags: [a, b] # a comment\nimportanceScore: 0.7 # also a comment\n---\nbody\n`;
+    const { data } = parseFrontmatter(raw);
+    expect(data.tags).toEqual(['a', 'b']);
+    expect(data.importanceScore).toBe(0.7);
+    expect(data.title).toBe('Foo');
+  });
+
+  it('keeps # characters inside quoted scalars, not as comment markers', () => {
+    const raw = `---\ntitle: 'Issue #42'\nnote: "hash # inside"\n---\nbody\n`;
+    const { data } = parseFrontmatter(raw);
+    expect(data.title).toBe('Issue #42');
+    expect(data.note).toBe('hash # inside');
+  });
+
+  it('strips trailing comments from scalar strings', () => {
+    const raw = `---\ntitle: Foo # comment\ntags: [a]\n---\nbody\n`;
+    const { data } = parseFrontmatter(raw);
+    expect(data.title).toBe('Foo');
+    expect(data.tags).toEqual(['a']);
+  });
 });
 
 describe('stringifyFrontmatter', () => {

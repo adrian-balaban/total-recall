@@ -15783,6 +15783,30 @@ var FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+function trimTrailingComment(s) {
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === "\\" && s[i + 1] === '"' && quote === '"') {
+        i++;
+        continue;
+      }
+      if (ch === quote) {
+        if (quote === "'" && s[i + 1] === "'") {
+          i++;
+          continue;
+        }
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === "#") {
+      return s.slice(0, i).trimEnd();
+    }
+  }
+  return s.trimEnd();
+}
 function parseFrontmatter(raw) {
   const match = raw.match(FM_RE);
   if (!match) return { data: {}, content: raw };
@@ -15874,16 +15898,17 @@ function parseYamlish(body) {
     if (!kv) continue;
     const key = kv[1];
     const val = kv[2] ?? "";
+    const cleanVal = trimTrailingComment(val);
     if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-    if (val === "") {
+    if (cleanVal === "") {
       data[key] = [];
       continue;
     }
-    if (val.startsWith("[") && val.endsWith("]")) {
-      data[key] = parseInlineArray(val.slice(1, -1));
+    if (cleanVal.startsWith("[") && cleanVal.endsWith("]")) {
+      data[key] = parseInlineArray(cleanVal.slice(1, -1));
       continue;
     }
-    data[key] = coerceScalar(val);
+    data[key] = coerceScalar(cleanVal);
   }
   for (const [k, v] of Object.entries(data)) {
     if (Array.isArray(v) && v.length === 0 && !hadBlockItems(body, k)) {
@@ -16510,13 +16535,15 @@ function searchIndex(args) {
 }
 
 // src/tools/query.ts
+var MAX_PAGE_LIMIT = 1e3;
+var MAX_PAGE_OFFSET = 1e6;
 function sortByUpdatedDesc(metas) {
   return metas.map((m) => [new Date(m.updated).getTime(), m]).sort((a, b) => b[0] - a[0]).map((pair) => pair[1]);
 }
 function listMemories(args) {
   const { category, tag } = args;
-  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
-  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   const filtered = sortByUpdatedDesc(
     Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
   );
@@ -16533,7 +16560,9 @@ function listMemories(args) {
   return { items, total, hasMore: offset + limit < total };
 }
 function getMemoriesByKeys(args) {
-  const { keys, summary = false } = args;
+  const rawKeys = Array.isArray(args.keys) ? args.keys : typeof args.keys === "string" ? [args.keys] : [];
+  const keys = rawKeys.map((k) => typeof k === "string" ? k : String(k));
+  const { summary = false } = args;
   return keys.map((key) => {
     const meta2 = memIndex[key];
     if (!meta2) return { key, error: "Not found" };
@@ -16567,8 +16596,8 @@ function getStats() {
 }
 function getTimeline(args) {
   const { since, before, category } = args;
-  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
-  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
   const filtered = sortByUpdatedDesc(
@@ -16657,7 +16686,7 @@ function updateMemory(args) {
     updated: now,
     sessions
   };
-  const newContent = content ? withExecutiveSummary(content) : parsed.content;
+  const newContent = content !== void 0 ? withExecutiveSummary(content) : parsed.content;
   fs6.writeFileSync(meta2.filePath, stringifyFrontmatter(newContent, newFm));
   Object.assign(meta2, {
     tags: newFm.tags,
@@ -16694,7 +16723,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.71" : null.version;
+var PLUGIN_VERSION = true ? "1.0.72" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

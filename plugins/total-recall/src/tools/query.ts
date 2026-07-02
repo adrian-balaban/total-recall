@@ -6,6 +6,12 @@ import { isVectorAvailable } from '../embeddings.js';
 import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
 import type { MemoryMetadata } from '../types.js';
 
+// Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
+// buggy/malicious caller can pass values that are huge, negative, or NaN.
+// Coerce, clamp, and provide safe defaults at the query boundary.
+const MAX_PAGE_LIMIT = 1000;
+const MAX_PAGE_OFFSET = 1_000_000;
+
 // #20: Schwartzian transform for the by-`updated`-descending sort shared by
 // list_memories and get_timeline. The prior inline comparator constructed two
 // `new Date` objects per comparison — ~2·N·log N Date allocations per
@@ -24,8 +30,8 @@ function sortByUpdatedDesc(metas: MemoryMetadata[]): MemoryMetadata[] {
 
 export function listMemories(args: any): any {
   const { category, tag } = args;
-  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
-  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   const filtered = sortByUpdatedDesc(
     Object.values(memIndex)
       .filter(m => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
@@ -40,7 +46,16 @@ export function listMemories(args: any): any {
 }
 
 export function getMemoriesByKeys(args: any): any {
-  const { keys, summary = false } = args;
+  // keys may arrive as a single string, a mixed array, or missing. Coerce to a
+  // clean string array at the boundary so the read path never throws on a
+  // non-iterable value and non-string elements are safely stringified.
+  const rawKeys = Array.isArray(args.keys)
+    ? args.keys
+    : typeof args.keys === 'string'
+      ? [args.keys]
+      : [];
+  const keys = rawKeys.map((k: unknown) => (typeof k === 'string' ? k : String(k)));
+  const { summary = false } = args;
   return keys.map((key: string) => {
     const meta = memIndex[key];
     if (!meta) return { key, error: 'Not found' };
@@ -92,8 +107,8 @@ export function getStats(): any {
 
 export function getTimeline(args: any): any {
   const { since, before, category } = args;
-  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
-  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   // Default the lower bound to the epoch so a timeline with no `since` still
   // excludes entries lacking a valid `updated`: inDateWindow returns false for a
   // missing `updated` whenever a lower bound is present (and `cutoff` is never

@@ -794,6 +794,18 @@ describe('update_memory', () => {
     expect(mem.content).toContain('Updated content');
   });
 
+  // T7: update_memory previously used `content ? withExecutiveSummary(content) : parsed.content`,
+  // which conflated an explicit empty string with an omitted argument. Passing
+  // `content: ''` must clear the body (it still normalizes to the Executive Summary
+  // header, matching store_memory) rather than silently keeping the old content.
+  it('treats an explicit empty content string as a real update, not as omitted', async () => {
+    const { key } = result(await callTool('store_memory', { title: 'Empty', content: 'Original body', tags: [], category: 'knowledge' }));
+    await callTool('update_memory', { key, content: '' });
+    const [mem] = result(await callTool('get_memories_by_keys', { keys: [key] }));
+    expect(mem.content).not.toContain('Original body');
+    expect(mem.content).toContain('## Executive Summary');
+  });
+
   it('updates tags', async () => {
     const { key } = result(await callTool('store_memory', { title: 'Tags', content: 'C', tags: ['old'], category: 'knowledge' }));
     await callTool('update_memory', { key, tags: ['new', 'tags'] });

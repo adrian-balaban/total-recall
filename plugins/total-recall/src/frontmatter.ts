@@ -29,6 +29,31 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+// val is the raw text captured after the colon (leading whitespace already
+// stripped by the key-value regex). Strip a trailing YAML comment and any
+// trailing whitespace before deciding whether the value is an inline array or
+// a scalar. Without this, `tags: [a, b] # comment` fails the inline-array
+// check because the captured value ends with `] # comment`, and it is then
+// parsed as the string "[a, b] # comment" instead of an array.
+function trimTrailingComment(s: string): string {
+  let quote: '"' | "'" | null = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (quote) {
+      if (ch === '\\' && s[i + 1] === '"' && quote === '"') { i++; continue; }
+      if (ch === quote) {
+        if (quote === "'" && s[i + 1] === "'") { i++; continue; }
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === '#') {
+      return s.slice(0, i).trimEnd();
+    }
+  }
+  return s.trimEnd();
+}
+
 export function parseFrontmatter(raw: string): Frontmatter {
   const match = raw.match(FM_RE);
   if (!match) return { data: {}, content: raw };
@@ -155,6 +180,9 @@ function parseYamlish(body: string): Record<string, unknown> {
     // Coerce through "" so the undefined type from noUncheckedIndexedAccess
     // doesn't propagate; the next branches all read `val` as a string.
     const val = kv[2] ?? '';
+    // Strip trailing comments/whitespace before deciding shape so
+    // `tags: [a, b] # comment` is parsed as an inline array, not a scalar.
+    const cleanVal = trimTrailingComment(val);
     // Prototype-pollution guard: a crafted `__proto__:` / `constructor:` /
     // `prototype:` key in frontmatter (a teammate can push one via the shared
     // org vault) would invoke the Object.prototype __proto__ setter on `data`
@@ -164,17 +192,17 @@ function parseYamlish(body: string): Record<string, unknown> {
     // inert, but this is a known YAML-parser vuln class; drop the key fail-closed
     // rather than let a teammate control the shape of a parsed object.
     if (key === '__proto__' || key === 'constructor' || key === 'prototype') continue;
-    if (val === '' ) {
+    if (cleanVal === '' ) {
       // Could be a block sequence (value on following lines) — preset an array
       // so subsequent "  - x" items attach to it. If no items follow, drop it.
       data[key] = [];
       continue;
     }
-    if (val.startsWith('[') && val.endsWith(']')) {
-      data[key] = parseInlineArray(val.slice(1, -1));
+    if (cleanVal.startsWith('[') && cleanVal.endsWith(']')) {
+      data[key] = parseInlineArray(cleanVal.slice(1, -1));
       continue;
     }
-    data[key] = coerceScalar(val);
+    data[key] = coerceScalar(cleanVal);
   }
   // Drop keys that are empty arrays because a block sequence was expected but
   // none followed (keeps `data` clean for keys like `tags:` with nothing under).

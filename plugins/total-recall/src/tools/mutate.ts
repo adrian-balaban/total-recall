@@ -80,7 +80,9 @@ export function updateMemory(args: any): any {
   // When new content is supplied, normalize it to begin with the Executive Summary
   // header (idempotent), matching what store_memory writes and what parseFrontmatter
   // yields on the read path — so contentPreview stays consistent with disk.
-  const newContent = content ? withExecutiveSummary(content) : parsed.content;
+  // Use `content !== undefined` so an explicit empty string (`content: ''`) is a
+  // legitimate "clear the body" update, not "leave the old content unchanged".
+  const newContent = content !== undefined ? withExecutiveSummary(content) : parsed.content;
   fs.writeFileSync(meta.filePath, stringifyFrontmatter(newContent, newFm));
 
   Object.assign(meta, {

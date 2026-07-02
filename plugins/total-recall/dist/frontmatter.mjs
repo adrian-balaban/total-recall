@@ -3,6 +3,30 @@ var FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
 function escapeRegExp(s) {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
+function trimTrailingComment(s) {
+  let quote = null;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    if (quote) {
+      if (ch === "\\" && s[i + 1] === '"' && quote === '"') {
+        i++;
+        continue;
+      }
+      if (ch === quote) {
+        if (quote === "'" && s[i + 1] === "'") {
+          i++;
+          continue;
+        }
+        quote = null;
+      }
+    } else if (ch === '"' || ch === "'") {
+      quote = ch;
+    } else if (ch === "#") {
+      return s.slice(0, i).trimEnd();
+    }
+  }
+  return s.trimEnd();
+}
 function parseFrontmatter(raw) {
   const match = raw.match(FM_RE);
   if (!match) return { data: {}, content: raw };
@@ -94,16 +118,17 @@ function parseYamlish(body) {
     if (!kv) continue;
     const key = kv[1];
     const val = kv[2] ?? "";
+    const cleanVal = trimTrailingComment(val);
     if (key === "__proto__" || key === "constructor" || key === "prototype") continue;
-    if (val === "") {
+    if (cleanVal === "") {
       data[key] = [];
       continue;
     }
-    if (val.startsWith("[") && val.endsWith("]")) {
-      data[key] = parseInlineArray(val.slice(1, -1));
+    if (cleanVal.startsWith("[") && cleanVal.endsWith("]")) {
+      data[key] = parseInlineArray(cleanVal.slice(1, -1));
       continue;
     }
-    data[key] = coerceScalar(val);
+    data[key] = coerceScalar(cleanVal);
   }
   for (const [k, v] of Object.entries(data)) {
     if (Array.isArray(v) && v.length === 0 && !hadBlockItems(body, k)) {
