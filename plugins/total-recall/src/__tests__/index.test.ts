@@ -1037,8 +1037,10 @@ describe('get_stats', () => {
 
   it('returns performance percentiles', async () => {
     const stats = result(await callTool('get_stats'));
+    expect(stats.performance).toHaveProperty('samples');
     expect(stats.performance).toHaveProperty('p50');
     expect(stats.performance).toHaveProperty('p95');
+    expect(typeof stats.performance.samples).toBe('number');
   });
 
   it('returns recentErrors array', async () => {
@@ -1941,11 +1943,11 @@ describe('embed callback — embedAndUpsert called on write', () => {
     expect(typeof key).toBe('string');
   });
 
-  it('update_memory calls embedAndUpsert(key, content) when content is provided', async () => {
+  it('calls embedAndUpsert(key, newContent) with Executive Summary header when content is provided', async () => {
     const { key } = result(await callTool('store_memory', { title: 'Embed Update Test', content: 'original', tags: [], category: 'knowledge', force: true }));
     vi.mocked(embedMod.embedAndUpsert).mockClear();
     await callTool('update_memory', { key, content: 'updated vector content' });
-    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, 'updated vector content');
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, '\n## Executive Summary\n\nupdated vector content');
   });
 
   it('update_memory does NOT call embedAndUpsert when content is omitted', async () => {

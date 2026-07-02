@@ -82,7 +82,7 @@ export function getStats(): any {
     total: Object.keys(memIndex).length,
     byCategory,
     cache: contentCache.stats(),
-    performance: { p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
+    performance: { samples: perf.length, p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
     recentErrors: errors.slice(-10),
     vectorSearchEnabled: isVectorAvailable(),
   };

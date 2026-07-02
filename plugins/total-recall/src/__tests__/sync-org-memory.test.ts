@@ -149,6 +149,11 @@ describe('privacyCheck', () => {
     expect(privacyCheck({ title: 'Notes', apikey: 'sk-abcdefghijklmnopqrstuvwxyz123456' } as any, 'Clean body.')).toMatch(/secret/);
   });
 
+  it('blocks ENCRYPTED private keys and ghr_ GitHub refresh tokens', () => {
+    expect(privacyCheck({ title: 'Encrypted Key' }, '-----BEGIN ENCRYPTED PRIVATE KEY-----\nMIIF...\n-----END ENCRYPTED PRIVATE KEY-----')).toMatch(/secret/);
+    expect(privacyCheck({ title: 'GitHub Refresh Token' }, 'Token: ghr_123456789012345678901234567890123456')).toMatch(/secret/);
+  });
+
   it('blocks a personal email in a CUSTOM frontmatter key (#12 regression)', () => {
     expect(privacyCheck({ title: 'Notes', contact: 'me@personal.com' } as any, 'Clean body.')).toMatch(/email/);
   });

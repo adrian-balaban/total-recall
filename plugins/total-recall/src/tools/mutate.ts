@@ -94,7 +94,7 @@ export function updateMemory(args: any): any {
   contentCache.delete(key);
   scheduleSave();
 
-  if (content) embedAndUpsert(key, content);
+  if (content) embedAndUpsert(key, newContent);
 
   return { key, message: 'Memory updated.' };
 }
