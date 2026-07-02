@@ -218,7 +218,7 @@ export function storeMemory(args: any): any {
   if (!isOrg) appendJournal('store', key, title);
   scheduleSave();
 
-  embedAndUpsert(key, content);
+  embedAndUpsert(key, body);
 
   return { key, filePath, message: `Memory stored: ${key}` };
 }

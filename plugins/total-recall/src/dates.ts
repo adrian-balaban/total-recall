@@ -1,7 +1,7 @@
 // ─── Date filter helpers ──────────────────────────────────────────────────────
 
 export function parseRelativeDate(expr: string): Date | null {
-  const m = expr.match(/^(\d+)([dwm])$/);
+  const m = expr.trim().toLowerCase().match(/^(\d+)([dwm])$/);
   if (!m) return null;
   // noUncheckedIndexedAccess makes match groups `string | undefined`. The regex
   // captures both groups when it matches, so they are guaranteed defined here.

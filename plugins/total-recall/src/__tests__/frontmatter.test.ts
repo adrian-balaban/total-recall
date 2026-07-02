@@ -275,4 +275,9 @@ describe('withExecutiveSummary', () => {
     expect(out).toContain('## Executive Summary');
     expect(out).toContain('After whitespace.');
   });
+
+  it('serializes arrays containing non-string primitive items (e.g. numbers in tags)', () => {
+    const out = stringifyFrontmatter('body', { tags: [2026, 'org'] });
+    expect(out).toContain('tags: [2026, org]');
+  });
 });

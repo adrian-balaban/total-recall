@@ -23,7 +23,9 @@ function sortByUpdatedDesc(metas: MemoryMetadata[]): MemoryMetadata[] {
 }
 
 export function listMemories(args: any): any {
-  const { category, tag, limit = 50, offset = 0 } = args;
+  const { category, tag } = args;
+  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
+  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
   const filtered = sortByUpdatedDesc(
     Object.values(memIndex)
       .filter(m => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
@@ -89,7 +91,9 @@ export function getStats(): any {
 }
 
 export function getTimeline(args: any): any {
-  const { since, before, limit = 50, offset = 0, category } = args;
+  const { since, before, category } = args;
+  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
+  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
   // Default the lower bound to the epoch so a timeline with no `since` still
   // excludes entries lacking a valid `updated`: inDateWindow returns false for a
   // missing `updated` whenever a lower bound is present (and `cutoff` is never

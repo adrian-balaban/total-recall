@@ -1,0 +1,437 @@
+ as an architect do a functional review ot total-recall plugin ; propose improvements
+
+I'll do an architect-level functional review of the total-recall plugin. Let me start by mapping the system, then evaluate it across functional dimensions.
+
+â Skill(code-review:code-review)
+Successfully loaded skill Â· 7 tools allowed
+
+The skill loaded is the standard PR-code-review skill, which is mismatched to this request â there's no PR here, and the user asked for an architect-level functional review with a specific section list. I'll do the review they asked for directly, since forcing the PR-review flow would produce a thin "no issues found" reply that doesn't answer the question.
+
+Let me build the system map first, then do the functional review.
+
+Let me kick off the deep reading. I'll do the system map first to anchor everything else.
+
+  Read 1 file
+
+  Read 4 files, listed 1 directory
+
+Now the persistence layer and search pipeline:
+
+  Read 6 files
+
+Now the tool layer, vault-scan, hooks, sync script, and the remaining types:
+
+  Read 4 files
+Read plugins/total-recall/package.json (40 lines)
+Referenced file plugins/total-recall/CLAUDE.md
+Read plugins/total-recall/src/__tests__/sync-org-memory.test.ts (286 lines)
+Read plugins/total-recall/src/__tests__/frontmatter.test.ts (278 lines)
+Read ../../CLAUDE.md (40 lines)
+Skills restored (code-review:code-review)
+SessionStart:compact says: dash0: telemetry is not active â configure the plugin to start sending data. Run /plugin â Installed â dash0 â Configure, then /reload-plugins.
+
+Now mutate.ts, frontmatter.ts, journal.ts, dates.ts, lru-cache.ts, sync script, and hooks:
+
+  Read 5 files
+
+Now the sync script, hooks, and the rest of the tools:
+
+  Read 2 files, listed 1 directory
+
+Now the remaining tools and the hook scripts (just the heads â they are large):
+
+  Read 4 files
+
+I now have a complete picture of the plugin. Mark the in-progress task done, run the remaining evaluations, then synthesize the report.
+
+  Read 2 files, listed 1 directory
+
+Functional review â total-recall v1.0.68
+
+Persistent-memory MCP server. 12 tools, ESM, single in-process state, dual vault (personal + shared org git), TF-IDF + Ebbinghaus + optional vector hybrid. The codebase is a long, disciplined hardening pass â every call site I traced has been audited for the same threats (symlink-to-vault-escape, poisoned filePath in committed index.json, scalar-secret in custom frontmatter, race-on-embed-load, RRF-fusion-journal-leak). The architecture has converged. The gaps that remain are about scope (what it doesn't do), not correctness of what it does.
+
+---
+1. System map
+
+                    âââ Claude Code âââ
+                    â   stdio JSON-RPC
+                    ââââââââââ¬âââââââââ
+                             â
+       âââââââââââââââââââââââ¼âââââââââââââââââââââââ
+       â                     â                      â
+ âââââââ¼âââââââ    âââââââââââ¼ââââââââââ  âââââââââââ¼âââââââââââ
+ â  SessionStart/PreCompact â  PostToolUse hooks â  tool calls   â
+ â  (build/load/extract)    â  (sync-org-memory)  â  (12 tools)   â
+ ââââââââââââââââââââââââââââ´âââââââââââââââââââââ´ââââââââââ¬âââââââ
+                                                          â
+              âââââââââââââââââââââââââââââââââââââââââââââ¼âââââââââ
+              â               src/server.ts (12 tools)             â
+              â  boot: ensureDir â loadIndexes â reconcileIndex    â
+              â       â recalcIdfNow â scheduleSave â markIndexFreshâ
+              â  dispatch: TOOL_HANDLERS[name](args) + recordPerf  â
+              ââââââ¬âââââââââââ¬ââââââââââââ¬ââââââââââââââ¬ââââââââââ
+                   â          â           â             â
+            ââââââââ¼ââ  âââââââ¼âââââ ââââââ¼âââââ  âââââââ¼âââââââ
+            â store  â  â  recall  â â  query  â  â   mutate   â
+            â .ts    â  â   .ts    â â  .ts    â  â    .ts     â
+            ââââââ¬ââââ  ââââââ¬ââââââ ââââââ¬âââââ  âââââââ¬âââââââ
+                 â           â           â             â
+                 â¼           â¼           â¼             â¼
+            ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+            â  vault-scan.ts (walk/indexFile, symlink guard,   â
+            â   mtime skip, reconcileVectors)                  â
+            â  tfidf.ts (tokenize, rebuild, search)            â
+            â  ebbinghaus.ts (retention, clamp)                â
+            â  rrf.ts (reciprocal rank fusion, k=60)           â
+            â  embeddings.ts + vectorStore.ts (lazy load,      â
+            â   fire-and-forget, flushEmbeddings)              â
+            â  frontmatter.ts (parse/serialize/withExecSummary)â
+            â  privacy-filter.ts (secret+email, IDN host)      â
+            â  persistence.ts (atomic write, debounce, dirty)  â
+            â  state.ts (memIndex, errors, perf, bumpAccess)   â
+            ââââââââââââââââââââââââââââââââââââââââââââââââââââ
+                                â               â
+                                â¼               â¼
+            âââââââââââââââââââââââââââ  ââââââââââââââââââââââââ
+            â ~/.total-recall/        â  â ~/.total-recall/org/ â
+            â  personal-vault/<cat>/  â  â   <git> org-vault/   â
+            â  index.json             â  â   index.json (synced)â
+            â  invertedIndex.json     â  â                      â
+            â  .index-cache.txt       â  â                      â
+            â  vectors.db (optional)  â  â                      â
+            âââââââââââââââââââââââââââ  ââââââââââââââââââââââââ
+
+Layered correctly: tools â domain modules â state/persistence. No module I traced reaches around the assertRegularFile / assertLstat containment layer to touch fs.*Sync directly except persistence.ts (index files â no vault path), journal.ts (guarded), store.ts (guarded), and the sync script (guarded).
+
+2. Data model
+
+Frontmatter (src/frontmatter.ts:14-17, src/types.ts):
+- MemoryFrontmatter { title, tags, author, sessions, created, updated, importanceScore } â written by the plugin, read by the same parser. Targeted, not general YAML.
+- MemoryMetadata adds runtime-only fields: key, filePath, category, contentPreview, accessCount, lastAccessed, tokenEstimate, isOrg, mtimeMs, size.
+- InvertedIndex = Record<term, { docs: Array<{key, tf}>, idf }> â precomputed tf per doc, idf per term, used in tfidfSearch raw-score loop.
+- Index = Record<key, MemoryMetadata> â the single mutable singleton (state.ts:13).
+
+Two design choices worth calling out:
+
+- Dual identity (key + filePath) â key is the trusted lookup token (vault-relative, with org/ prefix for org), filePath is always re-derived from the key (persistence.ts:97-111, coerceMemEntry). This closes a real attack: a teammate-pushed index.json in the shared org vault can set filePath: /etc/shadow; the plugin never trusts it.
+- mtimeMs/size as identity â vault-scan.ts:343-346 skips re-reads when the stat is unchanged. Cheap stat-based boot speed-up, and the 0-sentinel for pre-#19 entries forces a one-time re-read after upgrade. Clean.
+
+3. Tool surface (12 tools, src/server.ts:46-200)
+
+ââââââââââââââââââââââââ¬ââââââââââââââââââââââ¬âââââââââââââââ¬âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â         Tool         â        File         â Surface area â                                       Notable behavior                                       â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â store_memory         â tools/store.ts:30   â Write        â Org-routes via org tag; symlink + org/-prefix + author-guard on overwrite                    â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â recall_memory        â tools/recall.ts:10  â Read (async) â TF-IDF + optional vector RRF; excludeJournal re-applied post-fusion; bumpAccess only on full â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â list_memories        â tools/query.ts:25   â Read         â Schwartzian sort by updated desc; paginated                                                  â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â update_memory        â tools/mutate.ts:15  â Write        â T3 lenient scalar-tags (keep existing); preserves sessions; org author-guarded               â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â delete_memory        â tools/mutate.ts:102 â Write        â Unlink + index drop + fire-and-forget deleteVector                                           â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â rebuild_index        â tools/mutate.ts:120 â Write        â Reconcile + inverted rebuild; preserves accessCount/lastAccessed                             â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â search_index         â tools/recall.ts:109 â Read         â Metadata-only; minScore on raw TF-IDF scale                                                  â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â get_memories_by_keys â tools/query.ts:40   â Read         â Bumps access on success only (defers); summary exec-summary regex                            â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â get_stats            â tools/query.ts:74   â Read         â recentErrors (last 10), cache stats, perf p50/p95/p99                                        â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â get_timeline         â tools/query.ts:91   â Read         â Default lower=new Date(0) so missing-updated excluded even without filter                    â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â get_related_memories â tools/query.ts:111  â Read         â Jaccard on tags + same-category boost; never bumps access (discovery)                        â
+ââââââââââââââââââââââââ¼ââââââââââââââââââââââ¼âââââââââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â prune_memories       â tools/query.ts:160  â Read         â Ebbinghaus candidates, no auto-delete                                                        â
+ââââââââââââââââââââââââ´ââââââââââââââââââââââ´âââââââââââââââ´âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+Dispatch via TOOL_HANDLERS lookup (server.ts:206-219) â adding a tool is one import + one line. Uniform await handler(args ?? {}) folds sync/async mix. recordPerfSample after every call.
+
+4. Search pipeline
+
+TF-IDF (src/tfidf.ts) â tokenize (lowercase, strip non-alphanumeric), rebuildInvertedIndex (precomputes tf per doc + idf per term), tfidfSearch (per-token raw score accumulator, decay applied once per doc after the token loop â that hoisting is the #22 perf fix). lowCache Map memoizes {titleLow, tagsLow} for the boost path (#5).
+
+Ebbinghaus (src/ebbinghaus.ts) â retentionStrength = clamp(i Â· exp(âÎ»d) Â· (1 + aÂ·0.2), 0, 1), Î» = 0.16Â·(1 â iÂ·0.8). Importance pushes decay down. clampImportanceScore is the centralized coercion; four call sites use it (store, update, indexFile read, coerceMemEntry restore).
+
+Vector hybrid (src/embeddings.ts, src/vectorStore.ts, src/rrf.ts) â lazy load via cached promise (race-safe), embed() returns null when deps absent, embedAndUpsert is fire-and-forget tracked in pendingEmbeds, flushEmbeddings(timeoutMs=2000) drains on exit. reconcileVectors backfills holes and sweeps stale rows at boot (#3 + #16).
+
+Pipeline observations:
+- recall_memory re-applies the excludeJournal filter after RRF fusion (recall.ts:55-57) â necessary because tfidfSearch filtered journals but searchVector doesn't. This is the only place in the code where the journal filter is layered, and it's correct.
+- minScore is documented as not-comparable-across-modes (recall.ts:74-79). The doc is good; the default 0 is byte-identical to the prior behavior, so the parameter is opt-in.
+- The excludeJournal post-fusion re-filter is in recall_memory but not in searchIndex â fine, searchIndex is TF-IDF-only and the filter is already applied by tfidfSearch.
+
+5. Dual vault
+
+Routing (src/tools/store.ts:49-50) â isOrg = tags.includes('org'). Org memories go to ORG_VAULT/<category>/<slug>.md and get an org/ key prefix (vault-scan.ts:55). The personal walk skips a subdir literally named org (vault-scan.ts:218-219) to keep the namespace unambiguous.
+
+Guards at the write site (store.ts:65-130):
+- category === 'org' and category.startsWith('org/') rejected (T2 pin at index.test.ts:150-178) â would have caused silent data loss (writes under personal-vault/org/, reconcile skips the whole subtree).
+- isOrg && !orgVaultConfigured() rejected (A3) â would have left an unsynced file blocking future git clone.
+- Symlink containment: assertLstat for catDir (must be a real dir) and filePath (must be a real file if it exists) â closes the planted-symlink write-escape (store.ts:121-130).
+- Lexical + realpath containment: path.resolve(filePath) startsWith vaultRoot (store.ts:101-103).
+- Org author-protection on overwrite: existingFm.author !== os.userInfo().username (store.ts:146-148). Treated as fail-closed on missing author.
+- effectiveAuthor = isOrg ? osUser : (author ?? osUser) â caller-supplied author is only honored for personal memories.
+
+Org sync script (scripts/sync-org-memory.mjs):
+- loadOrgIndex throws on a parse-failed existing file (does not catch-wipe; would have propagated a single-entry/empty index to every teammate â the diff vs loadMemIndex is intentional: personal self-heals, org is git-committed).
+- orgFileIsSafe lstat + realpath containment before reading the file (sync-org-memory.mjs:149-159).
+- commitAndPush stages + commits + pushes, with reset --soft HEAD~1 on push failure to keep the branch clean.
+- Privacy filter runs before git add (sync-org-memory.mjs:281-285) â never stage a file that fails.
+- Submodule hardening: GIT_CONFIG_KEY_0=protocol.ext.allow VALUE_0=never blocks the ext:: RCE vector. --no-recurse-submodules on pull closes the file:// submodule vector.
+- Privacy filter (src/privacy-filter.ts):
+  - EMAIL_RE host class is non-ASCII (BMP above ASCII), so user@mÃ¼nchen.de and Cyrillic/CJK hosts are caught.
+  - sanitizeAllowedDomains drops bare TLDs (com â []) â the footgun that would have allowlisted all of .com.
+  - isAllowedEmail does h === d || h.endsWith('.' + d) â full-host comparison, not a negative-lookahead regex (which has the "yourcompany.com.evil.com" prefix-bypass).
+  - safeStringify catches JSON.stringify throws on circular/BigInt and falls back to '' (T6 pin).
+  - privacyCheck scans JSON.stringify(data) (every parsed frontmatter key) plus the named fields â closes the custom-key leak.
+
+6. Persistence
+
+Atomic write (persistence.ts:39-72):
+- writeFileSync(tmp); renameSync(tmp, p). Random tmp suffix (crypto.randomBytes(6)) prevents the predictable-tmp symlink-race. Rename is atomic on POSIX.
+- writeFileSync failure â falls back to direct overwrite (loses atomicity, gains survival).
+- renameSync failure â falls back to direct overwrite + best-effort unlink (Windows cross-volume / open handles).
+- Both fallbacks record to errors singleton rather than throwing into a timer callback (which would uncaughtException the stdio server).
+
+Debouncing:
+- scheduleSave (write path) â 1s setTimeout writes index.json and sets dirtyTokens = true; the timer fires and chains scheduleIdfRecalc (2s) which rebuilds the inverted index, writes invertedIndex.json, and rebuilds the shell cache. (#4 gate.)
+- scheduleAccessSave (read path) â 1s setTimeout writes index.json only. No inverted-index rebuild on read.
+- dirtyTokens flag is set only by the write path; cleared by the timer after chaining, by markIndexFresh() at boot, and by flushPending.
+
+flushPending (persistence.ts:266-296):
+- Gated recalc: only rebuilds the inverted index if dirtyTokens || idfTimer was set. A read-only session's flushPending is now saveNow only â no redundant rebuild.
+- Two independent try { saveNow() } catch { recordError } blocks so a transient I/O error in saveNow does not skip recalcIdfNow.
+- Returns early on !indexSaveTimer && !idfTimer && !dirtyTokens (idempotent no-op).
+
+Boot (server.ts:250-273):
+1. ensureDir for personal vault, org vault, default categories
+2. loadIndexes() (read index.json only â #18 removes the dead invertedIndex.json load)
+3. reconcileIndex() (re-build memIndex from .md files, preserve runtime stats)
+4. recalcIdfNow() (synchronous rebuild + persist of inverted index + cache)
+5. scheduleSave() (1s index.json flush)
+6. markIndexFresh() (clear dirtyTokens so the timer doesn't re-rebuild what step 4 just persisted)
+7. server.connect(transport)
+
+This is a clean boot. The mtimeMs/size skip in indexFile (vault-scan.ts:343) makes repeat boots near-free for an unchanged personal vault.
+
+7. Hooks
+
+hooks/hooks.json:1-53:
+- SessionStart: pull-org-vault.sh (30s) â build-memory-index.sh (15s) â load-memory-index.sh (5s) â load-open-questions.sh (5s). Sequential.
+- PostToolUse on store_memory|update_memory|delete_memory: sync-org-memory.sh (30s).
+- PreCompact: extract-and-store-memories.sh (60s).
+
+SessionStart and PreCompact have no matcher (run unconditionally). PostToolUse is the only tool-scoped hook.
+
+The sync hook backgrounds sync-org-memory.mjs; sync errors are caught, logged to ~/.total-recall/org/.sync-errors.log, and exit 0 (so the hook is non-blocking). This is the right shape for a tool hook.
+
+Observation: SessionStart runs four scripts sequentially, three of which depend on the first (build-memory-index needs the pulled vault; load-memory-index / load-open-questions need the built index). If pull-org-vault.sh fails (no network, no auth, repo gone), the rest runs against a stale org vault. There is no failure-surface in the user's session.
+
+8. Error model
+
+Sink (state.ts:15, recordError state.ts:45-48):
+- Single errors: Array<{ time, msg }> singleton, capped at 1000, amortized-O(1) trim (trimTo state.ts:35-37).
+- get_stats.recentErrors returns the last 10 (query.ts:86).
+- Producers: server.ts:243 (every tool dispatch catch), vault-scan.ts:191 (non-ENOENT readdirSync), vault-scan.ts:404 (indexFile catch), persistence.ts:158 (loadMemIndex non-ENOENT parse fail), persistence.ts:61 (atomicWrite direct-overwrite fallback), persistence.ts:217/231/292/294 (debounce + flush catches), recall.ts:42 (hybrid vector failure).
+
+Perf samples (state.ts:16,55-58): recordPerfSample on every tool call. get_stats.performance returns p50/p95/p99 from [...perfSamples].sort. Same bounded-append.
+
+Bounded catches throughout â every I/O site and every timer callback has its own try { ... } catch { recordError } (or equivalent). The dispatch catch in server.ts:242-245 is the last-line backstop. There is no uncaughtException handler at the process level, so a stray throw that escapes every bounded catch will kill the stdio server. This is intentional (the per-site bounds are the contract) but the absence of a final-floor handler means the error path is the same as a crash. The user gets no signal in the session â they only see the tool return isError: true for the call that tripped it.
+
+9. Test maturity
+
+22 test files. Distribution:
+
+âââââââââââââââââââ¬âââââââââââââââââââââââââââââ¬ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â      Layer      â           Tests            â                                    Coverage shape                                     â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â frontmatter     â 1 file (8 describe blocks) â Parser/serializer round-trips, DoS immunity, prototype-pollution, idempotency         â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â persistence     â 3 files                    â atomicWrite, loadMemIndex error path, readonly-flush, dirtyTokens gate                â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â vault-scan      â 1 file                     â symlink rejection, realpath containment, mtime skip                                   â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â tfidf-search    â 1 file                     â tokenize, decay, Ebbinghaus-boost, memo                                               â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â ebbinghaus      â 1 file                     â retention curve, clamp, daysSince                                                     â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â state           â 1 file                     â bounded-append amortized trim, recordError cap                                        â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â journal         â 1 file                     â ENOENT/EACCES, symlink guard                                                          â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â dates           â 1 file                     â toCutoff, inDateWindow, missing-updated                                               â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â embeddings      â 1 file                     â lazy-load cached-promise, embed null paths                                            â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â vectorStore     â 1 file                     â upsert/search/delete, distanceâscore                                                  â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â rrf             â 1 file                     â k=60 fusion                                                                           â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â atomic-write    â 1 file                     â tmp suffix, rename, fallback                                                          â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â hook-scripts    â 1 file                     â shell scripts presence/permissions, shebang                                           â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â index           â 1 file                     â T1 (slugify empty title), T2 (org-prefix rejection), plus the other org-config guards â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â sync-org-memory â 3 files                    â privacy filter (the largest), org file safety, e2e git                                â
+âââââââââââââââââââ¼âââââââââââââââââââââââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â integration     â 1 dir                      â multi-module flows                                                                    â
+âââââââââââââââââââ´âââââââââââââââââââââââââââââ´ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+The test culture is regression-pin, not unit-exhaustive â the new tests in review2-fix all follow the "pin this so a future refactor doesn't reintroduce" pattern, with comments naming the bug and the threat. That's appropriate for a hardening pass on a small surface.
+
+Gaps:
+- No property-based test for the frontmatter round-trip â only fixed fixtures.
+- No fuzz test for parseFrontmatter against a corpus of malformed frontmatter (the surface that touches every .md file on boot).
+- No concurrency test for the debounce timers (only via integration).
+- No test for the recall_memory excludeJournal post-fusion re-filter â the test gap is exactly where the only subtle bug was found.
+
+10. Gaps & proposed improvements
+
+High-leverage gaps
+
+G1. No semantic rerank over the TF-IDF/vector candidate set. The pipeline stops at lexical + vector. There is no cross-encoder rerank, no LLM-side "given the user's question, re-rank these N". For a memory plugin used for recall â the user's whole purpose â this is the next ceiling. Cheap starter: a rerank tool that takes the top-N from recall_memory and asks the calling LLM to reorder them via tool-use. Expensive: wire a cross-encoder model (also lazy-loaded, also optional).
+
+G2. The SessionStart index injection is one-shot and serial. build-memory-index.sh writes .index-cache.txt; load-memory-index.sh reads it once. After a long session with many store_memory calls, the shell-injected index is stale until the next rebuild_index (or the next SessionStart). Either (a) regenerate the cache on a debounce in buildIndexCache and rewrite the file the hook reads (in-process; the hook can't see it), or (b) add a "live tail" tool that the agent calls to refresh. The current behavior is correct but invisible to the user â they don't know they're searching a stale index.
+
+G3. No bulk import / no schema migration. A new user with 500 existing notes has to call store_memory 500 times. The plugin reads .md files at boot via reconcileIndex but it does not write index.json for them until first scheduleSave â and index.json itself has a schema (v1.0.6+ expects mtimeMs/size). A migration tool that re-derives metadata from a directory of existing notes in one shot would close a real onboarding gap.
+
+G4. The org-vault reconciliation is not automatic. After a teammate pushes to the org vault, the user must run rebuild_index (or restart the session) to see the new files. There is no file-watcher on the org vault. A fs.watch on the org vault with a debounced reconcile (mirrors the existing debounce model) would close this â but the org vault is on a git branch, so the right shape is: a hook on git pull (in pull-org-vault.sh) calls rebuild_index after a successful pull, not a file-watcher.
+
+G5. The privacy filter is regex-based. SECRET_TOKEN_RE and EMAIL_RE will miss novel secret formats. Two real attack surfaces it doesn't cover:
+- A description: field carrying a long base64 string (a private key, a JWT) without a recognizable prefix.
+- An org memory body that quotes a secret (e.g. "we used to use sk-â¦") â the regex catches the prefix, but a quoted-form variant (markdown code-fence escape, zero-width chars) slips through.
+
+A real fix is hard (no regex catches every secret). A pragmatic improvement: add a body-size gate â flag any org memory whose body contains a contiguous 60+ char base64-like run â and run that before the regex sweep. Cheap, low FP, catches the unprefixed-key case.
+
+G6. update_memory does not re-embed when only importanceScore or tags change. mutate.ts:97 â if (content) embedAndUpsert(key, content). The vector reflects the content; a tags-only update leaves the vector stale. Not a correctness bug (vector is one signal among many), but a ranking-quality bug.
+
+G7. The 1000-entry perfSamples cap and the 1000-entry errors cap are arbitrary and undocumented. get_stats percentile accuracy degrades silently past 1000 samples. Either raise the cap, document it in the get_stats output, or surface n alongside the percentiles so the caller knows the sample is from a window.
+
+G8. No structured logging. Every catch writes to errors with time: ISO; msg: string. There is no level (error/warn/info), no code, no stack. When get_stats.recentErrors is consulted, the caller has to grep message strings. Add { time, level, code, msg, stack? } and key code from the same enum that documents the threat (e.g. SYMLINK_REJECTED, PRIVACY_BLOCKED, VECTOR_FAIL).
+
+Lower-leverage gaps
+
+G9. get_stats returns only the last 10 errors. A subtle issue that recurs 5 minutes ago is gone from the buffer the moment 11 newer errors land. Either keep a higher-resolution ring (e.g. 100 with same cap, or unbounded on disk in ~/.total-recall/errors.jsonl) or add get_recent_errors(since: ISO) so the agent can pull a window.
+
+G10. parseFrontmatter is in-process; the sync script imports dist/frontmatter.mjs. The build is esbuild; the import is from a dist path. If the user runs sync-org-memory.mjs before npm run build, they get a MODULE_NOT_FOUND. A small tsx scripts/sync-org-memory.mjs wrapper would be more robust (matches dev: tsx src/index.ts).
+
+G11. No rate limiting on the sync hook. A 10,000-call session produces 10,000 sync-org-memory.sh invocations, each forking a node process to do a git add && git commit && git push. The commits are idempotent (nothing-to-commit early-exits) but the forking is real. Coalesce: write a sentinel file on each call, have a single per-session sync-org-memory-daemon consume the sentinel queue.
+
+G12. The journal/ directory is inside the personal vault but excluded from the index by category === 'journal' filter (no EXCLUDED_DIRS entry for it). That works, but the journal/<date>.md files are still walked and indexFile'd on every reconcile (consuming a read + parse), then filtered out at query time. A small optimization: add journal to EXCLUDED_DIRS and the walk skips it; the appendJournal writer is the only producer, and tfidfSearch's excludeJournal filter becomes a no-op (the journal entries were never indexed in the first place). This needs a get_timeline source path (currently it reads memIndex, so the journal entries would be unreachable).
+
+G13. The recall_memory excludeJournal post-fusion re-filter is a workaround, not a fix. The real fix is the G12 walk-skip. The post-fusion filter is correct, but it's a code smell â the journal entries went through the entire pipeline (TF-IDF, vector, RRF) and were thrown out at the end.
+
+G14. prune_memories is a list, not an action. It's the right call (no auto-delete), but the user has no follow-on tool to "delete all of these". A delete_memories (bulk) tool with a list of keys, gated by a confirmation token, would close the loop.
+
+G15. There is no export or import tool. A user moving machines must hand-tar ~/.total-recall/. A export_memories(format='json'|'markdown-bundle') and import_memories(force=true) pair would be a few hours of work and a real onboarding/offboarding primitive.
+
+G16. The test suite is a single-node, single-machine truth source. No concurrency test, no power-loss test, no large-corpus perf test. The npm run test:integration config is the closest thing. A property-based test of parseFrontmatter (hypothesis / fast-check) would catch the next js-yaml-class regression in 5 lines.
+
+11. Prioritized roadmap
+
+âââââââ¬âââââââââââââââââââââââââââââââ¬âââââââââ¬âââââââââ¬âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â  #  â             Item             â Effort â Impact â                                                 Why first                                                  â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 1   â G1 (semantic rerank)         â M      â High   â This is the recall ceiling. The whole plugin is about finding the right memory; the current pipeline is    â
+â     â                              â        â        â good, not great. A rerank tool that delegates to the calling LLM is the cheap start.                       â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 2   â G4 (post-pull reconcile)     â S      â High   â Closes the "I just pulled and don't see new memories" footgun. Hook in pull-org-vault.sh.                  â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 3   â G2 (live index tail)         â S      â Medium â Closes the "SessionStart index is stale" footgun. Low-risk; debounce + rewrite.                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 4   â G5 (privacy filter body-size â S      â High   â Cheap, low-FP, catches the unprefixed-key leak. Should have been there on day one.                         â
+â     â  gate)                       â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 5   â G8 (structured errors)       â S      â Medium â Foundation for G9, G7, and a real observability story.                                                     â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 6   â G3 (bulk import)             â M      â Medium â Onboarding. Real but unblocks a small user segment.                                                        â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 7   â G11 (sync hook coalescing)   â S      â Medium â Resolves a real perf issue at scale; clean fix.                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 8   â G6 (update re-embeds)        â XS     â Low    â One-line fix; ranking-quality, not correctness.                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+
+11. Prioritized roadmap
+
+âââââââ¬âââââââââââââââââââââââââââââââ¬âââââââââ¬âââââââââ¬âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â  #  â             Item             â Effort â Impact â                                                 Why first                                                  â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 1   â G1 (semantic rerank)         â M      â High   â This is the recall ceiling. The whole plugin is about finding the right memory; the current pipeline is    â
+â     â                              â        â        â good, not great. A rerank tool that delegates to the calling LLM is the cheap start.                       â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 2   â G4 (post-pull reconcile)     â S      â High   â Closes the "I just pulled and don't see new memories" footgun. Hook in pull-org-vault.sh.                  â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 3   â G2 (live index tail)         â S      â Medium â Closes the "SessionStart index is stale" footgun. Low-risk; debounce + rewrite.                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 4   â G5 (privacy filter body-size â S      â High   â Cheap, low-FP, catches the unprefixed-key leak. Should have been there on day one.                         â
+â     â  gate)                       â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 5   â G8 (structured errors)       â S      â Medium â Foundation for G9, G7, and a real observability story.                                                     â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 6   â G3 (bulk import)             â M      â Medium â Onboarding. Real but unblocks a small user segment.                                                        â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 7   â G11 (sync hook coalescing)   â S      â Medium â Resolves a real perf issue at scale; clean fix.                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 8   â G6 (update re-embeds)        â XS     â Low    â One-line fix; ranking-quality, not correctness.                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 9   â G7 (perf cap documentation)  â XS     â Low    â Surface n next to percentiles.                                                                             â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 10  â G9 (error history)           â S      â Low    â Better than ring-buffer; foundation for an /errors tool.                                                   â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 11  â G12/G13 (walk-skip journal)  â S      â Low    â Optimization, but the right shape (removes the post-fusion filter).                                        â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 12  â G14 (bulk delete with        â S      â Low    â Completes the prune loop.                                                                                  â
+â     â confirmation)                â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 13  â G15 (export/import)          â M      â Low    â Offboarding, but unblocks the next "I'm switching laptops" issue.                                          â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 14  â G16 (property-based test for â S      â Medium â Catches the next CVE class for free.                                                                       â
+â     â  frontmatter)                â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 15  â G10 (tsx wrapper for sync    â XS     â Low    â Removes the "must build first" footgun.                                                                    â
+â     â script)                      â        â        â                                                                                                            â
+âââââââ´âââââââââââââââââââââââââââââââ´âââââââââ´âââââââââ´âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+Effort key: XS < S < M < L. S â 1 day; M â 1 week.
+
+The single highest-leverage move is G1 (semantic rerank) â it changes the recall ceiling, which is the product. Everything else is either correctness/perf hygiene (G2, G4, G5, G8, G11) or a missing feature on a feature-complete plugin (G3, G6, G14, G15). The hygiene items are cheap and should ship together; the feature items are the product roadmap.
+
+---
+Verdict: the plugin is well past the "first-rough-cut" stage. The codebase reads as if a single author has been hardening it adversarially for months â every module I traced has had its symlink, regex, race, and contamination paths audited. The remaining gaps are scope, not correctness. The single biggest open question is whether the product positioning is "personal memory vault" (in which case G1 rerank + G3 bulk import are the moves) or "team memory vault" (in which case G4 post-pull reconcile + G5 body-size gate are the moves, and the org-vault model is the wedge). The architecture supports both; the README doesn't pick.
+
+â» Churned for 4m 5s
+
+  8 tasks (7 done, 1 in progress, 0 open)
+  â¼ Synthesize gaps + propose improvements + roadmap
+  â Evaluate the search pipeline (TF-IDF + Ebbinghaus + vector hybrid)
+  â Evaluate dual-vault routing + org privacy filter
+  â Evaluate persistence model (atomic writes, debouncing, flush, single-writer)
+  â Evaluate hook system (SessionStart, PostToolUse, PreCompact)
+   â¦ +3 completed
+                                                                                                                                                    1% until auto-compact
+ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+â¯
+ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  ~/_/claude/github/claude-plugins-total-recall  git:(main)  minimax-m3:cloud  total-recall v1.0.59
+  âµâµ auto mode on (shift
+â     â confirmation)                â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 13  â G15 (export/import)          â M      â Low    â Offboarding, but unblocks the next "I'm switching laptops" issue.                                          â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 14  â G16 (property-based test for â S      â Medium â Catches the                                                                   â
+â     â  frontmatter)                â        â        â                                                                                                            â
+âââââââ¼âââââââââââââââââââââââââââââââ¼âââââââââ¼âââââââââ¼ââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ¤
+â 15  â G10 (tsx wrapper for sync    â XS     â Low    â Removes the "must build first" footgun.                                                                    â
+â     â script)                      â        â        â                                                                               â
+âââââââ´âââââââââââââââââââââââââââââââ´âââââââââ´âââââââââ´âââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+
+Effort key: XS < S < M < L. S â 1 day; M â 1 week.
+
+The single highest-leverage move is G1 (semantic rerank) â it changes the recall ceiling, which is the product. Everything else is either correctness/perf hygiene (G2, G4, G5, G8, G11) or a missing feature on a feature-complete plugin (G3, G6, G14, G15). The hygiene items are cheap and should ship together; the feature items are the product roadmap.
+
+---
+Verdict: the plugin is well past the "first-rough-cut" stage. The codthor has been hardening it adversarially for months â every module Itraced has had its symlink, regex, race, and contamination paths audited. The remaining gaps are scope, not correctness. The single biggest open question is whether the product positioning is "personal memory vault" (in which case G1 reraoves) or "team memory vault" (in which case G4 post-pull reconcile +G5 body-size gate are the moves, and the org-vault model is the wedge). The architecture supports both; the README doesn't pick.
+
+â» Churned for 4m 5s

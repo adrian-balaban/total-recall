@@ -15906,8 +15906,9 @@ function serializeValue(v) {
   return serializeString(String(v));
 }
 function serializeArrayItem(s) {
-  if (/[\r\n]/.test(s)) throw new Error("Frontmatter array item contains a newline \u2014 refusing to emit.");
-  return needsQuotes(s) ? `'${s.replace(/'/g, "''")}'` : s;
+  const str = String(s);
+  if (/[\r\n]/.test(str)) throw new Error("Frontmatter array item contains a newline \u2014 refusing to emit.");
+  return needsQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
 }
 function serializeString(s) {
   if (/[\r\n]/.test(s)) throw new Error("Frontmatter value contains a newline \u2014 refusing to emit.");
@@ -16401,13 +16402,13 @@ function storeMemory(args) {
   contentCache.set(key, body);
   if (!isOrg) appendJournal("store", key, title);
   scheduleSave();
-  embedAndUpsert(key, content);
+  embedAndUpsert(key, body);
   return { key, filePath, message: `Memory stored: ${key}` };
 }
 
 // src/dates.ts
 function parseRelativeDate(expr) {
-  const m = expr.match(/^(\d+)([dwm])$/);
+  const m = expr.trim().toLowerCase().match(/^(\d+)([dwm])$/);
   if (!m) return null;
   const n = parseInt(m[1]);
   const unit = m[2];
@@ -16511,7 +16512,9 @@ function sortByUpdatedDesc(metas) {
   return metas.map((m) => [new Date(m.updated).getTime(), m]).sort((a, b) => b[0] - a[0]).map((pair) => pair[1]);
 }
 function listMemories(args) {
-  const { category, tag, limit = 50, offset = 0 } = args;
+  const { category, tag } = args;
+  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
+  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
   const filtered = sortByUpdatedDesc(
     Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
   );
@@ -16561,7 +16564,9 @@ function getStats() {
   };
 }
 function getTimeline(args) {
-  const { since, before, limit = 50, offset = 0, category } = args;
+  const { since, before, category } = args;
+  const limit = Math.max(1, Math.floor(Number(args.limit))) || 50;
+  const offset = Math.max(0, Math.floor(Number(args.offset))) || 0;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
   const filtered = sortByUpdatedDesc(
@@ -16687,7 +16692,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.70" : null.version;
+var PLUGIN_VERSION = true ? "1.0.71" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

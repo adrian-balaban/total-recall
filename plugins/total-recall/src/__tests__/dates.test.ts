@@ -101,6 +101,16 @@ describe('toCutoff', () => {
     expect(age).toBeLessThan(sevenDaysMs + 1000);
   });
 
+  it('resolves uppercase and padded relative shorthands (7D, 2W, " 1m ")', () => {
+    const cutoffU = toCutoff('7D');
+    const sevenDaysMs = 7 * 86400000;
+    const age = Date.now() - cutoffU.getTime();
+    expect(age).toBeGreaterThan(sevenDaysMs - 1000);
+    expect(age).toBeLessThan(sevenDaysMs + 1000);
+
+    expect(toCutoff(' 2w ').getTime()).toBeGreaterThan(0);
+  });
+
   it('resolves an ISO date verbatim', () => {
     expect(toCutoff('2026-06-24').getTime()).toBe(new Date('2026-06-24').getTime());
   });
