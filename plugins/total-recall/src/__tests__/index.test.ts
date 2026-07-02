@@ -1937,7 +1937,7 @@ describe('embed callback — embedAndUpsert called on write', () => {
     await callTool('store_memory', { title: 'Embed Store Test', content: 'vector content', tags: [], category: 'knowledge' });
     expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalled();
     // Find the call from THIS test (other store_memory tests may have run earlier)
-    const match = vi.mocked(embedMod.embedAndUpsert).mock.calls.find(([, c]) => c === 'vector content');
+    const match = vi.mocked(embedMod.embedAndUpsert).mock.calls.find(([, c]) => c === '\n## Executive Summary\n\nvector content');
     expect(match).toBeDefined();
     const [key] = match!;
     expect(typeof key).toBe('string');

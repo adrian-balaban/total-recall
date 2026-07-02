@@ -35,11 +35,13 @@ describe('vectorStore — graceful degradation', () => {
   });
 
   it('all operations remain no-ops after first failed load', async () => {
-    const { upsertVector, searchVector, deleteVector } = await import('../vectorStore.js');
+    const { upsertVector, searchVector, deleteVector, listVectorKeys } = await import('../vectorStore.js');
     await upsertVector(tmpDb, 'k1', [1, 2, 3]);
     const res = await searchVector(tmpDb, [1, 2, 3]);
     await deleteVector(tmpDb, 'k1');
+    const keys = await listVectorKeys(tmpDb);
     expect(res).toEqual([]);
+    expect(keys).toBeNull();
   });
 });
 
@@ -114,5 +116,11 @@ describe('vectorStore — success path with real sqlite', () => {
   it('deleteVector calls prepare().run() when db available', async () => {
     const { deleteVector } = await import('../vectorStore.js');
     await expect(deleteVector(tmpDb, 'k/a')).resolves.toBeUndefined();
+  });
+
+  it('listVectorKeys returns keys when db available', async () => {
+    const { listVectorKeys } = await import('../vectorStore.js');
+    const res = await listVectorKeys(tmpDb);
+    expect(res).toEqual(['k/a']);
   });
 });

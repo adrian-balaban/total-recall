@@ -209,6 +209,8 @@ function serializeValue(v: unknown): string {
 }
 
 function serializeArrayItem(s: unknown): string {
+  if (typeof s === 'number') return String(s);
+  if (typeof s === 'boolean') return s ? 'true' : 'false';
   const str = String(s);
   // A literal newline in an inline-array item would terminate the frontmatter
   // line and inject a following line as a new key on re-parse. Single-quoted

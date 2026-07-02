@@ -126,6 +126,8 @@ function serializeValue(v) {
   return serializeString(String(v));
 }
 function serializeArrayItem(s) {
+  if (typeof s === "number") return String(s);
+  if (typeof s === "boolean") return s ? "true" : "false";
   const str = String(s);
   if (/[\r\n]/.test(str)) throw new Error("Frontmatter array item contains a newline \u2014 refusing to emit.");
   return needsQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
