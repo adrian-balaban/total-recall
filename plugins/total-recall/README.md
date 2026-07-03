@@ -157,6 +157,17 @@ The email filter is **fail-closed by default**: every email address is blocked f
 
 Emails at any other domain remain blocked.
 
+## Obsidian Integration
+
+Both vaults are plain markdown-with-YAML-frontmatter folders, so they can be opened directly as Obsidian vaults — there's no plugin or API integration needed. Point Obsidian at `~/.total-recall/personal-vault/` and, separately, at `~/.total-recall/org/org-vault/` (as two vaults). Obsidian's own `.obsidian/` config folder is already excluded from vault scanning (`EXCLUDED_DIRS` in `src/paths.ts`), so it's never mistaken for memory content.
+
+A few things to know before editing memories in Obsidian:
+
+- **YAML is a subset, not identical.** `src/frontmatter.ts` is a minimal parser that supports inline arrays, quoted strings, and scalars, but not arbitrary YAML (no anchors, merge keys, or multi-line scalars). Anything total-recall writes is valid for Obsidian to read, but Obsidian's fancier Properties types (nested objects, folded scalars) won't round-trip cleanly through total-recall on the next write — stick to plain scalars and flat string arrays.
+- **No live sync.** Files added or edited in Obsidian aren't picked up by total-recall until the next Claude Code session start (`reconcileIndex`) or a manual `rebuild_index` call — there's no file-watcher.
+- **`[[wikilinks]]` are Obsidian-only.** They're a body-content feature Obsidian parses itself; total-recall's tokenizer strips brackets and indexes the plain words for TF-IDF, with no awareness of Obsidian's link graph. The two features are fully decoupled.
+- **Don't double-sync the org vault.** It already syncs via `scripts/sync-org-memory.mjs` (git, with a privacy filter blocking secrets/emails before push). Enabling Obsidian Sync/Publish on the same folder adds a second, uncoordinated write path and bypasses that privacy filter — keep git as the only sync mechanism for the org vault, and use Obsidian Sync (if desired) only on the personal vault.
+
 ## What Happens Automatically
 
 | Event | Action |
