@@ -211,6 +211,94 @@ Uses `Xenova/all-MiniLM-L6-v2` (384-dim ONNX). Gracefully degrades to TF-IDF if 
 
 ---
 
+## Other Clients
+
+The MCP server is a plain stdio Node process and works in any client that speaks MCP. The hooks and skills are Claude Code-specific, but the project ships a Gemini-shaped parallel (see below). Copilot/Codex currently have no hook integration — the 12 tools work there, the automatic context injection does not.
+
+## Gemini compatibility
+
+**Short answer: the 12 MCP tools work; the hooks work IF you install the plugin as a Gemini extension; the skills are Claude Code-only.**
+
+The plugin directory doubles as a Gemini CLI extension — `gemini-extension.json` registers the MCP server, and `hooks/hooks.gemini.json` wires the same lifecycle hooks (with Gemini's event-name renames). One `gemini extensions install <path>` does both.
+
+| Component | Works in Gemini CLI? | Why |
+|---|---|---|
+| **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Gemini CLI loads stdio MCP servers from `mcpServers` in `settings.json` (or `mcpServers` in `gemini-extension.json` when installed as an extension) and exposes their tools to the model. |
+| **Hooks** (SessionStart/AfterTool/PreCompress/SessionEnd) | ✅ Yes, via `hooks/hooks.gemini.json` | Gemini renames the lifecycle events: `PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress` (SessionStart/SessionEnd keep their names). The matcher regex targets the full MCP namespaced tool name (`mcp__total-recall__(store_memory\|update_memory\|delete_memory)`), not the bare suffix. `${extensionPath}` is substituted at load time. The script bodies are the same `hooks/scripts/*.sh` files Claude Code uses. |
+| **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | Claude Code skills are invoked on demand via the `Skill` tool — the model picks the skill by name, the system loads the `SKILL.md` body as a one-shot knowledge injection, and the body references bare tool names (Claude Code adds the MCP namespace prefix at load time). Gemini has no equivalent: the closest analogs are (a) **custom slash commands** in `gemini-extension.json`, which are action invocations, not knowledge injections, and (b) a **`GEMINI.md` block**, which is always-on context, not on-demand. This plugin's skills are not authored for either, and there is no `activate_skill` tool on the Gemini side. |
+
+### Installing as a Gemini extension (recommended)
+
+`gemini extensions install` reads the `gemini-extension.json` manifest at the plugin root + `hooks/hooks.gemini.json` next to the existing `hooks/hooks.json`, copies the tree to `~/.gemini/extensions/total-recall/`, and registers the MCP server and hooks automatically. The `${extensionPath}` placeholder in the hooks file is resolved at load time, so the same source dir works on any machine.
+
+```bash
+cd plugins/total-recall && npm install && npm run build
+gemini extensions install --consent "$(pwd)"
+```
+
+`--consent` skips the secondary "acknowledge the security risk" prompt; you'll still be asked to trust the folder once (a documented Gemini CLI requirement with no documented bypass). Verify with `gemini mcp list` (server listed) and by starting a Gemini session — the 12 tools appear namespaced as `mcp_total-recall_<tool>`.
+
+`install.sh --gemini` does the same install in one step (and prints the exact `gemini extensions install` line if the script can't do it for you, e.g. under `-y`).
+
+### Manual MCP-only registration (no hooks)
+
+If you want just the 12 tools without the lifecycle hooks, add a stanza to `~/.gemini/settings.json` directly. Use an **absolute path** — Gemini does not expand `${CLAUDE_PLUGIN_ROOT}`:
+
+```json
+{
+  "mcpServers": {
+    "total-recall": {
+      "command": "node",
+      "args": ["/absolute/path/to/plugins/total-recall/dist/index.js"],
+      "timeout": 30000
+    }
+  }
+}
+```
+
+Or via the CLI command:
+
+```bash
+gemini mcp add -s user total-recall node /absolute/path/to/plugins/total-recall/dist/index.js
+```
+
+The 12 tools then appear namespaced as `mcp_total-recall_<tool>` — invoke them by asking in plain English ("recall X", "store memory", "list memories", etc.), same as in Claude Code.
+
+### Gemini-specific notes
+
+- **Server name:** keep `total-recall` (hyphen, not underscore). Gemini namespaces discovered tools as `mcp_{serverName}_{toolName}`, and underscores in the server name confuse its policy parser — `total-recall` is fine, `total_recall` is not.
+- **Env-var sanitization:** Gemini CLI auto-redacts host env vars matching `*TOKEN*` / `*SECRET*` / `*PASSWORD*` / `*KEY*` unless you explicitly define them in the `env` block. total-recall reads its config from `~/.total-recall/config.json` (not env secrets), so this normally doesn't bite — but if you ever drive the org vault via a `GITHUB_TOKEN`-style env var, declare it explicitly in `env` or it will be stripped.
+- **Matcher scope:** for `AfterTool` / `BeforeTool` the regex is matched against the **full MCP namespaced tool name** (`mcp__total-recall__store_memory`), not the bare suffix Claude Code uses. `hooks/hooks.gemini.json` already accounts for this; only relevant if you hand-author your own hook config.
+- **`PreCompress` is advisory only:** Gemini explicitly says it "cannot block or modify the compression process." The hook still runs (and `transcript_path` is in stdin), so the learning-extraction script gets a chance — but Gemini may compress before the script finishes. Treat the PreCompress hook as best-effort.
+- **Transport field:** Gemini uses `command` for stdio (as above). If copying a config from Claude Code that used `url` for an HTTP server, Gemini wants `httpUrl` instead — not relevant here since total-recall is stdio-only.
+
+### What the Gemini hooks buy you
+
+Same as Claude Code — full lifecycle parity:
+
+- **SessionStart:** pull org vault, build the index cache, inject the memory index + open questions into context.
+- **AfterTool** (matched on `store_memory|update_memory|delete_memory`): auto-sync the touched file to the org vault (privacy filter applies).
+- **PreCompress:** extract 0–3 learnings from the transcript and store them (advisory, see above).
+- **SessionEnd:** flush any pending writes.
+
+Without the hooks (MCP-only install), the tools work but you lose all four: you'd call `search_index` / `recall_memory` / `list_memories` explicitly each session, and run `node scripts/sync-org-memory.mjs` by hand after every `org`-tagged store/update/delete.
+
+### Per-client install paths
+
+- **Claude Code (plugin install):** `claude plugin install …/plugins/total-recall` → reads `hooks/hooks.json` (uses `${CLAUDE_PLUGIN_ROOT}`) + `.mcp.json` automatically. No installer step needed.
+- **Claude Code (standalone / uninstalled):** `./install.sh --standalone` → wires hooks into `~/.claude/settings.json` with literal absolute paths (since `${CLAUDE_PLUGIN_ROOT}` is plugin-context-only).
+- **Gemini CLI:** `./install.sh --gemini` (or `gemini extensions install --consent <path>` directly) → copies the plugin dir to `~/.gemini/extensions/total-recall/`, registers the MCP server from `gemini-extension.json`, loads `hooks/hooks.gemini.json` with `${extensionPath}` substituted.
+
+Same plugin directory, two distinct manifest pairs, one installer flag per client.
+
+### Sources
+
+- [Gemini CLI hooks reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md)
+- [Gemini CLI extensions reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/extensions/reference.md)
+- [Gemini CLI hooks index](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/index.md)
+
+---
+
 ## Comparison with Similar Projects
 
 Four implementations share the "total-recall" name or solve the same problem. Here's how they differ.

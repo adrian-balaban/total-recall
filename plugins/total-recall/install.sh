@@ -10,6 +10,7 @@
 #   4. Build the initial index
 #   5. Wire hooks into ~/.claude/settings.json   (standalone installs only)
 #   5b. Statusline         (optional, --statusline)
+#   5c. Gemini extension   (optional, --gemini)
 #   6. Org vault            (optional)
 #   7. Vector search        (optional)
 #   8. Verify
@@ -31,6 +32,11 @@
 #                             and wires `statusLine` into ~/.claude/settings.json
 #                             (shows the plugin version in the bottom bar). Skipped
 #                             if a statusLine is already configured.
+#   --gemini                  Install the plugin as a Gemini CLI extension.
+#                             Equivalent to `gemini extensions install <plugin-root>`
+#                             — copies the dir into ~/.gemini/extensions/total-recall/
+#                             and registers the MCP server + hooks (hooks/hooks.gemini.json)
+#                             automatically. Requires the `gemini` CLI on PATH.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -46,6 +52,7 @@
 # Prerequisites:
 #   - Node.js v18+
 #   - gh CLI authenticated (`gh auth status`) — only for the org vault
+#   - gemini CLI on PATH — only for --gemini
 #
 # --------------------------------------------------------------------------
 # What the script does — each checking state first so
@@ -66,6 +73,15 @@
 #      ~/.claude/total-recall-statusline.sh and wires `statusLine` into
 #      ~/.claude/settings.json (shows the plugin version in the bottom bar).
 #      Skipped if a statusLine is already configured.
+#   5c. Gemini CLI extension (optional, --gemini) — runs
+#      `gemini extensions install <plugin-root>`, which copies the plugin
+#      dir into ~/.gemini/extensions/total-recall/ and registers the MCP
+#      server (from gemini-extension.json) and the hooks (from
+#      hooks/hooks.gemini.json) automatically. Skipped if `gemini` is not
+#      on PATH. The hooks file uses Gemini's event-name renames
+#      (PostToolUse→AfterTool, PreCompact→PreCompress) and a full
+#      mcp__total-recall__* matcher; the script bodies are the same as
+#      the Claude Code hook scripts.
 #   6. Org vault (optional) — prompts or --org-repo/--allowed-email-domain;
 #      writes config.json, runs pull-org-vault.sh.
 #   7. Vector search (optional) — prompts or --vector/--no-vector;
@@ -93,6 +109,7 @@ ORG_REPO=""
 ORG_DOMAIN=""
 VECTOR=""        # "" = ask, "yes" = install, "no" = skip
 ASSUME_YES=0
+GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
 
 if [ -t 1 ]; then
   C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RST=$'\033[0m'
@@ -141,6 +158,7 @@ while [ $# -gt 0 ]; do
     --plugin-root)         PLUGIN_ROOT="${2:?--plugin-root needs a path}"; shift 2;;
     --standalone)          STANDALONE=1; shift;;
     --statusline)          STATUSLINE=1; shift;;
+    --gemini)              GEMINI=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector)              VECTOR="yes"; shift;;
@@ -167,6 +185,9 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
 else
   warn "gh CLI not authenticated — required only for the org vault (Step 6)."
 fi
+# `gemini` is optional — only required if --gemini is passed. Warn-but-don't-fail
+# so non-Gemini users don't see a hard error.
+command -v gemini >/dev/null 2>&1 || warn "'gemini' CLI not found on PATH — required only for --gemini (Step 5c)."
 
 # --------------------------------------------------------------------------
 # Step 1 — Detect plugin path
@@ -384,6 +405,58 @@ NODE
     else
       warn "settings.json wiring failed — add statusLine manually (see README)."
       note "Statusline launcher installed but settings wiring failed."
+    fi
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# Step 5c — Gemini CLI extension (optional, --gemini)
+# --------------------------------------------------------------------------
+step "Step 5c — Gemini CLI extension (optional)"
+if [ "$GEMINI" -ne 1 ]; then
+  ok "Gemini extension skipped. (Pass --gemini to install as a Gemini CLI extension.)"
+elif ! command -v gemini >/dev/null 2>&1; then
+  warn "'gemini' CLI not found on PATH — cannot install as an extension."
+  warn "Install Gemini CLI first (https://github.com/google-gemini/gemini-cli), then re-run with --gemini."
+  note "Gemini extension skipped (gemini CLI not on PATH)."
+elif [ ! -f "$PLUGIN_ROOT/gemini-extension.json" ]; then
+  warn "gemini-extension.json not found at $PLUGIN_ROOT/gemini-extension.json — skipping."
+  note "Gemini extension skipped (manifest missing)."
+elif [ ! -f "$PLUGIN_ROOT/hooks/hooks.gemini.json" ]; then
+  warn "hooks/hooks.gemini.json not found at $PLUGIN_ROOT/hooks/hooks.gemini.json — skipping."
+  note "Gemini extension skipped (hooks/hooks.gemini.json missing)."
+else
+  # The actual `gemini extensions install` command is INTERACTIVE: it prompts
+  # "Do you trust the files in this folder?" even with --consent, and there
+  # is no documented flag to bypass that prompt (the top-level `--skip-trust`
+  # is a session flag, not an install subcommand flag). We can't pipe "y"
+  # blindly — the prompt has a security policy reason. Instead, do the
+  # automatable checks (idempotency) and print the exact command for the
+  # user to run, with `--consent` so the SECOND prompt is auto-accepted.
+  # Re-running the script is a no-op once the user has installed it.
+  GEMINI_EXT_DIR="$HOME/.gemini/extensions/total-recall"
+  if [ -d "$GEMINI_EXT_DIR" ] && [ -f "$GEMINI_EXT_DIR/gemini-extension.json" ]; then
+    ok "Gemini extension already installed at $GEMINI_EXT_DIR"
+    note "Gemini extension already installed."
+  else
+    info "Run the following command to install (it will ask you to trust the folder once):"
+    info "  gemini extensions install --consent $PLUGIN_ROOT"
+    # Try anyway, in case a future Gemini CLI version adds a non-interactive
+    # flag. If it succeeds, great; if it hangs on the trust prompt, the user
+    # will see the message above and can run the command themselves.
+    if [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
+      # Interactive: try with consent; if it hangs the user can Ctrl-C and
+      # the script will fall through to the manual command.
+      if ( cd "$PLUGIN_ROOT" && gemini extensions install --consent "$PLUGIN_ROOT" 2>&1 ); then
+        ok "Installed Gemini extension from $PLUGIN_ROOT"
+        note "Gemini extension installed (run 'gemini' to start a session with 12 tools + hooks)."
+      else
+        warn "Install did not complete — run manually: gemini extensions install --consent $PLUGIN_ROOT"
+        note "Gemini extension install did not complete (run manually)."
+      fi
+    else
+      # Non-interactive: skip the attempt entirely. The user has the command.
+      note "Gemini extension not yet installed — run: gemini extensions install --consent $PLUGIN_ROOT"
     fi
   fi
 fi
