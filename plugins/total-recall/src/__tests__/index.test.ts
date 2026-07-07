@@ -2037,6 +2037,63 @@ describe('embed callback — embedAndUpsert called on write', () => {
     await callTool('update_memory', { key, tags: ['newtag'] });
     expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
   });
+
+  it('update_memory DOES call embedAndUpsert on an explicit empty-string content (clear-the-body update)', async () => {
+    // Regression: the call site used truthy `if (content)`, so `content: ''`
+    // rewrote the file but skipped the vector upsert — the OLD body's embedding
+    // stayed live in vec_memories and hybrid search kept surfacing wiped content.
+    const { key } = result(await callTool('store_memory', {
+      title: 'Embed Clear Test', content: 'to be wiped', tags: [], category: 'knowledge',
+    }));
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
+    await callTool('update_memory', { key, content: '' });
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, '\n## Executive Summary\n\n');
+  });
+});
+
+// update_memory must refresh the file-derived metadata it changes on disk —
+// tokenEstimate (surfaced via list_memories/search_index) and the #19 stat
+// identity (mtimeMs/size, used by reconcileIndex to skip unchanged files).
+// Regression: only store_memory recaptured these; an update left them stale
+// until the next reconcile.
+describe('update_memory — refreshes tokenEstimate and stat identity', () => {
+  it('tokenEstimate and mtimeMs/size track the rewritten file', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Stat Refresh Test', content: 'short', tags: [], category: 'knowledge',
+    }));
+    const before = { ...memIndex[key]! };
+    await callTool('update_memory', { key, content: 'a much longer body '.repeat(50) });
+    const after = memIndex[key]!;
+    expect(after.tokenEstimate).toBeGreaterThan(before.tokenEstimate);
+    const st = fs.statSync(after.filePath);
+    expect(after.size).toBe(st.size);
+    expect(after.mtimeMs).toBe(st.mtimeMs);
+    expect(after.tokenEstimate).toBe(Math.ceil(fs.readFileSync(after.filePath, 'utf8').length / 4));
+  });
+});
+
+// search_index boundary coercion: a scalar `tags` arg (MCP does not enforce the
+// inputSchema) must filter as a single tag, not throw "filterTags.every is not
+// a function" and fail the whole search.
+describe('search_index — scalar tags arg is coerced, not fatal', () => {
+  it('tags: "kafka" (scalar string) filters like tags: ["kafka"]', async () => {
+    await callTool('store_memory', { title: 'Tagged Kafka Doc', content: 'kafka cdc pipeline', tags: ['kafka'], category: 'knowledge' });
+    await callTool('store_memory', { title: 'Untagged Doc', content: 'kafka mentioned only in body', tags: [], category: 'knowledge' });
+    rebuildInvertedIndex();
+    const res = await callTool('search_index', { query: 'kafka', tags: 'kafka' });
+    expect(res.isError).toBeUndefined();
+    const items = result(res);
+    expect(items.length).toBeGreaterThan(0);
+    expect(items.every((i: any) => i.tags.includes('kafka'))).toBe(true);
+  });
+
+  it('tags with a non-string non-array shape is ignored (no filter, no throw)', async () => {
+    await callTool('store_memory', { title: 'Shape Test Doc', content: 'shape test body', tags: [], category: 'knowledge' });
+    rebuildInvertedIndex();
+    const res = await callTool('search_index', { query: 'shape', tags: 42 });
+    expect(res.isError).toBeUndefined();
+    expect(result(res).length).toBeGreaterThan(0);
+  });
 });
 
 // ─── #16: boot reconcileVectors sweeps stale vec_memories rows ───────────────

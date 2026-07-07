@@ -114,7 +114,15 @@ export async function recallMemory(args: any): Promise<any> {
 }
 
 export function searchIndex(args: any): any {
-  const { query, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const { query, since, before, minScore = 0, excludeJournal = true, category } = args;
+  // Coerce `tags` at the boundary (mirrors get_memories_by_keys' keys coercion):
+  // MCP does not enforce the inputSchema, so a caller can pass `tags: "org"` as
+  // a scalar — `filterTags?.length` is truthy for a non-empty string and the
+  // `.every` below then throws "filterTags.every is not a function", failing
+  // the whole search. Wrap a scalar string; drop any other shape.
+  const filterTags: string[] = Array.isArray(args.tags)
+    ? args.tags
+    : typeof args.tags === 'string' ? [args.tags] : [];
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   let results = tfidfSearch(query, excludeJournal);
 
@@ -128,7 +136,7 @@ export function searchIndex(args: any): any {
     results = results.filter(r => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter(r => memIndex[r.key]?.category === category);
-  if (filterTags?.length) results = results.filter(r => filterTags.every((t: string) => memIndex[r.key]?.tags.includes(t)));
+  if (filterTags.length) results = results.filter(r => filterTags.every((t: string) => memIndex[r.key]?.tags.includes(t)));
 
   // Minimum-score floor (mirrors danilop/claude-total-recall's `threshold`).
   // Default 0 = no filtering (current behavior). search_index is TF-IDF-only,

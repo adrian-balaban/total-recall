@@ -3,7 +3,7 @@ import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB } from '../paths.js';
-import { reconcileIndex, assertRegularFile } from '../vault-scan.js';
+import { reconcileIndex, assertRegularFile, tokenEstimate } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -83,20 +83,34 @@ export function updateMemory(args: any): any {
   // Use `content !== undefined` so an explicit empty string (`content: ''`) is a
   // legitimate "clear the body" update, not "leave the old content unchanged".
   const newContent = content !== undefined ? withExecutiveSummary(content) : parsed.content;
-  fs.writeFileSync(meta.filePath, stringifyFrontmatter(newContent, newFm));
+  const fileContent = stringifyFrontmatter(newContent, newFm);
+  fs.writeFileSync(meta.filePath, fileContent);
 
+  // #19: recapture the just-written file's stat (mirrors store.ts). Without it,
+  // meta keeps the pre-update mtimeMs/size, so the next reconcileIndex sees a
+  // mismatch and pays a redundant re-read — and, worse, tokenEstimate stays
+  // stale in list_memories/search_index until that reconcile. Best-effort: a
+  // throw leaves 0/0, which just forces the re-read.
+  let mtimeMs = 0, size = 0;
+  try { const st = fs.statSync(meta.filePath); mtimeMs = st.mtimeMs; size = st.size; } catch { /* best-effort */ }
   Object.assign(meta, {
     tags: newFm.tags,
     importanceScore: newFm.importanceScore,
     updated: now,
     sessions: newFm.sessions,
     contentPreview: newContent.trim().slice(0, 500),
+    tokenEstimate: tokenEstimate(fileContent),
+    mtimeMs, size,
   });
 
   contentCache.delete(key);
   scheduleSave();
 
-  if (content) embedAndUpsert(key, newContent);
+  // `content !== undefined`, not truthy: an explicit `content: ''` is a
+  // legitimate "clear the body" update (see newContent above) — the truthy
+  // check skipped the vector upsert for it, leaving the OLD body's embedding
+  // live in vec_memories (hybrid search kept surfacing wiped content).
+  if (content !== undefined) embedAndUpsert(key, newContent);
 
   return { key, message: 'Memory updated.' };
 }

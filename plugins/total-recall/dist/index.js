@@ -16521,7 +16521,8 @@ async function recallMemory(args) {
   }).filter(Boolean);
 }
 function searchIndex(args) {
-  const { query, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const { query, since, before, minScore = 0, excludeJournal = true, category } = args;
+  const filterTags = Array.isArray(args.tags) ? args.tags : typeof args.tags === "string" ? [args.tags] : [];
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   let results = tfidfSearch(query, excludeJournal);
   const lower = since ? toCutoff(since) : null;
@@ -16530,7 +16531,7 @@ function searchIndex(args) {
     results = results.filter((r) => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter((r) => memIndex[r.key]?.category === category);
-  if (filterTags?.length) results = results.filter((r) => filterTags.every((t) => memIndex[r.key]?.tags.includes(t)));
+  if (filterTags.length) results = results.filter((r) => filterTags.every((t) => memIndex[r.key]?.tags.includes(t)));
   if (minScore > 0) results = results.filter((r) => r.score >= minScore);
   return results.slice(0, limit).map((r) => {
     const m = memIndex[r.key];
@@ -16693,17 +16694,28 @@ function updateMemory(args) {
     sessions
   };
   const newContent = content !== void 0 ? withExecutiveSummary(content) : parsed.content;
-  fs6.writeFileSync(meta2.filePath, stringifyFrontmatter(newContent, newFm));
+  const fileContent = stringifyFrontmatter(newContent, newFm);
+  fs6.writeFileSync(meta2.filePath, fileContent);
+  let mtimeMs = 0, size = 0;
+  try {
+    const st = fs6.statSync(meta2.filePath);
+    mtimeMs = st.mtimeMs;
+    size = st.size;
+  } catch {
+  }
   Object.assign(meta2, {
     tags: newFm.tags,
     importanceScore: newFm.importanceScore,
     updated: now,
     sessions: newFm.sessions,
-    contentPreview: newContent.trim().slice(0, 500)
+    contentPreview: newContent.trim().slice(0, 500),
+    tokenEstimate: tokenEstimate(fileContent),
+    mtimeMs,
+    size
   });
   contentCache.delete(key);
   scheduleSave();
-  if (content) embedAndUpsert(key, newContent);
+  if (content !== void 0) embedAndUpsert(key, newContent);
   return { key, message: "Memory updated." };
 }
 function deleteMemory(args) {
@@ -16729,7 +16741,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.81" : null.version;
+var PLUGIN_VERSION = true ? "1.0.82" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
