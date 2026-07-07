@@ -141,3 +141,53 @@ After cloning the marketplace repo and building once (`cd plugins/total-recall &
 Codex runs MCP servers under its own sandbox/approval policy. total-recall writes to `~/.total-recall/personal-vault/` and `~/.total-recall/org/org-vault/` (and the index files in `~/.total-recall/`), so those paths must be writable from the sandbox Codex spawns the server in — typically a workspace-write or `--full-auto` approval level, or an explicit allow for `~/.total-recall/`. If Codex sandboxing blocks the writes, tool calls fail on the first store/update/delete; the read-only tools (`search_index`, `recall_memory`, `list_memories`, `get_timeline`, `get_related_memories`, `prune_memories`, `get_stats`, `get_memories_by_keys`) still work against the on-disk index as long as `~/.total-recall/index.json` is readable.
 
 The MCP tools alone are still a capable manual memory store — just not zero-touch.
+
+## Gemini compatibility
+
+**Short answer: same as Copilot and Codex — the 12 MCP tools work in Google Gemini CLI; the automatic context injection does not.**
+
+Gemini CLI consumes stdio MCP servers configured in `~/.gemini/settings.json` (user-level) or `.gemini/settings.json` (project-level). Same portability breakdown: the MCP server is plain stdio (`node dist/index.js`), so it runs unchanged; hooks and the skill are Claude Code-specific and have no Gemini equivalent.
+
+| Component | Works in Gemini CLI? | Why |
+|---|---|---|
+| **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Gemini CLI loads stdio MCP servers from `mcpServers` in `settings.json` and exposes their tools to the model. |
+| **Hooks** (SessionStart/PostToolUse/PreCompact) | ❌ No | Hooks are a Claude Code feature with no Gemini equivalent. No session-start index injection, no org-vault auto-sync, no PreCompact learning extraction. |
+| **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | The skill is a Claude Code artifact (it references `mcp__plugin_total-recall_total-recall__*` tool names and the `Skill` tool). Gemini CLI has its own skill/`activate_skill` mechanism via `GEMINI.md`, but this plugin's skills are not authored for it. |
+
+### Registering the MCP server in Gemini CLI
+
+Add a stanza to `~/.gemini/settings.json`. Gemini doesn't expand `${CLAUDE_PLUGIN_ROOT}`, so use an **absolute path**:
+
+```json
+{
+  "mcpServers": {
+    "total-recall": {
+      "command": "node",
+      "args": ["/absolute/path/to/plugins/total-recall/dist/index.js"],
+      "timeout": 30000
+    }
+  }
+}
+```
+
+Or via the CLI command:
+
+```bash
+gemini mcp add -s user total-recall node /absolute/path/to/plugins/total-recall/dist/index.js
+```
+
+After cloning the marketplace repo and building once (`cd plugins/total-recall && npm install && npm run build`), point `args` at the built `dist/index.js`. Verify with `/mcp` inside a session or `gemini mcp list` from the shell. The 12 tools then appear namespaced as `mcp_total-recall_<tool>` — invoke them by asking in plain English ("recall X", "store memory", "list memories", etc.), same as in Claude Code but with no automatic index injection.
+
+### Gemini-specific notes
+
+- **Server name:** keep `total-recall` (hyphen, not underscore). Gemini namespaces discovered tools as `mcp_{serverName}_{toolName}`, and underscores in the server name confuse its policy parser — `total-recall` is fine, `total_recall` is not.
+- **Env-var sanitization:** Gemini CLI auto-redacts host env vars matching `*TOKEN*` / `*SECRET*` / `*PASSWORD*` / `*KEY*` unless you explicitly define them in the `env` block. total-recall reads its config from `~/.total-recall/config.json` (not env secrets), so this normally doesn't bite — but if you ever drive the org vault via a `GITHUB_TOKEN`-style env var, declare it explicitly in `env` or it will be stripped.
+- **Transport field:** Gemini uses `command` for stdio (as above). If copying a config from Claude Code that used `url` for an HTTP server, Gemini wants `httpUrl` instead — not relevant here since total-recall is stdio-only.
+
+### What you lose without the hooks (Gemini, same as Copilot and Codex)
+
+- **No injected memory index at session start** — call `search_index` / `recall_memory` / `list_memories` explicitly.
+- **No org-vault auto-sync** — run `node scripts/sync-org-memory.mjs` by hand after `org`-tagged store/update/delete.
+- **No PreCompact learning extraction** — doubly Claude-bound (the hook *and* the `claude -p` extractor).
+
+The MCP tools alone are still a capable manual memory store — just not zero-touch.
