@@ -5,6 +5,20 @@ This plugin runs in Gemini CLI. The 12 tools are exposed as
 ("recall X", "store a memory about Y", "list memories tagged Z")
 — same as in Claude Code.
 
+## Install
+
+```bash
+cd plugins/total-recall && npm install && npm run build
+./install.sh --gemini          # or: gemini extensions install --consent "$(pwd)"
+```
+
+This copies the plugin into `~/.gemini/extensions/total-recall/`, registers
+the MCP server (from `gemini-extension.json`), and wires the lifecycle hooks
+from `hooks/hooks.gemini.json` (Gemini's event renames: `PostToolUse` →
+`AfterTool`, `PreCompact` → `PreCompress`). Verify with `gemini mcp list`.
+For MCP-only registration without hooks, see the README's *Gemini
+compatibility* section.
+
 ## Always-true rules
 
 - **Tag routing**: `org` → shared org vault (git-synced, privacy-filtered

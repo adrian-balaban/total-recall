@@ -1,10 +1,10 @@
 # Total Recall
 
-Persistent knowledge management for Claude Code. Stores memories as markdown files, exposes 12 MCP tools, and uses Claude Code hooks to inject context automatically.
+Persistent knowledge management for Claude Code, GitHub Copilot CLI, and Gemini CLI. Stores memories as markdown files, exposes 12 MCP tools, and uses per-client lifecycle hooks to inject context automatically.
 
 ## What it is
 
-A Claude Code plugin that gives Claude a persistent memory system. It runs as an MCP (Model Context Protocol) server — a stdio subprocess that Claude Code talks to via the MCP protocol. Memories are stored as markdown files on disk with YAML frontmatter, indexed in JSON for fast access.
+A plugin that gives Claude, Copilot, and Gemini a persistent memory system. It runs as an MCP (Model Context Protocol) server — a stdio subprocess that the host client talks to via the MCP protocol. Memories are stored as markdown files on disk with YAML frontmatter, indexed in JSON for fast access.
 
 ### Storage & Dual Vault Architecture
 
@@ -115,23 +115,38 @@ src/tools/{store,recall,query,mutate}.ts  <- 12 tool implementations
 
 ## Install
 
-Installed as a Claude Code **plugin** (recommended), `hooks/hooks.json` and `.mcp.json` are auto-loaded — no manual MCP registration or hook wiring needed.
+The MCP server is a plain stdio Node process, so the same 12 tools work in **Claude Code**, **GitHub Copilot CLI**, and **Gemini CLI**. What differs per client is how the server and the lifecycle hooks get loaded. `install.sh` (at the plugin root) is the one-shot, state-aware setup script that creates the vault dirs, registers the MCP server, builds the index, and optionally wires hooks / enables the org vault and vector search. Every step checks current state first, so it's safe to re-run.
 
-For a standalone or scripted setup, run **`install.sh`** (at the plugin root) — a one-shot, state-aware setup script that creates the vault dirs, registers the MCP server, builds the index, and optionally wires hooks / enables the org vault and vector search. Every step checks current state first, so it's safe to re-run:
+### Quick install by client
 
 ```bash
 cd plugins/total-recall
 npm install && npm run build      # build dist/ if not already present
-./install.sh                      # interactive
+
+# Claude Code (recommended) — plugin install auto-loads hooks/hooks.json + .mcp.json
+claude plugin install "$(pwd)"
+
+# GitHub Copilot CLI — registers MCP + hooks/hooks.copilot.json
+./install.sh --copilot            # or directly: copilot plugin install "$(pwd)"
+
+# Gemini CLI — copies to ~/.gemini/extensions/ and registers MCP + hooks/hooks.gemini.json
+./install.sh --gemini             # or directly: gemini extensions install --consent "$(pwd)"
+
+# Standalone (no plugin manager) — wires hooks into ~/.claude/settings.json with literal paths
+./install.sh --standalone
 ./install.sh --help               # all flags
 ./install.sh -y --standalone --org-repo https://github.com/you/your-vault.git   # non-interactive
 ```
+
+The skills (`/total-recall:memory-workflow`, `/total-recall:review-fix-ship`) are Claude Code-only — Copilot and Gemini get the 12 tools and the lifecycle hooks but not the skills.
 
 Manual MCP registration (if not using the script or plugin):
 
 ```bash
 claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(pwd)'/dist/index.js"]}'
 ```
+
+For per-client compatibility details (what works, what degrades, manual MCP-only registration without hooks), see [Gemini compatibility](#gemini-compatibility) and [Copilot CLI compatibility](#copilot-cli-compatibility) below.
 
 ## Data Locations
 
