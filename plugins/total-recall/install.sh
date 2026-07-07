@@ -259,9 +259,15 @@ step "Step 3 — Register MCP server"
 if ! command -v claude >/dev/null 2>&1; then
   warn "'claude' CLI unavailable — skipping MCP registration."
   note "MCP registration skipped (no claude CLI)."
-elif claude mcp get total-recall >/dev/null 2>&1; then
-  ok "MCP server 'total-recall' already registered."
 else
+  if claude mcp get total-recall >/dev/null 2>&1; then
+    info "MCP server 'total-recall' already registered — removing for clean re-install."
+    claude mcp remove total-recall -s user 2>/dev/null \
+      || claude mcp remove total-recall 2>/dev/null \
+      || true
+    ok "Removed existing registration."
+  fi
+  if true; then
   # Pick the highest-versioned nvm node, else whatever is on PATH.
   # (The skill's one-liner accidentally *executed* the node binaries; we list
   # the paths instead, which is the intended behavior.)
@@ -299,6 +305,7 @@ else
     note "MCP server registered."
   else
     warn "claude mcp add-json failed — register manually if needed."
+  fi
   fi
 fi
 
