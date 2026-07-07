@@ -223,6 +223,27 @@ describe('store_memory', () => {
     expect(fs.existsSync(traversalDir)).toBe(false);
   });
 
+  it('coerces a non-string category to a string (no TypeError on startsWith)', async () => {
+    // MCP does not enforce the tool's inputSchema, so a malformed caller can
+    // pass `category: 123` (or `null`). Without coercion at the write boundary,
+    // the `category.startsWith('org/')` org-prefix guard throws
+    // `123.startsWith is not a function` and the memory is never stored.
+    // Coerce to a string so both the guard and the path join see a string.
+    const resNum = result(await callTool('store_memory', {
+      title: 'Num Cat', content: 'X', tags: [], category: 123,
+    }));
+    expect(resNum.key).toMatch(/^123\//);
+    expect(fs.existsSync(resNum.filePath)).toBe(true);
+
+    // `null` is nullish → falls back to the 'knowledge' default (not a crash,
+    // and not a `null.startsWith` TypeError).
+    const resNull = result(await callTool('store_memory', {
+      title: 'Null Cat', content: 'X', tags: [], category: null,
+    }));
+    expect(resNull.key).toMatch(/^knowledge\//);
+    expect(fs.existsSync(resNull.filePath)).toBe(true);
+  });
+
   it('ignores a caller-supplied author for org (no impersonation bypass)', async () => {
     // An existing org memory authored by "other-user". A caller passing
     // author: "other-user" + force must NOT be able to impersonate and overwrite.
@@ -591,6 +612,32 @@ describe('recall_memory', () => {
   it('respects limit', async () => {
     const res = result(await callTool('recall_memory', { query: 'kafka', limit: 1 }));
     expect(res.length).toBeLessThanOrEqual(1);
+  });
+
+  it('clamps a malformed limit (negative/NaN/huge) to a safe value', async () => {
+    // Seed 5 kafka-titled memories so the slice is observable. The beforeEach
+    // already stored one; add four more, then rebuild the inverted index so
+    // tfidfSearch ranks all five for the query "kafka".
+    for (let i = 2; i <= 5; i++) {
+      await callTool('store_memory', {
+        title: `Kafka ${i}`, content: `kafka notes ${i}`, tags: ['kafka'], category: 'architecture',
+      });
+    }
+    await callTool('rebuild_index');
+    const baseline = result(await callTool('recall_memory', { query: 'kafka' }));
+    expect(baseline.length).toBe(5);
+
+    // `limit: -1` pre-fix was `.slice(0, -1)` → 4 results (drops the last);
+    // post-fix clamps to min 1 → exactly 1.
+    expect(result(await callTool('recall_memory', { query: 'kafka', limit: -1 })).length).toBe(1);
+
+    // `limit: NaN` pre-fix was `.slice(0, NaN)` → empty; post-fix falls back to
+    // the default 10 → all 5.
+    expect(result(await callTool('recall_memory', { query: 'kafka', limit: NaN })).length).toBe(5);
+
+    // `limit: 1e12` pre-fix returned all 5 unbounded; post-fix clamps to
+    // MAX_PAGE_LIMIT (1000) → still all 5 here.
+    expect(result(await callTool('recall_memory', { query: 'kafka', limit: 1e12 })).length).toBe(5);
   });
 
   it('excludes journal by default', async () => {
@@ -964,6 +1011,26 @@ describe('search_index', () => {
   it('respects limit', async () => {
     const res = result(await callTool('search_index', { query: 'flink', limit: 1 }));
     expect(res.length).toBeLessThanOrEqual(1);
+  });
+
+  it('clamps a malformed limit (negative/NaN/huge) to a safe value', async () => {
+    // Seed 5 flink-titled memories so the slice is observable (beforeEach
+    // stored one; add four more, then rebuild the inverted index).
+    for (let i = 2; i <= 5; i++) {
+      await callTool('store_memory', {
+        title: `Flink ${i}`, content: `flink notes ${i}`, tags: ['flink'], category: 'architecture',
+      });
+    }
+    await callTool('rebuild_index');
+    expect(result(await callTool('search_index', { query: 'flink' })).length).toBe(5);
+
+    // `limit: -1` pre-fix was `.slice(0, -1)` → 4 (drops the last); post-fix
+    // clamps to min 1 → exactly 1.
+    expect(result(await callTool('search_index', { query: 'flink', limit: -1 })).length).toBe(1);
+    // `limit: NaN` pre-fix was `.slice(0, NaN)` → empty; post-fix → default 20 → all 5.
+    expect(result(await callTool('search_index', { query: 'flink', limit: NaN })).length).toBe(5);
+    // `limit: 1e12` post-fix clamps to MAX_PAGE_LIMIT (1000) → still all 5.
+    expect(result(await callTool('search_index', { query: 'flink', limit: 1e12 })).length).toBe(5);
   });
 
   it('minScore filters out low-scoring results (0 = no filtering)', async () => {

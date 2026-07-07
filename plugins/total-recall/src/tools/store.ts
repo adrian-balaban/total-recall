@@ -38,7 +38,13 @@ export function storeMemory(args: any): any {
   // on the next read. Coerce at the destructure so every downstream use is
   // safe — same blast radius the indexFile hardening guards against for
   // externally-authored frontmatter.
-  const { content, category = 'knowledge', sessionId, author, force = false } = args;
+  const { content, sessionId, author, force = false } = args;
+  // Coerce category to a string at the WRITE path (mirrors title/tags below):
+  // a non-string `category` (e.g. `123`, `null` from a malformed caller) would
+  // otherwise reach `category.startsWith('org/')` below and throw TypeError
+  // (Number has no startsWith) before the memory is stored. MCP does not
+  // enforce the tool's inputSchema, so coerce at the boundary like title/tags.
+  const category = String(args.category ?? 'knowledge');
   const title = String(args.title ?? '');
   const tags = Array.isArray(args.tags) ? args.tags : [];
   // Clamp + coerce importanceScore to a finite [0, 1] number — see

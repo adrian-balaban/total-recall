@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { listMemories, getMemoriesByKeys, getTimeline } from '../tools/query.js';
+import { listMemories, getMemoriesByKeys, getTimeline, getRelatedMemories, pruneMemories } from '../tools/query.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import type { MemoryMetadata } from '../types.js';
@@ -151,6 +151,67 @@ describe('query tools', () => {
       const nan = getTimeline({ limit: NaN, offset: NaN });
       expect(nan.items.length).toBe(3);
       expect(nan.total).toBe(3);
+    });
+  });
+
+  describe('getRelatedMemories', () => {
+    // Source memory + 5 related ones. All share tag 'x' so Jaccard > 0 and
+    // every related memory is a candidate; same category 'src' adds a 0.2
+    // boost but does not change ordering among them (all boosted equally).
+    beforeEach(() => {
+      memIndex['src'] = mkMeta({ key: 'src', tags: ['x'], category: 'src' });
+      for (let i = 1; i <= 5; i++) {
+        memIndex[`r${i}`] = mkMeta({ key: `r${i}`, tags: ['x'], category: 'src' });
+      }
+    });
+
+    it('defaults to 10 and returns all related memories', () => {
+      const res = getRelatedMemories({ key: 'src' });
+      expect(res).toHaveLength(5);
+    });
+
+    it('clamps a malformed limit (negative/NaN/huge) to a safe value', () => {
+      // Default (limit omitted) → all 5 (default is 10, only 5 candidates).
+      expect(getRelatedMemories({ key: 'src' })).toHaveLength(5);
+      // `limit: -1` pre-fix was `.slice(0, -1)` → 4 (drops the last); post-fix
+      // clamps to min 1 → exactly 1.
+      expect(getRelatedMemories({ key: 'src', limit: -1 })).toHaveLength(1);
+      // `limit: NaN` pre-fix was `.slice(0, NaN)` → empty; post-fix → default 10 → all 5.
+      expect(getRelatedMemories({ key: 'src', limit: NaN })).toHaveLength(5);
+      // `limit: 1e12` post-fix clamps to MAX_PAGE_LIMIT (1000) → still all 5.
+      expect(getRelatedMemories({ key: 'src', limit: 1e12 })).toHaveLength(5);
+    });
+  });
+
+  describe('pruneMemories', () => {
+    // 5 memories, all with retention strength ≤ 1 (importanceScore 0.5, no
+    // recent access, accessCount 0). A threshold of 2 means strength < 2 is
+    // true for every one of them, so all 5 are prune candidates — the slice
+    // is observable.
+    beforeEach(() => {
+      for (let i = 1; i <= 5; i++) {
+        memIndex[`p${i}`] = mkMeta({
+          key: `p${i}`,
+          importanceScore: 0.5,
+          accessCount: 0,
+          lastAccessed: '2025-01-01T00:00:00.000Z',
+        });
+      }
+    });
+
+    it('defaults to 20 and returns all candidates', () => {
+      expect(pruneMemories({ threshold: 2 })).toHaveLength(5);
+    });
+
+    it('clamps a malformed limit (negative/NaN/huge) to a safe value', () => {
+      // Default (limit omitted) → all 5 (default is 20, only 5 candidates).
+      expect(pruneMemories({ threshold: 2 })).toHaveLength(5);
+      // `limit: -1` pre-fix was `.slice(0, -1)` → 4; post-fix clamps to min 1 → 1.
+      expect(pruneMemories({ threshold: 2, limit: -1 })).toHaveLength(1);
+      // `limit: NaN` pre-fix was `.slice(0, NaN)` → empty; post-fix → default 20 → all 5.
+      expect(pruneMemories({ threshold: 2, limit: NaN })).toHaveLength(5);
+      // `limit: 1e12` post-fix clamps to MAX_PAGE_LIMIT (1000) → still all 5.
+      expect(pruneMemories({ threshold: 2, limit: 1e12 })).toHaveLength(5);
     });
   });
 });

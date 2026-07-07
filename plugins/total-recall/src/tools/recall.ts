@@ -7,8 +7,15 @@ import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
 import { readCachedOrFresh } from '../vault-scan.js';
 
+// Pagination bounds (mirrors query.ts): MCP does not enforce the tool's
+// inputSchema, so a buggy/malicious caller can pass a huge/negative/NaN limit.
+// `.slice(0, -1)` would drop the last result and `.slice(0, NaN)` yields an
+// empty array. Coerce + clamp at the query boundary; safe default when absent.
+const MAX_PAGE_LIMIT = 1000;
+
 export async function recallMemory(args: any): Promise<any> {
-  const { query, full = false, since, before, minScore = 0, limit = 10, excludeJournal = true, hybrid = true } = args;
+  const { query, full = false, since, before, minScore = 0, excludeJournal = true, hybrid = true } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;
   const tfidfResults = tfidfSearch(query, excludeJournal);
 
   // Optional hybrid path: fuse the TF-IDF rank (already decay-weighted by Ebbinghaus
@@ -107,7 +114,8 @@ export async function recallMemory(args: any): Promise<any> {
 }
 
 export function searchIndex(args: any): any {
-  const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const { query, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   let results = tfidfSearch(query, excludeJournal);
 
   // Same single-pass date window as recall_memory above (see the comment there):

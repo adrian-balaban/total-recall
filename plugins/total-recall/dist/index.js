@@ -16327,7 +16327,8 @@ function orgVaultConfigured() {
   return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
 }
 function storeMemory(args) {
-  const { content, category = "knowledge", sessionId, author, force = false } = args;
+  const { content, sessionId, author, force = false } = args;
+  const category = String(args.category ?? "knowledge");
   const title = String(args.title ?? "");
   const tags = Array.isArray(args.tags) ? args.tags : [];
   const importanceScore = clampImportanceScore(args.importanceScore);
@@ -16473,8 +16474,10 @@ function reciprocalRankFusion(lists, k = 60) {
 }
 
 // src/tools/recall.ts
+var MAX_PAGE_LIMIT = 1e3;
 async function recallMemory(args) {
-  const { query, full = false, since, before, minScore = 0, limit = 10, excludeJournal = true, hybrid = true } = args;
+  const { query, full = false, since, before, minScore = 0, excludeJournal = true, hybrid = true } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;
   const tfidfResults = tfidfSearch(query, excludeJournal);
   let ranked;
   if (hybrid) {
@@ -16518,7 +16521,8 @@ async function recallMemory(args) {
   }).filter(Boolean);
 }
 function searchIndex(args) {
-  const { query, limit = 20, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const { query, since, before, minScore = 0, excludeJournal = true, category, tags: filterTags } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   let results = tfidfSearch(query, excludeJournal);
   const lower = since ? toCutoff(since) : null;
   const upper = before ? toCutoff(before) : null;
@@ -16535,14 +16539,14 @@ function searchIndex(args) {
 }
 
 // src/tools/query.ts
-var MAX_PAGE_LIMIT = 1e3;
+var MAX_PAGE_LIMIT2 = 1e3;
 var MAX_PAGE_OFFSET = 1e6;
 function sortByUpdatedDesc(metas) {
   return metas.map((m) => [new Date(m.updated).getTime(), m]).sort((a, b) => b[0] - a[0]).map((pair) => pair[1]);
 }
 function listMemories(args) {
   const { category, tag } = args;
-  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 50;
   const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   const filtered = sortByUpdatedDesc(
     Object.values(memIndex).filter((m) => (!category || m.category === category) && (!tag || m.tags.includes(tag)))
@@ -16596,7 +16600,7 @@ function getStats() {
 }
 function getTimeline(args) {
   const { since, before, category } = args;
-  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 50;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 50;
   const offset = Math.max(0, Math.min(MAX_PAGE_OFFSET, Math.floor(Number(args.offset)))) || 0;
   const cutoff = since ? toCutoff(since) : /* @__PURE__ */ new Date(0);
   const upper = before ? toCutoff(before) : null;
@@ -16608,7 +16612,8 @@ function getTimeline(args) {
   return { items, total, hasMore: offset + limit < total };
 }
 function getRelatedMemories(args) {
-  const { key, limit = 10, includeContent = false } = args;
+  const { key, includeContent = false } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 10;
   const source = memIndex[key];
   if (!source) throw new Error(`Memory not found: ${key}`);
   const srcTags = new Set(source.tags);
@@ -16628,7 +16633,8 @@ function getRelatedMemories(args) {
   });
 }
 function pruneMemories(args) {
-  const { threshold = 0.1, limit = 20 } = args;
+  const { threshold = 0.1 } = args;
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 20;
   return Object.values(memIndex).map((m) => ({
     key: m.key,
     title: m.title,
@@ -16723,7 +16729,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.80" : null.version;
+var PLUGIN_VERSION = true ? "1.0.81" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

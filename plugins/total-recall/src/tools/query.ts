@@ -128,7 +128,10 @@ export function getTimeline(args: any): any {
 }
 
 export function getRelatedMemories(args: any): any {
-  const { key, limit = 10, includeContent = false } = args;
+  const { key, includeContent = false } = args;
+  // Coerce + clamp limit (mirrors listMemories above): MCP does not enforce
+  // the inputSchema, so a negative/NaN/huge limit must not produce a wrong slice.
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;
   const source = memIndex[key];
   if (!source) throw new Error(`Memory not found: ${key}`);
 
@@ -177,7 +180,10 @@ export function getRelatedMemories(args: any): any {
 }
 
 export function pruneMemories(args: any): any {
-  const { threshold = 0.1, limit = 20 } = args;
+  const { threshold = 0.1 } = args;
+  // Coerce + clamp limit (mirrors listMemories above): MCP does not enforce the
+  // inputSchema, so a negative/NaN/huge limit must not produce a wrong slice.
+  const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   return Object.values(memIndex)
     .map(m => ({
       key: m.key, title: m.title, category: m.category,
