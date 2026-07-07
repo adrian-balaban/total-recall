@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/pull-org-vault.sh", "timeoutSec": 30 },
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/build-memory-index.sh", "timeoutSec": 15 },
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/load-memory-index.sh", "timeoutSec": 5 },
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/load-open-questions.sh", "timeoutSec": 5 }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__total-recall__(store_memory|update_memory|delete_memory)",
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/sync-org-memory.sh", "timeoutSec": 30 }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/extract-and-store-memories.sh", "timeoutSec": 60 }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          { "type": "command", "command": "${PLUGIN_ROOT}/hooks/scripts/session-end.sh", "timeoutSec": 5 }
+        ]
+      }
+    ]
+  }
+}

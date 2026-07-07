@@ -11,6 +11,7 @@
 #   5. Wire hooks into ~/.claude/settings.json   (standalone installs only)
 #   5b. Statusline         (optional, --statusline)
 #   5c. Gemini extension   (optional, --gemini)
+#   5d. Copilot extension  (optional, --copilot)
 #   6. Org vault            (optional)
 #   7. Vector search        (optional)
 #   8. Verify
@@ -37,6 +38,12 @@
 #                             — copies the dir into ~/.gemini/extensions/total-recall/
 #                             and registers the MCP server + hooks (hooks/hooks.gemini.json)
 #                             automatically. Requires the `gemini` CLI on PATH.
+#   --copilot                 Install the plugin as a GitHub Copilot CLI extension.
+#                             Equivalent to `copilot plugin install <plugin-root>`
+#                             — Copilot reads the same `.claude-plugin/plugin.json`
+#                             manifest (with the new `"hooks": "hooks/hooks.copilot.json"`
+#                             field) and registers the MCP server + hooks
+#                             automatically. Requires the `copilot` CLI on PATH.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -53,6 +60,7 @@
 #   - Node.js v18+
 #   - gh CLI authenticated (`gh auth status`) — only for the org vault
 #   - gemini CLI on PATH — only for --gemini
+#   - copilot CLI on PATH — only for --copilot
 #
 # --------------------------------------------------------------------------
 # What the script does — each checking state first so
@@ -82,6 +90,21 @@
 #      (PostToolUse→AfterTool, PreCompact→PreCompress) and a full
 #      mcp__total-recall__* matcher; the script bodies are the same as
 #      the Claude Code hook scripts.
+#   5d. Copilot CLI extension (optional, --copilot) — runs
+#      `copilot plugin install <plugin-root>`, which reads the same
+#      `.claude-plugin/plugin.json` (one of Copilot's four recognized
+#      manifest locations; the `mcpServers: "./.mcp.json"` path-string and
+#      the new `hooks: "hooks/hooks.copilot.json"` path-string are both
+#      documented Copilot shapes) and registers the MCP server + hooks
+#      automatically. Skipped if `copilot` is not on PATH. The hooks file
+#      uses PascalCase event names (SessionStart/PostToolUse/PreCompact/
+#      SessionEnd) which makes Copilot deliver the Claude-format
+#      (snake_case) stdin payload — the existing script bodies parse it
+#      unchanged. The Claude-format envelope on stdout is NOT recognized
+#      by Copilot (and preCompact/sessionEnd output isn't processed at
+#      all) so `additionalContext` injection into the LLM context is
+#      silently lost — a documented graceful degradation. The side
+#      effects (pull vault, sync to org, flush writes) all still run.
 #   6. Org vault (optional) — prompts or --org-repo/--allowed-email-domain;
 #      writes config.json, runs pull-org-vault.sh.
 #   7. Vector search (optional) — prompts or --vector/--no-vector;
@@ -110,6 +133,7 @@ ORG_DOMAIN=""
 VECTOR=""        # "" = ask, "yes" = install, "no" = skip
 ASSUME_YES=0
 GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
+COPILOT=0        # --copilot: install the extension via `copilot plugin install`
 
 if [ -t 1 ]; then
   C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RST=$'\033[0m'
@@ -159,6 +183,7 @@ while [ $# -gt 0 ]; do
     --standalone)          STANDALONE=1; shift;;
     --statusline)          STATUSLINE=1; shift;;
     --gemini)              GEMINI=1; shift;;
+    --copilot)             COPILOT=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector)              VECTOR="yes"; shift;;
@@ -188,6 +213,9 @@ fi
 # `gemini` is optional — only required if --gemini is passed. Warn-but-don't-fail
 # so non-Gemini users don't see a hard error.
 command -v gemini >/dev/null 2>&1 || warn "'gemini' CLI not found on PATH — required only for --gemini (Step 5c)."
+# `copilot` is optional — only required if --copilot is passed. Warn-but-don't-fail
+# so non-Copilot users don't see a hard error.
+command -v copilot >/dev/null 2>&1 || warn "'copilot' CLI not found on PATH — required only for --copilot (Step 5d)."
 
 # --------------------------------------------------------------------------
 # Step 1 — Detect plugin path
@@ -458,6 +486,47 @@ else
       # Non-interactive: skip the attempt entirely. The user has the command.
       note "Gemini extension not yet installed — run: gemini extensions install --consent $PLUGIN_ROOT"
     fi
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# Step 5d — Copilot CLI extension (optional, --copilot)
+# --------------------------------------------------------------------------
+step "Step 5d — Copilot CLI extension (optional)"
+if [ "$COPILOT" -ne 1 ]; then
+  ok "Copilot extension skipped. (Pass --copilot to install as a GitHub Copilot CLI extension.)"
+elif ! command -v copilot >/dev/null 2>&1; then
+  warn "'copilot' CLI not found on PATH — cannot install as an extension."
+  warn "Install GitHub Copilot CLI first (https://docs.github.com/en/copilot/how-tos/copilot-cli), then re-run with --copilot."
+  note "Copilot extension skipped (copilot CLI not on PATH)."
+elif [ ! -f "$PLUGIN_ROOT/.claude-plugin/plugin.json" ]; then
+  warn ".claude-plugin/plugin.json not found at $PLUGIN_ROOT — skipping."
+  note "Copilot extension skipped (manifest missing)."
+elif [ ! -f "$PLUGIN_ROOT/hooks/hooks.copilot.json" ]; then
+  warn "hooks/hooks.copilot.json not found at $PLUGIN_ROOT/hooks/hooks.copilot.json — skipping."
+  note "Copilot extension skipped (hooks/hooks.copilot.json missing)."
+else
+  # The documented Copilot subcommand is `copilot plugin install <path>`. The
+  # plugin loader reads `.claude-plugin/plugin.json` at one of four recognized
+  # locations — we ship at that exact path. The `mcpServers: "./.mcp.json"`
+  # (path-string) and the new `hooks: "hooks/hooks.copilot.json"` (path-string)
+  # are both documented Copilot-acceptable shapes.
+  #
+  # The Copilot install command is documented as non-interactive, but we wrap
+  # it with the same guard pattern as the Gemini step (--yes mode skips the
+  # attempt, prints the manual command instead) to stay safe under `-y`.
+  if [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
+    if ( cd "$PLUGIN_ROOT" && copilot plugin install "$PLUGIN_ROOT" 2>&1 ); then
+      ok "Installed Copilot extension from $PLUGIN_ROOT"
+      note "Copilot extension installed (run 'copilot' to start a session with 12 tools + lifecycle hooks)."
+    else
+      warn "Install did not complete — run manually: copilot plugin install $PLUGIN_ROOT"
+      note "Copilot extension install did not complete (run manually)."
+    fi
+  else
+    info "Run the following command to install the Copilot extension:"
+    info "  copilot plugin install $PLUGIN_ROOT"
+    note "Copilot extension not yet installed — run: copilot plugin install $PLUGIN_ROOT"
   fi
 fi
 

@@ -70,15 +70,28 @@ Skipped (write/destructive): `store_memory`, `update_memory`, `delete_memory`, `
 
 ## Copilot compatibility
 
-**Short answer: the 12 MCP tools work in GitHub Copilot Chat; the automatic context injection does not.**
+**Short answer: the 12 MCP tools work in GitHub Copilot CLI; the lifecycle hooks work too (with one documented graceful degradation — `additionalContext` injection into the LLM context is silently lost). The skills are Claude Code-only.**
 
-total-recall ships three things, and only one of them is portable:
+total-recall ships three things, and the plugin's two-of-three are now portable to Copilot CLI:
 
 | Component | Works in Copilot? | Why |
 |---|---|---|
-| **MCP server (12 tools)** | ✅ Yes | It's a plain stdio MCP server — `node dist/index.js`. Any MCP-capable client can consume it. Copilot Chat supports stdio MCP servers in VS Code / VS 2022. |
-| **Hooks** (SessionStart/PostToolUse/PreCompact) | ❌ No | Hooks are a Claude Code feature with no Copilot equivalent. No `SessionStart` → no automatic memory-index injection at session start. No `PostToolUse` → org-vault sync after store/update/delete doesn't run. No `PreCompact` → no learning extraction on context compaction. |
+| **MCP server (12 tools)** | ✅ Yes | It's a plain stdio MCP server — `node dist/index.js`. Any MCP-capable client can consume it. Copilot CLI loads stdio MCP servers from `mcpServers` in the plugin manifest. |
+| **Hooks** (SessionStart/PostToolUse/PreCompact/SessionEnd) | ⚠️ Partial — side effects run, `additionalContext` is silently lost | `hooks/hooks.copilot.json` uses PascalCase event names, which makes Copilot deliver the **Claude-format (snake_case) stdin payload** — the existing script bodies parse it unchanged. **All side effects still run** — vault pull, index build, org-vault sync, PreCompact learning extraction, SessionEnd flush. The one thing lost is the LLM-facing `additionalContext` injection: Copilot's parser doesn't read the Claude envelope, and for `PreCompact`/`SessionEnd` stdout is documented as not processed at all. The LLM in Copilot doesn't see the memory-index dump at session start; you can still call `search_index` / `recall_memory` / `list_memories` explicitly to find anything. |
 | **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | Skills and slash commands are Claude Code-specific. |
+
+### Installing as a Copilot extension (recommended)
+
+`copilot plugin install` reads `.claude-plugin/plugin.json` (one of Copilot's four recognized manifest locations; the new `hooks: "hooks/hooks.copilot.json"` field points at the Copilot-shaped hooks file) and registers the MCP server + hooks automatically. The `${PLUGIN_ROOT}` placeholder in the hooks file is resolved at load time, so the same source dir works on any machine.
+
+```bash
+cd plugins/total-recall && npm install && npm run build
+copilot plugin install "$(pwd)"
+```
+
+Verify with `/mcp` inside a session or `copilot mcp list` from the shell. The 12 tools appear namespaced as `mcp__total-recall__<tool>`. The lifecycle hooks (vault pull, index build, org-vault sync) run automatically; `additionalContext` injection into the LLM context is silently lost (documented graceful degradation — the LLM just doesn't see the memory-index dump; the index is still built and the tools still work).
+
+`install.sh --copilot` does the same install in one step.
 
 ### Using just the MCP server in Copilot Chat
 
@@ -98,13 +111,14 @@ Register it in your VS Code MCP config (`.vscode/mcp.json` or user settings). Th
 
 After cloning the marketplace repo and building once (`cd plugins/total-recall && npm install && npm run build`), point the `args` at the built `dist/index.js`. The 12 tools then appear in Copilot Chat and you can call them by name ("recall X", "store memory", "list memories", etc.) — the same calls as in Claude Code, just without the automatic index injection and org sync.
 
-### What you lose without the hooks
+### What you lose with the Copilot hooks (one documented graceful degradation)
 
-- **No injected memory index at session start** — you must call `search_index` / `recall_memory` / `list_memories` explicitly to find anything; the index isn't pre-loaded into context.
-- **No org-vault auto-sync** — store/update/delete on `org`-tagged memories won't push to the shared GitHub repo automatically. Run `node scripts/sync-org-memory.mjs` by hand if you need it.
-- **No PreCompact learning extraction** — and note this hook also shells out to the `claude` CLI binary, so it's Claude-Code-bound on two counts (the hook *and* the `claude -p` extractor).
+The hooks all RUN — vault pull, index build, org-vault auto-sync, PreCompact learning extraction, SessionEnd write flush all fire as they do in Claude Code. The one thing Copilot's parser silently drops is the `additionalContext` field the SessionStart / PostToolUse scripts emit on stdout. Concretely:
 
-The MCP tools alone are still a capable manual memory store — they're just not zero-touch.
+- **No injected memory index at session start** — the script that builds the index runs, but the resulting dump is not injected into the LLM context. The on-disk index is fresh (so `search_index` / `recall_memory` / `list_memories` work without re-scanning), but the LLM doesn't see the pre-loaded index at session start. Call those tools explicitly to find anything.
+- **Org-vault auto-sync still runs** — the matched `PostToolUse` fires `sync-org-memory.sh` and the org push goes through. The privacy filter still applies.
+- **No PreCompact learning extraction** — and the `claude -p` shell-out is Claude-Code-bound (same as the documented Gemini caveat), so the PreCompact hook is best-effort even when it runs.
+- **SessionEnd write flush runs** — pending writes are persisted on exit.
 
 ## Codex compatibility
 
@@ -144,19 +158,32 @@ The MCP tools alone are still a capable manual memory store — just not zero-to
 
 ## Gemini compatibility
 
-**Short answer: same as Copilot and Codex — the 12 MCP tools work in Google Gemini CLI; the automatic context injection does not.**
+**Short answer: the 12 MCP tools work; the lifecycle hooks work IF you install the plugin as a Gemini extension (with one documented graceful degradation — `additionalContext` is silently lost for the hooks that try to inject it). The skills are Claude Code-only.**
 
-Gemini CLI consumes stdio MCP servers configured in `~/.gemini/settings.json` (user-level) or `.gemini/settings.json` (project-level). Same portability breakdown: the MCP server is plain stdio (`node dist/index.js`), so it runs unchanged; hooks and the skill are Claude Code-specific and have no Gemini equivalent.
+Gemini CLI consumes stdio MCP servers configured in `~/.gemini/settings.json` (user-level) or `.gemini/settings.json` (project-level). The plugin directory doubles as a Gemini extension — `gemini-extension.json` registers the MCP server, and `hooks/hooks.gemini.json` wires the same lifecycle hooks (with Gemini's event-name renames). One `gemini extensions install <path>` does both.
 
 | Component | Works in Gemini CLI? | Why |
 |---|---|---|
-| **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Gemini CLI loads stdio MCP servers from `mcpServers` in `settings.json` and exposes their tools to the model. |
-| **Hooks** (SessionStart/PostToolUse/PreCompact) | ❌ No | Hooks are a Claude Code feature with no Gemini equivalent. No session-start index injection, no org-vault auto-sync, no PreCompact learning extraction. |
-| **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | The skill is a Claude Code artifact (it references `mcp__plugin_total-recall_total-recall__*` tool names and the `Skill` tool). Gemini CLI has its own skill/`activate_skill` mechanism via `GEMINI.md`, but this plugin's skills are not authored for it. |
+| **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Gemini CLI loads stdio MCP servers from `mcpServers` in `settings.json` (or `mcpServers` in `gemini-extension.json` when installed as an extension) and exposes their tools to the model. |
+| **Hooks** (SessionStart/AfterTool/PreCompress/SessionEnd) | ✅ Yes, via `hooks/hooks.gemini.json` | Gemini renames the lifecycle events: `PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress` (SessionStart/SessionEnd keep their names). The matcher regex targets the full MCP namespaced tool name (`mcp__total-recall__(store_memory\|update_memory\|delete_memory)`), not the bare suffix. `${extensionPath}` is substituted at load time. The script bodies are the same `hooks/scripts/*.sh` files Claude Code uses. |
+| **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | The skill is a Claude Code artifact (it references `mcp__plugin_total-recall_total-recall__*` tool names and the `Skill` tool). Gemini CLI has its own skill/`activate_skill` mechanism via `GEMINI.md`, but this plugin's skills are not authored for it. A distilled `GEMINI.md` ships with the plugin for the always-on-context side, but the on-demand playbook skills are Claude-Code-only. |
 
-### Registering the MCP server in Gemini CLI
+### Installing as a Gemini extension (recommended)
 
-Add a stanza to `~/.gemini/settings.json`. Gemini doesn't expand `${CLAUDE_PLUGIN_ROOT}`, so use an **absolute path**:
+`gemini extensions install` reads the `gemini-extension.json` manifest at the plugin root + `hooks/hooks.gemini.json` next to the existing `hooks/hooks.json`, copies the tree to `~/.gemini/extensions/total-recall/`, and registers the MCP server and hooks automatically. The `${extensionPath}` placeholder in the hooks file is resolved at load time, so the same source dir works on any machine.
+
+```bash
+cd plugins/total-recall && npm install && npm run build
+gemini extensions install --consent "$(pwd)"
+```
+
+`--consent` skips the secondary "acknowledge the security risk" prompt; you'll still be asked to trust the folder once (a documented Gemini CLI requirement with no documented bypass). Verify with `gemini mcp list` (server listed) and by starting a Gemini session — the 12 tools appear namespaced as `mcp_total-recall_<tool>`.
+
+`install.sh --gemini` does the same install in one step (and prints the exact `gemini extensions install` line if the script can't do it for you, e.g. under `-y`).
+
+### Manual MCP-only registration (no hooks)
+
+If you want just the 12 tools without the lifecycle hooks, add a stanza to `~/.gemini/settings.json` directly. Use an **absolute path** — Gemini does not expand `${CLAUDE_PLUGIN_ROOT}`:
 
 ```json
 {
@@ -176,18 +203,12 @@ Or via the CLI command:
 gemini mcp add -s user total-recall node /absolute/path/to/plugins/total-recall/dist/index.js
 ```
 
-After cloning the marketplace repo and building once (`cd plugins/total-recall && npm install && npm run build`), point `args` at the built `dist/index.js`. Verify with `/mcp` inside a session or `gemini mcp list` from the shell. The 12 tools then appear namespaced as `mcp_total-recall_<tool>` — invoke them by asking in plain English ("recall X", "store memory", "list memories", etc.), same as in Claude Code but with no automatic index injection.
+The 12 tools then appear namespaced as `mcp_total-recall_<tool>` — invoke them by asking in plain English ("recall X", "store memory", "list memories", etc.), same as in Claude Code.
 
 ### Gemini-specific notes
 
 - **Server name:** keep `total-recall` (hyphen, not underscore). Gemini namespaces discovered tools as `mcp_{serverName}_{toolName}`, and underscores in the server name confuse its policy parser — `total-recall` is fine, `total_recall` is not.
 - **Env-var sanitization:** Gemini CLI auto-redacts host env vars matching `*TOKEN*` / `*SECRET*` / `*PASSWORD*` / `*KEY*` unless you explicitly define them in the `env` block. total-recall reads its config from `~/.total-recall/config.json` (not env secrets), so this normally doesn't bite — but if you ever drive the org vault via a `GITHUB_TOKEN`-style env var, declare it explicitly in `env` or it will be stripped.
+- **Matcher scope:** for `AfterTool` / `BeforeTool` the regex is matched against the **full MCP namespaced tool name** (`mcp__total-recall__store_memory`), not the bare suffix Claude Code uses. `hooks/hooks.gemini.json` already accounts for this; only relevant if you hand-author your own hook config.
+- **`PreCompress` is advisory only:** Gemini explicitly says it "cannot block or modify the compression process." The hook still runs (and `transcript_path` is in stdin), so the learning-extraction script gets a chance — but Gemini may compress before the script finishes. Treat the PreCompress hook as best-effort.
 - **Transport field:** Gemini uses `command` for stdio (as above). If copying a config from Claude Code that used `url` for an HTTP server, Gemini wants `httpUrl` instead — not relevant here since total-recall is stdio-only.
-
-### What you lose without the hooks (Gemini, same as Copilot and Codex)
-
-- **No injected memory index at session start** — call `search_index` / `recall_memory` / `list_memories` explicitly.
-- **No org-vault auto-sync** — run `node scripts/sync-org-memory.mjs` by hand after `org`-tagged store/update/delete.
-- **No PreCompact learning extraction** — doubly Claude-bound (the hook *and* the `claude -p` extractor).
-
-The MCP tools alone are still a capable manual memory store — just not zero-touch.

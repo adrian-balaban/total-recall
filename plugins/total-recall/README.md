@@ -213,7 +213,7 @@ Uses `Xenova/all-MiniLM-L6-v2` (384-dim ONNX). Gracefully degrades to TF-IDF if 
 
 ## Other Clients
 
-The MCP server is a plain stdio Node process and works in any client that speaks MCP. The hooks and skills are Claude Code-specific, but the project ships a Gemini-shaped parallel (see below). Copilot/Codex currently have no hook integration — the 12 tools work there, the automatic context injection does not.
+The MCP server is a plain stdio Node process and works in any client that speaks MCP. The hooks and skills are Claude Code-specific, but the project ships a Gemini-shaped parallel and a Copilot-shaped parallel (see below). Codex has no hook integration — the 12 tools work there, the automatic context injection does not.
 
 ## Gemini compatibility
 
@@ -283,19 +283,86 @@ Same as Claude Code — full lifecycle parity:
 
 Without the hooks (MCP-only install), the tools work but you lose all four: you'd call `search_index` / `recall_memory` / `list_memories` explicitly each session, and run `node scripts/sync-org-memory.mjs` by hand after every `org`-tagged store/update/delete.
 
+For a unified client-comparison table and a consolidated per-client install-paths block, see [Copilot CLI compatibility](#copilot-cli-compatibility) below.
+
+## Copilot CLI compatibility
+
+**Short answer: the 12 MCP tools work; the hooks work IF you install the plugin as a Copilot extension (with one documented graceful degradation — `additionalContext` is silently lost, see below); the skills are Claude Code-only.**
+
+Copilot's plugin loader accepts `.claude-plugin/plugin.json` as one of its four recognized manifest locations — the same file Claude Code reads. The new `"hooks": "hooks/hooks.copilot.json"` field points Copilot at a Copilot-shaped hooks file (different schema: `{"version": 1, "hooks": {...}}` instead of Claude's bare `{"hooks": {...}}`); the existing `mcpServers: "./.mcp.json"` (path-string) is already a documented Copilot-acceptable shape. One `copilot plugin install <path>` does both.
+
+| Component | Works in Copilot CLI? | Why |
+|---|---|---|
+| **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Copilot loads stdio MCP servers from `mcpServers` in the plugin manifest and exposes their tools to the model. |
+| **Hooks** (SessionStart/PostToolUse/PreCompact/SessionEnd) | ⚠️ Partial — side effects run, `additionalContext` is silently lost | `hooks/hooks.copilot.json` uses PascalCase event names, which makes Copilot deliver the **Claude-format (snake_case) stdin payload** — the existing script bodies parse it unchanged. The matcher regex targets the full MCP namespaced tool name (`mcp__total-recall__(store_memory\|update_memory\|delete_memory)`), not the bare suffix. **All side effects still run** — vault pull, index build, org-vault sync, PreCompact learning extraction, SessionEnd flush. The one thing lost is the LLM-facing `additionalContext` injection: Copilot's parser doesn't read the Claude envelope (`{"continue":true,"hookSpecificOutput":{...}}`) — for `SessionStart`/`PostToolUse` the `additionalContext` field is silently dropped, and for `PreCompact`/`SessionEnd` stdout is documented as not processed at all. The LLM in Copilot doesn't see the memory-index dump at session start; you can still call `search_index` / `recall_memory` / `list_memories` explicitly to find anything. |
+| **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | Claude Code skills are invoked on demand via the `Skill` tool — the model picks the skill by name, the system loads the `SKILL.md` body as a one-shot knowledge injection. Copilot has no `Skill`-equivalent tool, and the two Claude-specific skills are not authored for Copilot. The skills are Claude-Code-only. |
+
+### Installing as a Copilot extension (recommended)
+
+`copilot plugin install` reads `.claude-plugin/plugin.json` + `hooks/hooks.copilot.json` and registers the MCP server and hooks automatically. The `${PLUGIN_ROOT}` placeholder in the hooks file is resolved at load time, so the same source dir works on any machine.
+
+```bash
+cd plugins/total-recall && npm install && npm run build
+copilot plugin install "$(pwd)"
+```
+
+Verify with `/mcp` inside a session or `copilot mcp list` from the shell. The 12 tools appear namespaced as `mcp__total-recall__<tool>`. The lifecycle hooks (vault pull, index build, org-vault sync) run automatically; `additionalContext` injection into the LLM context is silently lost (documented graceful degradation — the LLM just doesn't see the memory-index dump; the index is still built and the tools still work).
+
+`install.sh --copilot` does the same install in one step (and prints the exact `copilot plugin install` line if the script can't do it for you, e.g. under `-y`).
+
+### Manual MCP-only registration (no hooks)
+
+If you want just the 12 tools without the lifecycle hooks, register the MCP server manually. Use an **absolute path** — Copilot doesn't expand `${CLAUDE_PLUGIN_ROOT}`:
+
+```json
+{
+  "mcpServers": {
+    "total-recall": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/absolute/path/to/plugins/total-recall/dist/index.js"]
+    }
+  }
+}
+```
+
+The 12 tools then appear namespaced as `mcp__total-recall__<tool>` — invoke them by asking in plain English ("recall X", "store memory", "list memories", etc.), same as in Claude Code but without automatic index injection or org-vault auto-sync.
+
+### Copilot-specific notes
+
+- **`${PLUGIN_ROOT}` placeholder:** substituted by the Copilot plugin loader. Inside `.claude-plugin/plugin.json` the `${CLAUDE_PLUGIN_ROOT}` form is what Claude Code uses; Copilot uses `${PLUGIN_ROOT}`. The new `hooks/hooks.copilot.json` already uses `${PLUGIN_ROOT}`. Don't mix them.
+- **Event-name casing triggers payload format:** PascalCase event names (`SessionStart`, `PostToolUse`, `PreCompact`, `SessionEnd`) make Copilot deliver the Claude-format (snake_case fields) stdin payload, AND the matcher uses Claude-format (full namespaced tool name) instead of native Copilot regex. This is the load-bearing reason `hooks/hooks.copilot.json` uses PascalCase everywhere.
+- **Match in Claude format:** for `PostToolUse` (Claude-format) the regex is matched against the full namespaced tool name (`mcp__total-recall__store_memory`), not the bare suffix. `hooks/hooks.copilot.json` already accounts for this.
+- **`preCompact` and `sessionEnd` are notification-only:** Copilot explicitly does not process the hook output for these events. The hooks still run (their side effects — learning extraction, write flush — still happen), but Copilot never injects anything back into the LLM context. Treat these as best-effort, same as Gemini's `PreCompress` advisory.
+- **`claude -p` becomes a no-op on Copilot:** `extract-and-store-memories.sh` shells out to the `claude` CLI for the learning-extraction step. The `claude` binary is Claude-Code-specific, so on a Copilot machine the script tolerates a missing `claude` (per its own design) and the PreCompact hook becomes a no-op. This is the same caveat documented for the Gemini install.
+- **`command` is the cross-platform hook field:** preferred over `bash`/`powershell` — Copilot auto-copies it to whichever platform-specific field is absent. `hooks/hooks.copilot.json` already uses `command`.
+
+### What the Copilot hooks buy you
+
+Same as Claude Code — full side-effect parity, only the LLM-facing `additionalContext` injection is lost:
+
+- **SessionStart:** pull org vault, build the index cache (the on-disk `index.json` / `invertedIndex.json` are fresh for the tools to read).
+- **PostToolUse** (matched on `store_memory|update_memory|delete_memory`): auto-sync the touched file to the org vault (privacy filter applies).
+- **PreCompact:** extract 0–3 learnings from the transcript (advisory, see above — `claude -p` is a no-op on Copilot).
+- **SessionEnd:** flush any pending writes.
+
+Without the hooks (MCP-only install), the tools work but you lose all four: you'd call `search_index` / `recall_memory` / `list_memories` explicitly each session, and run `node scripts/sync-org-memory.mjs` by hand after every `org`-tagged store/update/delete.
+
 ### Per-client install paths
 
 - **Claude Code (plugin install):** `claude plugin install …/plugins/total-recall` → reads `hooks/hooks.json` (uses `${CLAUDE_PLUGIN_ROOT}`) + `.mcp.json` automatically. No installer step needed.
 - **Claude Code (standalone / uninstalled):** `./install.sh --standalone` → wires hooks into `~/.claude/settings.json` with literal absolute paths (since `${CLAUDE_PLUGIN_ROOT}` is plugin-context-only).
 - **Gemini CLI:** `./install.sh --gemini` (or `gemini extensions install --consent <path>` directly) → copies the plugin dir to `~/.gemini/extensions/total-recall/`, registers the MCP server from `gemini-extension.json`, loads `hooks/hooks.gemini.json` with `${extensionPath}` substituted.
+- **Copilot CLI:** `./install.sh --copilot` (or `copilot plugin install <path>` directly) → registers the MCP server from `.claude-plugin/plugin.json`, loads `hooks/hooks.copilot.json` with `${PLUGIN_ROOT}` substituted. Side-effect parity with Claude Code; `additionalContext` is silently lost (documented).
 
-Same plugin directory, two distinct manifest pairs, one installer flag per client.
+Same plugin directory, three distinct manifest pairs (Claude `.claude-plugin/plugin.json` + `hooks/hooks.json`, Gemini `gemini-extension.json` + `hooks/hooks.gemini.json`, Copilot `.claude-plugin/plugin.json` + `hooks/hooks.copilot.json`), one installer flag per client.
 
 ### Sources
 
-- [Gemini CLI hooks reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/reference.md)
-- [Gemini CLI extensions reference](https://github.com/google-gemini/gemini-cli/blob/main/docs/extensions/reference.md)
-- [Gemini CLI hooks index](https://github.com/google-gemini/gemini-cli/blob/main/docs/hooks/index.md)
+- [GitHub Copilot CLI plugin reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-plugin-reference) — `plugin.json` schema, four recognized manifest locations, `mcpServers`/`hooks` field accepts path strings
+- [GitHub Copilot hooks reference](https://github.com/github/docs/blob/main/content/copilot/reference/hooks-reference.md) — `version: 1` schema, event names, PascalCase→Claude-format, stdout envelope
+- [GitHub Copilot hooks tutorial](https://docs.github.com/en/copilot/tutorials/copilot-cli-hooks) — practical example of a hook file
+- [GitHub Copilot plugin creating guide](https://docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/plugins-creating) — full plugin authoring flow
 
 ---
 
