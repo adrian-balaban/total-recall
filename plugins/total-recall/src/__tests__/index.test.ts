@@ -265,6 +265,49 @@ describe('store_memory', () => {
     expect(raw).not.toContain('Hijacked');
   });
 
+  it('refuses a "no-prune"-tagged memory on store_memory even with force=true (file + tags unchanged)', async () => {
+    // The immortal-memory guard: store_memory(force) on a no-prune target must
+    // throw, NOT silently overwrite the body or strip the no-prune tag (which would
+    // quietly make the memory mortal again — exactly the removal-by-mistake path
+    // the tag exists to prevent). The deliberate teardown path is
+    // delete_memory(force=true) then a fresh store; amend-in-place is update_memory.
+    const { filePath } = result(await callTool('store_memory', {
+      title: 'Pinned ADR', content: 'Decision body must survive',
+      tags: ['no-prune', 'adr'], category: 'decisions',
+    }));
+    const res = await callTool('store_memory', {
+      title: 'Pinned ADR', content: 'Hijacked body',
+      tags: ['adr'], // note: no-prune deliberately omitted — the guard must fire
+      category: 'decisions', force: true,
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('no-prune');
+    // The file on disk is untouched: original body intact, the re-store body gone,
+    // and the no-prune tag still present in the persisted frontmatter.
+    const raw = fs.readFileSync(filePath, 'utf8');
+    expect(raw).toContain('Decision body must survive');
+    expect(raw).not.toContain('Hijacked body');
+    expect(raw).toMatch(/no-prune/);
+  });
+
+  it('refuses a "no-prune"-tagged memory on store_memory without force (immortal guard fires before the generic already-exists error)', async () => {
+    // Without force the generic "!force → already exists" guard would also throw,
+    // but the immortal guard must fire FIRST with its more-specific message so the
+    // caller learns the right teardown path (delete_memory force, not just
+    // force=true here — force here would still be refused).
+    const { filePath } = result(await callTool('store_memory', {
+      title: 'Pinned ADR2', content: 'Decision body must survive',
+      tags: ['no-prune'], category: 'decisions',
+    }));
+    const res = await callTool('store_memory', {
+      title: 'Pinned ADR2', content: 'Hijacked body',
+      tags: [], category: 'decisions', // no force
+    });
+    expect(res.isError).toBe(true);
+    expect(res.content[0].text).toContain('no-prune');
+    expect(fs.readFileSync(filePath, 'utf8')).toContain('Decision body must survive');
+  });
+
   it('rejects a title containing a newline (frontmatter injection)', async () => {
     const res = await callTool('store_memory', {
       title: 'bad\ninjected: evil', content: 'X', tags: [],

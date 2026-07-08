@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir } from '../paths.js';
+import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir, NO_PRUNE_TAG } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -151,6 +151,26 @@ export function storeMemory(args: any): any {
     // foreign (fail-closed) rather than silently overwritable.
     if (isOrg && existingFm.author !== effectiveAuthor) {
       throw new Error(`Cannot overwrite org memory authored by ${existingFm.author ?? '(unknown)'}.`);
+    }
+    // Immortal-memory guard (completes the no-prune contract). A `no-prune`-tagged
+    // existing memory is refused on store_memory EVEN with force=true — the third
+    // removal path. prune_memories excludes it (query.ts) and delete_memory
+    // refuses it unless force (mutate.ts); without this guard, store_memory(force)
+    // would silently overwrite an ADR's body AND could strip the `no-prune` tag
+    // itself (if the re-store's tags omit it), after which the memory is no longer
+    // immortal and CAN be pruned/deleted — exactly the "removed by mistake" path
+    // the tag exists to prevent. force=true is the universal "I mean it" override
+    // for delete, but store_memory(force) is a routine content re-store that
+    // quietly strips immortality, so refuse it here. A deliberate teardown still
+    // has one loud path: delete_memory(force=true) (which drops the file), then a
+    // fresh store. To amend the body without removing the memory, use update_memory
+    // (which does NOT strip tags). See NO_PRUNE_TAG in paths.ts.
+    const existingTags = Array.isArray(existingFm.tags) ? existingFm.tags : [];
+    if (existingTags.includes(NO_PRUNE_TAG)) {
+      throw new Error(
+        `Memory "${key}" is tagged '${NO_PRUNE_TAG}' (immortal) and cannot be overwritten by store_memory, even with force=true — this would silently rewrite its body and could strip the no-prune tag. ` +
+        `Use update_memory to amend it (preserves tags), or delete_memory with force=true first (a deliberate teardown) then re-store.`
+      );
     }
     if (!force) {
       throw new Error(

@@ -22,7 +22,7 @@ The org vault syncs to a remote git repo (`orgRepo` in `~/.total-recall/config.j
 Grouped by function:
 
 **Write** (`src/tools/store.ts`)
-- `store_memory` — create a memory; optional `force=true` overwrites (preserves `created`/`accessCount`)
+- `store_memory` — create a memory; optional `force=true` overwrites (preserves `created`/`accessCount`). Refused if the existing memory is tagged `no-prune` (immortal), even with `force=true` — use `update_memory` to amend or `delete_memory(force=true)` then re-store
 
 **Search & Recall** (`src/tools/recall.ts`)
 - `recall_memory` — TF-IDF + Ebbinghaus decay, optionally fused with vector search via RRF
@@ -57,7 +57,7 @@ The vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec
 ### Key Algorithms
 
 - **Ebbinghaus decay** (`src/ebbinghaus.ts`): `importance x exp(-lambda x days) x (1 + accessCount x 0.2)` — memories accessed frequently or recently rank higher
-- **Immortality (`no-prune` tag)** — a memory tagged `no-prune` is excluded from `prune_memories` candidates and refused by `delete_memory` unless `force=true` is passed. Use it for decisions that must never decay out of the candidate list or be removed by mistake (e.g. an ADR). Tag-only by design: the `decisions` category is NOT auto-protected, since not every decision is immortal — immortality is an explicit per-memory opt-in
+- **Immortality (`no-prune` tag)** — a memory tagged `no-prune` is excluded from `prune_memories` candidates, refused by `delete_memory` unless `force=true` is passed, and refused by `store_memory` even with `force=true` (so a routine re-store can't silently rewrite an ADR's body or strip the tag). Use it for decisions that must never decay out of the candidate list or be removed by mistake (e.g. an ADR). Tag-only by design: the `decisions` category is NOT auto-protected, since not every decision is immortal — immortality is an explicit per-memory opt-in. Amend-in-place via `update_memory` (does not strip tags); deliberate teardown is `delete_memory(force=true)` then a fresh store
 - **TF-IDF** (`src/tfidf.ts`): standard term-frequency / inverse-document-frequency over the in-memory inverted index
 - **RRF** (`src/rrf.ts`): Reciprocal Rank Fusion merges two ranked lists without needing score normalization
 
@@ -196,7 +196,7 @@ A few things to know before editing memories in Obsidian:
 
 | Tool | Description |
 |---|---|
-| `store_memory` | Create a new memory (routes to org vault if tagged `org`). Throws on duplicate key — use `update_memory` or pass `force=true` to overwrite (preserves `created`/`accessCount`). Org memories are always author-protected. |
+| `store_memory` | Create a new memory (routes to org vault if tagged `org`). Throws on duplicate key — use `update_memory` or pass `force=true` to overwrite (preserves `created`/`accessCount`). `force=true` is refused if the existing memory is tagged `no-prune` (immortal). Org memories are always author-protected. |
 | `recall_memory` | TF-IDF search with Ebbinghaus decay scoring |
 | `list_memories` | Metadata-only listing with category/tag filter |
 | `update_memory` | Update content, tags, or importance score |

@@ -16375,6 +16375,12 @@ function storeMemory(args) {
     if (isOrg && existingFm.author !== effectiveAuthor) {
       throw new Error(`Cannot overwrite org memory authored by ${existingFm.author ?? "(unknown)"}.`);
     }
+    const existingTags = Array.isArray(existingFm.tags) ? existingFm.tags : [];
+    if (existingTags.includes(NO_PRUNE_TAG)) {
+      throw new Error(
+        `Memory "${key}" is tagged '${NO_PRUNE_TAG}' (immortal) and cannot be overwritten by store_memory, even with force=true \u2014 this would silently rewrite its body and could strip the no-prune tag. Use update_memory to amend it (preserves tags), or delete_memory with force=true first (a deliberate teardown) then re-store.`
+      );
+    }
     if (!force) {
       throw new Error(
         `Memory "${key}" already exists (created ${existingFm.created ?? "unknown"}). Use update_memory to modify it, or pass force=true to overwrite.`
@@ -16748,7 +16754,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.83" : null.version;
+var PLUGIN_VERSION = true ? "1.0.84" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16760,7 +16766,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: "store_memory",
-      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists \u2014 use update_memory, or pass force=true to overwrite (preserves created/accessCount).',
+      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists \u2014 use update_memory, or pass force=true to overwrite (preserves created/accessCount). force=true is refused if the existing memory is tagged "no-prune" (immortal) \u2014 use update_memory to amend or delete_memory(force=true) then re-store.',
       inputSchema: {
         type: "object",
         properties: {

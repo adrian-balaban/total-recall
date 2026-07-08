@@ -47,7 +47,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   tools: [
     {
       name: 'store_memory',
-      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists — use update_memory, or pass force=true to overwrite (preserves created/accessCount).',
+      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists — use update_memory, or pass force=true to overwrite (preserves created/accessCount). force=true is refused if the existing memory is tagged "no-prune" (immortal) — use update_memory to amend or delete_memory(force=true) then re-store.',
       inputSchema: {
         type: 'object',
         properties: {
