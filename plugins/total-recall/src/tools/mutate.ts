@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { VECTORS_DB } from '../paths.js';
+import { VECTORS_DB, NO_PRUNE_TAG } from '../paths.js';
 import { reconcileIndex, assertRegularFile, tokenEstimate } from '../vault-scan.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
@@ -116,9 +116,21 @@ export function updateMemory(args: any): any {
 }
 
 export function deleteMemory(args: any): any {
-  const { key } = args;
+  const { key, force = false } = args;
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
+
+  // Immortal-memory guard (mirrors store_memory's `force` pattern at store.ts).
+  // A `no-prune`-tagged memory (e.g. an ADR) is refused even for the org author —
+  // no-prune is orthogonal to authorship, it marks decisions that must not
+  // disappear. An explicit `force=true` overrides, so a deliberate teardown is
+  // still possible. See NO_PRUNE_TAG in paths.ts.
+  if (meta.tags.includes(NO_PRUNE_TAG) && !force) {
+    throw new Error(
+      `Memory "${key}" is tagged '${NO_PRUNE_TAG}' and cannot be deleted. ` +
+      `Pass force=true to override.`
+    );
+  }
 
   // If the file was already removed (a repeated delete, or an external removal
   // since the index was loaded), unlinkSync would throw and abort the in-memory

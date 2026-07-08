@@ -34,11 +34,11 @@ Grouped by function:
 - `get_stats` — index statistics
 - `get_timeline` — memories ordered by time
 - `get_related_memories` — find memories related to a given one
-- `prune_memories` — surface low-retention candidates (does NOT auto-delete)
+- `prune_memories` — surface low-retention candidates (does NOT auto-delete); excludes memories tagged `no-prune`
 
 **Mutate** (`src/tools/mutate.ts`)
 - `update_memory` — edit existing memory; deduplicates session history (capped at 50)
-- `delete_memory` — remove a memory
+- `delete_memory` — remove a memory; refuses memories tagged `no-prune` unless `force=true` is passed
 - `rebuild_index` — rescan vaults and rebuild all indexes (preserves access stats)
 
 ### Search Pipeline
@@ -57,6 +57,7 @@ The vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec
 ### Key Algorithms
 
 - **Ebbinghaus decay** (`src/ebbinghaus.ts`): `importance x exp(-lambda x days) x (1 + accessCount x 0.2)` — memories accessed frequently or recently rank higher
+- **Immortality (`no-prune` tag)** — a memory tagged `no-prune` is excluded from `prune_memories` candidates and refused by `delete_memory` unless `force=true` is passed. Use it for decisions that must never decay out of the candidate list or be removed by mistake (e.g. an ADR). Tag-only by design: the `decisions` category is NOT auto-protected, since not every decision is immortal — immortality is an explicit per-memory opt-in
 - **TF-IDF** (`src/tfidf.ts`): standard term-frequency / inverse-document-frequency over the in-memory inverted index
 - **RRF** (`src/rrf.ts`): Reciprocal Rank Fusion merges two ranked lists without needing score normalization
 
@@ -199,14 +200,14 @@ A few things to know before editing memories in Obsidian:
 | `recall_memory` | TF-IDF search with Ebbinghaus decay scoring |
 | `list_memories` | Metadata-only listing with category/tag filter |
 | `update_memory` | Update content, tags, or importance score |
-| `delete_memory` | Remove from vault and index |
+| `delete_memory` | Remove from vault and index. Refuses memories tagged `no-prune` unless `force=true` is passed (immortal decisions, e.g. ADRs) |
 | `rebuild_index` | Full re-scan of both vaults |
 | `search_index` | Lightweight metadata-only search (no file reads) |
 | `get_memories_by_keys` | Batch fetch; `summary=true` for executive summary only |
 | `get_stats` | Totals, category breakdown, cache stats, performance percentiles |
 | `get_timeline` | Chronological view with date grouping |
 | `get_related_memories` | Jaccard tag similarity with same-category boost |
-| `prune_memories` | Surface low-retention candidates (does NOT auto-delete) |
+| `prune_memories` | Surface low-retention candidates (does NOT auto-delete). Excludes memories tagged `no-prune` (immortal, e.g. ADRs) |
 
 ## Categories
 

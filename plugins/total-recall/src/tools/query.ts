@@ -4,6 +4,7 @@ import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable } from '../embeddings.js';
 import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
+import { NO_PRUNE_TAG } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
 
 // Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
@@ -189,7 +190,13 @@ export function pruneMemories(args: any): any {
       key: m.key, title: m.title, category: m.category,
       retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
       lastAccessed: m.lastAccessed, importanceScore: m.importanceScore,
+      tags: m.tags,
     }))
+    // Exclude immortal memories BEFORE the retention filter so they never count
+    // toward `limit` either. The `no-prune` tag is an explicit per-memory opt-in
+    // (e.g. an ADR); the `decisions` category is intentionally NOT auto-protected
+    // — not every decision is immortal. See NO_PRUNE_TAG in paths.ts.
+    .filter(m => !m.tags.includes(NO_PRUNE_TAG))
     .filter(m => m.retentionStrength < threshold)
     .sort((a, b) => a.retentionStrength - b.retentionStrength)
     .slice(0, limit);

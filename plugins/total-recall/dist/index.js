@@ -15478,6 +15478,7 @@ var DEFAULT_CATEGORIES = [
   "knowledge",
   "journal"
 ];
+var NO_PRUNE_TAG = "no-prune";
 function ensureDir(p) {
   fs.mkdirSync(p, { recursive: true });
 }
@@ -16642,8 +16643,9 @@ function pruneMemories(args) {
     category: m.category,
     retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
     lastAccessed: m.lastAccessed,
-    importanceScore: m.importanceScore
-  })).filter((m) => m.retentionStrength < threshold).sort((a, b) => a.retentionStrength - b.retentionStrength).slice(0, limit);
+    importanceScore: m.importanceScore,
+    tags: m.tags
+  })).filter((m) => !m.tags.includes(NO_PRUNE_TAG)).filter((m) => m.retentionStrength < threshold).sort((a, b) => a.retentionStrength - b.retentionStrength).slice(0, limit);
 }
 
 // src/tools/mutate.ts
@@ -16719,9 +16721,14 @@ function updateMemory(args) {
   return { key, message: "Memory updated." };
 }
 function deleteMemory(args) {
-  const { key } = args;
+  const { key, force = false } = args;
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
+  if (meta2.tags.includes(NO_PRUNE_TAG) && !force) {
+    throw new Error(
+      `Memory "${key}" is tagged '${NO_PRUNE_TAG}' and cannot be deleted. Pass force=true to override.`
+    );
+  }
   try {
     fs6.unlinkSync(meta2.filePath);
   } catch {
@@ -16741,7 +16748,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.82" : null.version;
+var PLUGIN_VERSION = true ? "1.0.83" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -16817,10 +16824,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "delete_memory",
-      description: "Delete a memory from the vault and index.",
+      description: 'Delete a memory from the vault and index. Refuses memories tagged "no-prune" unless force=true is passed.',
       inputSchema: {
         type: "object",
-        properties: { key: { type: "string" } },
+        properties: {
+          key: { type: "string" },
+          force: { type: "boolean", default: false, description: "Override the no-prune tag guard (use to delete an immortal memory)." }
+        },
         required: ["key"]
       }
     },
@@ -16893,7 +16903,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: "prune_memories",
-      description: "List low-retention candidates using Ebbinghaus model. Does NOT auto-delete.",
+      description: 'List low-retention candidates using Ebbinghaus model. Does NOT auto-delete. Excludes memories tagged "no-prune" (immortal, e.g. ADRs).',
       inputSchema: {
         type: "object",
         properties: {

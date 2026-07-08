@@ -213,5 +213,35 @@ describe('query tools', () => {
       // `limit: 1e12` post-fix clamps to MAX_PAGE_LIMIT (1000) → still all 5.
       expect(pruneMemories({ threshold: 2, limit: 1e12 })).toHaveLength(5);
     });
+
+    it('excludes memories tagged "no-prune" even when their retention is below threshold', () => {
+      // resetIndex already cleared memIndex in the outer beforeEach; rebuild a
+      // minimal set: one immortal (no-prune) + one ordinary prune candidate,
+      // both with retention strength < threshold so the only differentiator is
+      // the tag. threshold 2 makes "below threshold" true for both.
+      for (const k of Object.keys(memIndex)) delete memIndex[k];
+      memIndex['immortal'] = mkMeta({
+        key: 'immortal', importanceScore: 0.1, accessCount: 0,
+        lastAccessed: '2025-01-01T00:00:00.000Z', tags: ['no-prune'],
+      });
+      memIndex['mortal'] = mkMeta({
+        key: 'mortal', importanceScore: 0.1, accessCount: 0,
+        lastAccessed: '2025-01-01T00:00:00.000Z', tags: [],
+      });
+      const candidates = pruneMemories({ threshold: 2 });
+      expect(candidates.map((m: any) => m.key)).toEqual(['mortal']);
+      expect(candidates.find((m: any) => m.key === 'immortal')).toBeUndefined();
+    });
+
+    it('does not auto-protect the "decisions" category — only the explicit tag', () => {
+      for (const k of Object.keys(memIndex)) delete memIndex[k];
+      // A decisions-category memory WITHOUT the no-prune tag is still a candidate.
+      memIndex['dec'] = mkMeta({
+        key: 'dec', importanceScore: 0.1, accessCount: 0,
+        lastAccessed: '2025-01-01T00:00:00.000Z', category: 'decisions', tags: [],
+      });
+      const candidates = pruneMemories({ threshold: 2 });
+      expect(candidates.map((m: any) => m.key)).toEqual(['dec']);
+    });
   });
 });

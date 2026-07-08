@@ -64,7 +64,7 @@ Summary of 6 tools called in one session and what they gave back:
 
 **`get_related_memories`** (key: `project/total-recall-review-fix-loop-converged-2026-06-19`) — Jaccard tag similarity + same-category boost. Returns 6 related memories; all other `project/*` entries scored 0.2, the total-recall architecture entry scored 0.14 (different category, shared tags).
 
-**`prune_memories`** — lists low-retention candidates using Ebbinghaus decay. Does NOT auto-delete (safe to inspect anytime).
+**`prune_memories`** — lists low-retention candidates using Ebbinghaus decay. Does NOT auto-delete (safe to inspect anytime). Excludes memories tagged `no-prune` (immortal, e.g. ADRs); `delete_memory` also refuses `no-prune`-tagged memories unless `force=true` is passed.
 
 Skipped (write/destructive): `store_memory`, `update_memory`, `delete_memory`, `rebuild_index` — all need specific inputs or are expensive full re-scans.
 

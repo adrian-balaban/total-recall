@@ -111,10 +111,13 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'delete_memory',
-      description: 'Delete a memory from the vault and index.',
+      description: 'Delete a memory from the vault and index. Refuses memories tagged "no-prune" unless force=true is passed.',
       inputSchema: {
         type: 'object',
-        properties: { key: { type: 'string' } },
+        properties: {
+          key: { type: 'string' },
+          force: { type: 'boolean', default: false, description: 'Override the no-prune tag guard (use to delete an immortal memory).' },
+        },
         required: ['key'],
       },
     },
@@ -187,7 +190,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
     },
     {
       name: 'prune_memories',
-      description: 'List low-retention candidates using Ebbinghaus model. Does NOT auto-delete.',
+      description: 'List low-retention candidates using Ebbinghaus model. Does NOT auto-delete. Excludes memories tagged "no-prune" (immortal, e.g. ADRs).',
       inputSchema: {
         type: 'object',
         properties: {

@@ -957,6 +957,36 @@ describe('delete_memory', () => {
     expect(listed.items.find((m: any) => m.key === key)).toBeUndefined();
   });
 
+  it('refuses a "no-prune"-tagged memory without force (file stays on disk)', async () => {
+    // The immortality guard mirrors store_memory's `force` pattern: a no-prune
+    // memory (e.g. an ADR) must survive a delete_memory call made without
+    // force=true, even for the author. The file and index entry must remain.
+    const { key, filePath } = result(await callTool('store_memory', {
+      title: 'Immortal ADR', content: 'Decision: never prune this',
+      tags: ['no-prune'], category: 'decisions',
+    }));
+    const res = await callTool('delete_memory', { key });
+    expect(res.isError).toBe(true);
+    expect(fs.existsSync(filePath)).toBe(true);
+    // Index entry must still be present (the guard throws before the unlink +
+    // memIndex/vector cleanup, so nothing was torn down).
+    const listed = result(await callTool('list_memories'));
+    expect(listed.items.find((m: any) => m.key === key)).toBeDefined();
+  });
+
+  it('deletes a "no-prune"-tagged memory when force=true is passed', async () => {
+    // A deliberate teardown must still be possible: force overrides the guard,
+    // so the file is removed (mirrors the plain "removes file from disk" test).
+    const { key, filePath } = result(await callTool('store_memory', {
+      title: 'Retired ADR', content: 'Superseded and being torn down',
+      tags: ['no-prune'], category: 'decisions',
+    }));
+    await callTool('delete_memory', { key, force: true });
+    expect(fs.existsSync(filePath)).toBe(false);
+    const listed = result(await callTool('list_memories'));
+    expect(listed.items.find((m: any) => m.key === key)).toBeUndefined();
+  });
+
   it('returns error for unknown key', async () => {
     const res = await callTool('delete_memory', { key: 'ghost/key' });
     expect(res.isError).toBe(true);
