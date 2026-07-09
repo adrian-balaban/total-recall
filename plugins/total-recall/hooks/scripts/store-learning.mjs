@@ -57,6 +57,20 @@ function slugify(s) {
 
 // yamlScalar/fmStringify removed — now using shared stringifyFrontmatter from dist/frontmatter.mjs
 
+// Clamp importanceScore to a finite [0, 1] number — mirrors src/ebbinghaus.ts
+// `clampImportanceScore` (used by the TS store_memory path) so this direct-vault
+// write can't persist a value the MCP path would have rejected. The extract prompt
+// asks the model for 0.0–1.0, but the model can drift (5, -1, "high"), and this hook
+// writes straight to disk with no MCP round-trip, so an unclamped value would land in
+// the stored metadata and survive until something re-clamps it on read. The
+// Number.isFinite guard is critical: Math.min(1, NaN) returns NaN (NaN propagates
+// through Math.min/max), so a non-numeric or NaN input must fall back to 0.5, not 0
+// (Math.max(0, NaN) is also NaN).
+function clampImportance(v, fallback = 0.5) {
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.max(0, Math.min(1, n)) : fallback;
+}
+
 let input = '';
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
@@ -92,7 +106,7 @@ process.stdin.on('end', () => {
       sessions: [],
       created: now,
       updated: now,
-      importanceScore: typeof obj.importanceScore === 'number' ? obj.importanceScore : 0.5,
+      importanceScore: clampImportance(obj.importanceScore),
     };
     const body = `\n${obj.content}`;
     try {
