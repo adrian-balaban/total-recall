@@ -1,4 +1,4 @@
-# 🧠 claude-plugins-total-recall
+# 🧠 total-recall plugin
 
 Repository containing the **total-recall** plugin — a persistent, searchable memory system for Claude Code, GitHub Copilot CLI, and Gemini CLI.
 
