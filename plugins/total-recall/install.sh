@@ -594,7 +594,11 @@ elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to GitH
     ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)?" ORG_REPO
   fi
   warn "The 'org-vault' branch must already exist with at least one commit."
-  [ -z "$ORG_DOMAIN" ] && ask_value "Work email domain to allow in org-vault sync (blank = block all)?" ORG_DOMAIN
+  if [ -z "$ORG_DOMAIN" ]; then
+    info "The privacy filter blocks all email addresses by default before pushing to GitHub."
+    info "You can specify a domain (e.g., company.com) to allow work emails to bypass the filter."
+    ask_value "Work email domain to allow in org-vault sync (blank = block all)?" ORG_DOMAIN
+  fi
 fi
 
 if [ "$ENABLE_ORG" -eq 1 ] && [ -n "$ORG_REPO" ]; then
