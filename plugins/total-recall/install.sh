@@ -243,12 +243,25 @@ ok "Plugin root: $PLUGIN_ROOT"
 # Step 2 — Create vault directories
 # --------------------------------------------------------------------------
 step "Step 2 — Create vault directories"
-if [ -d "$VAULT_HOME/personal-vault" ] && [ -n "$(ls -A "$VAULT_HOME/personal-vault" 2>/dev/null)" ]; then
+PERSONAL_VAULT="$VAULT_HOME/personal-vault"
+ORG_VAULT="$VAULT_HOME/org/org-vault"
+ORG_DIR="$VAULT_HOME/org"
+
+if [ -f "$CONFIG_FILE" ]; then
+  NODE_BIN=$(command -v node || echo "")
+  if [ -n "$NODE_BIN" ]; then
+    PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
+    ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
+    ORG_DIR=$(dirname "$ORG_VAULT")
+  fi
+fi
+
+if [ -d "$PERSONAL_VAULT" ] && [ -n "$(ls -A "$PERSONAL_VAULT" 2>/dev/null)" ]; then
   ok "Vault directories already exist."
 else
-  mkdir -p "$VAULT_HOME/personal-vault"/{architecture,decisions,troubleshooting,meetings,knowledge,journal}
-  mkdir -p "$VAULT_HOME/org"
-  ok "Created $VAULT_HOME/personal-vault/{architecture,decisions,troubleshooting,meetings,knowledge,journal} and org/"
+  mkdir -p "$PERSONAL_VAULT"/{architecture,decisions,troubleshooting,meetings,knowledge,journal}
+  mkdir -p "$ORG_DIR"
+  ok "Created $PERSONAL_VAULT/{architecture,decisions,troubleshooting,meetings,knowledge,journal} and $ORG_DIR/"
   note "Vault directories created."
 fi
 

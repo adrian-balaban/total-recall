@@ -150,21 +150,59 @@ claude mcp add-json total-recall '{"type":"stdio","command":"node","args":["'$(p
 For per-client compatibility details (what works, what degrades, manual MCP-only registration without hooks), see [Gemini compatibility](#gemini-compatibility) and [Copilot CLI compatibility](#copilot-cli-compatibility) below.
 
 ## Data Locations
-
+ 
 | Location | Purpose |
 |---|---|
-| `~/.total-recall/personal-vault/` | Personal memory vault |
-| `~/.total-recall/org/org-vault/` | Shared org vault (git-synced) |
+| `~/.total-recall/personal-vault/` | Personal memory vault (default, configurable) |
+| `~/.total-recall/org/org-vault/` | Shared org vault (default, configurable) |
 | `~/.total-recall/index.json` | In-memory index (persisted) |
 | `~/.total-recall/invertedIndex.json` | TF-IDF inverted index |
 | `~/.total-recall/.index-cache.txt` | Shell-readable cache injected at SessionStart |
 | `~/.total-recall/personal-vault/vectors.db` | sqlite-vec vector store (optional) |
-| `~/.total-recall/config.json` | Plugin configuration — `orgRepo`, `allowedEmailDomains` (optional) |
-
+| `~/.total-recall/config.json` | Plugin configuration |
+ 
+## Configuration (`config.json`)
+ 
+You can customize total-recall settings by creating or editing `~/.total-recall/config.json`. Supported settings:
+ 
+```json
+{
+  "personalVault": "~/my-custom-personal-vault",
+  "orgVault": "~/my-custom-org-vault",
+  "orgRepo": "https://github.com/you/your-vault.git",
+  "allowedEmailDomains": ["yourcompany.com"],
+  "embeddingProvider": "ollama",
+  "embeddingUrl": "http://127.0.0.1:11434/api/embeddings",
+  "embeddingModel": "nomic-embed-text",
+  "enableMultilingualSearch": true
+}
+```
+ 
+### Configuration Parameters
+ 
+- **Vault Locations**:
+  - `personalVault` (string, optional): Custom absolute path (or starting with `~`) to override the default personal vault location.
+  - `orgVault` (string, optional): Custom absolute path (or starting with `~`) to override the default org vault location.
+ 
+- **Org Vault Sync**:
+  - `orgRepo` (string, optional): Git HTTPS or SSH URL for the shared org vault repo.
+  - `allowedEmailDomains` (array of strings, optional): Whitelisted email domains that can bypass the privacy filter (e.g. `["company.com"]`).
+ 
+- **Embeddings Providers**:
+  - `embeddingProvider` (string, optional): Choice of `'huggingface'` (default, in-process MiniLM), `'ollama'` (local API), or `'vertexai'` (Google Cloud Vertex AI).
+  - `embeddingUrl` (string, optional): Endpoint for Ollama embeddings. Default: `http://127.0.0.1:11434/api/embeddings`.
+  - `embeddingModel` (string, optional): Model name to request. Default for Ollama is `nomic-embed-text`, and for Vertex AI is `text-embedding-004`.
+  - `embeddingApiKey` (string, optional): API authentication token for Vertex AI (if not using GCLOUD environment variables).
+  - `vertexRegion` (string, optional): Region for Vertex AI API. Default: `us-central1`.
+  - `vertexProjectId` (string, optional): GCP Project ID (required if using Vertex AI).
+ 
+- **Bilingual & Multi-language Search**:
+  - `enableMultilingualSearch` (boolean, optional): Set to `true` to enable automatic Romanian/English query token expansion for cross-language semantic retrieval in TF-IDF queries.
+ 
 ## Org Vault
-
+ 
 Memories tagged `org` are synced to a shared git repo via `scripts/sync-org-memory.mjs`. Privacy filters block secret tokens and email addresses before any push. (Pronouns and phone numbers were intentionally removed — both had false-positive rates high enough to block legitimate org memories; the real "personal, don't sync" guard is the mutual-exclusion of the `personal` and `org` tags.)
-
+ 
 The email filter is **fail-closed by default**: every email address is blocked from org sync. If your team legitimately syncs work contacts, allow your company domain in `~/.total-recall/config.json`:
 
 ```json
