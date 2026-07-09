@@ -12,7 +12,7 @@
     ],
     "AfterTool": [
       {
-        "matcher": "mcp__total-recall__(store_memory|update_memory|delete_memory)",
+        "matcher": "mcp_total-recall_(store_memory|update_memory|delete_memory)",
         "hooks": [
           { "type": "command", "command": "${extensionPath}/hooks/scripts/sync-org-memory.sh", "timeout": 30 }
         ]

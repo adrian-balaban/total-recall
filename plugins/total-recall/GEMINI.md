@@ -1,7 +1,7 @@
 # Total Recall — Gemini CLI working notes
 
 This plugin runs in Gemini CLI. The 12 tools are exposed as
-`mcp__total-recall__<tool>`. Invoke them by asking in plain English
+`mcp_total-recall_<tool>`. Invoke them by asking in plain English
 ("recall X", "store a memory about Y", "list memories tagged Z")
 — same as in Claude Code.
 
@@ -15,7 +15,7 @@ cd plugins/total-recall && npm install && npm run build
 This copies the plugin into `~/.gemini/extensions/total-recall/`, registers
 the MCP server (from `gemini-extension.json`), and wires the lifecycle hooks
 from `hooks/hooks.gemini.json` (Gemini's event renames: `PostToolUse` →
-`AfterTool`, `PreCompact` → `PreCompress`). Verify with `gemini mcp list`.
+`AfterTool`, `PreCompact` → `PreCompress`) and a full `mcp_total-recall_*` matcher. Verify with `gemini mcp list`.
 For MCP-only registration without hooks, see the README's *Gemini
 compatibility* section.
 

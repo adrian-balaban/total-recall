@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm run build          # Bundle src/index.ts → dist/index.js (esbuild, CJS)
+npm run build          # Bundle src/index.ts → dist/index.js (esbuild, ESM)
 npm run build:watch    # Same, with watch mode
 npm run dev            # Run via tsx without building (dev only)
 npm run typecheck      # tsc --noEmit
@@ -41,7 +41,7 @@ Only after all three are green: `git add -A && git commit` from the plugin root,
 
 This is an MCP server that exposes 12 tools for persistent memory management. It runs as a stdio process registered with Claude Code via `claude mcp add`. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
 
-- `src/server.ts` — `Server` construction, the 12 tool schemas, the `CallTool` dispatch switch, and `main()`
+- `src/server.ts` — `Server` construction, the 12 tool schemas, the `CallTool` dispatch table, and `main()`
 - `src/state.ts` — the shared in-memory singletons (`memIndex`, `invertedIndex`, `errors`, `perfSamples`). These are `const` objects with a stable identity; every module that reads/writes the index imports them from here so there is exactly one index across the process. Mutate in place (`memIndex[key] = …`, `delete memIndex[key]`); the two sites that formerly reassigned them (`loadIndexes`, `rebuildInvertedIndex`) now clear-then-populate the same object
 - `src/paths.ts` — vault/DB/index paths (supports custom paths resolved from `~/.total-recall/config.json`), `EXCLUDED_DIRS`, `DEFAULT_CATEGORIES`, `ensureDir`
 - `src/types.ts` — `MemoryFrontmatter`, `MemoryMetadata`, `Index`, `InvertedIndex`

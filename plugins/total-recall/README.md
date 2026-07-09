@@ -63,7 +63,7 @@ The vector path requires optional deps (`@huggingface/transformers`, `sqlite-vec
 
 ### Data Flow & Performance
 
-- On boot: loads `~/.total-recall/index.json` + `invertedIndex.json` into memory singletons (`src/state.ts`)
+- On boot: loads `~/.total-recall/index.json` into memory singletons (`src/state.ts`)
 - All tool calls operate against the in-memory `memIndex` — no disk reads for metadata operations
 - Debounced writes: mutations trigger `scheduleSave()` -> 1s later writes index -> `scheduleIdfRecalc()` -> +2s later rebuilds TF-IDF and writes `.index-cache.txt`
 - LRU cache (`src/lru-cache.ts`): 100 entries, 30-min TTL — `recall_memory(full=true)` and `get_memories_by_keys` read through it; mutations invalidate entries
@@ -278,7 +278,7 @@ The plugin directory doubles as a Gemini CLI extension — `gemini-extension.jso
 | Component | Works in Gemini CLI? | Why |
 |---|---|---|
 | **MCP server (12 tools)** | ✅ Yes | Plain stdio MCP server. Gemini CLI loads stdio MCP servers from `mcpServers` in `settings.json` (or `mcpServers` in `gemini-extension.json` when installed as an extension) and exposes their tools to the model. |
-| **Hooks** (SessionStart/AfterTool/PreCompress/SessionEnd) | ✅ Yes, via `hooks/hooks.gemini.json` | Gemini renames the lifecycle events: `PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress` (SessionStart/SessionEnd keep their names). The matcher regex targets the full MCP namespaced tool name (`mcp__total-recall__(store_memory\|update_memory\|delete_memory)`), not the bare suffix. `${extensionPath}` is substituted at load time. The script bodies are the same `hooks/scripts/*.sh` files Claude Code uses. |
+| **Hooks** (SessionStart/AfterTool/PreCompress/SessionEnd) | ✅ Yes, via `hooks/hooks.gemini.json` | Gemini renames the lifecycle events: `PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress` (SessionStart/SessionEnd keep their names). The matcher regex targets the full MCP namespaced tool name (`mcp_total-recall_(store_memory\|update_memory\|delete_memory)`), not the bare suffix. `${extensionPath}` is substituted at load time. The script bodies are the same `hooks/scripts/*.sh` files Claude Code uses. |
 | **Skill / slash command** (`/total-recall:memory-workflow`) | ❌ No | Claude Code skills are invoked on demand via the `Skill` tool — the model picks the skill by name, the system loads the `SKILL.md` body as a one-shot knowledge injection, and the body references bare tool names (Claude Code adds the MCP namespace prefix at load time). Gemini has no equivalent: the closest analogs are (a) **custom slash commands** in `gemini-extension.json`, which are action invocations, not knowledge injections, and (b) a **`GEMINI.md` block**, which is always-on context, not on-demand. This plugin's skills are not authored for either, and there is no `activate_skill` tool on the Gemini side. |
 
 ### Installing as a Gemini extension (recommended)
@@ -322,7 +322,7 @@ The 12 tools then appear namespaced as `mcp_total-recall_<tool>` — invoke them
 
 - **Server name:** keep `total-recall` (hyphen, not underscore). Gemini namespaces discovered tools as `mcp_{serverName}_{toolName}`, and underscores in the server name confuse its policy parser — `total-recall` is fine, `total_recall` is not.
 - **Env-var sanitization:** Gemini CLI auto-redacts host env vars matching `*TOKEN*` / `*SECRET*` / `*PASSWORD*` / `*KEY*` unless you explicitly define them in the `env` block. total-recall reads its config from `~/.total-recall/config.json` (not env secrets), so this normally doesn't bite — but if you ever drive the org vault via a `GITHUB_TOKEN`-style env var, declare it explicitly in `env` or it will be stripped.
-- **Matcher scope:** for `AfterTool` / `BeforeTool` the regex is matched against the **full MCP namespaced tool name** (`mcp__total-recall__store_memory`), not the bare suffix Claude Code uses. `hooks/hooks.gemini.json` already accounts for this; only relevant if you hand-author your own hook config.
+- **Matcher scope:** for `AfterTool` / `BeforeTool` the regex is matched against the **full MCP namespaced tool name** (`mcp_total-recall_store_memory`), not the bare suffix Claude Code uses. `hooks/hooks.gemini.json` already accounts for this; only relevant if you hand-author your own hook config.
 - **`PreCompress` is advisory only:** Gemini explicitly says it "cannot block or modify the compression process." The hook still runs (and `transcript_path` is in stdin), so the learning-extraction script gets a chance — but Gemini may compress before the script finishes. Treat the PreCompress hook as best-effort.
 - **Transport field:** Gemini uses `command` for stdio (as above). If copying a config from Claude Code that used `url` for an HTTP server, Gemini wants `httpUrl` instead — not relevant here since total-recall is stdio-only.
 

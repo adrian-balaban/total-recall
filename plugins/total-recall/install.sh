@@ -88,7 +88,7 @@
 #      hooks/hooks.gemini.json) automatically. Skipped if `gemini` is not
 #      on PATH. The hooks file uses Gemini's event-name renames
 #      (PostToolUse→AfterTool, PreCompact→PreCompress) and a full
-#      mcp__total-recall__* matcher; the script bodies are the same as
+#      mcp_total-recall_* matcher; the script bodies are the same as
 #      the Claude Code hook scripts.
 #   5d. Copilot CLI extension (optional, --copilot) — runs
 #      `copilot plugin install <plugin-root>`, which reads the same

@@ -282,7 +282,7 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 
 ```
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)
-2. build-memory-index.sh   — standalone awk scan of frontmatter → .index-cache.txt (no MCP)
+2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
 3. load-memory-index.sh    — cat .index-cache.txt → injected into context
 4. load-open-questions.sh  — cat open-questions.md → injected into context
 ```
