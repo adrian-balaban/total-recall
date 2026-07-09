@@ -247,6 +247,26 @@ PERSONAL_VAULT="$VAULT_HOME/personal-vault"
 ORG_VAULT="$VAULT_HOME/org/org-vault"
 ORG_DIR="$VAULT_HOME/org"
 
+# Initialize config.json defaults if they do not exist
+mkdir -p "$VAULT_HOME"
+NODE_BIN=$(command -v node || echo "")
+if [ -n "$NODE_BIN" ]; then
+  "$NODE_BIN" - "$CONFIG_FILE" <<'NODE'
+const fs = require('fs');
+const [, , cfgPath] = process.argv;
+let c = {};
+try { c = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
+let modified = false;
+if (c.embeddingProvider === undefined) { c.embeddingProvider = 'ollama'; modified = true; }
+if (c.embeddingModel === undefined) { c.embeddingModel = 'nomic-embed-text'; modified = true; }
+if (c.enableMultilingualSearch === undefined) { c.enableMultilingualSearch = true; modified = true; }
+if (c.orgRepo === undefined) { c.orgRepo = 'https://github.com/adrian-balaban/total-recall-memories'; modified = true; }
+if (modified) {
+  fs.writeFileSync(cfgPath, JSON.stringify(c, null, 2) + '\n');
+}
+NODE
+fi
+
 if [ -f "$CONFIG_FILE" ]; then
   NODE_BIN=$(command -v node || echo "")
   if [ -n "$NODE_BIN" ]; then
@@ -559,7 +579,16 @@ if [ -n "$ORG_REPO" ]; then
   ENABLE_ORG=1
 elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to GitHub)?" "n"; then
   ENABLE_ORG=1
-  ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)?" ORG_REPO
+  EXISTING_REPO=""
+  if [ -f "$CONFIG_FILE" ]; then
+    EXISTING_REPO=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); console.log(c.orgRepo || ''); } catch { console.log(''); }")
+  fi
+  if [ -n "$EXISTING_REPO" ]; then
+    ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)? [default: $EXISTING_REPO]" ORG_REPO
+    [ -z "$ORG_REPO" ] && ORG_REPO="$EXISTING_REPO"
+  else
+    ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)?" ORG_REPO
+  fi
   warn "The 'org-vault' branch must already exist with at least one commit."
   [ -z "$ORG_DOMAIN" ] && ask_value "Work email domain to allow in org-vault sync (blank = block all)?" ORG_DOMAIN
 fi
