@@ -189,6 +189,35 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     expect(indexJson).not.toContain(SENTINEL);
   });
 
+  // Immortal-memory guard for the org-sync delete path. The PostToolUse sync fires
+  // on tool invocation INCLUDING errors, and the hook falls back to tool_input.key
+  // regardless of the response — so a delete_memory that the TS side refused on the
+  // no-prune guard still reaches this .mjs as `--delete`. Without the .mjs-side guard
+  // the refused delete would unlink the org-vault file and commitAndPush the removal to
+  // the shared branch, defeating no-prune immortality and propagating the deletion to
+  // every teammate. The .mjs must refuse a no-prune memory without --force, and honor
+  // --force (forwarded by the hook when tool_input.force was true) for a deliberate
+  // teardown. The force=true path normally arrives with the file already unlinked by the
+  // TS side; here we invoke the .mjs directly with the file present to pin the guard.
+  it('refuses to --delete a no-prune org memory without --force (immortal guard; no push)', () => {
+    const key = 'org/decisions/immortal-adr';
+    writeOrgMemory('decisions/immortal-adr', { title: 'Immortal ADR', tags: ['org', 'no-prune'], author: 'tester' }, '## Executive Summary\n\nA decision that must not disappear.\n');
+    runMjs(key); // store + push
+    expect(remoteTree()).toContain('org-vault/decisions/immortal-adr.md');
+    const res = runMjs(key, ['--delete']); // refused — guard fires before unlink/commit
+    expect(res.stderr).toMatch(/Refusing to delete.*no-prune/i);
+    expect(remoteTree()).toContain('org-vault/decisions/immortal-adr.md');
+  });
+
+  it('removes a no-prune org memory with --delete --force (deliberate teardown syncs)', () => {
+    const key = 'org/decisions/teardown-adr';
+    writeOrgMemory('decisions/teardown-adr', { title: 'Teardown ADR', tags: ['org', 'no-prune'], author: 'tester' }, '## Executive Summary\n\nDeliberately retired.\n');
+    runMjs(key);
+    expect(remoteTree()).toContain('org-vault/decisions/teardown-adr.md');
+    runMjs(key, ['--delete', '--force']);
+    expect(remoteTree()).not.toContain('org-vault/decisions/teardown-adr.md');
+  });
+
   // #2: a corrupt org index.json (interrupted atomicWrite, bad manual edit, or a git-
   // merge conflict marker) used to parse to undefined → the bare `catch {}` set
   // `index = {}` → updateOrgIndex wrote a one-entry index and commitAndPush committed

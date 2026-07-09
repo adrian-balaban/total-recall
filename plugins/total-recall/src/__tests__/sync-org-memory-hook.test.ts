@@ -54,14 +54,14 @@ function runHook(json: string): { stdout: string; status: number | null } {
   return { stdout: r.stdout ?? '', status: r.status };
 }
 
-async function waitForArgs(timeoutMs = 4000): Promise<{ key: string; delete: boolean } | null> {
+async function waitForArgs(timeoutMs = 4000): Promise<{ key: string; delete: boolean; force: boolean } | null> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (fs.existsSync(argsFile)) {
       const raw = fs.readFileSync(argsFile, 'utf8').trim();
       if (raw) {
         const parts = raw.split('\n');
-        return { key: parts[0] ?? '', delete: parts.includes('--delete') };
+        return { key: parts[0] ?? '', delete: parts.includes('--delete'), force: parts.includes('--force') };
       }
     }
     await new Promise((r) => setTimeout(r, 20));
@@ -127,6 +127,40 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     expect(args).not.toBeNull();
     expect(args!.key).toBe('org/architecture/bar');
     expect(args!.delete).toBe(true);
+  });
+
+  it('forwards --force when delete_memory was called with force=true (no-prune teardown)', async () => {
+    // A deliberate no-prune teardown (delete_memory force=true) must reach the .mjs
+    // WITH --force, or the .mjs delete guard would refuse the very delete the user
+    // authorized. The hook serializes tool_input.force (boolean) onto the \x1f
+    // third field and appends --force only when it is true.
+    const json = JSON.stringify({
+      tool_name: 'mcp__total-recall__delete_memory',
+      tool_input: { key: 'org/decisions/adr-1', force: true },
+      tool_response: { content: [{ type: 'text', text: JSON.stringify({ key: 'org/decisions/adr-1', message: 'Memory deleted.' }) }] },
+    });
+    runHook(json);
+    const args = await waitForArgs();
+    expect(args).not.toBeNull();
+    expect(args!.key).toBe('org/decisions/adr-1');
+    expect(args!.delete).toBe(true);
+    expect(args!.force).toBe(true);
+  });
+
+  it('does NOT forward --force when force is absent (refused delete stays force-less)', async () => {
+    // The bypass direction: a refused (force-less) delete_memory must reach the .mjs
+    // WITHOUT --force, so the .mjs no-prune guard fires. If the hook ever defaulted
+    // force on, immortal org memories would be silently removed + pushed.
+    const json = JSON.stringify({
+      tool_name: 'mcp__total-recall__delete_memory',
+      tool_input: { key: 'org/decisions/adr-2' },
+      tool_response: { content: [{ type: 'text', text: 'deleted' }] },
+    });
+    runHook(json);
+    const args = await waitForArgs();
+    expect(args).not.toBeNull();
+    expect(args!.delete).toBe(true);
+    expect(args!.force).toBe(false);
   });
 
   it('handles an unwrapped tool_response object (no MCP content envelope)', async () => {

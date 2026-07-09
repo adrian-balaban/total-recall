@@ -196,6 +196,7 @@ function commitAndPush(relFile, relIndex, message) {
 async function main() {
   const key = process.argv[2];
   const deleteMode = process.argv.includes('--delete');
+  const force = process.argv.includes('--force');
 
   if (!key) { console.error('Usage: sync-org-memory.mjs <key> [--delete]'); process.exit(1); }
 
@@ -261,6 +262,35 @@ async function main() {
       if (!orgFileIsSafe(orgFile)) {
         console.error(`Refusing to delete org key ${key}: file is a symlink or resolves outside the org vault.`);
         process.exit(0);
+      }
+      // Immortal-memory guard (mirrors mutate.ts deleteMemory + store.ts store
+      // force-guard). The PostToolUse sync fires on tool invocation INCLUDING
+      // errors, so this runs even when the originating delete_memory threw on the
+      // TS-side no-prune refusal — and the hook falls back to tool_input.key
+      // (present on the request side) regardless of the error. Without this guard
+      // that refused delete would unlink the org-vault file here and commitAndPush
+      // the removal to the shared org-vault branch, defeating the no-prune
+      // immortality contract AND propagating the deletion to every teammate on
+      // their next pull. An explicit --force (forwarded by the hook when
+      // tool_input.force was true) overrides, so a deliberate teardown still
+      // syncs. The force=true path usually arrives with the file already unlinked
+      // by the TS side, so existsSync is false and this check is skipped naturally
+      // — the guard only ever fires for the refused (force=false) case.
+      if (!force) {
+        try {
+          const { data } = parseFrontmatter(fs.readFileSync(orgFile, 'utf8'));
+          const tags = Array.isArray(data.tags) ? data.tags : [];
+          if (tags.includes('no-prune')) {
+            console.error(`Refusing to delete org key ${key}: tagged 'no-prune' (immortal). Pass force=true to override.`);
+            process.exit(0);
+          }
+        } catch {
+          // Unreadable/unparseable frontmatter: we can't confirm the memory isn't
+          // immortal. Fail safe by skipping the delete — the TS side guards the
+          // canonical path; this is defense-in-depth for the shared-vault push.
+          console.error(`Refusing to delete org key ${key}: frontmatter unreadable (cannot verify no-prune status).`);
+          process.exit(0);
+        }
       }
       try { fs.unlinkSync(orgFile); } catch {}
     }

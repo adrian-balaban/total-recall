@@ -16,9 +16,9 @@ HOOK_INPUT=$(cat)
 # is the tool's own JSON return (e.g. {"key":"org/architecture/foo",...}); some
 # transports send the object unwrapped. Handle both, then fall back to
 # tool_input.key (present on the request side) if the response carried no key.
-# Emit "<key>\x1f<delete-flag>" (\x1f = ASCII unit separator) so bash can split it
-# without a second parse call — see the comment at the `read` below for why \x1f
-# (not a tab) is the delimiter.
+# Emit "<key>\x1f<delete-flag>\x1f<force-flag>" (\x1f = ASCII unit separator) so
+# bash can split it without a second parse call — see the comment at the `read`
+# below for why \x1f (not a tab) is the delimiter.
 # Parse via node (node is this plugin's hard dependency; python3 is not guaranteed,
 # so a python3 parser would silently no-op org sync on python3-less systems — the
 # same silent-no-op class the other hooks were fixed to avoid).
@@ -45,7 +45,8 @@ process.stdin.on("data", d => s += d).on("end", () => {
   }
   if (!key && d.tool_input && d.tool_input.key) key = d.tool_input.key;
   const flag = tn.endsWith("delete_memory") ? 1 : 0;
-  process.stdout.write(key + "\x1f" + flag);
+  const force = d.tool_input && d.tool_input.force === true ? 1 : 0;
+  process.stdout.write(key + "\x1f" + flag + "\x1f" + force);
 });
 ' 2>/dev/null || true)
 
@@ -53,8 +54,8 @@ process.stdin.on("data", d => s += d).on("end", () => {
 # IFS-whitespace delimiter, so a TAB here would turn an empty key into the delete-flag
 # value and the -z guard would misfire (running the sync with "0"/"1" as the key).
 # With \x1f an empty key stays empty. Keys are slugified paths and never contain \x1f,
-# so the delimiter is collision-free.
-IFS=$'\x1f' read -r KEY DELETE_FLAG <<< "$PARSED"
+# so the delimiter is collision-free. Three fields: KEY, DELETE_FLAG, FORCE_FLAG.
+IFS=$'\x1f' read -r KEY DELETE_FLAG FORCE_FLAG <<< "$PARSED"
 
 if [ -z "$KEY" ]; then
   echo '{"continue":true}'
@@ -97,7 +98,13 @@ case "$KEY" in
     if [ "$DELETE_FLAG" = "1" ]; then
       (
         if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
+        # --force only when the user passed force=true (deliberate no-prune teardown);
+        # the .mjs delete branch refuses a no-prune memory without it.
+        if [ "$FORCE_FLAG" = "1" ]; then
+          "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete --force
+        else
+          "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
+        fi
       ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
     else
       (
