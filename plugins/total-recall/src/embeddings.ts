@@ -15,7 +15,7 @@ async function getExternalEmbedding(text: string): Promise<number[] | null> {
 
   if (provider === 'ollama') {
     const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
-    const model = config.embeddingModel || 'nomic-embed-text';
+    const model = config.embeddingModel || 'bge-m3';
     try {
       const response = await fetch(url, {
         method: 'POST',

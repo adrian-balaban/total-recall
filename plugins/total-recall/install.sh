@@ -257,8 +257,13 @@ const [, , cfgPath] = process.argv;
 let c = {};
 try { c = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
 let modified = false;
-if (c.embeddingProvider === undefined) { c.embeddingProvider = 'ollama'; modified = true; }
-if (c.embeddingModel === undefined) { c.embeddingModel = 'nomic-embed-text'; modified = true; }
+if (c.embeddingProvider === undefined) { c.embeddingProvider = 'huggingface'; modified = true; }
+if (c.embeddingProvider === 'ollama') {
+  if (c.embeddingModel === undefined || c.embeddingModel === 'nomic-embed-text') {
+    c.embeddingModel = 'bge-m3';
+    modified = true;
+  }
+}
 if (c.enableMultilingualSearch === undefined) { c.enableMultilingualSearch = true; modified = true; }
 if (c.orgRepo === undefined) { c.orgRepo = 'https://github.com/adrian-balaban/total-recall-memories'; modified = true; }
 if (modified) {

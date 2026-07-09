@@ -173,7 +173,7 @@ You can customize total-recall settings by creating or editing `~/.total-recall/
   "allowedEmailDomains": ["yourcompany.com"],
   "embeddingProvider": "ollama",
   "embeddingUrl": "http://127.0.0.1:11434/api/embeddings",
-  "embeddingModel": "nomic-embed-text",
+  "embeddingModel": "bge-m3",
   "enableMultilingualSearch": true
 }
 ```
@@ -191,7 +191,7 @@ You can customize total-recall settings by creating or editing `~/.total-recall/
 - **Embeddings Providers**:
   - `embeddingProvider` (string, optional): Choice of `'huggingface'` (default, in-process MiniLM), `'ollama'` (local API), or `'vertexai'` (Google Cloud Vertex AI).
   - `embeddingUrl` (string, optional): Endpoint for Ollama embeddings. Default: `http://127.0.0.1:11434/api/embeddings`.
-  - `embeddingModel` (string, optional): Model name to request. Default for Ollama is `nomic-embed-text`, and for Vertex AI is `text-embedding-004`.
+  - `embeddingModel` (string, optional): Model name to request. Default for Ollama is `bge-m3`, and for Vertex AI is `text-embedding-004`.
   - `embeddingApiKey` (string, optional): API authentication token for Vertex AI (if not using GCLOUD environment variables).
   - `vertexRegion` (string, optional): Region for Vertex AI API. Default: `us-central1`.
   - `vertexProjectId` (string, optional): GCP Project ID (required if using Vertex AI).

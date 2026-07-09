@@ -16143,7 +16143,7 @@ async function getExternalEmbedding(text) {
   const provider = config3.embeddingProvider || "huggingface";
   if (provider === "ollama") {
     const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
-    const model = config3.embeddingModel || "nomic-embed-text";
+    const model = config3.embeddingModel || "bge-m3";
     try {
       const response = await fetch(url, {
         method: "POST",
