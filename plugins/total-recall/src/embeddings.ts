@@ -2,28 +2,83 @@
  * Optional HuggingFace embedding model — lazy-loaded from vector/node_modules.
  * If @huggingface/transformers is not installed, all methods are no-ops.
  */
-import { VECTORS_DB } from './paths.js';
+import { VECTORS_DB, loadConfig } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError } from './state.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
-let loadPromise: Promise<((text: string) => Promise<number[]>) | null> | null = null;
+let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
 
-async function getEmbedder(): Promise<((text: string) => Promise<number[]>) | null> {
-  // Cache the *promise*, not a `loadAttempted` boolean. The previous code set
-  // loadAttempted=true synchronously (before the `await import` resolved), so a
-  // concurrent caller arriving mid-load saw the flag set but `pipeline` still
-  // null, returned null, and embedAndUpsert's `if (vec) upsertVector(...)` then
-  // SILENTLY SKIPPED the vector upsert for that key — a permanent hole in the
-  // vector index. The race is reachable in practice: embedAndUpsert is
-  // fire-and-forget (store.ts / mutate.ts don't await it), so the server is free
-  // to process a second store_memory — or a hybrid recall_memory — during the
-  // seconds-to-minutes @huggingface/transformers import + model init, and the
-  // losing writer drops its vector. A failed load caches a promise that resolves
-  // to null, so subsequent callers also get null (no retry) — matching the prior
-  // no-retry-on-failure semantics. Mirrors vectorStore.ts getDb (lines 13-17),
-  // which was rewritten for the identical bug class. `pipeline` is still mutated
-  // inside the load body so isVectorAvailable() flips true only once loaded.
+async function getExternalEmbedding(text: string): Promise<number[] | null> {
+  const config = loadConfig();
+  const provider = config.embeddingProvider || 'huggingface';
+
+  if (provider === 'ollama') {
+    const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
+    const model = config.embeddingModel || 'nomic-embed-text';
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, prompt: text })
+      });
+      if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
+      const data = await response.json() as { embedding: number[] };
+      return data.embedding;
+    } catch (e) {
+      recordError(`Ollama embedding failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+
+  if (provider === 'vertexai') {
+    const region = config.vertexRegion || 'us-central1';
+    const projectId = config.vertexProjectId;
+    const model = config.embeddingModel || 'text-embedding-004';
+    if (!projectId) {
+      recordError('Vertex AI embedding failed: vertexProjectId is not configured');
+      return null;
+    }
+    const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:predict`;
+    const token = config.embeddingApiKey || process.env.VERTEX_API_KEY || process.env.GCLOUD_ACCESS_TOKEN;
+    if (!token) {
+      recordError('Vertex AI embedding failed: no authentication token found (configure embeddingApiKey or GCLOUD_ACCESS_TOKEN)');
+      return null;
+    }
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          instances: [{ content: text }]
+        })
+      });
+      if (!response.ok) throw new Error(`Vertex AI returned status ${response.status}`);
+      const data = await response.json() as {
+        predictions: { embeddings: { values: number[] } }[]
+      };
+      if (data.predictions?.[0]?.embeddings?.values) {
+        return data.predictions[0].embeddings.values;
+      }
+      throw new Error('Unexpected Vertex AI response structure');
+    } catch (e) {
+      recordError(`Vertex AI embedding failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+
+  return null;
+}
+
+async function getEmbedder(): Promise<((text: string) => Promise<number[] | null>) | null> {
+  const config = loadConfig();
+  const provider = config.embeddingProvider || 'huggingface';
+  if (provider !== 'huggingface') {
+    return getExternalEmbedding;
+  }
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     try {
@@ -100,5 +155,8 @@ export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
 // consult this — it always attempts embed() when hybrid is requested and degrades
 // to TF-IDF via the embed()->null path, which is what triggers the lazy load.
 export function isVectorAvailable(): boolean {
+  const config = loadConfig();
+  const provider = config.embeddingProvider || 'huggingface';
+  if (provider !== 'huggingface') return true;
   return pipeline !== null;
 }

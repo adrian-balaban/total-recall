@@ -224,7 +224,7 @@ export function scheduleIdfRecalc() {
   if (idfTimer) clearTimeout(idfTimer);
   idfTimer = setTimeout(() => {
     try {
-      rebuildInvertedIndex();
+      // Inverted index is already updated incrementally in-memory during mutations
       atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
       buildIndexCache();
     } catch (e) {

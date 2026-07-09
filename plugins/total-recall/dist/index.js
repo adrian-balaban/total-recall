@@ -2983,7 +2983,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve3.call(this, root, ref);
+      let _sch = resolve4.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3010,7 +3010,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve3(root, ref) {
+    function resolve4(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3641,7 +3641,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve3(baseURI, relativeURI, options) {
+    function resolve4(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3899,7 +3899,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve3,
+      resolve: resolve4,
       resolveComponent,
       equal,
       serialize,
@@ -7554,8 +7554,8 @@ function prefixIssues(path7, issues) {
 function unwrapMessage(message) {
   return typeof message === "string" ? message : message?.message;
 }
-function finalizeIssue(iss, ctx, config2) {
-  const message = iss.message ? iss.message : unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ?? unwrapMessage(ctx?.error?.(iss)) ?? unwrapMessage(config2.customError?.(iss)) ?? unwrapMessage(config2.localeError?.(iss)) ?? "Invalid input";
+function finalizeIssue(iss, ctx, config3) {
+  const message = iss.message ? iss.message : unwrapMessage(iss.inst?._zod.def?.error?.(iss)) ?? unwrapMessage(ctx?.error?.(iss)) ?? unwrapMessage(config3.customError?.(iss)) ?? unwrapMessage(config3.localeError?.(iss)) ?? "Invalid input";
   const { inst: _inst, continue: _continue, input: _input, ...rest } = iss;
   rest.path ?? (rest.path = []);
   rest.message = message;
@@ -14209,7 +14209,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve3) => setTimeout(resolve3, pollInterval));
+        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -14226,7 +14226,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -14304,7 +14304,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve3(parseResult.data);
+            resolve4(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -14565,12 +14565,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve3, reject) => {
+    return new Promise((resolve4, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve3, interval);
+      const timeoutId = setTimeout(resolve4, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -15440,12 +15440,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve3) => {
+    return new Promise((resolve4) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve3();
+        resolve4();
       } else {
-        this._stdout.once("drain", resolve3);
+        this._stdout.once("drain", resolve4);
       }
     });
   }
@@ -15456,12 +15456,24 @@ import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 var HOME = os.homedir();
-var PERSONAL_VAULT = path.join(HOME, ".total-recall", "personal-vault");
-var ORG_VAULT = path.join(HOME, ".total-recall", "org", "org-vault");
+var TOTAL_RECALL_DIR = path.join(HOME, ".total-recall");
+var CONFIG_PATH = path.join(TOTAL_RECALL_DIR, "config.json");
+function loadConfig() {
+  try {
+    if (fs.existsSync(CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    }
+  } catch {
+  }
+  return {};
+}
+var config2 = loadConfig();
+var PERSONAL_VAULT = config2.personalVault ? path.resolve(config2.personalVault.replace(/^~/, HOME)) : path.join(TOTAL_RECALL_DIR, "personal-vault");
+var ORG_VAULT = config2.orgVault ? path.resolve(config2.orgVault.replace(/^~/, HOME)) : path.join(TOTAL_RECALL_DIR, "org", "org-vault");
 var VECTORS_DB = path.join(PERSONAL_VAULT, "vectors.db");
-var INDEX_PATH = path.join(HOME, ".total-recall", "index.json");
-var INVERTED_INDEX_PATH = path.join(HOME, ".total-recall", "invertedIndex.json");
-var INDEX_CACHE_PATH = path.join(HOME, ".total-recall", ".index-cache.txt");
+var INDEX_PATH = path.join(TOTAL_RECALL_DIR, "index.json");
+var INVERTED_INDEX_PATH = path.join(TOTAL_RECALL_DIR, "invertedIndex.json");
+var INDEX_CACHE_PATH = path.join(TOTAL_RECALL_DIR, ".index-cache.txt");
 var EXCLUDED_DIRS = /* @__PURE__ */ new Set([
   "projects",
   "templates",
@@ -15531,8 +15543,67 @@ function bumpAccess(meta2) {
 }
 
 // src/tfidf.ts
+var BILINGUAL_DICT = {
+  // Romanian -> English
+  "decizie": "decision",
+  "decizii": "decision",
+  "sedinta": "meeting",
+  "sedinte": "meeting",
+  "intalnire": "meeting",
+  "intalniri": "meeting",
+  "concepte": "concepts",
+  "concept": "concept",
+  "arhitectura": "architecture",
+  "arhitecturi": "architecture",
+  "problema": "troubleshooting",
+  "probleme": "troubleshooting",
+  "depanare": "troubleshooting",
+  "jurnal": "journal",
+  "jurnale": "journal",
+  "memorie": "memory",
+  "memorii": "memories",
+  "salvare": "store",
+  "actualizare": "update",
+  "stergere": "delete",
+  // English -> Romanian
+  "decision": "decizie",
+  "meeting": "sedinta",
+  "concepts": "concepte",
+  "architecture": "arhitectura",
+  "troubleshooting": "problema",
+  "journal": "jurnal",
+  "memories": "memorii",
+  "memory": "memorie"
+};
 function tokenize(text) {
   return text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+}
+function deregisterDocument(key) {
+  for (const t of Object.keys(invertedIndex)) {
+    const entry = invertedIndex[t];
+    if (entry) {
+      entry.docs = entry.docs.filter((d) => d.key !== key);
+      if (entry.docs.length === 0) {
+        delete invertedIndex[t];
+      }
+    }
+  }
+}
+function registerDocument(key, title, tags, contentPreview) {
+  deregisterDocument(key);
+  const tokens = tokenize(`${title} ${tags.join(" ")} ${contentPreview}`);
+  const tf = {};
+  for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
+  for (const [t, count] of Object.entries(tf)) {
+    if (!invertedIndex[t]) {
+      invertedIndex[t] = { docs: [], idf: 0 };
+    }
+    invertedIndex[t].docs.push({ key, tf: count });
+  }
+  const N = Object.keys(memIndex).length;
+  for (const t of Object.keys(invertedIndex)) {
+    invertedIndex[t].idf = Math.log((N + 1) / (invertedIndex[t].docs.length + 1)) + 1;
+  }
 }
 function rebuildInvertedIndex() {
   const docFreq = {};
@@ -15559,7 +15630,17 @@ function rebuildInvertedIndex() {
   }
 }
 function tfidfSearch(query, excludeJournal = true) {
-  const tokens = tokenize(query);
+  const config3 = loadConfig();
+  let tokens = tokenize(query);
+  if (config3.enableMultilingualSearch) {
+    const expanded = [];
+    for (const t of tokens) {
+      expanded.push(t);
+      const translated = BILINGUAL_DICT[t];
+      if (translated) expanded.push(translated);
+    }
+    tokens = expanded;
+  }
   const rawScores = {};
   const lowCache = /* @__PURE__ */ new Map();
   for (const token of tokens) {
@@ -15711,7 +15792,6 @@ function scheduleIdfRecalc() {
   if (idfTimer) clearTimeout(idfTimer);
   idfTimer = setTimeout(() => {
     try {
-      rebuildInvertedIndex();
       atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
       buildIndexCache();
     } catch (e) {
@@ -15817,7 +15897,12 @@ function parseFrontmatter(raw) {
 }
 function stringifyFrontmatter(content, data) {
   const lines = [];
-  for (const [k, v] of Object.entries(data)) {
+  const rawData = data;
+  const orderedKeys = ["title", "tags", "author", "sessions", "created", "updated", "importanceScore"];
+  const customKeys = Object.keys(rawData).filter((k) => !orderedKeys.includes(k)).sort();
+  const keysToSerialize = [...orderedKeys.filter((k) => k in rawData), ...customKeys];
+  for (const k of keysToSerialize) {
+    const v = rawData[k];
     if (v === void 0 || v === null) continue;
     lines.push(`${k}: ${serializeValue(v)}`);
   }
@@ -16053,7 +16138,70 @@ async function listVectorKeys(dbPath) {
 // src/embeddings.ts
 var pipeline = null;
 var loadPromise = null;
+async function getExternalEmbedding(text) {
+  const config3 = loadConfig();
+  const provider = config3.embeddingProvider || "huggingface";
+  if (provider === "ollama") {
+    const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
+    const model = config3.embeddingModel || "nomic-embed-text";
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ model, prompt: text })
+      });
+      if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
+      const data = await response.json();
+      return data.embedding;
+    } catch (e) {
+      recordError(`Ollama embedding failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+  if (provider === "vertexai") {
+    const region = config3.vertexRegion || "us-central1";
+    const projectId = config3.vertexProjectId;
+    const model = config3.embeddingModel || "text-embedding-004";
+    if (!projectId) {
+      recordError("Vertex AI embedding failed: vertexProjectId is not configured");
+      return null;
+    }
+    const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:predict`;
+    const token = config3.embeddingApiKey || process.env.VERTEX_API_KEY || process.env.GCLOUD_ACCESS_TOKEN;
+    if (!token) {
+      recordError("Vertex AI embedding failed: no authentication token found (configure embeddingApiKey or GCLOUD_ACCESS_TOKEN)");
+      return null;
+    }
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          instances: [{ content: text }]
+        })
+      });
+      if (!response.ok) throw new Error(`Vertex AI returned status ${response.status}`);
+      const data = await response.json();
+      if (data.predictions?.[0]?.embeddings?.values) {
+        return data.predictions[0].embeddings.values;
+      }
+      throw new Error("Unexpected Vertex AI response structure");
+    } catch (e) {
+      recordError(`Vertex AI embedding failed: ${e instanceof Error ? e.message : String(e)}`);
+      return null;
+    }
+  }
+  return null;
+}
 async function getEmbedder() {
+  const config3 = loadConfig();
+  const provider = config3.embeddingProvider || "huggingface";
+  if (provider !== "huggingface") {
+    return getExternalEmbedding;
+  }
   if (loadPromise) return loadPromise;
   loadPromise = (async () => {
     try {
@@ -16100,6 +16248,9 @@ async function flushEmbeddings(timeoutMs = 2e3) {
   }
 }
 function isVectorAvailable() {
+  const config3 = loadConfig();
+  const provider = config3.embeddingProvider || "huggingface";
+  if (provider !== "huggingface") return true;
   return pipeline !== null;
 }
 
@@ -16434,6 +16585,7 @@ function storeMemory(args) {
   if (fm.author !== void 0) meta2.author = fm.author;
   if (fm.sessions !== void 0) meta2.sessions = fm.sessions;
   memIndex[key] = meta2;
+  registerDocument(key, meta2.title, meta2.tags, meta2.contentPreview);
   contentCache.set(key, body);
   if (!isOrg) appendJournal("store", key, title);
   scheduleSave();
@@ -16722,6 +16874,7 @@ function updateMemory(args) {
     size
   });
   contentCache.delete(key);
+  registerDocument(key, meta2.title, meta2.tags, meta2.contentPreview);
   scheduleSave();
   if (content !== void 0) embedAndUpsert(key, newContent);
   return { key, message: "Memory updated." };
@@ -16740,6 +16893,7 @@ function deleteMemory(args) {
   } catch {
   }
   delete memIndex[key];
+  deregisterDocument(key);
   contentCache.delete(key);
   deleteVector(VECTORS_DB, key).catch(() => {
   });
@@ -16754,7 +16908,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.84" : null.version;
+var PLUGIN_VERSION = true ? "1.0.85" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -65,7 +65,16 @@ export function parseFrontmatter(raw: string): Frontmatter {
 
 export function stringifyFrontmatter(content: string, data: object): string {
   const lines: string[] = [];
-  for (const [k, v] of Object.entries(data)) {
+  const rawData = data as Record<string, unknown>;
+  const orderedKeys = ['title', 'tags', 'author', 'sessions', 'created', 'updated', 'importanceScore'];
+
+  const customKeys = Object.keys(rawData)
+    .filter(k => !orderedKeys.includes(k))
+    .sort();
+  const keysToSerialize = [...orderedKeys.filter(k => k in rawData), ...customKeys];
+
+  for (const k of keysToSerialize) {
+    const v = rawData[k];
     if (v === undefined || v === null) continue;
     lines.push(`${k}: ${serializeValue(v)}`);
   }

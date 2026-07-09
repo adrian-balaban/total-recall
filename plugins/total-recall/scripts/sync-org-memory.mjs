@@ -9,10 +9,6 @@ import { privacyCheck, sanitizeAllowedDomains } from '../dist/privacy-filter.mjs
 import { atomicWrite, cleanupInFlightTmp } from './atomic-write.mjs';
 
 const TOTAL_RECALL_DIR = path.join(os.homedir(), '.total-recall');
-const PERSONAL_VAULT = path.join(TOTAL_RECALL_DIR, 'personal-vault');
-const ORG_VAULT_DIR = path.join(TOTAL_RECALL_DIR, 'org');
-const ORG_VAULT = path.join(ORG_VAULT_DIR, 'org-vault');
-const BRANCH = 'org-vault';
 
 function loadConfig() {
   try {
@@ -20,6 +16,18 @@ function loadConfig() {
   } catch { return {}; }
 }
 const config = loadConfig();
+
+const PERSONAL_VAULT = config.personalVault 
+  ? path.resolve(config.personalVault.replace(/^~/, os.homedir()))
+  : path.join(TOTAL_RECALL_DIR, 'personal-vault');
+
+const ORG_VAULT = config.orgVault
+  ? path.resolve(config.orgVault.replace(/^~/, os.homedir()))
+  : path.join(TOTAL_RECALL_DIR, 'org', 'org-vault');
+
+const ORG_VAULT_DIR = path.dirname(ORG_VAULT);
+const BRANCH = 'org-vault';
+
 const ORG_REPO = config.orgRepo;
 if (!ORG_REPO) {
   console.error('Error: orgRepo is not set. Add {"orgRepo": "https://github.com/you/your-vault.git"} to ~/.total-recall/config.json');

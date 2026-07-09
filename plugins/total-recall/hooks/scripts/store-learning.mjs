@@ -18,7 +18,16 @@ import os from 'node:os';
 import { stringifyFrontmatter } from '../../dist/frontmatter.mjs';
 import { atomicWrite, cleanupInFlightTmp } from '../../scripts/atomic-write.mjs';
 
-const VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
+const CONFIG_FILE = path.join(os.homedir(), '.total-recall', 'config.json');
+let VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
+try {
+  if (fs.existsSync(CONFIG_FILE)) {
+    const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+    if (config.personalVault) {
+      VAULT = path.resolve(config.personalVault.replace(/^~/, os.homedir()));
+    }
+  }
+} catch {}
 
 // Atomic write (write-`.tmp` + rename) for the memory .md is shared via
 // scripts/atomic-write.mjs. A partial write would leave a corrupt frontmatter

@@ -4,7 +4,7 @@ import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '..
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB, NO_PRUNE_TAG } from '../paths.js';
 import { reconcileIndex, assertRegularFile, tokenEstimate } from '../vault-scan.js';
-import { rebuildInvertedIndex } from '../tfidf.js';
+import { rebuildInvertedIndex, registerDocument, deregisterDocument } from '../tfidf.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
@@ -104,6 +104,7 @@ export function updateMemory(args: any): any {
   });
 
   contentCache.delete(key);
+  registerDocument(key, meta.title, meta.tags, meta.contentPreview);
   scheduleSave();
 
   // `content !== undefined`, not truthy: an explicit `content: ''` is a
@@ -138,6 +139,7 @@ export function deleteMemory(args: any): any {
   // the key is gone regardless of on-disk state.
   try { fs.unlinkSync(meta.filePath); } catch {}
   delete memIndex[key];
+  deregisterDocument(key);
   contentCache.delete(key);
   deleteVector(VECTORS_DB, key).catch(() => {});
   scheduleSave();

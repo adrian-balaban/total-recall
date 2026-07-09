@@ -4,6 +4,11 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
 
 PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
+CONFIG_FILE="$HOME/.total-recall/config.json"
+
+if [ -f "$CONFIG_FILE" ]; then
+  PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
+fi
 # `|| true` is load-bearing under `set -euo pipefail`: (1) if the personal vault
 # dir is absent (fresh install before any store_memory), find exits non-zero and
 # the pipeline's status is non-zero → set -e aborts the SessionStart hook before

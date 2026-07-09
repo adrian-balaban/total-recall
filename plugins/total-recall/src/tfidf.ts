@@ -1,10 +1,78 @@
 import { computeRetentionStrength, daysSince } from './ebbinghaus.js';
 import { memIndex, invertedIndex } from './state.js';
+import { loadConfig } from './paths.js';
 
 // ─── TF-IDF ──────────────────────────────────────────────────────────────────
 
+const BILINGUAL_DICT: Record<string, string> = {
+  // Romanian -> English
+  'decizie': 'decision',
+  'decizii': 'decision',
+  'sedinta': 'meeting',
+  'sedinte': 'meeting',
+  'intalnire': 'meeting',
+  'intalniri': 'meeting',
+  'concepte': 'concepts',
+  'concept': 'concept',
+  'arhitectura': 'architecture',
+  'arhitecturi': 'architecture',
+  'problema': 'troubleshooting',
+  'probleme': 'troubleshooting',
+  'depanare': 'troubleshooting',
+  'jurnal': 'journal',
+  'jurnale': 'journal',
+  'memorie': 'memory',
+  'memorii': 'memories',
+  'salvare': 'store',
+  'actualizare': 'update',
+  'stergere': 'delete',
+
+  // English -> Romanian
+  'decision': 'decizie',
+  'meeting': 'sedinta',
+  'concepts': 'concepte',
+  'architecture': 'arhitectura',
+  'troubleshooting': 'problema',
+  'journal': 'jurnal',
+  'memories': 'memorii',
+  'memory': 'memorie',
+};
+
 export function tokenize(text: string): string[] {
   return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+}
+
+export function deregisterDocument(key: string) {
+  for (const t of Object.keys(invertedIndex)) {
+    const entry = invertedIndex[t];
+    if (entry) {
+      entry.docs = entry.docs.filter(d => d.key !== key);
+      if (entry.docs.length === 0) {
+        delete invertedIndex[t];
+      }
+    }
+  }
+}
+
+export function registerDocument(key: string, title: string, tags: string[], contentPreview: string) {
+  deregisterDocument(key);
+
+  const tokens = tokenize(`${title} ${tags.join(' ')} ${contentPreview}`);
+  const tf: Record<string, number> = {};
+  for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
+
+  for (const [t, count] of Object.entries(tf)) {
+    if (!invertedIndex[t]) {
+      invertedIndex[t] = { docs: [], idf: 0 };
+    }
+    invertedIndex[t]!.docs.push({ key, tf: count });
+  }
+
+  // Recalculate IDFs for all active terms
+  const N = Object.keys(memIndex).length;
+  for (const t of Object.keys(invertedIndex)) {
+    invertedIndex[t]!.idf = Math.log((N + 1) / (invertedIndex[t]!.docs.length + 1)) + 1;
+  }
 }
 
 export function rebuildInvertedIndex() {
@@ -40,7 +108,17 @@ export function rebuildInvertedIndex() {
 }
 
 export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: string; score: number }> {
-  const tokens = tokenize(query);
+  const config = loadConfig();
+  let tokens = tokenize(query);
+  if (config.enableMultilingualSearch) {
+    const expanded: string[] = [];
+    for (const t of tokens) {
+      expanded.push(t);
+      const translated = BILINGUAL_DICT[t];
+      if (translated) expanded.push(translated);
+    }
+    tokens = expanded;
+  }
   // #22: accumulate RAW tf×idf (with per-token title/tag boosts) per doc across
   // all query tokens, then multiply by the Ebbinghaus decay ONCE per doc after
   // the token loop. The decay is a per-doc scalar — it depends only on

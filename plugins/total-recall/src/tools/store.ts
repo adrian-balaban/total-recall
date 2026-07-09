@@ -6,6 +6,7 @@ import { clampImportanceScore } from '../ebbinghaus.js';
 import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir, NO_PRUNE_TAG } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat } from '../vault-scan.js';
 import { memIndex } from '../state.js';
+import { registerDocument } from '../tfidf.js';
 import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
 import { scheduleSave } from '../persistence.js';
@@ -239,6 +240,7 @@ export function storeMemory(args: any): any {
   if (fm.author !== undefined) meta.author = fm.author;
   if (fm.sessions !== undefined) meta.sessions = fm.sessions;
   memIndex[key] = meta;
+  registerDocument(key, meta.title, meta.tags, meta.contentPreview);
   contentCache.set(key, body);
 
   if (!isOrg) appendJournal('store', key, title);

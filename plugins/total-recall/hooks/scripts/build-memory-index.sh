@@ -4,6 +4,13 @@ set -euo pipefail
 
 PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
 ORG_VAULT="$HOME/.total-recall/org/org-vault"
+CONFIG_FILE="$HOME/.total-recall/config.json"
+
+if [ -f "$CONFIG_FILE" ]; then
+  PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
+  ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
+fi
+
 CACHE="$HOME/.total-recall/.index-cache.txt"
 
 # Must stay in sync with EXCLUDED_DIRS in src/paths.ts — these directories are
