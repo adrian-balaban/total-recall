@@ -265,7 +265,6 @@ if (c.embeddingProvider === 'ollama') {
   }
 }
 if (c.enableMultilingualSearch === undefined) { c.enableMultilingualSearch = true; modified = true; }
-if (c.orgRepo === undefined) { c.orgRepo = 'https://github.com/adrian-balaban/total-recall-memories'; modified = true; }
 if (modified) {
   fs.writeFileSync(cfgPath, JSON.stringify(c, null, 2) + '\n');
 }

@@ -4,7 +4,7 @@ Repository containing the **total-recall** plugin — a persistent, searchable m
 
 ## 🔌 Main Plugin
 
-*   **[total-recall](file:///home/adrianb/_/ai-assisted/github/total-recall/plugins/total-recall)**: Persistent memory plugin.
+*   **[total-recall](plugins/total-recall)**: Persistent memory plugin.
     *   Exposes 12 MCP tools for knowledge management.
     *   Wires lifecycle hooks (SessionStart, PostToolUse/AfterTool, PreCompact/PreCompress, SessionEnd) for automated context injection and sync.
     *   Uses a dual-vault architecture: personal memories stay local, while `org`-tagged memories sync to a shared Git repository through a fail-closed privacy filter.
@@ -13,7 +13,7 @@ Repository containing the **total-recall** plugin — a persistent, searchable m
 
 For detailed setup, configuration options, client compatibility matrices, and developer documentation, please refer to the main plugin page:
 
-👉 **[Go to total-recall Plugin Documentation](file:///home/adrianb/_/ai-assisted/github/total-recall/plugins/total-recall/README.md)**
+👉 **[Go to total-recall Plugin Documentation](plugins/total-recall/README.md)**
 
 ## 💡 Proactive Memory Saving
 
