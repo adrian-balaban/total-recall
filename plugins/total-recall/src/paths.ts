@@ -22,13 +22,41 @@ export interface TotalRecallConfig {
   enableMultilingualSearch?: boolean;
 }
 
+// Cache the parsed config by mtime. loadConfig() is a hot path — embeddings.ts
+// calls it on every embed (3 sites) and tfidf.ts on every search (the multilingual
+// toggle) — so the uncached version did an existsSync + readFileSync + JSON.parse
+// per call. mtimeMs (nanosecond precision on Linux/macOS) keys the cache: an edit to
+// config.json changes its mtime → the next loadConfig re-reads, so a runtime toggle
+// of enableMultilingualSearch / embeddingProvider / personalVault is picked up
+// without a restart, exactly as before. statSync replaces the existsSync+read
+// pair (one syscall on a cache hit instead of two); ENOENT (no config / cold
+// start) resets the cache and returns {}. A parse error also resets, so a later
+// valid write re-reads. No test toggles config in-process within a sub-second
+// same-mtime window (index.test.ts writes/removes config.json once per setup,
+// each advancing mtime), so the cache is test-safe.
+let cachedConfig: TotalRecallConfig | null = null;
+let cachedMtime = -1;
+
 export function loadConfig(): TotalRecallConfig {
+  let mtime: number;
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
-    }
-  } catch {}
-  return {};
+    mtime = fs.statSync(CONFIG_PATH).mtimeMs;
+  } catch {
+    cachedConfig = null;
+    cachedMtime = -1;
+    return {};
+  }
+  if (cachedConfig !== null && mtime === cachedMtime) return cachedConfig;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+    cachedConfig = parsed;
+    cachedMtime = mtime;
+    return parsed;
+  } catch {
+    cachedConfig = null;
+    cachedMtime = -1;
+    return {};
+  }
 }
 
 const config = loadConfig();

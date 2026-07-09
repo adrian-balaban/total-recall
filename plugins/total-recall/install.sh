@@ -304,7 +304,6 @@ else
       || true
     ok "Removed existing registration."
   fi
-  if true; then
   # Pick the highest-versioned nvm node, else whatever is on PATH.
   # (The skill's one-liner accidentally *executed* the node binaries; we list
   # the paths instead, which is the intended behavior.)
@@ -342,7 +341,6 @@ else
     note "MCP server registered."
   else
     warn "claude mcp add-json failed — register manually if needed."
-  fi
   fi
 fi
 

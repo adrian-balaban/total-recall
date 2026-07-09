@@ -15458,14 +15458,28 @@ import * as path from "path";
 var HOME = os.homedir();
 var TOTAL_RECALL_DIR = path.join(HOME, ".total-recall");
 var CONFIG_PATH = path.join(TOTAL_RECALL_DIR, "config.json");
+var cachedConfig = null;
+var cachedMtime = -1;
 function loadConfig() {
+  let mtime;
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
-    }
+    mtime = fs.statSync(CONFIG_PATH).mtimeMs;
   } catch {
+    cachedConfig = null;
+    cachedMtime = -1;
+    return {};
   }
-  return {};
+  if (cachedConfig !== null && mtime === cachedMtime) return cachedConfig;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf8"));
+    cachedConfig = parsed;
+    cachedMtime = mtime;
+    return parsed;
+  } catch {
+    cachedConfig = null;
+    cachedMtime = -1;
+    return {};
+  }
 }
 var config2 = loadConfig();
 var PERSONAL_VAULT = config2.personalVault ? path.resolve(config2.personalVault.replace(/^~/, HOME)) : path.join(TOTAL_RECALL_DIR, "personal-vault");
@@ -16908,7 +16922,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.87" : null.version;
+var PLUGIN_VERSION = true ? "1.0.88" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
