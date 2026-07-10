@@ -2,6 +2,10 @@
 # Single-pass awk scanner across both vaults. Reads only frontmatter.
 set -euo pipefail
 
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)"
+# shellcheck source=_resolve-node.sh
+. "$SCRIPT_DIR/_resolve-node.sh"
+
 PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
 ORG_VAULT="$HOME/.total-recall/org/org-vault"
 CONFIG_FILE="$HOME/.total-recall/config.json"

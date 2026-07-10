@@ -89,12 +89,13 @@ afterAll(async () => {
 }, 30_000);
 
 describe('total-recall over real stdio', () => {
-  it('exposes the 12 documented tools via list_tools', async () => {
+  it('exposes the 17 documented tools via list_tools', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t: any) => t.name).sort()).toEqual([
-      'delete_memory', 'get_memories_by_keys', 'get_related_memories',
-      'get_stats', 'get_timeline', 'list_memories', 'prune_memories',
-      'rebuild_index', 'recall_memory', 'search_index', 'store_memory', 'update_memory',
+      'confirm_memory', 'delete_memories', 'delete_memory', 'export_memories',
+      'get_memories_by_keys', 'get_related_memories', 'get_stats', 'get_timeline',
+      'import_memories', 'list_memories', 'prune_memories', 'rebuild_index',
+      'recall_memory', 'rerank_memories', 'search_index', 'store_memory', 'update_memory',
     ]);
   });
 

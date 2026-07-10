@@ -1,6 +1,6 @@
 # Total Recall — Gemini CLI working notes
 
-This plugin runs in Gemini CLI. The 12 tools are exposed as
+This plugin runs in Gemini CLI. The 17 tools are exposed as
 `mcp_total-recall_<tool>`. Invoke them by asking in plain English
 ("recall X", "store a memory about Y", "list memories tagged Z")
 — same as in Claude Code.

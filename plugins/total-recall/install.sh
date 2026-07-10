@@ -130,6 +130,7 @@ STANDALONE=0
 STATUSLINE=0
 ORG_REPO=""
 ORG_DOMAIN=""
+ORG_DOMAIN_CLEARED=0  # set to 1 only when the user explicitly blanks the work domain
 VECTOR=""        # "" = ask, "yes" = install, "no" = skip
 ASSUME_YES=0
 GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
@@ -598,17 +599,20 @@ elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to GitH
     info "The privacy filter blocks all email addresses by default before pushing to GitHub."
     info "You can specify a domain (e.g., company.com) to allow work emails to bypass the filter."
     ask_value "Work email domain to allow in org-vault sync (blank = block all)?" ORG_DOMAIN
+    [ -z "$ORG_DOMAIN" ] && ORG_DOMAIN_CLEARED=1
   fi
 fi
 
 if [ "$ENABLE_ORG" -eq 1 ] && [ -n "$ORG_REPO" ]; then
-  node - "$CONFIG_FILE" "$ORG_REPO" "$ORG_DOMAIN" <<'NODE'
+  node - "$CONFIG_FILE" "$ORG_REPO" "$ORG_DOMAIN" "$ORG_DOMAIN_CLEARED" <<'NODE'
 const fs = require('fs');
-const [, , cfgPath, repo, domain] = process.argv;
+const [, , cfgPath, repo, domain, clearDomain] = process.argv;
 let c = {};
 try { c = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
 c.orgRepo = repo;
-if (domain) c.allowedEmailDomains = [domain]; else delete c.allowedEmailDomains;
+if (domain) c.allowedEmailDomains = [domain];
+else if (clearDomain === '1') delete c.allowedEmailDomains;
+// otherwise preserve the existing allowedEmailDomains array (safe re-run)
 fs.writeFileSync(cfgPath, JSON.stringify(c, null, 2) + '\n');
 NODE
   ok "Wrote orgRepo to $CONFIG_FILE${ORG_DOMAIN:+ (allowing @$ORG_DOMAIN)}"

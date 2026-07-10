@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 import { privacyCheck, sanitizeAllowedDomains } from '../privacy-filter.js';
 
 // The org-sync privacy filter (secret-token + email checks) and the email-allowlist
@@ -287,5 +289,15 @@ describe('git command safety', () => {
     expect(args[2]).toBe(commitMsg); // literal string, not expanded
     // spawnSync with shell:false would not interpret $() — we just verify the arg is safe
     expect(args[2]).toContain('$(rm -rf /)'); // still there as literal text
+  });
+
+  // Pass 6 fix: the git() helper in sync-org-memory.mjs must disable interactive
+  // credential prompts. A missing/stale `gh` token or a changed remote URL could
+  // otherwise hang the background PostToolUse worker waiting for terminal input.
+  it('disables GIT_TERMINAL_PROMPT in the git() helper env', () => {
+    const scriptPath = path.resolve(__dirname, '..', '..', 'scripts', 'sync-org-memory.mjs');
+    const src = fs.readFileSync(scriptPath, 'utf8');
+    // The env object inside spawnSync must set GIT_TERMINAL_PROMPT to '0'.
+    expect(src).toContain("GIT_TERMINAL_PROMPT: '0'");
   });
 });

@@ -199,6 +199,17 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     }
   });
 
+  // Pass 6 fix: build-memory-index.sh must source _resolve-node.sh so a stripped
+  // PATH (e.g. nvm-only hook environment) still finds node. Without the source, the
+  // script fell back to a bare `node` and could fail silently in Claude Code hooks.
+  // This static pin guards the source line; the runtime tests above exercise the
+  // script with a normal PATH and would not catch a stripped-PATH regression.
+  it('build-memory-index.sh: sources _resolve-node.sh for nvm/stripped-PATH safety', () => {
+    const src = fs.readFileSync(BUILD_SCRIPT, 'utf8');
+    expect(src).toMatch(/\.\s*"\$SCRIPT_DIR\/_resolve-node\.sh"/);
+    expect(src).toMatch(/SCRIPT_DIR=/);
+  });
+
   // Pass 5 fix #8: build-memory-index.sh must (a) strip a trailing CR from each
   // frontmatter line so a teammate-pushed CRLF .md doesn't leak \r into the injected
   // title/tags, and (b) parse block-sequence tags (tags:\n  - a\n  - b) so a
@@ -420,6 +431,52 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(vectorLine, 'expected an npm install line pulling @huggingface/transformers').toBeDefined();
     expect(vectorLine).toContain('--no-save');
     expect(vectorLine).not.toMatch(/npm install\s+--save\b/);
+  });
+
+  // Pass 6 fix: install.sh's org-config block used to delete allowedEmailDomains
+  // whenever ORG_DOMAIN was empty, so a non-interactive re-run such as
+  // `./install.sh --org-repo ... --yes` silently wiped an existing work-email
+  // allowlist. The fix deletes the array only when the user explicitly blanks the
+  // domain; a --yes re-run with no --allowed-email-domain must preserve it.
+  it('install.sh: --yes re-run preserves existing allowedEmailDomains when domain is omitted', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-domain-'));
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    // claude stub: MCP get/add-json are no-ops so the install reaches Step 6.
+    const claudeStub = path.join(binDir, 'claude');
+    fs.writeFileSync(claudeStub, [
+      '#!/usr/bin/env bash',
+      'if [ "$1" = "mcp" ] && [ "$2" = "get" ]; then exit 0; fi',
+      'if [ "$1" = "mcp" ] && [ "$2" = "add-json" ]; then exit 0; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(claudeStub, 0o755);
+    // gh stub: pretend authenticated and that `gh repo clone` succeeds so the
+    // install does not hit the network in Step 6.
+    const ghStub = path.join(binDir, 'gh');
+    fs.writeFileSync(ghStub, '#!/usr/bin/env bash\nexit 0\n');
+    fs.chmodSync(ghStub, 0o755);
+
+    const run = (extraArgs: string[]) => spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector', ...extraArgs], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+    });
+
+    try {
+      const first = run(['--org-repo', 'https://github.com/o/r.git', '--allowed-email-domain', 'example.com']);
+      expect(first.status).toBe(0);
+      const cfgPath = path.join(home, '.total-recall', 'config.json');
+      const cfg1 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      expect(cfg1.allowedEmailDomains).toEqual(['example.com']);
+
+      const second = run(['--org-repo', 'https://github.com/o/r.git']);
+      expect(second.status).toBe(0);
+      const cfg2 = JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
+      expect(cfg2.allowedEmailDomains).toEqual(['example.com']);
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
   });
 }, 60000);
 

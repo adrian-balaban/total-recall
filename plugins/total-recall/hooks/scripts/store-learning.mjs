@@ -91,9 +91,23 @@ process.stdin.on('end', () => {
       errors++; continue;
     }
 
+    // The `org` namespace is reserved for the git-synced org vault. PreCompact
+    // extracts must never land there or claim the org tag — they would be silently
+    // ignored by reconcileIndex (which skips a personal-vault `org/` dir) and would
+    // pollute the org/personal mutual-exclusion checks.
+    if (String(obj.category ?? '').toLowerCase() === 'org') { errors++; continue; }
+    if (Array.isArray(obj.tags) && obj.tags.some(t => String(t).toLowerCase() === 'org')) { errors++; continue; }
+
     const category = obj.category && /^[a-z0-9_-]+$/i.test(obj.category) ? obj.category : 'knowledge';
     const dir = path.join(VAULT, category);
     try { fs.mkdirSync(dir, { recursive: true }); } catch { errors++; continue; }
+
+    // A symlinked category dir (planted by a teammate or a bad config) would let
+    // an extract escape the personal vault. lstat + isDirectory + !isSymbolicLink
+    // keeps writes inside the real vault only.
+    let dirStat;
+    try { dirStat = fs.lstatSync(dir); } catch { errors++; continue; }
+    if (!dirStat.isDirectory() || dirStat.isSymbolicLink()) { errors++; continue; }
 
     const slug = slugify(obj.title);
     const filePath = path.join(dir, `${slug}.md`);

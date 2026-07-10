@@ -54,6 +54,7 @@ function git(cwd, args, opts = {}) {
     // closed by --no-recurse-submodules on the pull below, not by blocking file://.
     env: {
       ...process.env,
+      GIT_TERMINAL_PROMPT: '0',
       GIT_CONFIG_COUNT: '1',
       GIT_CONFIG_KEY_0: 'protocol.ext.allow',
       GIT_CONFIG_VALUE_0: 'never',
@@ -115,6 +116,12 @@ function loadOrgIndex(indexPath) {
   }
 }
 
+function normalizeTags(data) {
+  if (Array.isArray(data.tags)) return data.tags;
+  if (typeof data.tags === 'string' && data.tags.length > 0) return [data.tags];
+  return [];
+}
+
 function updateOrgIndex(key, data, content) {
   const indexPath = path.join(ORG_VAULT, 'index.json');
   const index = loadOrgIndex(indexPath);
@@ -122,7 +129,7 @@ function updateOrgIndex(key, data, content) {
   index[key] = {
     key,
     title: data.title ?? key,
-    tags: Array.isArray(data.tags) ? data.tags : [],
+    tags: normalizeTags(data),
     author: data.author ?? '',
     updated: data.updated ?? now,
     created: data.created ?? now,
@@ -297,7 +304,7 @@ async function main() {
         // unlinked by the TS side, so existsSync is false and this check is skipped
         // naturally — the guard only ever fires for the refused (force=false) case.
         if (!force) {
-          const tags = Array.isArray(data.tags) ? data.tags : [];
+          const tags = normalizeTags(data);
           if (tags.includes('no-prune')) {
             console.error(`Refusing to delete org key ${key}: tagged 'no-prune' (immortal). Pass force=true to override.`);
             process.exit(0);
@@ -323,7 +330,7 @@ async function main() {
   // fails — staging it would risk a later blind `git add -A` sweeping it up).
   const raw = fs.readFileSync(orgFile, 'utf8');
   const { data, content } = parseFrontmatter(raw);
-  const tags = Array.isArray(data.tags) ? data.tags : [];
+  const tags = normalizeTags(data);
 
   if (!tags.includes('org')) {
     console.log(`Skipping ${key} — not tagged org`);

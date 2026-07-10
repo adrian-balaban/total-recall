@@ -273,7 +273,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
   ],
 }));
 
-// Tool dispatch table — replaces the 12-case switch with a lookup so adding a
+// Tool dispatch table — replaces the large tool-case switch with a lookup so adding a
 // tool is a one-line import + one entry below. All handlers return `any`; the
 // async/sync mix (recall_memory returns a Promise, the rest are synchronous)
 // is folded into a uniform await on the caller side below.

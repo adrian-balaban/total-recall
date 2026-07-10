@@ -1,7 +1,7 @@
 {
   "name": "total-recall",
-  "version": "1.0.99",
-  "description": "Persistent memory MCP server (12 tools) with hooks for session-start index injection, org-vault auto-sync, and pre-compact learning extraction.",
+  "version": "1.0.100",
+  "description": "Persistent memory MCP server (17 tools) with hooks for session-start index injection, org-vault auto-sync, and pre-compact learning extraction.",
   "mcpServers": {
     "total-recall": {
       "command": "node",

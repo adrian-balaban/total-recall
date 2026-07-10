@@ -20,6 +20,17 @@ function has(bin: string): boolean {
 }
 const OK = has('node');
 
+// Symlinks are needed to plant the category-escape vector. Linux/macOS allow them;
+// skip on a FS that doesn't.
+const CAN_SYMLINK = (() => {
+  try {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-store-sym-'));
+    fs.symlinkSync('nonexistent-target', path.join(d, 'link'));
+    fs.rmSync(d, { recursive: true, force: true });
+    return true;
+  } catch { return false; }
+})();
+
 let tmpHome: string;
 let vault: string;
 let prevHome: string | undefined;
@@ -95,5 +106,45 @@ suite('store-learning.mjs clamps importanceScore to [0, 1] on write', () => {
   it('preserves a normal in-range value (0.7)', () => {
     runMjs([line('clamp-normal', 0.7)]);
     expect(readImportance('clamp-normal')).toBeCloseTo(0.7);
+  });
+
+  // Pass 6 fix: the direct PreCompact write path must enforce the same org/personal
+  // namespace invariants as store.ts. A model-extracted learning with category 'org'
+  // or tag 'org' would otherwise be written to personal-vault/org/ and ignored by
+  // reconcileIndex, polluting the reserved org key prefix.
+  it('rejects category "org" to keep the org namespace reserved', () => {
+    runMjs([JSON.stringify({
+      title: 'Org Category',
+      content: '## Executive Summary\n\nShould not land in org/.\n',
+      tags: ['extract'],
+      category: 'org',
+    })]);
+    expect(fs.existsSync(path.join(vault, 'org', 'org-category.md'))).toBe(false);
+  });
+
+  it('rejects a line tagged "org" so extracts never masquerade as org memories', () => {
+    runMjs([JSON.stringify({
+      title: 'Org Tag',
+      content: '## Executive Summary\n\nOrg tag must be rejected.\n',
+      tags: ['org'],
+      category: 'knowledge',
+    })]);
+    expect(fs.existsSync(path.join(vault, 'knowledge', 'org-tag.md'))).toBe(false);
+  });
+
+  const symTest = CAN_SYMLINK ? it : it.skip;
+  symTest('rejects a symlinked category directory to prevent writes outside the vault', () => {
+    const outside = path.join(tmpHome, 'outside');
+    fs.mkdirSync(outside, { recursive: true });
+    const evil = path.join(vault, 'evil');
+    fs.symlinkSync(outside, evil);
+    runMjs([JSON.stringify({
+      title: 'Symlink Escape',
+      content: '## Executive Summary\n\nShould not escape the vault.\n',
+      tags: ['extract'],
+      category: 'evil',
+    })]);
+    expect(fs.existsSync(path.join(outside, 'symlink-escape.md'))).toBe(false);
+    expect(fs.existsSync(path.join(vault, 'evil', 'symlink-escape.md'))).toBe(false);
   });
 }, 60000);

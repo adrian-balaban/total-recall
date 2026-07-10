@@ -160,6 +160,19 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     expect(remoteTree()).toContain('org-vault/architecture/block-tags.md');
   });
 
+  // Pass 6 fix: the .mjs used to assume `data.tags` is always an array, so a scalar
+  // `tags: org` (hand-edited or older frontmatter) was normalized to `[]` and the
+  // file was silently skipped. normalizeTags coerces a non-empty scalar string to a
+  // one-element array before all tag checks.
+  it('syncs a memory whose org tag is a scalar string', () => {
+    const key = 'org/architecture/scalar-tags';
+    const file = path.join(orgVault, 'architecture/scalar-tags.md');
+    writeMkdir(file, '---\ntitle: Scalar Tag Doc\ntags: org\nauthor: tester\n---\n## Executive Summary\n\nScalar tag doc.\n');
+    const res = runMjs(key);
+    expect(res.stdout).not.toContain('not tagged org');
+    expect(remoteTree()).toContain('org-vault/architecture/scalar-tags.md');
+  });
+
   // Pass 2 fix #4: a teammate with push access plants a symlink `architecture/leak.md`
   // → an outside file in the shared org vault; git pull preserves it. The PostToolUse
   // sync fires (even on a failed store_memory over that key), readFileSync follows the
