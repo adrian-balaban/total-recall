@@ -241,8 +241,11 @@ async function main() {
     console.error(`Org key escapes vault: ${key}`);
     process.exit(0);
   }
-  const relFile = path.relative(ORG_VAULT_DIR, orgFile);     // e.g. org-vault/architecture/foo.md
-  const relIndex = path.relative(ORG_VAULT_DIR, path.join(ORG_VAULT, 'index.json'));
+  // Git pathspecs always use `/`; on Windows path.relative yields `\`-separated
+  // paths that `git add --` treats as literal names (no match → sync no-op).
+  const toGitPath = (p) => p.split(path.sep).join('/');
+  const relFile = toGitPath(path.relative(ORG_VAULT_DIR, orgFile));     // e.g. org-vault/architecture/foo.md
+  const relIndex = toGitPath(path.relative(ORG_VAULT_DIR, path.join(ORG_VAULT, 'index.json')));
 
   // store_memory writes org memories DIRECTLY into the org-vault working tree (which
   // lives on the `org-vault` branch after pull-org-vault.sh runs at session start). The

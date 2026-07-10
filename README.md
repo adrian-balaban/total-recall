@@ -5,15 +5,16 @@ Repository containing the **total-recall** plugin — a persistent, searchable m
 ## 🔌 Main Plugin
 
 *   **[total-recall](plugins/total-recall)**: Persistent memory plugin.
-    *   Exposes 12 MCP tools for knowledge management.
+    *   Exposes 17 MCP tools for knowledge management (CRUD, hybrid search, semantic rerank, bulk export/import/delete, confirm/flag feedback).
     *   Wires lifecycle hooks (SessionStart, PostToolUse/AfterTool, PreCompact/PreCompress, SessionEnd) for automated context injection and sync.
     *   Uses a dual-vault architecture: personal memories stay local, while `org`-tagged memories sync to a shared Git repository through a fail-closed privacy filter.
     *   Implements hybrid search (TF-IDF + Ebbinghaus memory decay, fused optionally with vector embeddings).
-    *   Includes a one-shot `install.sh` setup script.
+    *   Includes a one-shot `install.sh` setup script with two profiles (default: no optional deps; complete: local vector search). Works on Linux, macOS, and Windows (Git Bash).
 
-For detailed setup, configuration options, client compatibility matrices, and developer documentation, please refer to the main plugin page:
+For detailed features, configuration options, client compatibility matrices, and developer documentation, please refer to the main plugin page:
 
 👉 **[Go to total-recall Plugin Documentation](plugins/total-recall/README.md)**
+👉 **[Installation guide (INSTALL.md)](plugins/total-recall/INSTALL.md)**
 
 ## 💡 Proactive Memory Saving
 

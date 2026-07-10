@@ -22,7 +22,19 @@
 # Usage:
 #   ./install.sh [options]
 #
+# On start (interactive, unless a profile flag or --vector/--no-vector/-y is
+# given) the script asks which install profile you want:
+#   a. Default  — no optional dependencies, no local LLM. TF-IDF + Ebbinghaus
+#                 search only; smallest footprint, works air-gapped.
+#   b. Complete — everything: hybrid vector search with a local embedding
+#                 model (HuggingFace MiniLM via @huggingface/transformers +
+#                 sqlite-vec, ~200 MB on first use).
+#
 # Options:
+#   --default                 Non-interactive profile a (no optional deps, no
+#                             local LLM). Same as --no-vector.
+#   --complete                Non-interactive profile b (vector search + local
+#                             embeddings). Same as --vector.
 #   --plugin-root PATH        Path to the total-recall plugin dir
 #                             (default: this script's own directory)
 #   --standalone              Wire hooks into ~/.claude/settings.json.
@@ -55,6 +67,14 @@
 #                             prompts (org vault / vector search) unless their
 #                             flags were given
 #   -h, --help                Show this help and exit
+#
+# Windows:
+#   Run this script from Git Bash (ships with Git for Windows). Claude Code on
+#   Windows also runs the plugin hooks through Git Bash, so having it installed
+#   covers both. Notes:
+#     - `flock` is not available in Git Bash — org-sync coalescing degrades
+#       gracefully to one sync per write (handled in sync-org-memory.sh).
+#     - Use a Windows Node.js (node.exe on PATH); WSL node won't be visible.
 #
 # Prerequisites:
 #   - Node.js v18+
@@ -187,8 +207,8 @@ while [ $# -gt 0 ]; do
     --copilot)             COPILOT=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
-    --vector)              VECTOR="yes"; shift;;
-    --no-vector)           VECTOR="no"; shift;;
+    --vector|--complete)   VECTOR="yes"; shift;;
+    --no-vector|--default) VECTOR="no"; shift;;
     -y|--yes)              ASSUME_YES=1; shift;;
     -h|--help)             usage; exit 0;;
     *) die "Unknown option: $1  (try --help)";;
@@ -196,9 +216,33 @@ while [ $# -gt 0 ]; do
 done
 
 # --------------------------------------------------------------------------
+# Step 0 — Install profile
+# --------------------------------------------------------------------------
+# Ask up front which profile to install, unless the choice is already implied
+# by a flag (--vector/--no-vector/--complete/--default) or -y (defaults apply).
+if [ -z "$VECTOR" ] && [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
+  step "Install profile"
+  info "a. Default  — no optional dependencies, no local LLM (TF-IDF search only)"
+  info "b. Complete — hybrid vector search with local embeddings (~200 MB on first use)"
+  read -rp "  Which profile? [A/b] " PROFILE_REPLY
+  case "${PROFILE_REPLY:-a}" in
+    [Bb]*) VECTOR="yes"; ok "Profile: complete (vector search + local embeddings)";;
+    *)     VECTOR="no";  ok "Profile: default (no optional dependencies)";;
+  esac
+fi
+
+# --------------------------------------------------------------------------
 # Prerequisites
 # --------------------------------------------------------------------------
 step "Prerequisites"
+# Windows (Git Bash / MSYS) awareness — the script works there, with caveats.
+case "$(uname -s 2>/dev/null)" in
+  MINGW*|MSYS*|CYGWIN*)
+    info "Windows (Git Bash) detected."
+    command -v flock >/dev/null 2>&1 \
+      || warn "'flock' not available — org-sync coalescing degrades to one sync per write (safe)."
+    ;;
+esac
 command -v node >/dev/null 2>&1 || die "Node.js not found on PATH (need v18+)."
 NODE_MAJOR=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
 if [ "$NODE_MAJOR" -lt 18 ]; then

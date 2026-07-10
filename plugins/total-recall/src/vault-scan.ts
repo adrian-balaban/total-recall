@@ -51,7 +51,15 @@ export function slugify(title: string): string {
 
 export function keyFromPath(filePath: string, isOrg: boolean): string {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path.relative(base, filePath).replace(/\.md$/, '');
+  // Keys always use `/` separators regardless of platform: on Windows
+  // path.relative returns `\`-separated segments, which would produce keys like
+  // `architecture\foo` that deriveFilePathFromKey rejects (it treats `\` as a
+  // path-escape attempt), making every memory invisible to the index.
+  const rel = path
+    .relative(base, filePath)
+    .split(path.sep)
+    .join('/')
+    .replace(/\.md$/, '');
   return isOrg ? `org/${rel}` : rel;
 }
 

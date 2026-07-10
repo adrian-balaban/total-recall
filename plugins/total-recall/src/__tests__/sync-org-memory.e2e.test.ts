@@ -22,6 +22,13 @@ const GIT_ENV: NodeJS.ProcessEnv = {
   GIT_COMMITTER_NAME: 'Tester',
   GIT_COMMITTER_EMAIL: 'tester@example.com',
   GIT_TERMINAL_PROMPT: '0',
+  // The test's "remote" is a local bare repo it operates in directly
+  // (symbolic-ref, ls-tree). A user-global `safe.bareRepository=explicit`
+  // (a common hardening setting) would make every such call fail; override it
+  // for the test processes only via git's env-config mechanism.
+  GIT_CONFIG_COUNT: '1',
+  GIT_CONFIG_KEY_0: 'safe.bareRepository',
+  GIT_CONFIG_VALUE_0: 'all',
 };
 
 function has(bin: string): boolean {

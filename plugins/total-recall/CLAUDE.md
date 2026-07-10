@@ -21,7 +21,7 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## Install / setup
 
-`install.sh` (plugin root) is the one-shot, state-aware setup script: vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.
+`install.sh` (plugin root) is the one-shot, state-aware setup script: profile prompt (a. default — no optional deps / b. complete — vector search) → vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--default`/`--complete`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). User-facing install docs live in `INSTALL.md` (incl. Windows/Git Bash notes) — keep it in sync with install.sh flags. Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.
 
 ## Build artifacts (`dist/`)
 

@@ -16150,7 +16150,7 @@ function slugify2(title) {
 }
 function keyFromPath(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path2.relative(base, filePath).replace(/\.md$/, "");
+  const rel = path2.relative(base, filePath).split(path2.sep).join("/").replace(/\.md$/, "");
   return isOrg ? `org/${rel}` : rel;
 }
 function tokenEstimate(text) {
@@ -17309,7 +17309,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.100" : null.version;
+var PLUGIN_VERSION = true ? "1.0.101" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
