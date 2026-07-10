@@ -132,6 +132,24 @@ suite('store-learning.mjs clamps importanceScore to [0, 1] on write', () => {
     expect(fs.existsSync(path.join(vault, 'knowledge', 'org-tag.md'))).toBe(false);
   });
 
+  // T-F1: the pre-fix guard only rejected the exact string 'org' — a model-produced
+  // category:'org/architecture' passed through and wrote to personal-vault/org/architecture/,
+  // which reconcileIndex silently skips (it ignores the personal `org/` subtree). The
+  // fixed guard also rejects any `org/`-prefixed category. Pin the prefix form.
+  it('rejects a category with an org/ prefix (e.g. org/architecture) to prevent orphaned writes', () => {
+    runMjs([JSON.stringify({
+      title: 'Org Prefix Category',
+      content: '## Executive Summary\n\nShould not land in org/architecture/.\n',
+      tags: ['extract'],
+      category: 'org/architecture',
+    })]);
+    // The file must not be written anywhere under vault/org/
+    const orgDir = path.join(vault, 'org');
+    const leaked = fs.existsSync(orgDir) &&
+      fs.readdirSync(orgDir, { recursive: true } as any).some((f: any) => String(f).endsWith('.md'));
+    expect(leaked).toBe(false);
+  });
+
   const symTest = CAN_SYMLINK ? it : it.skip;
   symTest('rejects a symlinked category directory to prevent writes outside the vault', () => {
     const outside = path.join(tmpHome, 'outside');

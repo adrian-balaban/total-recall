@@ -281,6 +281,15 @@ export function markIndexFresh() {
 export function flushPending() {
   if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
+  // Capture whether a recalc was queued BEFORE clearing idfTimer. After clearing,
+  // `idfTimer` is null, so `idfTimer !== null` is always false — reading it after
+  // the clear would silently skip recalcIdfNow() in the 1-second window between
+  // the index.json write (which fires scheduleIdfRecalc + clears dirtyTokens) and
+  // the IDF recalc itself. A process exit in that window needs the recalc:
+  // dirtyTokens is false (the index timer cleared it) but the tokens DID change
+  // earlier (that's what triggered scheduleSave → scheduleIdfRecalc). Capture
+  // before clearing, not after.
+  const idfWasQueued = idfTimer !== null;
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
@@ -295,7 +304,7 @@ export function flushPending() {
   // reflects the current memIndex tokens, so when it does run the dirty flag is
   // satisfied — clear it either way so a subsequent (theoretical) same-process
   // save doesn't carry a stale "tokens changed" into an unneeded rebuild.
-  const needRecalc = dirtyTokens || idfTimer !== null;
+  const needRecalc = dirtyTokens || idfWasQueued;
   dirtyTokens = false;
   // Isolate the two writes: if saveNow throws (transient I/O), recalcIdfNow
   // must still run, and the throw must not propagate out of the SIGTERM/SIGINT

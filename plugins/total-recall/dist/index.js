@@ -16486,10 +16486,11 @@ function markIndexFresh() {
 function flushPending() {
   if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
+  const idfWasQueued = idfTimer !== null;
   if (idfTimer) clearTimeout(idfTimer);
   indexSaveTimer = null;
   idfTimer = null;
-  const needRecalc = dirtyTokens || idfTimer !== null;
+  const needRecalc = dirtyTokens || idfWasQueued;
   dirtyTokens = false;
   try {
     saveNow();

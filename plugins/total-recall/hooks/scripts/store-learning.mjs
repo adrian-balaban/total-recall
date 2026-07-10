@@ -93,9 +93,14 @@ process.stdin.on('end', () => {
 
     // The `org` namespace is reserved for the git-synced org vault. PreCompact
     // extracts must never land there or claim the org tag — they would be silently
-    // ignored by reconcileIndex (which skips a personal-vault `org/` dir) and would
-    // pollute the org/personal mutual-exclusion checks.
-    if (String(obj.category ?? '').toLowerCase() === 'org') { errors++; continue; }
+    // ignored by reconcileIndex (which skips a personal-vault `org/` subtree) and
+    // would pollute the org/personal mutual-exclusion checks. Block the exact string
+    // AND any `org/`-prefixed value (e.g. `org/architecture` from a drifting model):
+    // the reconcileIndex personal-vault walk skips the ENTIRE `org/` subtree, so a
+    // `category: 'org/architecture'` write silently orphans the file. Mirrors the
+    // prefix guard in src/tools/store.ts:100 (`category === 'org' || startsWith('org/')`).
+    const catLower = String(obj.category ?? '').toLowerCase();
+    if (catLower === 'org' || catLower.startsWith('org/')) { errors++; continue; }
     if (Array.isArray(obj.tags) && obj.tags.some(t => String(t).toLowerCase() === 'org')) { errors++; continue; }
 
     const category = obj.category && /^[a-z0-9_-]+$/i.test(obj.category) ? obj.category : 'knowledge';

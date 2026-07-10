@@ -25,7 +25,7 @@ vi.mock('../tfidf.js', async () => {
   };
 });
 
-import { flushPending, scheduleAccessSave, scheduleSave } from '../persistence.js';
+import { flushPending, scheduleAccessSave, scheduleSave, scheduleIdfRecalc } from '../persistence.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
 
@@ -75,5 +75,26 @@ describe('flushPending read-only recalc gate (#4)', () => {
     expect(() => flushPending()).not.toThrow();
     expect(rebuildInvertedIndex).toHaveBeenCalled();
     delete (memIndex as any)['knowledge/write-probe'];
+  });
+
+  // T-F2 regression: the pre-fix code read `idfTimer !== null` AFTER setting
+  // `idfTimer = null` (line 286 before 298), so `needRecalc` was always false
+  // when `dirtyTokens` was also false — skipping recalcIdfNow even though a
+  // recalc was queued. This window opens in the 1 second between the index.json
+  // write (which fires scheduleIdfRecalc and clears dirtyTokens) and the +2s
+  // IDF recalc itself. Pin the fix: when only idfTimer is armed (no dirtyTokens),
+  // flushPending must still call rebuildInvertedIndex.
+  it('still runs rebuildInvertedIndex when only idfTimer was queued (dirtyTokens=false)', () => {
+    seed('knowledge/idf-pending-probe');
+    // Arm only the idfTimer. scheduleIdfRecalc sets idfTimer without touching dirtyTokens.
+    scheduleIdfRecalc();
+    // dirtyTokens is false (no scheduleSave); idfTimer is set.
+    // The pre-fix code: needRecalc = dirtyTokens || idfTimer !== null  (after idfTimer=null)
+    //                 = false || null !== null = false  → skipped rebuild.
+    // The fixed code:  needRecalc = dirtyTokens || idfWasQueued
+    //                 = false || true = true  → runs rebuild.
+    expect(() => flushPending()).not.toThrow();
+    expect(rebuildInvertedIndex).toHaveBeenCalled();
+    delete (memIndex as any)['knowledge/idf-pending-probe'];
   });
 });
