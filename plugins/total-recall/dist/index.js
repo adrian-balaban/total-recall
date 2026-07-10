@@ -16152,6 +16152,7 @@ async function listVectorKeys(dbPath) {
 // src/embeddings.ts
 var pipeline = null;
 var loadPromise = null;
+var testEmbedder = void 0;
 async function getExternalEmbedding(text) {
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
@@ -16211,6 +16212,7 @@ async function getExternalEmbedding(text) {
   return null;
 }
 async function getEmbedder() {
+  if (testEmbedder !== void 0) return testEmbedder;
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
   if (provider !== "huggingface") {
@@ -16262,6 +16264,8 @@ async function flushEmbeddings(timeoutMs = 2e3) {
   }
 }
 function isVectorAvailable() {
+  if (testEmbedder !== void 0 && testEmbedder !== null) return true;
+  if (testEmbedder === null) return false;
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
   if (provider !== "huggingface") return true;
@@ -16890,7 +16894,11 @@ function updateMemory(args) {
   contentCache.delete(key);
   registerDocument(key, meta2.title, meta2.tags, meta2.contentPreview);
   scheduleSave();
-  if (content !== void 0) embedAndUpsert(key, newContent);
+  const previousTags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+  const tagsChanged = Array.isArray(tags) && JSON.stringify(tags) !== JSON.stringify(previousTags);
+  const previousImportance = clampImportanceScore(parsed.data.importanceScore);
+  const importanceChanged = importanceScore !== void 0 && Number(importanceScore) !== previousImportance;
+  if (content !== void 0 || tagsChanged || importanceChanged) embedAndUpsert(key, newContent);
   return { key, message: "Memory updated." };
 }
 function deleteMemory(args) {
@@ -16922,7 +16930,7 @@ function rebuildIndex() {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.88" : null.version;
+var PLUGIN_VERSION = true ? "1.0.89" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

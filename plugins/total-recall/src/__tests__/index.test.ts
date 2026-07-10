@@ -2102,12 +2102,30 @@ describe('embed callback — embedAndUpsert called on write', () => {
     expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, '\n## Executive Summary\n\nupdated vector content');
   });
 
-  it('update_memory does NOT call embedAndUpsert when content is omitted', async () => {
+  it('update_memory calls embedAndUpsert when tags change even if content is omitted (G6)', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Embed Tag Test', content: 'orig', tags: [], category: 'knowledge',
+    }));
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
+    await callTool('update_memory', { key, tags: ['newtag'] });
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, expect.stringContaining('orig'));
+  });
+
+  it('update_memory calls embedAndUpsert when importanceScore changes even if content is omitted (G6)', async () => {
+    const { key } = result(await callTool('store_memory', {
+      title: 'Embed IS Test', content: 'orig', tags: [], category: 'knowledge', importanceScore: 0.3,
+    }));
+    vi.mocked(embedMod.embedAndUpsert).mockClear();
+    await callTool('update_memory', { key, importanceScore: 0.9 });
+    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, expect.stringContaining('orig'));
+  });
+
+  it('update_memory does NOT call embedAndUpsert when neither content, tags, nor importanceScore change', async () => {
     const { key } = result(await callTool('store_memory', {
       title: 'Embed Skip Test', content: 'orig', tags: [], category: 'knowledge',
     }));
     vi.mocked(embedMod.embedAndUpsert).mockClear();
-    await callTool('update_memory', { key, tags: ['newtag'] });
+    await callTool('update_memory', { key, sessionId: 'sess-only' });
     expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
   });
 

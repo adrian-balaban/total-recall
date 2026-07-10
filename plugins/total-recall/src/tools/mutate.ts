@@ -107,11 +107,17 @@ export function updateMemory(args: any): any {
   registerDocument(key, meta.title, meta.tags, meta.contentPreview);
   scheduleSave();
 
-  // `content !== undefined`, not truthy: an explicit `content: ''` is a
-  // legitimate "clear the body" update (see newContent above) — the truthy
-  // check skipped the vector upsert for it, leaving the OLD body's embedding
-  // live in vec_memories (hybrid search kept surfacing wiped content).
-  if (content !== undefined) embedAndUpsert(key, newContent);
+  // Re-embed whenever a search-relevant dimension changes: content, tags, or
+  // importanceScore. A tag-only or importance-only update changes what should
+  // surface in hybrid search / pruning, so the old vector (built from the stale
+  // tags/score context) must be replaced. Use coerced previous values so a
+  // malformed scalar tags arg is treated as "no change" rather than a false
+  // diff against an array-typed default.
+  const previousTags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
+  const tagsChanged = Array.isArray(tags) && JSON.stringify(tags) !== JSON.stringify(previousTags);
+  const previousImportance = clampImportanceScore(parsed.data.importanceScore);
+  const importanceChanged = importanceScore !== undefined && Number(importanceScore) !== previousImportance;
+  if (content !== undefined || tagsChanged || importanceChanged) embedAndUpsert(key, newContent);
 
   return { key, message: 'Memory updated.' };
 }

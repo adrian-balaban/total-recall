@@ -8,6 +8,30 @@ import { recordError } from './state.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
+let testEmbedder: ((text: string) => Promise<number[] | null>) | null | undefined = undefined;
+
+/**
+ * Test-only seam: inject a fake embedder (or `null` to force the unavailable
+ * fallback) without loading the real optional dependency. The env guard
+ * prevents accidental use in production; Vitest sets NODE_ENV=test.
+ */
+export function __testSetEmbedder(
+  embedder: ((text: string) => Promise<number[] | null>) | null
+): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('__testSetEmbedder is test-only');
+  }
+  if (embedder === null) {
+    // Simulate "model unavailable": getEmbedder returns null.
+    testEmbedder = null;
+    loadPromise = Promise.resolve(null);
+    pipeline = null;
+  } else {
+    testEmbedder = embedder;
+    loadPromise = Promise.resolve(embedder);
+    pipeline = embedder as (text: string) => Promise<number[]>;
+  }
+}
 
 async function getExternalEmbedding(text: string): Promise<number[] | null> {
   const config = loadConfig();
@@ -74,6 +98,7 @@ async function getExternalEmbedding(text: string): Promise<number[] | null> {
 }
 
 async function getEmbedder(): Promise<((text: string) => Promise<number[] | null>) | null> {
+  if (testEmbedder !== undefined) return testEmbedder;
   const config = loadConfig();
   const provider = config.embeddingProvider || 'huggingface';
   if (provider !== 'huggingface') {
@@ -155,6 +180,8 @@ export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
 // consult this — it always attempts embed() when hybrid is requested and degrades
 // to TF-IDF via the embed()->null path, which is what triggers the lazy load.
 export function isVectorAvailable(): boolean {
+  if (testEmbedder !== undefined && testEmbedder !== null) return true;
+  if (testEmbedder === null) return false;
   const config = loadConfig();
   const provider = config.embeddingProvider || 'huggingface';
   if (provider !== 'huggingface') return true;
