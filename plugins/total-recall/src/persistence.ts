@@ -11,6 +11,7 @@ import {
 import { clampImportanceScore } from './ebbinghaus.js';
 import { memIndex, invertedIndex, recordError } from './state.js';
 import { rebuildInvertedIndex } from './tfidf.js';
+import { isReservedKey } from './vault-scan.js';
 import * as crypto from 'crypto';
 
 // Debounce timers live here (only this module touches them).
@@ -96,6 +97,10 @@ function atomicWrite(p: string, data: string) {
 // the entry rather than indexing a path that points outside the vault.
 export function deriveFilePathFromKey(key: unknown): string | null {
   if (typeof key !== 'string' || !key) return null;
+  // Prototype-pollution guard: keys like `__proto__`, `constructor`, or
+  // `prototype` (or any segment containing them) must never become property
+  // names on memIndex or the serialized index.json.
+  if (isReservedKey(key)) return null;
   if (key.includes('\0') || key.includes('\\')) return null;
   const isOrg = key.startsWith('org/');
   const rel = isOrg ? key.slice('org/'.length) : key;

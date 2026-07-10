@@ -4,6 +4,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawnSync } from 'child_process';
 
+const ME = os.userInfo().username;
+
 // End-to-end test of scripts/sync-org-memory.mjs against a real (local, bare) git
 // remote. Proves the #1 fix — org sync actually commits+pushes the file already on
 // disk in the org-vault working tree — plus the delete, skip, and privacy-block
@@ -118,7 +120,8 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
 
   it('removes a memory from the remote when invoked with --delete', () => {
     const key = 'org/decisions/adopt-kafka';
-    writeOrgMemory('decisions/adopt-kafka', { title: 'Adopt Kafka', tags: ['org'], author: 'tester' }, '## Executive Summary\n\nUse Kafka for the event bus.\n');
+    // Author must match the local OS user or the delete guard refuses authorship.
+    writeOrgMemory('decisions/adopt-kafka', { title: 'Adopt Kafka', tags: ['org'], author: ME }, '## Executive Summary\n\nUse Kafka for the event bus.\n');
     runMjs(key);
     expect(remoteTree()).toContain('org-vault/decisions/adopt-kafka.md');
     runMjs(key, ['--delete']);
@@ -201,7 +204,9 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
   // TS side; here we invoke the .mjs directly with the file present to pin the guard.
   it('refuses to --delete a no-prune org memory without --force (immortal guard; no push)', () => {
     const key = 'org/decisions/immortal-adr';
-    writeOrgMemory('decisions/immortal-adr', { title: 'Immortal ADR', tags: ['org', 'no-prune'], author: 'tester' }, '## Executive Summary\n\nA decision that must not disappear.\n');
+    // Author must match the local OS user so we reach the no-prune guard, not the
+    // authorship guard.
+    writeOrgMemory('decisions/immortal-adr', { title: 'Immortal ADR', tags: ['org', 'no-prune'], author: ME }, '## Executive Summary\n\nA decision that must not disappear.\n');
     runMjs(key); // store + push
     expect(remoteTree()).toContain('org-vault/decisions/immortal-adr.md');
     const res = runMjs(key, ['--delete']); // refused — guard fires before unlink/commit
@@ -211,11 +216,42 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
 
   it('removes a no-prune org memory with --delete --force (deliberate teardown syncs)', () => {
     const key = 'org/decisions/teardown-adr';
-    writeOrgMemory('decisions/teardown-adr', { title: 'Teardown ADR', tags: ['org', 'no-prune'], author: 'tester' }, '## Executive Summary\n\nDeliberately retired.\n');
+    writeOrgMemory('decisions/teardown-adr', { title: 'Teardown ADR', tags: ['org', 'no-prune'], author: ME }, '## Executive Summary\n\nDeliberately retired.\n');
     runMjs(key);
     expect(remoteTree()).toContain('org-vault/decisions/teardown-adr.md');
     runMjs(key, ['--delete', '--force']);
     expect(remoteTree()).not.toContain('org-vault/decisions/teardown-adr.md');
+  });
+
+  // Pass 3 fix: org-author guard. The .mjs delete path must verify the file's frontmatter
+  // author matches the local OS user; force=true overrides no-prune but NOT authorship.
+  it('refuses to --delete an org memory authored by another user', () => {
+    const key = 'org/decisions/foreign';
+    writeOrgMemory('decisions/foreign', { title: 'Foreign ADR', tags: ['org'], author: 'someone-else' }, '## Executive Summary\n\nNot mine.\n');
+    runMjs(key); // store + push
+    expect(remoteTree()).toContain('org-vault/decisions/foreign.md');
+    const res = runMjs(key, ['--delete']);
+    expect(res.stderr).toMatch(/authored by someone-else/);
+    expect(remoteTree()).toContain('org-vault/decisions/foreign.md');
+  });
+
+  it('refuses --delete --force for another author (force does not override authorship)', () => {
+    const key = 'org/decisions/foreign-force';
+    writeOrgMemory('decisions/foreign-force', { title: 'Foreign Force ADR', tags: ['org', 'no-prune'], author: 'someone-else' }, '## Executive Summary\n\nNot mine.\n');
+    runMjs(key); // store + push
+    expect(remoteTree()).toContain('org-vault/decisions/foreign-force.md');
+    const res = runMjs(key, ['--delete', '--force']);
+    expect(res.stderr).toMatch(/authored by someone-else/);
+    expect(remoteTree()).toContain('org-vault/decisions/foreign-force.md');
+  });
+
+  // Pass 3 fix: reserved-key guard. The org prefix + a reserved key segment must be
+  // rejected before any git write, matching the TS-side reserved-key guard.
+  it('rejects a reserved-key org memory at the entry point', () => {
+    const key = 'org/__proto__';
+    const res = runMjs(key);
+    expect(res.stderr).toMatch(/reserved/i);
+    expect(remoteTree()).not.toContain('org-vault/__proto__.md');
   });
 
   // #2: a corrupt org index.json (interrupted atomicWrite, bad manual edit, or a git-

@@ -22,22 +22,6 @@ async function getDb(dbPath: string): Promise<any> {
       const Database = (await import('better-sqlite3')).default;
       const d = new Database(dbPath);
       sqliteVec.load(d);
-      // sqlite-vec defaults to L2/Euclidean distance. Our embeddings are normalized
-      // (L2 = 1) and we want cosine similarity in [0, 1], so force the table to use
-      // cosine distance. An existing table created before this fix will still say
-      // FLOAT[384] with no metric; detect that and recreate so scores are comparable
-      // to cosine distance instead of raw L2.
-      const existing = d.prepare(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
-      ).get() as { sql: string } | undefined;
-      const needsRecreate = existing && !/distance_metric\s*=\s*cosine/i.test(existing.sql);
-      if (needsRecreate) {
-        d.exec("DROP TABLE vec_memories");
-      }
-      d.exec(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories
-        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384] distance_metric=cosine);
-      `);
       return d;
     } catch {
       // Only cache successful loads; a transient failure (missing optional dep,
@@ -50,9 +34,36 @@ async function getDb(dbPath: string): Promise<any> {
   return dbPromise;
 }
 
+function parseExistingDimension(sql: string): number | null {
+  const match = sql.match(/embedding\s+FLOAT\[(\d+)\]/i);
+  return match ? parseInt(match[1] as string, 10) : null;
+}
+
+// sqlite-vec requires a fixed dimension declared at table creation. The table is
+// created lazily on the first upsert/search that provides an embedding length, so
+// the dimension is driven by the incoming vectors rather than hardcoded to 384.
+// If an existing table was created with a different dimension or without the cosine
+// metric (pre-fix tables), drop and recreate it so scores stay comparable.
+function ensureVecTable(d: any, dim: number): void {
+  const existing = d.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+  ).get() as { sql: string } | undefined;
+  if (existing) {
+    const existingDim = parseExistingDimension(existing.sql);
+    const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
+    if (existingDim === dim && hasCosine) return;
+    d.exec("DROP TABLE vec_memories");
+  }
+  d.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories ` +
+    `USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
+  );
+}
+
 export async function upsertVector(dbPath: string, key: string, embedding: number[]): Promise<void> {
   const d = await getDb(dbPath);
   if (!d) return;
+  ensureVecTable(d, embedding.length);
   d.prepare(`INSERT OR REPLACE INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
     key,
     JSON.stringify(embedding)
@@ -66,6 +77,7 @@ export async function searchVector(
 ): Promise<Array<{ key: string; score: number }>> {
   const d = await getDb(dbPath);
   if (!d) return [];
+  ensureVecTable(d, queryEmbedding.length);
   const rows = d
     .prepare(
       `SELECT key, distance FROM vec_memories
@@ -79,7 +91,14 @@ export async function searchVector(
 export async function deleteVector(dbPath: string, key: string): Promise<void> {
   const d = await getDb(dbPath);
   if (!d) return;
-  d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
+  try {
+    d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
+  } catch (e: any) {
+    // A freshly-created db with no vectors yet has no vec_memories table.
+    // Treat a missing table as a no-op delete, not a fatal error.
+    if (e && typeof e.message === 'string' && /no such table/i.test(e.message)) return;
+    throw e;
+  }
 }
 
 // All keys currently present in the vector store. Returns null when the optional
@@ -91,6 +110,13 @@ export async function deleteVector(dbPath: string, key: string): Promise<void> {
 export async function listVectorKeys(dbPath: string): Promise<string[] | null> {
   const d = await getDb(dbPath);
   if (!d) return null;
-  const rows = d.prepare(`SELECT key FROM vec_memories`).all() as Array<{ key: string }>;
-  return rows.map(r => r.key);
+  try {
+    const rows = d.prepare(`SELECT key FROM vec_memories`).all() as Array<{ key: string }>;
+    return rows.map(r => r.key);
+  } catch (e: any) {
+    // A freshly-created db may not have the vec table yet if no upsert/search
+    // has run. Treat a missing table as an empty store, not a fatal error.
+    if (e && typeof e.message === 'string' && /no such table/i.test(e.message)) return [];
+    throw e;
+  }
 }

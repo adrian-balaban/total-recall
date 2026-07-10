@@ -4,7 +4,7 @@ import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir, NO_PRUNE_TAG } from '../paths.js';
-import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat } from '../vault-scan.js';
+import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat, isReservedKey } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { registerDocument } from '../tfidf.js';
 import { contentCache } from '../lru-cache.js';
@@ -112,6 +112,15 @@ export function storeMemory(args: any): any {
     key = keyFromPath(filePath, isOrg);
   }
 
+  // Prototype-pollution guard: keys like `__proto__`, `constructor`, or `prototype`
+  // (or any segment containing them) must never become property names on memIndex.
+  // deriveFilePathFromKey already rejects reserved explicit keys; this is defense-
+  // in-depth for the generated-key path and for any future code path that reaches
+  // here with a reserved key.
+  if (isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment.`);
+  }
+
   // Org-config guard (A3): refuse an org store when the shared org vault is not
   // configured. Otherwise ensureDir(catDir) below would create `~/.total-recall/
   // org/org-vault/<category>` AND write the memory file in an environment where
@@ -216,7 +225,10 @@ export function storeMemory(args: any): any {
     // spread below reset `sessions` to just `[sessionId]` — or `[]` when no new
     // session was supplied — discarding the accumulated session trail. Mirror
     // update_memory's dedupe-merge so a repeated overwrite never duplicates entries.
-    preservedSessions = existingFm.sessions;
+    // Coerce to an array: a hand-edited/teammate-pushed frontmatter with a scalar
+    // `sessions` value would otherwise be spread as a string (per-character) or
+    // throw "is not iterable" on a number, corrupting the session history.
+    preservedSessions = Array.isArray(existingFm.sessions) ? existingFm.sessions : [];
   }
 
   const now = new Date().toISOString();

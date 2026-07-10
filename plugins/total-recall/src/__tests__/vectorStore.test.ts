@@ -129,3 +129,98 @@ describe('vectorStore — success path with real sqlite', () => {
     expect(res).toEqual(['k/a']);
   });
 });
+
+// ─── Dynamic dimension handling ───────────────────────────────────────────────
+
+describe('vectorStore — dynamic dimension migration', () => {
+  const tmpDb = path.join(os.tmpdir(), `tr-vec-dim-${process.pid}.db`);
+  let execMock: ReturnType<typeof vi.fn>;
+  let prepareGet: ReturnType<typeof vi.fn>;
+  let prepareAll: ReturnType<typeof vi.fn>;
+  let prepareRun: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    execMock = vi.fn();
+    prepareGet = vi.fn().mockReturnValue(undefined);
+    prepareAll = vi.fn().mockReturnValue([]);
+    prepareRun = vi.fn();
+
+    vi.doMock('sqlite-vec', () => ({ load: vi.fn() }));
+    vi.doMock('better-sqlite3', () => ({
+      default: vi.fn(function (this: any) {
+        this.exec = execMock;
+        this.prepare = vi.fn().mockReturnValue({
+          run: prepareRun,
+          all: prepareAll,
+          get: prepareGet,
+        });
+      }),
+    }));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    try { fs.unlinkSync(tmpDb); } catch {}
+  });
+
+  function createSql(dim: number): string {
+    return `CREATE VIRTUAL TABLE vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine)`;
+  }
+
+  it('creates the vector table using the first embedding dimension', async () => {
+    const { upsertVector } = await import('../vectorStore.js');
+    await upsertVector(tmpDb, 'k/a', [1, 2, 3]);
+
+    const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
+    expect(createCalls.length).toBe(1);
+    expect((createCalls[0] as any[])[0]).toMatch(/FLOAT\[3\]/);
+    expect((createCalls[0] as any[])[0]).toMatch(/distance_metric=cosine/i);
+  });
+
+  it('migrates the table when the stored dimension differs from the embedding', async () => {
+    prepareGet.mockReturnValue({ sql: createSql(384) });
+    const { upsertVector } = await import('../vectorStore.js');
+
+    await upsertVector(tmpDb, 'k/a', [1, 2, 3]); // dimension 3, but table is 384
+
+    expect(execMock).toHaveBeenCalledWith('DROP TABLE vec_memories');
+    const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
+    expect(createCalls.length).toBe(1);
+    expect((createCalls[0] as any[])[0]).toMatch(/FLOAT\[3\]/);
+  });
+
+  it('keeps an existing table when dimension and metric already match', async () => {
+    prepareGet.mockReturnValue({ sql: createSql(3) });
+    const { upsertVector } = await import('../vectorStore.js');
+
+    await upsertVector(tmpDb, 'k/a', [1, 2, 3]);
+
+    expect(execMock).not.toHaveBeenCalledWith('DROP TABLE vec_memories');
+    const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
+    expect(createCalls.length).toBe(0);
+  });
+
+  it('migrates the table when distance_metric is not cosine', async () => {
+    prepareGet.mockReturnValue({ sql: 'CREATE VIRTUAL TABLE vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[3] distance_metric=l2);' });
+    const { upsertVector } = await import('../vectorStore.js');
+
+    await upsertVector(tmpDb, 'k/a', [1, 2, 3]);
+
+    expect(execMock).toHaveBeenCalledWith('DROP TABLE vec_memories');
+    const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
+    expect(createCalls.length).toBe(1);
+    expect((createCalls[0] as any[])[0]).toMatch(/distance_metric=cosine/i);
+  });
+
+  it('deleteVector and listVectorKeys tolerate a missing vec_memories table', async () => {
+    // Simulate the first vector operation failing with a "no such table" error.
+    const noSuchTable = new Error('no such table: vec_memories');
+    prepareAll.mockImplementation(() => { throw noSuchTable; });
+    prepareRun.mockImplementation(() => { throw noSuchTable; });
+
+    const { deleteVector, listVectorKeys } = await import('../vectorStore.js');
+    await expect(deleteVector(tmpDb, 'k/a')).resolves.toBeUndefined();
+    await expect(listVectorKeys(tmpDb)).resolves.toEqual([]);
+  });
+});

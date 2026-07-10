@@ -57,6 +57,12 @@ process_vault() {
   [ -d "$base" ] || return 0
   while IFS= read -r -d '' mdfile; do
     local rel="${mdfile#$base/}"
+    # Skip the `org/` subtree of the personal vault to keep the `org/` key prefix
+    # reserved for the org vault (mirrors src/vault-scan.ts reconcileIndex, which
+    # skips a personal-vault directory literally named `org`). Without this, a
+    # personal file at `personal-vault/org/foo.md` would be injected as key `org/foo`,
+    # colliding with org-vault keys and surfacing a memory the MCP tools never index.
+    if [ "$prefix" = "" ] && [ "$rel" != "${rel#org/}" ]; then continue; fi
     local key="$prefix${rel%.md}"
     local in_fm=0
     # Track an open block-sequence array (tags:\n  - a\n  - b). Only `tags` is

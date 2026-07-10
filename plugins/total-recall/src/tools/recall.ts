@@ -122,7 +122,11 @@ export async function recallMemory(args: any): Promise<any> {
 }
 
 export function searchIndex(args: any): any {
-  const { query, since, before, minScore = 0, excludeJournal = true, category } = args;
+  const { since, before, minScore = 0, excludeJournal = true, category } = args;
+  // Coerce `query` to a string at the boundary: a non-string value would otherwise
+  // reach tokenize() and throw inside text.toLowerCase(). Default to empty string
+  // (returns no results) rather than throwing.
+  const query = String(args.query ?? '');
   // Coerce `tags` at the boundary (mirrors get_memories_by_keys' keys coercion):
   // MCP does not enforce the inputSchema, so a caller can pass `tags: "org"` as
   // a scalar — `filterTags?.length` is truthy for a non-empty string and the

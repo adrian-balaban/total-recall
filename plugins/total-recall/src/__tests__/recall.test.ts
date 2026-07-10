@@ -4,7 +4,7 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-recall-' + process.pid;
 });
 
-import { recallMemory } from '../tools/recall.js';
+import { recallMemory, searchIndex } from '../tools/recall.js';
 import { memIndex } from '../state.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import type { MemoryMetadata } from '../types.js';
@@ -58,6 +58,14 @@ describe('recall_memory boundary hardening', () => {
     // Post-fix: String(args.query ?? '') produces a valid string.
     const res = await recallMemory({ query: 12345, hybrid: false });
     expect(Array.isArray(res)).toBe(true);
+  });
+
+  it('search_index coerces a non-string query to string', () => {
+    // search_index is the metadata-only variant of recall_memory; it must not
+    // crash when the MCP layer passes an unexpected non-string value.
+    expect(() => searchIndex({ query: 12345 })).not.toThrow();
+    expect(searchIndex({ query: 12345 })).toEqual([]);
+    expect(() => searchIndex({ query: null })).not.toThrow();
   });
 
   it('clamps a malformed minScore to 0 (no filtering)', async () => {

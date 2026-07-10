@@ -139,6 +139,15 @@ function removeFromOrgIndex(key) {
   atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }
 
+// Prototype-pollution guard: keys like `__proto__`, `constructor`, or `prototype`
+// (or any segment containing them) must never become property names on the org
+// index.json object. Reject both at the entry point and inside the delete/store paths.
+const RESERVED_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+function isReservedKey(key) {
+  if (typeof key !== 'string' || !key) return true;
+  return key.split('/').some((s) => RESERVED_SEGMENTS.has(s));
+}
+
 // Symlink + realpath containment for an org-vault file (mirrors src/vault-scan.ts
 // indexFile + src/tools/store.ts). The lexical path.resolve check in main() does NOT
 // detect symlinks, and the org vault is a SHARED git repo: a teammate with push
@@ -214,6 +223,10 @@ async function main() {
     console.error(`Rejecting suspicious org key: ${key}`);
     process.exit(0);
   }
+  if (isReservedKey(relKey)) {
+    console.error(`Rejecting reserved org key: ${key}`);
+    process.exit(0);
+  }
   const resolvedOrgFile = path.resolve(orgFile);
   if (!resolvedOrgFile.startsWith(path.resolve(ORG_VAULT) + path.sep)) {
     console.error(`Org key escapes vault: ${key}`);
@@ -263,34 +276,37 @@ async function main() {
         console.error(`Refusing to delete org key ${key}: file is a symlink or resolves outside the org vault.`);
         process.exit(0);
       }
-      // Immortal-memory guard (mirrors mutate.ts deleteMemory + store.ts store
-      // force-guard). The PostToolUse sync fires on tool invocation INCLUDING
-      // errors, so this runs even when the originating delete_memory threw on the
-      // TS-side no-prune refusal — and the hook falls back to tool_input.key
-      // (present on the request side) regardless of the error. Without this guard
-      // that refused delete would unlink the org-vault file here and commitAndPush
-      // the removal to the shared org-vault branch, defeating the no-prune
-      // immortality contract AND propagating the deletion to every teammate on
-      // their next pull. An explicit --force (forwarded by the hook when
-      // tool_input.force was true) overrides, so a deliberate teardown still
-      // syncs. The force=true path usually arrives with the file already unlinked
-      // by the TS side, so existsSync is false and this check is skipped naturally
-      // — the guard only ever fires for the refused (force=false) case.
-      if (!force) {
-        try {
-          const { data } = parseFrontmatter(fs.readFileSync(orgFile, 'utf8'));
+      // Org-author guard (mirrors mutate.ts deleteMemory): only the original
+      // author may delete an org memory. force=true overrides the no-prune guard
+      // below, but it does NOT override authorship — a deliberate teardown must be
+      // performed by the original author (or after correcting the author field).
+      // The PostToolUse sync fires on tool invocation INCLUDING errors, so this
+      // also runs when the originating delete_memory threw on the TS-side guard.
+      try {
+        const { data } = parseFrontmatter(fs.readFileSync(orgFile, 'utf8'));
+        const fileAuthor = data.author ?? '';
+        if (fileAuthor !== os.userInfo().username) {
+          console.error(`Refusing to delete org key ${key}: authored by ${fileAuthor || '(unknown)'}.`);
+          process.exit(0);
+        }
+        // Immortal-memory guard (mirrors mutate.ts deleteMemory + store.ts store
+        // force-guard). An explicit --force overrides, so a deliberate teardown
+        // still syncs. The force=true path usually arrives with the file already
+        // unlinked by the TS side, so existsSync is false and this check is skipped
+        // naturally — the guard only ever fires for the refused (force=false) case.
+        if (!force) {
           const tags = Array.isArray(data.tags) ? data.tags : [];
           if (tags.includes('no-prune')) {
             console.error(`Refusing to delete org key ${key}: tagged 'no-prune' (immortal). Pass force=true to override.`);
             process.exit(0);
           }
-        } catch {
-          // Unreadable/unparseable frontmatter: we can't confirm the memory isn't
-          // immortal. Fail safe by skipping the delete — the TS side guards the
-          // canonical path; this is defense-in-depth for the shared-vault push.
-          console.error(`Refusing to delete org key ${key}: frontmatter unreadable (cannot verify no-prune status).`);
-          process.exit(0);
         }
+      } catch {
+        // Unreadable/unparseable frontmatter: we can't confirm the memory isn't
+        // immortal or who authored it. Fail safe by skipping the delete — the TS
+        // side guards the canonical path; this is defense-in-depth for the shared-vault push.
+        console.error(`Refusing to delete org key ${key}: frontmatter unreadable (cannot verify author/no-prune status).`);
+        process.exit(0);
       }
       try { fs.unlinkSync(orgFile); } catch {}
     }

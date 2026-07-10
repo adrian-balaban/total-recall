@@ -59,6 +59,23 @@ export function tokenEstimate(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// Prototype-pollution guard: memory keys are used as plain-object property
+// names in memIndex and the org index.json. A key like `__proto__`,
+// `constructor`, or `prototype` — or any path segment containing one — would
+// either set the object's prototype/constructor or, on delete, mutate the
+// prototype chain of every object. Reject these segments everywhere keys are
+// accepted (deriveFilePathFromKey, indexFile, store.ts explicit keys, and
+// sync-org-memory.mjs).
+export const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
+
+export function isReservedKey(key: string): boolean {
+  if (typeof key !== 'string' || !key) return true;
+  const isOrg = key.startsWith('org/');
+  const rel = isOrg ? key.slice('org/'.length) : key;
+  if (!rel) return true;
+  return rel.split('/').some((s) => RESERVED_KEY_SEGMENTS.has(s));
+}
+
 // Assert the on-disk entry at `filePath` is a regular file, not a symlink or
 // directory. Used at read sites (recall.ts, query.ts) to close the post-index-swap
 // read leak that indexFile's scan-time lstat guard (Pass 1) does NOT cover. The MCP
@@ -321,6 +338,14 @@ export function indexFile(filePath: string, isOrg: boolean) {
     if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
 
     const key = keyFromPath(filePath, isOrg);
+    // Prototype-pollution guard: a teammate-pushed file named `__proto__.md` or
+    // under a `constructor/` directory would index to a reserved object-key name
+    // and pollute every object's prototype. Skip silently — the file stays on
+    // disk but never enters memIndex or the serialized index.json.
+    if (isReservedKey(key)) {
+      recordError(`indexFile: reserved key skipped: ${key}`);
+      return;
+    }
     // Re-index from disk but preserve runtime stats (accessCount, lastAccessed)
     // accumulated since the last scan. Applies to personal AND org memories — org
     // entries are now refreshed too (previously skipped via the !memIndex[key] guard,

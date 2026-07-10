@@ -15511,8 +15511,8 @@ function ensureDir(p) {
 }
 
 // src/persistence.ts
-import * as fs2 from "fs";
-import * as path2 from "path";
+import * as fs3 from "fs";
+import * as path3 from "path";
 
 // src/ebbinghaus.ts
 function computeRetentionStrength(importance, daysSince2, accessCount, confirmations = 0, flags = 0) {
@@ -15692,196 +15692,9 @@ function tfidfSearch(query, excludeJournal = true) {
   return scores.sort((a, b) => b.score - a.score);
 }
 
-// src/persistence.ts
-import * as crypto from "crypto";
-var indexSaveTimer = null;
-var idfTimer = null;
-var dirtyTokens = false;
-function atomicWrite(p, data) {
-  ensureDir(path2.dirname(p));
-  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
-  try {
-    fs2.writeFileSync(tmp, data);
-  } catch {
-    try {
-      fs2.writeFileSync(p, data);
-    } catch (e) {
-      recordError(`atomicWrite(${p}): ${e.message}`);
-    }
-    return;
-  }
-  try {
-    fs2.renameSync(tmp, p);
-  } catch {
-    fs2.writeFileSync(p, data);
-    try {
-      fs2.unlinkSync(tmp);
-    } catch {
-    }
-  }
-}
-function deriveFilePathFromKey(key) {
-  if (typeof key !== "string" || !key) return null;
-  if (key.includes("\0") || key.includes("\\")) return null;
-  const isOrg = key.startsWith("org/");
-  const rel = isOrg ? key.slice("org/".length) : key;
-  if (!rel || rel.startsWith("/") || rel.includes("//")) return null;
-  const segments = rel.split("/");
-  if (segments.some((s) => s === ".." || s === "." || s === "")) return null;
-  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const filePath = path2.join(base, rel + ".md");
-  const vaultRoot = path2.resolve(base);
-  const resolved = path2.resolve(filePath);
-  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path2.sep)) return null;
-  return filePath;
-}
-function coerceMemEntry(raw, key) {
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
-  const e = raw;
-  const filePath = deriveFilePathFromKey(key);
-  if (!filePath) return null;
-  return {
-    ...e,
-    key,
-    // normalize to the trusted memIndex key (discard any inner key)
-    filePath,
-    // re-derived + containment-checked; discards any persisted filePath
-    title: String(e.title ?? ""),
-    tags: Array.isArray(e.tags) ? e.tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean) : [],
-    sessions: Array.isArray(e.sessions) ? e.sessions : [],
-    // Clamp + coerce importanceScore to a finite [0, 1] number — see
-    // clampImportanceScore in ebbinghaus.ts.
-    importanceScore: clampImportanceScore(e.importanceScore),
-    // Provide safe defaults for fields added after earlier index.json formats so
-    // a pre-upgrade entry never carries undefined through to search/pruning.
-    accessCount: typeof e.accessCount === "number" && Number.isFinite(e.accessCount) ? Math.max(0, e.accessCount) : 0,
-    lastAccessed: typeof e.lastAccessed === "string" ? e.lastAccessed : "",
-    isOrg: typeof e.isOrg === "boolean" ? e.isOrg : key.startsWith("org/"),
-    category: typeof e.category === "string" ? e.category : "knowledge",
-    // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
-    // unchanged files across boots. A pre-#19 index.json (or a corrupted
-    // non-numeric value) yields 0 — the "no stat" sentinel that forces a
-    // full re-read on the next reconcile, so the skip path never fires on
-    // stale/corrupt data.
-    mtimeMs: typeof e.mtimeMs === "number" && Number.isFinite(e.mtimeMs) ? e.mtimeMs : 0,
-    size: typeof e.size === "number" && Number.isFinite(e.size) ? e.size : 0
-  };
-}
-function loadMemIndex() {
-  for (const k of Object.keys(memIndex)) delete memIndex[k];
-  let parsed;
-  try {
-    parsed = JSON.parse(fs2.readFileSync(INDEX_PATH, "utf8"));
-  } catch (e) {
-    if (e.code !== "ENOENT") {
-      recordError(`loadMemIndex parse failed (rebuilding from .md files): ${e.message}`);
-    }
-    return;
-  }
-  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
-  for (const [k, v] of Object.entries(parsed)) {
-    const coerced = coerceMemEntry(v, k);
-    if (coerced) memIndex[k] = coerced;
-  }
-}
-function loadIndexes() {
-  loadMemIndex();
-}
-function scheduleSave() {
-  dirtyTokens = true;
-  scheduleIndexSave();
-}
-function scheduleAccessSave() {
-  scheduleIndexSave();
-}
-function scheduleIndexSave() {
-  if (indexSaveTimer) clearTimeout(indexSaveTimer);
-  indexSaveTimer = setTimeout(() => {
-    try {
-      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-      if (dirtyTokens) {
-        dirtyTokens = false;
-        scheduleIdfRecalc();
-      }
-    } catch (e) {
-      recordError(`scheduleSave: ${e.message}`);
-      try {
-        console.error(e);
-      } catch {
-      }
-    }
-  }, 1e3);
-}
-function scheduleIdfRecalc() {
-  if (idfTimer) clearTimeout(idfTimer);
-  idfTimer = setTimeout(() => {
-    try {
-      atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-      buildIndexCache();
-    } catch (e) {
-      recordError(`scheduleIdfRecalc: ${e.message}`);
-      try {
-        console.error(e);
-      } catch {
-      }
-    }
-  }, 2e3);
-}
-function saveNow() {
-  atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
-}
-function recalcIdfNow() {
-  rebuildInvertedIndex();
-  atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-  buildIndexCache();
-}
-function markIndexFresh() {
-  dirtyTokens = false;
-}
-function flushPending() {
-  if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
-  if (indexSaveTimer) clearTimeout(indexSaveTimer);
-  if (idfTimer) clearTimeout(idfTimer);
-  indexSaveTimer = null;
-  idfTimer = null;
-  const needRecalc = dirtyTokens || idfTimer !== null;
-  dirtyTokens = false;
-  try {
-    saveNow();
-  } catch (e) {
-    recordError(`flushPending saveNow: ${e.message}`);
-    try {
-      console.error("flushPending saveNow:", e);
-    } catch {
-    }
-  }
-  if (needRecalc) {
-    try {
-      recalcIdfNow();
-    } catch (e) {
-      recordError(`flushPending recalcIdfNow: ${e.message}`);
-      try {
-        console.error("flushPending recalcIdfNow:", e);
-      } catch {
-      }
-    }
-  }
-}
-function buildIndexCache() {
-  const entries = Object.values(memIndex);
-  const lines = [`${entries.length}`];
-  for (const m of entries) {
-    const shortTitle = m.title.slice(0, 40);
-    const tags = m.tags.slice(0, 3).join(", ") + (m.tags.length > 3 ? ", ..." : "");
-    lines.push(`- ${m.key}: ${shortTitle} [${tags}] (${m.category})`);
-  }
-  ensureDir(path2.dirname(INDEX_CACHE_PATH));
-  atomicWrite(INDEX_CACHE_PATH, lines.join("\n"));
-}
-
 // src/vault-scan.ts
-import * as fs3 from "fs";
-import * as path3 from "path";
+import * as fs2 from "fs";
+import * as path2 from "path";
 
 // src/frontmatter.ts
 var FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -16122,17 +15935,6 @@ async function getDb(dbPath) {
       const Database = (await import("better-sqlite3")).default;
       const d = new Database(dbPath);
       sqliteVec.load(d);
-      const existing = d.prepare(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
-      ).get();
-      const needsRecreate = existing && !/distance_metric\s*=\s*cosine/i.test(existing.sql);
-      if (needsRecreate) {
-        d.exec("DROP TABLE vec_memories");
-      }
-      d.exec(`
-        CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories
-        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384] distance_metric=cosine);
-      `);
       return d;
     } catch {
       dbPromise = null;
@@ -16142,9 +15944,28 @@ async function getDb(dbPath) {
   })();
   return dbPromise;
 }
+function parseExistingDimension(sql) {
+  const match = sql.match(/embedding\s+FLOAT\[(\d+)\]/i);
+  return match ? parseInt(match[1], 10) : null;
+}
+function ensureVecTable(d, dim) {
+  const existing = d.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+  ).get();
+  if (existing) {
+    const existingDim = parseExistingDimension(existing.sql);
+    const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
+    if (existingDim === dim && hasCosine) return;
+    d.exec("DROP TABLE vec_memories");
+  }
+  d.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
+  );
+}
 async function upsertVector(dbPath, key, embedding) {
   const d = await getDb(dbPath);
   if (!d) return;
+  ensureVecTable(d, embedding.length);
   d.prepare(`INSERT OR REPLACE INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
     key,
     JSON.stringify(embedding)
@@ -16153,6 +15974,7 @@ async function upsertVector(dbPath, key, embedding) {
 async function searchVector(dbPath, queryEmbedding, limit = 20) {
   const d = await getDb(dbPath);
   if (!d) return [];
+  ensureVecTable(d, queryEmbedding.length);
   const rows = d.prepare(
     `SELECT key, distance FROM vec_memories
        WHERE embedding MATCH ?
@@ -16163,13 +15985,23 @@ async function searchVector(dbPath, queryEmbedding, limit = 20) {
 async function deleteVector(dbPath, key) {
   const d = await getDb(dbPath);
   if (!d) return;
-  d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
+  try {
+    d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
+  } catch (e) {
+    if (e && typeof e.message === "string" && /no such table/i.test(e.message)) return;
+    throw e;
+  }
 }
 async function listVectorKeys(dbPath) {
   const d = await getDb(dbPath);
   if (!d) return null;
-  const rows = d.prepare(`SELECT key FROM vec_memories`).all();
-  return rows.map((r) => r.key);
+  try {
+    const rows = d.prepare(`SELECT key FROM vec_memories`).all();
+    return rows.map((r) => r.key);
+  } catch (e) {
+    if (e && typeof e.message === "string" && /no such table/i.test(e.message)) return [];
+    throw e;
+  }
 }
 
 // src/embeddings.ts
@@ -16304,7 +16136,7 @@ function realBaseFor(base) {
   if (realBaseCache.has(base)) return realBaseCache.get(base) ?? null;
   let resolved;
   try {
-    resolved = fs3.realpathSync(base);
+    resolved = fs2.realpathSync(base);
   } catch {
     resolved = null;
   }
@@ -16317,15 +16149,23 @@ function slugify2(title) {
 }
 function keyFromPath(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path3.relative(base, filePath).replace(/\.md$/, "");
+  const rel = path2.relative(base, filePath).replace(/\.md$/, "");
   return isOrg ? `org/${rel}` : rel;
 }
 function tokenEstimate(text) {
   return Math.ceil(text.length / 4);
 }
+var RESERVED_KEY_SEGMENTS = /* @__PURE__ */ new Set(["__proto__", "constructor", "prototype"]);
+function isReservedKey(key) {
+  if (typeof key !== "string" || !key) return true;
+  const isOrg = key.startsWith("org/");
+  const rel = isOrg ? key.slice("org/".length) : key;
+  if (!rel) return true;
+  return rel.split("/").some((s) => RESERVED_KEY_SEGMENTS.has(s));
+}
 function assertRegularFile(filePath, key) {
   try {
-    if (!fs3.lstatSync(filePath).isFile()) {
+    if (!fs2.lstatSync(filePath).isFile()) {
       throw new Error(`Memory "${key}" is not a regular file (symlink or directory) \u2014 refusing to follow a possible planted link in the shared org vault.`);
     }
   } catch (e) {
@@ -16334,7 +16174,7 @@ function assertRegularFile(filePath, key) {
 }
 function assertLstat(filePath, predicate, errorIfFail) {
   try {
-    if (!predicate(fs3.lstatSync(filePath))) throw new Error(errorIfFail);
+    if (!predicate(fs2.lstatSync(filePath))) throw new Error(errorIfFail);
   } catch (e) {
     if (!e || e.code !== "ENOENT") throw e;
   }
@@ -16342,7 +16182,7 @@ function assertLstat(filePath, predicate, errorIfFail) {
 function readMemoryContent(filePath, key) {
   try {
     assertRegularFile(filePath, key);
-    const raw = fs3.readFileSync(filePath, "utf8");
+    const raw = fs2.readFileSync(filePath, "utf8");
     return parseFrontmatter(raw).content;
   } catch {
     return null;
@@ -16366,7 +16206,7 @@ function reconcileIndex() {
   const walk = (dir, isOrg) => {
     let entries;
     try {
-      entries = fs3.readdirSync(dir, { withFileTypes: true });
+      entries = fs2.readdirSync(dir, { withFileTypes: true });
     } catch (e) {
       if (e && e.code !== "ENOENT") {
         recordError(`reconcile readdirSync(${dir}): ${e.message}`);
@@ -16375,7 +16215,7 @@ function reconcileIndex() {
     }
     for (const e of entries) {
       if (e.isSymbolicLink()) continue;
-      const fp = path3.join(dir, e.name);
+      const fp = path2.join(dir, e.name);
       if (e.isDirectory()) {
         const reservedOrgPrefix = !isOrg && e.name === "org";
         if (!EXCLUDED_DIRS.has(e.name.toLowerCase()) && !reservedOrgPrefix) walk(fp, isOrg);
@@ -16420,22 +16260,26 @@ function indexFile(filePath, isOrg) {
     const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
     let st;
     try {
-      st = fs3.lstatSync(filePath);
+      st = fs2.lstatSync(filePath);
     } catch {
       return;
     }
     if (st.isSymbolicLink()) return;
     const realBase = realBaseFor(base);
     if (realBase === null) return;
-    const realFile = fs3.realpathSync(filePath);
-    if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
+    const realFile = fs2.realpathSync(filePath);
+    if (realFile !== realBase && !realFile.startsWith(realBase + path2.sep)) return;
     const key = keyFromPath(filePath, isOrg);
+    if (isReservedKey(key)) {
+      recordError(`indexFile: reserved key skipped: ${key}`);
+      return;
+    }
     const existing = memIndex[key];
     if (existing && existing.mtimeMs === st.mtimeMs && existing.size === st.size) {
       memIndex[key] = { ...existing, filePath };
       return;
     }
-    const raw = fs3.readFileSync(filePath, "utf8");
+    const raw = fs2.readFileSync(filePath, "utf8");
     const { data, content } = parseFrontmatter(raw);
     const fm = data;
     const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -16450,7 +16294,7 @@ function indexFile(filePath, isOrg) {
       // always quotes numeric-looking titles, so this only affects externally
       // authored files — but the threat model is the same as the frontmatter-key
       // ReDoS hardening (teammate-pushed malformed frontmatter).
-      title: String(fm.title ?? path3.basename(filePath, ".md")),
+      title: String(fm.title ?? path2.basename(filePath, ".md")),
       // Coerce arrays defensively: a teammate-pushed (or hand-edited) frontmatter
       // with a scalar `tags: foo` or `sessions: bar` would otherwise crash
       // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
@@ -16486,9 +16330,197 @@ function indexFile(filePath, isOrg) {
 }
 function deriveCategory(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path3.relative(base, filePath);
-  const parts = rel.split(path3.sep);
+  const rel = path2.relative(base, filePath);
+  const parts = rel.split(path2.sep);
   return parts.length > 1 ? parts[0] ?? "knowledge" : "knowledge";
+}
+
+// src/persistence.ts
+import * as crypto from "crypto";
+var indexSaveTimer = null;
+var idfTimer = null;
+var dirtyTokens = false;
+function atomicWrite(p, data) {
+  ensureDir(path3.dirname(p));
+  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
+  try {
+    fs3.writeFileSync(tmp, data);
+  } catch {
+    try {
+      fs3.writeFileSync(p, data);
+    } catch (e) {
+      recordError(`atomicWrite(${p}): ${e.message}`);
+    }
+    return;
+  }
+  try {
+    fs3.renameSync(tmp, p);
+  } catch {
+    fs3.writeFileSync(p, data);
+    try {
+      fs3.unlinkSync(tmp);
+    } catch {
+    }
+  }
+}
+function deriveFilePathFromKey(key) {
+  if (typeof key !== "string" || !key) return null;
+  if (isReservedKey(key)) return null;
+  if (key.includes("\0") || key.includes("\\")) return null;
+  const isOrg = key.startsWith("org/");
+  const rel = isOrg ? key.slice("org/".length) : key;
+  if (!rel || rel.startsWith("/") || rel.includes("//")) return null;
+  const segments = rel.split("/");
+  if (segments.some((s) => s === ".." || s === "." || s === "")) return null;
+  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
+  const filePath = path3.join(base, rel + ".md");
+  const vaultRoot = path3.resolve(base);
+  const resolved = path3.resolve(filePath);
+  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path3.sep)) return null;
+  return filePath;
+}
+function coerceMemEntry(raw, key) {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const e = raw;
+  const filePath = deriveFilePathFromKey(key);
+  if (!filePath) return null;
+  return {
+    ...e,
+    key,
+    // normalize to the trusted memIndex key (discard any inner key)
+    filePath,
+    // re-derived + containment-checked; discards any persisted filePath
+    title: String(e.title ?? ""),
+    tags: Array.isArray(e.tags) ? e.tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean) : [],
+    sessions: Array.isArray(e.sessions) ? e.sessions : [],
+    // Clamp + coerce importanceScore to a finite [0, 1] number — see
+    // clampImportanceScore in ebbinghaus.ts.
+    importanceScore: clampImportanceScore(e.importanceScore),
+    // Provide safe defaults for fields added after earlier index.json formats so
+    // a pre-upgrade entry never carries undefined through to search/pruning.
+    accessCount: typeof e.accessCount === "number" && Number.isFinite(e.accessCount) ? Math.max(0, e.accessCount) : 0,
+    lastAccessed: typeof e.lastAccessed === "string" ? e.lastAccessed : "",
+    isOrg: typeof e.isOrg === "boolean" ? e.isOrg : key.startsWith("org/"),
+    category: typeof e.category === "string" ? e.category : "knowledge",
+    // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
+    // unchanged files across boots. A pre-#19 index.json (or a corrupted
+    // non-numeric value) yields 0 — the "no stat" sentinel that forces a
+    // full re-read on the next reconcile, so the skip path never fires on
+    // stale/corrupt data.
+    mtimeMs: typeof e.mtimeMs === "number" && Number.isFinite(e.mtimeMs) ? e.mtimeMs : 0,
+    size: typeof e.size === "number" && Number.isFinite(e.size) ? e.size : 0
+  };
+}
+function loadMemIndex() {
+  for (const k of Object.keys(memIndex)) delete memIndex[k];
+  let parsed;
+  try {
+    parsed = JSON.parse(fs3.readFileSync(INDEX_PATH, "utf8"));
+  } catch (e) {
+    if (e.code !== "ENOENT") {
+      recordError(`loadMemIndex parse failed (rebuilding from .md files): ${e.message}`);
+    }
+    return;
+  }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
+  for (const [k, v] of Object.entries(parsed)) {
+    const coerced = coerceMemEntry(v, k);
+    if (coerced) memIndex[k] = coerced;
+  }
+}
+function loadIndexes() {
+  loadMemIndex();
+}
+function scheduleSave() {
+  dirtyTokens = true;
+  scheduleIndexSave();
+}
+function scheduleAccessSave() {
+  scheduleIndexSave();
+}
+function scheduleIndexSave() {
+  if (indexSaveTimer) clearTimeout(indexSaveTimer);
+  indexSaveTimer = setTimeout(() => {
+    try {
+      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+      if (dirtyTokens) {
+        dirtyTokens = false;
+        scheduleIdfRecalc();
+      }
+    } catch (e) {
+      recordError(`scheduleSave: ${e.message}`);
+      try {
+        console.error(e);
+      } catch {
+      }
+    }
+  }, 1e3);
+}
+function scheduleIdfRecalc() {
+  if (idfTimer) clearTimeout(idfTimer);
+  idfTimer = setTimeout(() => {
+    try {
+      atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
+      buildIndexCache();
+    } catch (e) {
+      recordError(`scheduleIdfRecalc: ${e.message}`);
+      try {
+        console.error(e);
+      } catch {
+      }
+    }
+  }, 2e3);
+}
+function saveNow() {
+  atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+}
+function recalcIdfNow() {
+  rebuildInvertedIndex();
+  atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
+  buildIndexCache();
+}
+function markIndexFresh() {
+  dirtyTokens = false;
+}
+function flushPending() {
+  if (!indexSaveTimer && !idfTimer && !dirtyTokens) return;
+  if (indexSaveTimer) clearTimeout(indexSaveTimer);
+  if (idfTimer) clearTimeout(idfTimer);
+  indexSaveTimer = null;
+  idfTimer = null;
+  const needRecalc = dirtyTokens || idfTimer !== null;
+  dirtyTokens = false;
+  try {
+    saveNow();
+  } catch (e) {
+    recordError(`flushPending saveNow: ${e.message}`);
+    try {
+      console.error("flushPending saveNow:", e);
+    } catch {
+    }
+  }
+  if (needRecalc) {
+    try {
+      recalcIdfNow();
+    } catch (e) {
+      recordError(`flushPending recalcIdfNow: ${e.message}`);
+      try {
+        console.error("flushPending recalcIdfNow:", e);
+      } catch {
+      }
+    }
+  }
+}
+function buildIndexCache() {
+  const entries = Object.values(memIndex);
+  const lines = [`${entries.length}`];
+  for (const m of entries) {
+    const shortTitle = m.title.slice(0, 40);
+    const tags = m.tags.slice(0, 3).join(", ") + (m.tags.length > 3 ? ", ..." : "");
+    lines.push(`- ${m.key}: ${shortTitle} [${tags}] (${m.category})`);
+  }
+  ensureDir(path3.dirname(INDEX_CACHE_PATH));
+  atomicWrite(INDEX_CACHE_PATH, lines.join("\n"));
 }
 
 // src/tools/store.ts
@@ -16564,6 +16596,9 @@ function storeMemory(args) {
     filePath = path5.join(catDir2, `${slug}.md`);
     key = keyFromPath(filePath, isOrg);
   }
+  if (isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment.`);
+  }
   if (isOrg && !orgVaultConfigured()) {
     throw new Error(
       'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). Writing now would leave an unsynced file that blocks the next clone.'
@@ -16607,7 +16642,7 @@ function storeMemory(args) {
       );
     }
     preservedCreated = existingFm.created;
-    preservedSessions = existingFm.sessions;
+    preservedSessions = Array.isArray(existingFm.sessions) ? existingFm.sessions : [];
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
   const priorSessions = Array.isArray(explicitSessions) ? explicitSessions : preservedSessions ?? [];
@@ -16753,7 +16788,8 @@ async function recallMemory(args) {
   }).filter(Boolean);
 }
 function searchIndex(args) {
-  const { query, since, before, minScore = 0, excludeJournal = true, category } = args;
+  const { since, before, minScore = 0, excludeJournal = true, category } = args;
+  const query = String(args.query ?? "");
   const filterTags = Array.isArray(args.tags) ? args.tags : typeof args.tags === "string" ? [args.tags] : [];
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;
   let results = tfidfSearch(query, excludeJournal);
@@ -16973,6 +17009,19 @@ function deleteMemory(args) {
   const { key, force = false } = args;
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
+  if (meta2.isOrg) {
+    try {
+      assertRegularFile(meta2.filePath, key);
+      const raw = fs6.readFileSync(meta2.filePath, "utf8");
+      const parsed = parseFrontmatter(raw);
+      const existingAuthor = parsed.data.author;
+      if (existingAuthor !== os3.userInfo().username) {
+        throw new Error(`Cannot delete org memory authored by ${existingAuthor ?? "(unknown)"}.`);
+      }
+    } catch (e) {
+      if (!e || e.code !== "ENOENT") throw e;
+    }
+  }
   if (meta2.tags.includes(NO_PRUNE_TAG) && !force) {
     throw new Error(
       `Memory "${key}" is tagged '${NO_PRUNE_TAG}' and cannot be deleted. Pass force=true to override.`
@@ -17233,7 +17282,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.97" : null.version;
+var PLUGIN_VERSION = true ? "1.0.98" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

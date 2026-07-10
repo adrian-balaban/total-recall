@@ -329,6 +329,34 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     }
   });
 
+  // Pass 3 fix: build-memory-index.sh must skip `personal-vault/org/` so the
+  // `org/` key prefix stays reserved for the git-synced org vault and is never
+  // merged with personal-vault indexing.
+  it('build-memory-index.sh: skips the personal-vault/org/ subtree', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-bmi-orgskip-'));
+    const knowledge = path.join(home, '.total-recall', 'personal-vault', 'knowledge');
+    fs.mkdirSync(knowledge, { recursive: true });
+    fs.writeFileSync(path.join(knowledge, 'ok.md'), '---\ntitle: OK\n---\nbody\n');
+    const orgDir = path.join(home, '.total-recall', 'personal-vault', 'org');
+    fs.mkdirSync(orgDir, { recursive: true });
+    fs.writeFileSync(path.join(orgDir, 'secret.md'), '---\ntitle: Secret\n---\nbody\n');
+
+    try {
+      const r = spawnSync('bash', [BUILD_SCRIPT], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home },
+      });
+      expect(r.status).toBe(0);
+      const cache = fs.readFileSync(path.join(home, '.total-recall', '.index-cache.txt'), 'utf8');
+      expect(cache).toContain('knowledge/ok:');
+      expect(cache).not.toContain('org/secret:');
+      expect(cache).not.toContain('Secret');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   // Pass 7 fix #3: install.sh's "Failed to connect" guard runs under
   // `set -o pipefail` (line 78). The real failure case (wrong node path → stdio
   // server unreachable) has `claude mcp get` print "Failed to connect" AND exit

@@ -136,6 +136,28 @@ export function deleteMemory(args: any): any {
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
+  // Org memories are author-protected, mirroring store_memory's guard.
+  // Fail-closed: a missing author on an existing org memory is treated as
+  // foreign (not silently deletable). force=true overrides the no-prune guard
+  // below, but it does NOT override authorship — a deliberate teardown must be
+  // performed by the original author (or after the author field is corrected).
+  if (meta.isOrg) {
+    try {
+      assertRegularFile(meta.filePath, key);
+      const raw = fs.readFileSync(meta.filePath, 'utf8');
+      const parsed = parseFrontmatter(raw);
+      const existingAuthor = (parsed.data as Partial<MemoryFrontmatter>).author;
+      if (existingAuthor !== os.userInfo().username) {
+        throw new Error(`Cannot delete org memory authored by ${existingAuthor ?? '(unknown)'}.`);
+      }
+    } catch (e: any) {
+      // ENOENT (file already removed) is the normal repeated-delete case; allow
+      // the in-memory cleanup to proceed. Any other failure (symlink, parse error,
+      // author mismatch) is fail-closed.
+      if (!e || e.code !== 'ENOENT') throw e;
+    }
+  }
+
   // Immortal-memory guard (mirrors store_memory's `force` pattern at store.ts).
   // A `no-prune`-tagged memory (e.g. an ADR) is refused even for the org author —
   // no-prune is orthogonal to authorship, it marks decisions that must not

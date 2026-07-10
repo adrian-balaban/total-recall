@@ -93,6 +93,35 @@ describe('confirm_memory', () => {
     expect(parsed.content).toContain('12345');
   });
 
+  it('store_memory force-overwrite coerces a scalar sessions field to an array', () => {
+    // Some persisted files may carry an invalid scalar `sessions` value. A
+    // force-overwrite must not crash when merging; it should reset to [] and
+    // still keep the file.
+    const key = 'knowledge/scalar-sessions';
+    const filePath = path.join(PERSONAL, key + '.md');
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      '---\ntitle: "Scalar Sessions"\ntags: []\nsessions: not-an-array\n---\n\nbody\n',
+    );
+
+    const res = storeMemory({
+      key,
+      title: 'Scalar Sessions',
+      content: 'new body',
+      category: 'knowledge',
+      tags: [],
+      importanceScore: 0.5,
+      force: true,
+    });
+    expect(res.key).toBe(key);
+    expect(memIndex[key]?.sessions).toEqual([]);
+
+    // The file must still exist and carry the new content.
+    const raw = fs.readFileSync(filePath, 'utf8');
+    expect(raw).toContain('new body');
+  });
+
   it('store_memory coerces non-string content to string', () => {
     // A caller may pass a number (or any JSON-serializable value) as content;
     // store_memory must String() it before building the frontmatter body.
