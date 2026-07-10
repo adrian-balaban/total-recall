@@ -6,7 +6,9 @@
 export function computeRetentionStrength(
   importance: number,
   daysSince: number,
-  accessCount: number
+  accessCount: number,
+  confirmations = 0,
+  flags = 0
 ): number {
   // Coerce each input to a finite number in a sensible range. The store_memory
   // schema clamps importanceScore to [0, 1] and update_memory clamps it on
@@ -18,8 +20,14 @@ export function computeRetentionStrength(
   const i = Number.isFinite(importance) ? Math.max(0, Math.min(1, importance)) : 0.5;
   const d = Number.isFinite(daysSince) ? Math.max(0, daysSince) : 0;
   const a = Number.isFinite(accessCount) ? Math.max(0, accessCount) : 0;
+  const c = Number.isFinite(confirmations) ? Math.max(0, confirmations) : 0;
+  const f = Number.isFinite(flags) ? Math.max(0, flags) : 0;
   const lambda = 0.16 * (1 - i * 0.8);
-  const strength = i * Math.exp(-lambda * d) * (1 + a * 0.2);
+  // Confirmation / flag feedback: a confirmed memory is reinforced (+0.1 per
+  // confirmation); a flagged memory decays faster (−0.1 per flag). The total
+  // multiplier is clamped to [0, ∞) and then the final strength to [0, 1].
+  const boost = 1 + a * 0.2 + c * 0.1 - f * 0.1;
+  const strength = i * Math.exp(-lambda * d) * boost;
   return Math.max(0, Math.min(1, strength));
 }
 

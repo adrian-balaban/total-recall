@@ -188,7 +188,13 @@ export function pruneMemories(args: any): any {
   return Object.values(memIndex)
     .map(m => ({
       key: m.key, title: m.title, category: m.category,
-      retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
+      retentionStrength: computeRetentionStrength(
+        m.importanceScore,
+        daysSince(m.lastAccessed || m.updated),
+        m.accessCount,
+        m.confirmations,
+        m.flags,
+      ),
       lastAccessed: m.lastAccessed, importanceScore: m.importanceScore,
       tags: m.tags,
     }))

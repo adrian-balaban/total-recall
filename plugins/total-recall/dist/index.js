@@ -15515,12 +15515,15 @@ import * as fs2 from "fs";
 import * as path2 from "path";
 
 // src/ebbinghaus.ts
-function computeRetentionStrength(importance, daysSince2, accessCount) {
+function computeRetentionStrength(importance, daysSince2, accessCount, confirmations = 0, flags = 0) {
   const i = Number.isFinite(importance) ? Math.max(0, Math.min(1, importance)) : 0.5;
   const d = Number.isFinite(daysSince2) ? Math.max(0, daysSince2) : 0;
   const a = Number.isFinite(accessCount) ? Math.max(0, accessCount) : 0;
+  const c = Number.isFinite(confirmations) ? Math.max(0, confirmations) : 0;
+  const f = Number.isFinite(flags) ? Math.max(0, flags) : 0;
   const lambda = 0.16 * (1 - i * 0.8);
-  const strength = i * Math.exp(-lambda * d) * (1 + a * 0.2);
+  const boost = 1 + a * 0.2 + c * 0.1 - f * 0.1;
+  const strength = i * Math.exp(-lambda * d) * boost;
   return Math.max(0, Math.min(1, strength));
 }
 function clampImportanceScore(v, fallback = 0.5) {
@@ -16451,6 +16454,12 @@ function indexFile(filePath, isOrg) {
       size: st.size
     };
     if (fm.author !== void 0) meta2.author = fm.author;
+    if (fm.confirmations !== void 0 && Number.isFinite(fm.confirmations) && fm.confirmations > 0) {
+      meta2.confirmations = Math.max(0, fm.confirmations);
+    }
+    if (fm.flags !== void 0 && Number.isFinite(fm.flags) && fm.flags > 0) {
+      meta2.flags = Math.max(0, fm.flags);
+    }
     memIndex[key] = meta2;
     contentCache.delete(key);
   } catch (e) {
@@ -16822,7 +16831,13 @@ function pruneMemories(args) {
     key: m.key,
     title: m.title,
     category: m.category,
-    retentionStrength: computeRetentionStrength(m.importanceScore, daysSince(m.lastAccessed || m.updated), m.accessCount),
+    retentionStrength: computeRetentionStrength(
+      m.importanceScore,
+      daysSince(m.lastAccessed || m.updated),
+      m.accessCount,
+      m.confirmations,
+      m.flags
+    ),
     lastAccessed: m.lastAccessed,
     importanceScore: m.importanceScore,
     tags: m.tags
@@ -16926,6 +16941,30 @@ function deleteMemory(args) {
   });
   scheduleSave();
   return { key, message: "Memory deleted." };
+}
+function confirmMemory(args) {
+  const { key, useful = true } = args;
+  const meta2 = memIndex[key];
+  if (!meta2) throw new Error(`Memory not found: ${key}`);
+  assertRegularFile(meta2.filePath, key);
+  const raw = fs6.readFileSync(meta2.filePath, "utf8");
+  const parsed = parseFrontmatter(raw);
+  const field = useful === false ? "flags" : "confirmations";
+  const prev = Number.isFinite(parsed.data[field]) ? Math.max(0, Number(parsed.data[field])) : 0;
+  const next = prev + 1;
+  const now = (/* @__PURE__ */ new Date()).toISOString();
+  const newFm = { ...parsed.data, [field]: next, updated: now };
+  const fileContent = stringifyFrontmatter(parsed.content, newFm);
+  fs6.writeFileSync(meta2.filePath, fileContent);
+  Object.assign(meta2, { [field]: next, updated: now });
+  contentCache.delete(key);
+  scheduleSave();
+  return {
+    key,
+    useful,
+    [field]: next,
+    message: `Memory ${useful === false ? "flagged" : "confirmed"}.`
+  };
 }
 function rebuildIndex() {
   reconcileIndex();
@@ -17133,12 +17172,12 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.94" : null.version;
+var PLUGIN_VERSION = true ? "1.0.95" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
     capabilities: { tools: {} },
-    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (16 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys. Rerank with rerank_memories. Bulk operations: export_memories / import_memories / delete_memories.`
+    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (17 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys. Rerank with rerank_memories. Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory.`
   }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -17228,6 +17267,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           confirm: { type: "boolean", default: false, description: "Must be true to confirm the bulk deletion." }
         },
         required: ["keys", "confirm"]
+      }
+    },
+    {
+      name: "confirm_memory",
+      description: "Confirm or flag a memory. useful=true increments confirmations (reinforces retention); useful=false increments flags (accelerates decay).",
+      inputSchema: {
+        type: "object",
+        properties: {
+          key: { type: "string" },
+          useful: { type: "boolean", default: true, description: "true = confirmation, false = flag." }
+        },
+        required: ["key"]
       }
     },
     {
@@ -17357,6 +17408,7 @@ var TOOL_HANDLERS = {
   export_memories: exportMemories,
   import_memories: importMemories,
   delete_memories: deleteMemories,
+  confirm_memory: confirmMemory,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,

@@ -8,6 +8,10 @@ export interface MemoryFrontmatter {
   created: string;
   updated: string;
   importanceScore?: number;
+  // Feedback counters from confirm_memory: positive confirmations boost retention,
+  // flags (wrong/useless signals) reduce it.
+  confirmations?: number;
+  flags?: number;
 }
 
 export interface MemoryMetadata extends MemoryFrontmatter {

@@ -42,6 +42,20 @@ describe('computeRetentionStrength', () => {
   it('never returns negative', () => {
     expect(computeRetentionStrength(0, 9999, 0)).toBeGreaterThanOrEqual(0);
   });
+
+  it('confirmations boost retention and flags reduce it', () => {
+    const base = computeRetentionStrength(0.5, 7, 0);
+    const confirmed = computeRetentionStrength(0.5, 7, 0, 1, 0);
+    const flagged = computeRetentionStrength(0.5, 7, 0, 0, 1);
+    expect(confirmed).toBeGreaterThan(base);
+    expect(flagged).toBeLessThan(base);
+  });
+
+  it('coerces negative confirmations/flags to zero', () => {
+    expect(computeRetentionStrength(0.5, 7, 0, -5, -3)).toBe(
+      computeRetentionStrength(0.5, 7, 0, 0, 0)
+    );
+  });
 });
 
 describe('clampImportanceScore', () => {

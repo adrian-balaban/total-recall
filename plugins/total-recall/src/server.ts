@@ -19,7 +19,7 @@ import {
   getRelatedMemories,
   pruneMemories,
 } from './tools/query.js';
-import { updateMemory, deleteMemory, rebuildIndex } from './tools/mutate.js';
+import { updateMemory, deleteMemory, confirmMemory, rebuildIndex } from './tools/mutate.js';
 import { rerankMemories } from './tools/rerank.js';
 import {
   exportMemories,
@@ -45,9 +45,9 @@ const server = new Server(
   {
     capabilities: { tools: {} },
     instructions:
-      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (16 tools). ` +
+      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (17 tools). ` +
       `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories. ` +
-      `Bulk operations: export_memories / import_memories / delete_memories.`,
+      `Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory.`,
   }
 );
 
@@ -138,6 +138,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           confirm: { type: 'boolean', default: false, description: 'Must be true to confirm the bulk deletion.' },
         },
         required: ['keys', 'confirm'],
+      },
+    },
+    {
+      name: 'confirm_memory',
+      description: 'Confirm or flag a memory. useful=true increments confirmations (reinforces retention); useful=false increments flags (accelerates decay).',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          key: { type: 'string' },
+          useful: { type: 'boolean', default: true, description: 'true = confirmation, false = flag.' },
+        },
+        required: ['key'],
       },
     },
     {
@@ -272,6 +284,7 @@ const TOOL_HANDLERS: Record<string, (args: any) => any> = {
   export_memories: exportMemories,
   import_memories: importMemories,
   delete_memories: deleteMemories,
+  confirm_memory: confirmMemory,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,

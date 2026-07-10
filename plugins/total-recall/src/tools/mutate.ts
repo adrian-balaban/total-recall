@@ -153,6 +153,36 @@ export function deleteMemory(args: any): any {
   return { key, message: 'Memory deleted.' };
 }
 
+export function confirmMemory(args: any): any {
+  const { key, useful = true } = args;
+  const meta = memIndex[key];
+  if (!meta) throw new Error(`Memory not found: ${key}`);
+
+  assertRegularFile(meta.filePath, key);
+
+  const raw = fs.readFileSync(meta.filePath, 'utf8');
+  const parsed = parseFrontmatter(raw);
+  const field = useful === false ? 'flags' : 'confirmations';
+  const prev = Number.isFinite(parsed.data[field]) ? Math.max(0, Number(parsed.data[field])) : 0;
+  const next = prev + 1;
+  const now = new Date().toISOString();
+
+  const newFm = { ...parsed.data, [field]: next, updated: now };
+  const fileContent = stringifyFrontmatter(parsed.content, newFm);
+  fs.writeFileSync(meta.filePath, fileContent);
+
+  Object.assign(meta, { [field]: next, updated: now });
+  contentCache.delete(key);
+  scheduleSave();
+
+  return {
+    key,
+    useful,
+    [field]: next,
+    message: `Memory ${useful === false ? 'flagged' : 'confirmed'}.`,
+  };
+}
+
 export function rebuildIndex(): any {
   // Reconcile against disk: add new/updated files, drop deleted ones, and preserve
   // runtime accessCount/lastAccessed for memories that still exist.

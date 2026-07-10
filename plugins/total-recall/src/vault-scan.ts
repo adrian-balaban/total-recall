@@ -392,6 +392,12 @@ export function indexFile(filePath: string, isOrg: boolean) {
       size: st.size,
     };
     if (fm.author !== undefined) meta.author = fm.author;
+    if (fm.confirmations !== undefined && Number.isFinite(fm.confirmations) && fm.confirmations > 0) {
+      meta.confirmations = Math.max(0, fm.confirmations);
+    }
+    if (fm.flags !== undefined && Number.isFinite(fm.flags) && fm.flags > 0) {
+      meta.flags = Math.max(0, fm.flags);
+    }
     memIndex[key] = meta;
     // Invalidate any cached content for this key: indexFile re-reads from disk
     // (boot, reconcile, rebuild_index), so the cached body may now be stale (e.g.
