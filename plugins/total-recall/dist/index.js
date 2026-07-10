@@ -17006,6 +17006,100 @@ ${content || meta2.contentPreview || ""}`.slice(0, 2e3);
   });
 }
 
+// src/tools/bulk.ts
+function exportMemories(args) {
+  const keysArg = args.keys;
+  let keySet;
+  if (keysArg !== void 0) {
+    const raw = Array.isArray(keysArg) ? keysArg : [keysArg];
+    keySet = new Set(raw.map((k) => typeof k === "string" ? k : String(k)));
+  }
+  const category = args.category;
+  const tag = args.tag;
+  const metas = Object.values(memIndex).filter((m) => {
+    if (keySet && !keySet.has(m.key)) return false;
+    if (category !== void 0 && m.category !== category) return false;
+    if (tag !== void 0 && !m.tags.includes(tag)) return false;
+    return true;
+  });
+  const memories = metas.map((m) => {
+    const content = readMemoryContent(m.filePath, m.key);
+    return {
+      key: m.key,
+      title: m.title,
+      content: content ?? "",
+      category: m.category,
+      tags: m.tags,
+      importanceScore: m.importanceScore,
+      author: m.author,
+      sessions: m.sessions,
+      created: m.created,
+      updated: m.updated,
+      isOrg: m.isOrg
+    };
+  });
+  return { count: memories.length, memories };
+}
+function importMemories(args) {
+  const raw = Array.isArray(args.memories) ? args.memories : [];
+  const force = args.force === true;
+  const results = [];
+  let imported = 0;
+  let skipped = 0;
+  let errors2 = 0;
+  for (const item of raw) {
+    const m = item || {};
+    try {
+      const title = String(m.title ?? "");
+      const content = m.content !== void 0 ? String(m.content) : void 0;
+      const category = m.category !== void 0 ? String(m.category) : "knowledge";
+      const tags = Array.isArray(m.tags) ? m.tags.map((t) => String(t)) : [];
+      const importanceScore = typeof m.importanceScore === "number" ? m.importanceScore : void 0;
+      const author = m.author !== void 0 ? String(m.author) : void 0;
+      if (!title) throw new Error("Missing title");
+      if (content === void 0) throw new Error("Missing content");
+      const res = storeMemory({ title, content, category, tags, importanceScore, author, force });
+      imported++;
+      results.push({ key: res.key, status: "imported" });
+    } catch (e) {
+      if (/already exists/.test(e.message)) {
+        skipped++;
+        results.push({ status: "skipped", error: e.message });
+      } else {
+        errors2++;
+        results.push({ status: "error", error: e.message });
+      }
+    }
+  }
+  return { imported, skipped, errors: errors2, count: raw.length, results };
+}
+function deleteMemories(args) {
+  const rawKeys = Array.isArray(args.keys) ? args.keys : typeof args.keys === "string" ? [args.keys] : [];
+  const keys = rawKeys.map((k) => typeof k === "string" ? k : String(k));
+  const force = args.force === true;
+  const confirm = args.confirm === true;
+  if (keys.length === 0) throw new Error("No keys provided.");
+  if (!confirm) {
+    throw new Error(
+      `Explicit confirmation required: you are about to delete ${keys.length} memory(s). Pass confirm=true to proceed.`
+    );
+  }
+  const results = [];
+  let deleted = 0;
+  let errors2 = 0;
+  for (const key of keys) {
+    try {
+      deleteMemory({ key, force });
+      deleted++;
+      results.push({ key, status: "deleted" });
+    } catch (e) {
+      errors2++;
+      results.push({ key, status: "error", error: e.message });
+    }
+  }
+  return { deleted, errors: errors2, count: keys.length, results };
+}
+
 // src/auto-reconcile.ts
 import * as fs7 from "fs";
 var DEFAULT_POLL_MS = 1e4;
@@ -17039,12 +17133,12 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.93" : null.version;
+var PLUGIN_VERSION = true ? "1.0.94" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
     capabilities: { tools: {} },
-    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (13 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys. Rerank with rerank_memories.`
+    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (16 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys. Rerank with rerank_memories. Bulk operations: export_memories / import_memories / delete_memories.`
   }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -17097,6 +17191,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           full: { type: "boolean", default: false, description: "Include the full memory content in the result." }
         },
         required: ["query", "keys"]
+      }
+    },
+    {
+      name: "export_memories",
+      description: "Export memories as a portable JSON archive. Optionally filter by keys, category, or tag. Each entry includes the full body content and metadata needed for import_memories.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          keys: { type: "array", items: { type: "string" }, description: "Optional subset of memory keys to export." },
+          category: { type: "string", description: "Filter by category." },
+          tag: { type: "string", description: "Filter by tag (any memory that includes this tag)." }
+        }
+      }
+    },
+    {
+      name: "import_memories",
+      description: "Import memories from a JSON archive produced by export_memories. Skips existing keys unless force=true.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          memories: { type: "array", description: "Array of memory objects (key, title, content, category, tags, importanceScore, ...)." },
+          force: { type: "boolean", default: false, description: "Overwrite existing memories with the same derived key." }
+        },
+        required: ["memories"]
+      }
+    },
+    {
+      name: "delete_memories",
+      description: "Bulk delete memories by key. Requires confirm=true. Refuses no-prune memories in the batch unless force=true is passed.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          keys: { type: "array", items: { type: "string" } },
+          force: { type: "boolean", default: false, description: "Override the no-prune tag guard for the batch." },
+          confirm: { type: "boolean", default: false, description: "Must be true to confirm the bulk deletion." }
+        },
+        required: ["keys", "confirm"]
       }
     },
     {
@@ -17223,6 +17354,9 @@ var TOOL_HANDLERS = {
   store_memory: storeMemory,
   recall_memory: recallMemory,
   rerank_memories: rerankMemories,
+  export_memories: exportMemories,
+  import_memories: importMemories,
+  delete_memories: deleteMemories,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,

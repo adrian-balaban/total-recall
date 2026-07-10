@@ -21,6 +21,11 @@ import {
 } from './tools/query.js';
 import { updateMemory, deleteMemory, rebuildIndex } from './tools/mutate.js';
 import { rerankMemories } from './tools/rerank.js';
+import {
+  exportMemories,
+  importMemories,
+  deleteMemories,
+} from './tools/bulk.js';
 import { startAutoReconcile } from './auto-reconcile.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
@@ -40,8 +45,9 @@ const server = new Server(
   {
     capabilities: { tools: {} },
     instructions:
-      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (13 tools). ` +
-      `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories.`,
+      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (16 tools). ` +
+      `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories. ` +
+      `Bulk operations: export_memories / import_memories / delete_memories.`,
   }
 );
 
@@ -95,6 +101,43 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           full: { type: 'boolean', default: false, description: 'Include the full memory content in the result.' },
         },
         required: ['query', 'keys'],
+      },
+    },
+    {
+      name: 'export_memories',
+      description: 'Export memories as a portable JSON archive. Optionally filter by keys, category, or tag. Each entry includes the full body content and metadata needed for import_memories.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          keys: { type: 'array', items: { type: 'string' }, description: 'Optional subset of memory keys to export.' },
+          category: { type: 'string', description: 'Filter by category.' },
+          tag: { type: 'string', description: 'Filter by tag (any memory that includes this tag).' },
+        },
+      },
+    },
+    {
+      name: 'import_memories',
+      description: 'Import memories from a JSON archive produced by export_memories. Skips existing keys unless force=true.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          memories: { type: 'array', description: 'Array of memory objects (key, title, content, category, tags, importanceScore, ...).' },
+          force: { type: 'boolean', default: false, description: 'Overwrite existing memories with the same derived key.' },
+        },
+        required: ['memories'],
+      },
+    },
+    {
+      name: 'delete_memories',
+      description: 'Bulk delete memories by key. Requires confirm=true. Refuses no-prune memories in the batch unless force=true is passed.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          keys: { type: 'array', items: { type: 'string' } },
+          force: { type: 'boolean', default: false, description: 'Override the no-prune tag guard for the batch.' },
+          confirm: { type: 'boolean', default: false, description: 'Must be true to confirm the bulk deletion.' },
+        },
+        required: ['keys', 'confirm'],
       },
     },
     {
@@ -226,6 +269,9 @@ const TOOL_HANDLERS: Record<string, (args: any) => any> = {
   store_memory: storeMemory,
   recall_memory: recallMemory,
   rerank_memories: rerankMemories,
+  export_memories: exportMemories,
+  import_memories: importMemories,
+  delete_memories: deleteMemories,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,
