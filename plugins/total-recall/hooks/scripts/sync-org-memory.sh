@@ -64,58 +64,104 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+QUEUE_DIR="$HOME/.total-recall/org/.sync-queue"
 LOCK="$HOME/.total-recall/org/.sync.lock"
 SYNC_LOG="$HOME/.total-recall/org/.sync.log"
-mkdir -p "$(dirname "$LOCK")"
-# flock is Linux-only (absent on macOS by default). Without it the git sync runs
-# unlocked — concurrent PostToolUse invocations can race on the org-vault repo.
-# Log the degradation so it's discoverable; the sync still proceeds.
-command -v flock >/dev/null 2>&1 || echo "warning: 'flock' not found; org sync running without a lock" >>"$SYNC_LOG"
+mkdir -p "$(dirname "$QUEUE_DIR")"
+mkdir -p "$QUEUE_DIR"
 
-# Run the git sync under an exclusive flock so concurrent PostToolUse invocations
-# serialize instead of racing on the same org-vault repo (checkout/pull/push). The
-# flock blocks, but the whole subshell is backgrounded so the hook never blocks the
-# session; queued syncs simply run one after another and no key's sync is dropped.
-# build-memory-index only writes the local cache file, so it stays outside the lock.
-#
-# The backgrounded subshell inherits fd 1 (this hook's stdout pipe to Claude Code).
-# Without a redirect, the node child's console.log lines append to the hook's
-# `{"continue":true}` JSON AFTER it is emitted — the pipe stays open until the
-# backgrounded child exits, so Claude Code reads the extra lines and may fail to
-# parse the hook output. Redirect the backgrounded children's stdout+stderr to a
-# log file so the hook emits exactly one clean JSON line and the sync output is
-# still discoverable at ~/.total-recall/org/.sync.log.
-#
-# Only org-tagged memories live in the shared git vault (their keys are prefixed
-# `org/`). A personal memory store/update/delete must NOT spawn the mjs git
-# sync — the mjs would treat a non-org key as missing from the org vault and
-# (attempt to) push a deletion / no-op, wasting a lock+spawn per personal write
-# and, for --delete, removing an unrelated entry if a path collision occurred.
-# Short-circuit personal keys: skip the mjs entirely but still rebuild the cache
-# below (personal writes must reflect in the injected index).
+log_warn() {
+  echo "warning: $1" >>"$SYNC_LOG"
+}
+
+# Run the mjs git sync for a single queued org key.
+run_queued_sync() {
+  local q_key="$1" q_delete="$2" q_force="$3"
+  if [ "$q_delete" = "1" ]; then
+    if [ "$q_force" = "1" ]; then
+      "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$q_key" --delete --force
+    else
+      "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$q_key" --delete
+    fi
+  else
+    "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$q_key"
+  fi
+}
+
+# Process every job file currently in the queue directory. Each job file is an
+# atomic, complete record created by the hook via mktemp+rename, so a concurrent
+# hook can add new files while we drain without corrupting the queue.
+drain_queue() {
+  local job_files=()
+  while IFS= read -r -d '' f; do
+    job_files+=("$f")
+  done < <(find "$QUEUE_DIR" -maxdepth 1 -type f -print0 2>/dev/null)
+
+  for job in "${job_files[@]}"; do
+    [ -f "$job" ] || continue
+    local q_key="" q_delete="0" q_force="0"
+    IFS=$'\t' read -r q_key q_delete q_force < "$job" || true
+    rm -f "$job"
+    [ -z "$q_key" ] && continue
+    [[ "$q_key" != org/* ]] && continue
+    run_queued_sync "$q_key" "${q_delete:-0}" "${q_force:-0}" || {
+      echo "sync failed for $q_key" >>"$SYNC_LOG"
+    }
+  done
+}
+
+# Background worker: holds the exclusive lock, drains the queue repeatedly, and
+# rebuilds the injected memory index once after the queue is quiet. Because the
+# lock is advisory, the queue is implemented as a directory of atomic job files
+# so appends never race with the drain.
+start_worker() {
+  (
+    while true; do
+      drain_queue
+      # After draining, see if more jobs arrived during the last pass.
+      any_jobs=$(find "$QUEUE_DIR" -maxdepth 1 -type f -print0 2>/dev/null | head -c 1)
+      if [ -z "$any_jobs" ]; then
+        # Queue is quiet — rebuild the injected index, then check one last time
+        # in case a hook appended a job just before we released the lock.
+        bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh"
+        any_jobs=$(find "$QUEUE_DIR" -maxdepth 1 -type f -print0 2>/dev/null | head -c 1)
+        [ -z "$any_jobs" ] && break
+      fi
+    done
+    # Release the inherited lock before exiting.
+    flock -u 9
+  ) >>"$SYNC_LOG" 2>&1 &
+}
+
 case "$KEY" in
   org/*)
-    if [ "$DELETE_FLAG" = "1" ]; then
-      (
-        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        # --force only when the user passed force=true (deliberate no-prune teardown);
-        # the .mjs delete branch refuses a no-prune memory without it.
-        if [ "$FORCE_FLAG" = "1" ]; then
-          "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete --force
-        else
-          "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY" --delete
-        fi
-      ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
+    # Coalesce org syncs: append an atomic job record, then start a background
+    # worker only if none is already running (flock -n). The worker drains the
+    # entire queue, so a burst of org writes results in one git sync process per
+    # session instead of one per key.
+    JOB_TMP=$(mktemp)
+    printf '%s\t%s\t%s\n' "$KEY" "$DELETE_FLAG" "$FORCE_FLAG" > "$JOB_TMP"
+    mv "$JOB_TMP" "$QUEUE_DIR/"
+
+    if command -v flock >/dev/null 2>&1; then
+      exec 9>"$LOCK"
+      if flock -n -x 9; then
+        # Pass the open fd 9 (and the lock) to the background worker, then close
+        # our copy. The worker holds the lock until it drains the queue and exits.
+        start_worker
+        exec 9>&-
+      fi
     else
-      (
-        if command -v flock >/dev/null 2>&1; then flock -x 9; fi
-        "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" "$KEY"
-      ) 9>"$LOCK" >>"$SYNC_LOG" 2>&1 &
+      log_warn "'flock' not found; org sync running without coalescing lock"
+      run_queued_sync "$KEY" "$DELETE_FLAG" "$FORCE_FLAG" || true
+      bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
     fi
     ;;
-  *) ;;  # personal key: no org-vault git sync needed
+  *)
+    # Personal memory store/update/delete: no org-vault git sync, but rebuild
+    # the local injected index so the new/deleted memory reflects immediately.
+    bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
+    ;;
 esac
-
-bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
 
 echo '{"continue":true}'

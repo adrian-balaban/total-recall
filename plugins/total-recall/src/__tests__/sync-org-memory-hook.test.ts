@@ -232,4 +232,77 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     const args = await waitForArgs(1500);
     expect(args).toBeNull();
   });
+
+  it('coalesces multiple org sync requests into a single worker session (G11)', async () => {
+    // Use an append stub so we can see every key the worker actually processed.
+    const coalesceArgsFile = path.join(tmpHome, 'coalesce-args.txt');
+    const appendStub = `#!/usr/bin/env node
+import fs from 'node:fs';
+import path from 'node:path';
+const argsFile = process.env.TR_COALESCE_ARGS_FILE;
+if (argsFile) {
+  fs.mkdirSync(path.dirname(argsFile), { recursive: true });
+  const argv = process.argv.slice(2);
+  const key = argv[0] || '';
+  const del = argv.includes('--delete') ? '1' : '0';
+  const force = argv.includes('--force') ? '1' : '0';
+  fs.appendFileSync(argsFile, [key, del, force].join('|') + '\\n');
+}
+process.exit(0);
+`;
+    const stubPath = path.join(fakeRoot, 'scripts', 'sync-org-memory.mjs');
+    fs.writeFileSync(stubPath, appendStub);
+    fs.chmodSync(stubPath, 0o755);
+
+    const envBase = { ...process.env, HOME: tmpHome, TR_COALESCE_ARGS_FILE: coalesceArgsFile };
+    const runCoalesceHook = (json: string, clear = false) => {
+      if (clear) fs.rmSync(coalesceArgsFile, { force: true });
+      return spawnSync('bash', [shPath], { encoding: 'utf8', input: json, env: envBase, stdio: ['pipe', 'pipe', 'pipe'] });
+    };
+    const waitForKeys = async (keys: string[], timeoutMs = 4000) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        if (fs.existsSync(coalesceArgsFile)) {
+          const raw = fs.readFileSync(coalesceArgsFile, 'utf8').trim();
+          const lines = raw ? raw.split('\n') : [];
+          if (keys.every((k) => lines.some((l) => l.startsWith(k + '|')))) return lines;
+        }
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      return null;
+    };
+
+    const jsonA = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'mcp__total-recall__store_memory',
+      tool_input: { title: 'A', content: '...', tags: ['org'] },
+      tool_response: { content: [{ type: 'text', text: JSON.stringify({ key: 'org/coalesce/a', message: 'stored' }) }] },
+    });
+    const jsonB = JSON.stringify({
+      tool_name: 'mcp__total-recall__store_memory',
+      tool_input: { title: 'B', content: '...', tags: ['org'] },
+      tool_response: { content: [{ type: 'text', text: JSON.stringify({ key: 'org/coalesce/b', message: 'stored' }) }] },
+    });
+
+    const rA = runCoalesceHook(jsonA, true);
+    expect(rA.status).toBe(0);
+    expect(rA.stdout.trim()).toBe('{"continue":true}');
+    const linesA = await waitForKeys(['org/coalesce/a']);
+    expect(linesA).not.toBeNull();
+
+    const rB = runCoalesceHook(jsonB);
+    expect(rB.status).toBe(0);
+    expect(rB.stdout.trim()).toBe('{"continue":true}');
+    const linesB = await waitForKeys(['org/coalesce/a', 'org/coalesce/b']);
+    expect(linesB).not.toBeNull();
+
+    const keys = linesB!.map((l) => l.split('|')[0]);
+    expect(keys).toContain('org/coalesce/a');
+    expect(keys).toContain('org/coalesce/b');
+
+    // Give the worker time to finish before restoring the original overwrite stub.
+    await new Promise((r) => setTimeout(r, 200));
+    fs.writeFileSync(stubPath, STUB_MJS);
+    fs.chmodSync(stubPath, 0o755);
+  }, 10000);
 }, 60000);
