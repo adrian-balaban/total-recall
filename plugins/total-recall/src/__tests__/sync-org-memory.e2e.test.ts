@@ -254,6 +254,16 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     expect(remoteTree()).not.toContain('org-vault/__proto__.md');
   });
 
+  // Pass 5 fix: argv flag parsing must only inspect the flag positions, not the key.
+  // A key whose slug literally contains `--delete` must be stored, not deleted.
+  it('does not misinterpret a key containing --delete as the delete flag', () => {
+    const key = 'org/knowledge/--delete';
+    writeOrgMemory('knowledge/--delete', { title: 'Delete Flag Literal', tags: ['org'], author: ME }, '## Executive Summary\n\nLiteral flag in key name.\n');
+    const res = runMjs(key);
+    expect(res.stderr).not.toMatch(/authored|no-prune|Refusing to delete/i);
+    expect(remoteTree()).toContain('org-vault/knowledge/--delete.md');
+  });
+
   // #2: a corrupt org index.json (interrupted atomicWrite, bad manual edit, or a git-
   // merge conflict marker) used to parse to undefined → the bare `catch {}` set
   // `index = {}` → updateOrgIndex wrote a one-entry index and commitAndPush committed

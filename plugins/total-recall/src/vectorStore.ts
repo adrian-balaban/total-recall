@@ -63,6 +63,7 @@ function ensureVecTable(d: any, dim: number): void {
 export async function upsertVector(dbPath: string, key: string, embedding: number[]): Promise<void> {
   const d = await getDb(dbPath);
   if (!d) return;
+  if (!Array.isArray(embedding) || embedding.length === 0) return;
   ensureVecTable(d, embedding.length);
   d.prepare(`INSERT OR REPLACE INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
     key,

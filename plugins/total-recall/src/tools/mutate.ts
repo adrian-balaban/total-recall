@@ -3,7 +3,7 @@ import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB, NO_PRUNE_TAG } from '../paths.js';
-import { reconcileIndex, assertRegularFile, tokenEstimate } from '../vault-scan.js';
+import { reconcileIndex, assertRegularFile, tokenEstimate, isReservedKey } from '../vault-scan.js';
 import { rebuildInvertedIndex, registerDocument, deregisterDocument } from '../tfidf.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -20,7 +20,11 @@ function normalizeTags(tags: unknown): string[] {
 }
 
 export function updateMemory(args: any): any {
-  const { key, content, tags, importanceScore, sessionId } = args;
+  const { key, content, tags, importanceScore } = args;
+  const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
+  if (typeof key !== 'string' || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
@@ -133,6 +137,9 @@ export function updateMemory(args: any): any {
 
 export function deleteMemory(args: any): any {
   const { key, force = false } = args;
+  if (typeof key !== 'string' || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
@@ -189,6 +196,9 @@ export function confirmMemory(args: any): any {
   // Coerce explicitly: a string `"false"` is truthy and would increment
   // confirmations instead of flags; only an explicit false-ish value counts.
   const useful = args.useful !== false && args.useful !== 'false';
+  if (typeof key !== 'string' || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 
@@ -196,6 +206,16 @@ export function confirmMemory(args: any): any {
 
   const raw = fs.readFileSync(meta.filePath, 'utf8');
   const parsed = parseFrontmatter(raw);
+
+  // Org memories are author-protected on confirmation too: a teammate should not
+  // be able to manipulate another author's Ebbinghaus retention signal.
+  if (meta.isOrg) {
+    const existingAuthor = (parsed.data as Partial<MemoryFrontmatter>).author;
+    if (existingAuthor !== os.userInfo().username) {
+      throw new Error(`Cannot confirm org memory authored by ${existingAuthor ?? '(unknown)'}.`);
+    }
+  }
+
   const field = useful === false ? 'flags' : 'confirmations';
   const prev = Number.isFinite(parsed.data[field]) ? Math.max(0, Number(parsed.data[field])) : 0;
   const next = prev + 1;

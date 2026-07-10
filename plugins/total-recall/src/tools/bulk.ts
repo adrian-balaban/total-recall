@@ -1,5 +1,5 @@
 import { memIndex } from '../state.js';
-import { readMemoryContent } from '../vault-scan.js';
+import { readMemoryContent, isReservedKey } from '../vault-scan.js';
 import { storeMemory } from './store.js';
 import { deleteMemory } from './mutate.js';
 import type { MemoryMetadata } from '../types.js';
@@ -102,6 +102,9 @@ export function deleteMemories(args: any): any {
       ? [args.keys]
       : [];
   const keys = rawKeys.map((k: unknown) => (typeof k === 'string' ? k : String(k)));
+  if (keys.some(isReservedKey)) {
+    throw new Error('One or more keys contain a reserved key segment.');
+  }
   const force = args.force === true;
   const confirm = args.confirm === true;
 

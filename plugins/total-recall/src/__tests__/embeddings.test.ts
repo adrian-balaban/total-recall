@@ -69,6 +69,14 @@ describe('embeddings — success path', () => {
     await embed('probe');
     expect(isVectorAvailable()).toBe(true);
   });
+
+  it('isVectorAvailable returns true for an external embedder that returns an empty array', async () => {
+    // Empty array is a valid (if degenerate) embedding response and must not
+    // disable the vector-search flag just because it is falsy.
+    __testSetEmbedder(async () => []);
+    await embed('probe');
+    expect(isVectorAvailable()).toBe(true);
+  });
 });
 
 // ─── Failure path: embedder unavailable ────────────────────────────────────────

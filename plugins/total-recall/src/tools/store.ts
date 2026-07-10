@@ -39,7 +39,9 @@ export function storeMemory(args: any): any {
   // on the next read. Coerce at the destructure so every downstream use is
   // safe — same blast radius the indexFile hardening guards against for
   // externally-authored frontmatter.
-  const { content, sessionId, author, force = false } = args;
+  const { content, force = false } = args;
+  const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
+  const author = typeof args.author === 'string' ? args.author : undefined;
   const explicitKey = typeof args.key === 'string' ? args.key : undefined;
   const explicitCreated = typeof args.created === 'string' ? args.created : undefined;
   const explicitUpdated = typeof args.updated === 'string' ? args.updated : undefined;

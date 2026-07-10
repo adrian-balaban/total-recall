@@ -126,7 +126,7 @@ export async function embed(text: string): Promise<number[] | null> {
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
-  if (result) externalEmbedSuccess = true;
+  if (Array.isArray(result)) externalEmbedSuccess = true;
   return result;
 }
 

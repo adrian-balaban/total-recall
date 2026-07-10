@@ -402,8 +402,8 @@ export function indexFile(filePath: string, isOrg: boolean) {
       // the same externally-authored threat model as the numeric-title coercion.
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
-      created: fm.created ?? existing?.created ?? now,
-      updated: fm.updated ?? existing?.updated ?? now,
+      created: String(fm.created ?? existing?.created ?? now),
+      updated: String(fm.updated ?? existing?.updated ?? now),
       // Coerce + clamp importanceScore to a finite [0, 1] number — see
       // clampImportanceScore in ebbinghaus.ts.
       importanceScore: clampImportanceScore(fm.importanceScore),
@@ -416,7 +416,7 @@ export function indexFile(filePath: string, isOrg: boolean) {
       mtimeMs: st.mtimeMs,
       size: st.size,
     };
-    if (fm.author !== undefined) meta.author = fm.author;
+    if (fm.author !== undefined) meta.author = String(fm.author);
     if (fm.confirmations !== undefined && Number.isFinite(fm.confirmations) && fm.confirmations > 0) {
       meta.confirmations = Math.max(0, fm.confirmations);
     }

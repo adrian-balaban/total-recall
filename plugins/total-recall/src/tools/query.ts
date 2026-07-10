@@ -3,7 +3,7 @@ import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable } from '../embeddings.js';
-import { readMemoryContent, readCachedOrFresh } from '../vault-scan.js';
+import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
 import { NO_PRUNE_TAG } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
 
@@ -58,6 +58,7 @@ export function getMemoriesByKeys(args: any): any {
   const keys = rawKeys.map((k: unknown) => (typeof k === 'string' ? k : String(k)));
   const { summary = false } = args;
   return keys.map((key: string) => {
+    if (isReservedKey(key)) return { key, error: 'Invalid key: reserved key segment.' };
     const meta = memIndex[key];
     if (!meta) return { key, error: 'Not found' };
     // Defer the access-count bump until a read actually succeeds. Previously the
@@ -131,6 +132,9 @@ export function getTimeline(args: any): any {
 
 export function getRelatedMemories(args: any): any {
   const { key, includeContent = false } = args;
+  if (typeof key !== 'string' || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   // Coerce + clamp limit (mirrors listMemories above): MCP does not enforce
   // the inputSchema, so a negative/NaN/huge limit must not produce a wrong slice.
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;

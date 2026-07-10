@@ -223,4 +223,12 @@ describe('vectorStore — dynamic dimension migration', () => {
     await expect(deleteVector(tmpDb, 'k/a')).resolves.toBeUndefined();
     await expect(listVectorKeys(tmpDb)).resolves.toEqual([]);
   });
+
+  it('upsertVector ignores an empty embedding array', async () => {
+    const { upsertVector } = await import('../vectorStore.js');
+    await upsertVector(tmpDb, 'k/empty', []);
+    // No CREATE VIRTUAL TABLE call should be issued for an empty vector.
+    const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
+    expect(createCalls.length).toBe(0);
+  });
 });

@@ -15965,6 +15965,7 @@ function ensureVecTable(d, dim) {
 async function upsertVector(dbPath, key, embedding) {
   const d = await getDb(dbPath);
   if (!d) return;
+  if (!Array.isArray(embedding) || embedding.length === 0) return;
   ensureVecTable(d, embedding.length);
   d.prepare(`INSERT OR REPLACE INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
     key,
@@ -16094,7 +16095,7 @@ async function embed(text) {
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
-  if (result) externalEmbedSuccess = true;
+  if (Array.isArray(result)) externalEmbedSuccess = true;
   return result;
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
@@ -16301,8 +16302,8 @@ function indexFile(filePath, isOrg) {
       // the same externally-authored threat model as the numeric-title coercion.
       tags: Array.isArray(fm.tags) ? fm.tags : [],
       sessions: Array.isArray(fm.sessions) ? fm.sessions : [],
-      created: fm.created ?? existing?.created ?? now,
-      updated: fm.updated ?? existing?.updated ?? now,
+      created: String(fm.created ?? existing?.created ?? now),
+      updated: String(fm.updated ?? existing?.updated ?? now),
       // Coerce + clamp importanceScore to a finite [0, 1] number — see
       // clampImportanceScore in ebbinghaus.ts.
       importanceScore: clampImportanceScore(fm.importanceScore),
@@ -16315,7 +16316,7 @@ function indexFile(filePath, isOrg) {
       mtimeMs: st.mtimeMs,
       size: st.size
     };
-    if (fm.author !== void 0) meta2.author = fm.author;
+    if (fm.author !== void 0) meta2.author = String(fm.author);
     if (fm.confirmations !== void 0 && Number.isFinite(fm.confirmations) && fm.confirmations > 0) {
       meta2.confirmations = Math.max(0, fm.confirmations);
     }
@@ -16561,7 +16562,9 @@ function orgVaultConfigured() {
   return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
 }
 function storeMemory(args) {
-  const { content, sessionId, author, force = false } = args;
+  const { content, force = false } = args;
+  const sessionId = typeof args.sessionId === "string" ? args.sessionId : void 0;
+  const author = typeof args.author === "string" ? args.author : void 0;
   const explicitKey = typeof args.key === "string" ? args.key : void 0;
   const explicitCreated = typeof args.created === "string" ? args.created : void 0;
   const explicitUpdated = typeof args.updated === "string" ? args.updated : void 0;
@@ -16837,6 +16840,7 @@ function getMemoriesByKeys(args) {
   const keys = rawKeys.map((k) => typeof k === "string" ? k : String(k));
   const { summary = false } = args;
   return keys.map((key) => {
+    if (isReservedKey(key)) return { key, error: "Invalid key: reserved key segment." };
     const meta2 = memIndex[key];
     if (!meta2) return { key, error: "Not found" };
     if (summary) {
@@ -16883,6 +16887,9 @@ function getTimeline(args) {
 }
 function getRelatedMemories(args) {
   const { key, includeContent = false } = args;
+  if (typeof key !== "string" || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 10;
   const source = memIndex[key];
   if (!source) throw new Error(`Memory not found: ${key}`);
@@ -16932,7 +16939,11 @@ function normalizeTags(tags) {
   return tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean);
 }
 function updateMemory(args) {
-  const { key, content, tags, importanceScore, sessionId } = args;
+  const { key, content, tags, importanceScore } = args;
+  const sessionId = typeof args.sessionId === "string" ? args.sessionId : void 0;
+  if (typeof key !== "string" || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   assertRegularFile(meta2.filePath, key);
@@ -17007,6 +17018,9 @@ function updateMemory(args) {
 }
 function deleteMemory(args) {
   const { key, force = false } = args;
+  if (typeof key !== "string" || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   if (meta2.isOrg) {
@@ -17042,11 +17056,20 @@ function deleteMemory(args) {
 function confirmMemory(args) {
   const { key } = args;
   const useful = args.useful !== false && args.useful !== "false";
+  if (typeof key !== "string" || isReservedKey(key)) {
+    throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
+  }
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   assertRegularFile(meta2.filePath, key);
   const raw = fs6.readFileSync(meta2.filePath, "utf8");
   const parsed = parseFrontmatter(raw);
+  if (meta2.isOrg) {
+    const existingAuthor = parsed.data.author;
+    if (existingAuthor !== os3.userInfo().username) {
+      throw new Error(`Cannot confirm org memory authored by ${existingAuthor ?? "(unknown)"}.`);
+    }
+  }
   const field = useful === false ? "flags" : "confirmations";
   const prev = Number.isFinite(parsed.data[field]) ? Math.max(0, Number(parsed.data[field])) : 0;
   const next = prev + 1;
@@ -17098,7 +17121,7 @@ async function rerankMemories(args) {
   }
   const requestedLimit = Number(args.limit);
   const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(MAX_KEYS, Math.floor(requestedLimit)) : keys.length;
-  const candidateKeys = keys.slice(0, MAX_KEYS).map(String);
+  const candidateKeys = keys.slice(0, MAX_KEYS).map(String).filter((k) => !isReservedKey(k));
   const qvec = await embed(query);
   if (!qvec) {
     return candidateKeys.map((key) => ({ key, score: 0 }));
@@ -17225,6 +17248,9 @@ function importMemories(args) {
 function deleteMemories(args) {
   const rawKeys = Array.isArray(args.keys) ? args.keys : typeof args.keys === "string" ? [args.keys] : [];
   const keys = rawKeys.map((k) => typeof k === "string" ? k : String(k));
+  if (keys.some(isReservedKey)) {
+    throw new Error("One or more keys contain a reserved key segment.");
+  }
   const force = args.force === true;
   const confirm = args.confirm === true;
   if (keys.length === 0) throw new Error("No keys provided.");
@@ -17282,7 +17308,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.98" : null.version;
+var PLUGIN_VERSION = true ? "1.0.99" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -11,6 +11,8 @@ import { storeMemory } from '../tools/store.js';
 import { pruneMemories } from '../tools/query.js';
 import { memIndex } from '../state.js';
 import { parseFrontmatter } from '../frontmatter.js';
+import { indexFile } from '../vault-scan.js';
+import * as os from 'os';
 
 const TEST_HOME = process.env.HOME!;
 const VAULT = path.join(TEST_HOME, '.total-recall');
@@ -148,5 +150,49 @@ describe('confirm_memory', () => {
     const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
     updateMemory({ key: stored.key, tags: ['a', 2, null as any] });
     expect(memIndex[stored.key]?.tags).toEqual(['a', '2']);
+  });
+
+  it('store_memory coerces a non-string sessionId and author to undefined', () => {
+    const stored = storeMemory({
+      title: 'Coerce', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5,
+      sessionId: 12345 as any, author: true as any,
+    });
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.data.sessions).toEqual([]);
+    expect(parsed.data.author).toBe(os.userInfo().username);
+  });
+
+  it('update_memory coerces a non-string sessionId to undefined', () => {
+    const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
+    updateMemory({ key: stored.key, content: 'new', sessionId: 12345 as any });
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.data.sessions).toEqual([]);
+  });
+
+  it('confirm_memory refuses to confirm an org memory authored by another user', () => {
+    const orgVault = path.join(TEST_HOME, '.total-recall', 'org', 'org-vault');
+    const key = 'org/knowledge/foreign';
+    const file = path.join(orgVault, 'knowledge', 'foreign.md');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `---\ntitle: "Foreign"\ntags: [org]\nauthor: "someone-else"\n---\n\nbody\n`);
+    indexFile(file, true);
+    expect(memIndex[key]).toBeDefined();
+
+    expect(() => confirmMemory({ key })).toThrow(/authored by someone-else/);
+    expect(memIndex[key]?.confirmations).toBeUndefined();
+  });
+
+  it('confirm_memory allows the org author to confirm their own org memory', () => {
+    const orgVault = path.join(TEST_HOME, '.total-recall', 'org', 'org-vault');
+    const key = 'org/knowledge/own';
+    const file = path.join(orgVault, 'knowledge', 'own.md');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, `---\ntitle: "Own"\ntags: [org]\nauthor: "${os.userInfo().username}"\n---\n\nbody\n`);
+    indexFile(file, true);
+
+    const res = confirmMemory({ key });
+    expect(res.confirmations).toBe(1);
   });
 });

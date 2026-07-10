@@ -1,6 +1,6 @@
 import { memIndex } from '../state.js';
 import { embed } from '../embeddings.js';
-import { readCachedOrFresh } from '../vault-scan.js';
+import { readCachedOrFresh, isReservedKey } from '../vault-scan.js';
 
 // ─── Cosine similarity for normalized embeddings ───────────────────────────────
 
@@ -40,7 +40,9 @@ export async function rerankMemories(args: any): Promise<any> {
     : keys.length;
 
   // Cap the candidate set itself so a huge `keys` array can't spam the embedder.
-  const candidateKeys = keys.slice(0, MAX_KEYS).map(String);
+  // Drop reserved-key segments: they cannot be own properties in memIndex and
+  // would otherwise resolve to Object.prototype when looked up.
+  const candidateKeys = keys.slice(0, MAX_KEYS).map(String).filter(k => !isReservedKey(k));
 
   const qvec = await embed(query);
   if (!qvec) {

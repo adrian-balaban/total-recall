@@ -203,9 +203,11 @@ function commitAndPush(relFile, relIndex, message) {
 }
 
 async function main() {
-  const key = process.argv[2];
-  const deleteMode = process.argv.includes('--delete');
-  const force = process.argv.includes('--force');
+  const cliArgs = process.argv.slice(2);
+  const key = cliArgs[0];
+  const flags = cliArgs.slice(1);
+  const deleteMode = flags.includes('--delete');
+  const force = flags.includes('--force');
 
   if (!key) { console.error('Usage: sync-org-memory.mjs <key> [--delete]'); process.exit(1); }
 
