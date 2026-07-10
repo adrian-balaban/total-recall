@@ -20,6 +20,7 @@ import {
   pruneMemories,
 } from './tools/query.js';
 import { updateMemory, deleteMemory, rebuildIndex } from './tools/mutate.js';
+import { rerankMemories } from './tools/rerank.js';
 import { startAutoReconcile } from './auto-reconcile.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
@@ -39,8 +40,8 @@ const server = new Server(
   {
     capabilities: { tools: {} },
     instructions:
-      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (12 tools). ` +
-      `Retrieval order: search_index → recall_memory → get_memories_by_keys.`,
+      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (13 tools). ` +
+      `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories.`,
   }
 );
 
@@ -80,6 +81,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           hybrid: { type: 'boolean', default: true, description: 'Fuse TF-IDF with vector search (RRF) when available.' },
         },
         required: ['query'],
+      },
+    },
+    {
+      name: 'rerank_memories',
+      description: 'Reorder a candidate list of memory keys by semantic similarity to a query using embeddings. Returns the same keys sorted by cosine score; pass full=true to include the memory body.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'The query to compare each candidate memory against.' },
+          keys: { type: 'array', items: { type: 'string' }, description: 'Candidate memory keys (e.g. the top-N results from recall_memory or search_index).' },
+          limit: { type: 'number', default: 0, description: 'Maximum number of keys to return. Default 0 returns all provided keys.' },
+          full: { type: 'boolean', default: false, description: 'Include the full memory content in the result.' },
+        },
+        required: ['query', 'keys'],
       },
     },
     {
@@ -210,6 +225,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 const TOOL_HANDLERS: Record<string, (args: any) => any> = {
   store_memory: storeMemory,
   recall_memory: recallMemory,
+  rerank_memories: rerankMemories,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,

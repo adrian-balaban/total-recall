@@ -16930,6 +16930,78 @@ function rebuildIndex() {
   return { message: `Index rebuilt. ${Object.keys(memIndex).length} memories indexed.` };
 }
 
+// src/tools/rerank.ts
+function cosineSimilarity(a, b) {
+  let dot = 0;
+  let normA = 0;
+  let normB = 0;
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    const ai = a[i] ?? 0;
+    const bi = b[i] ?? 0;
+    dot += ai * bi;
+    normA += ai * ai;
+    normB += bi * bi;
+  }
+  const denom = Math.sqrt(normA) * Math.sqrt(normB);
+  return denom ? dot / denom : 0;
+}
+var MAX_KEYS = 200;
+async function rerankMemories(args) {
+  const { query, keys, full = false } = args;
+  if (typeof query !== "string" || query.trim().length === 0) {
+    throw new Error("query must be a non-empty string");
+  }
+  if (!Array.isArray(keys) || keys.length === 0) {
+    throw new Error("keys must be a non-empty array");
+  }
+  const requestedLimit = Number(args.limit);
+  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0 ? Math.min(MAX_KEYS, Math.floor(requestedLimit)) : keys.length;
+  const candidateKeys = keys.slice(0, MAX_KEYS).map(String);
+  const qvec = await embed(query);
+  if (!qvec) {
+    return candidateKeys.map((key) => ({ key, score: 0 }));
+  }
+  const scored = [];
+  for (const key of candidateKeys) {
+    const meta2 = memIndex[key];
+    if (!meta2) continue;
+    const { content } = readCachedOrFresh(key, meta2.filePath, "reread");
+    const textToEmbed = `${meta2.title}
+
+${content || meta2.contentPreview || ""}`.slice(0, 2e3);
+    const mvec = await embed(textToEmbed);
+    if (!mvec) continue;
+    scored.push({ key, score: cosineSimilarity(qvec, mvec), meta: meta2 });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const top = scored.slice(0, limit);
+  return top.map((r) => {
+    const m = r.meta;
+    if (full) {
+      const { content } = readCachedOrFresh(r.key, m.filePath, "reread");
+      return {
+        key: r.key,
+        score: r.score,
+        title: m.title,
+        category: m.category,
+        tags: m.tags,
+        updated: m.updated,
+        content
+      };
+    }
+    return {
+      key: r.key,
+      score: r.score,
+      title: m.title,
+      category: m.category,
+      tags: m.tags,
+      updated: m.updated,
+      preview: m.contentPreview
+    };
+  });
+}
+
 // src/auto-reconcile.ts
 import * as fs7 from "fs";
 var DEFAULT_POLL_MS = 1e4;
@@ -16963,12 +17035,12 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.91" : null.version;
+var PLUGIN_VERSION = true ? "1.0.92" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
     capabilities: { tools: {} },
-    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (12 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys.`
+    instructions: `total-recall v${PLUGIN_VERSION} \u2014 persistent memory MCP server (13 tools). Retrieval order: search_index \u2192 recall_memory \u2192 get_memories_by_keys. Rerank with rerank_memories.`
   }
 );
 server.setRequestHandler(ListToolsRequestSchema, async () => ({
@@ -17007,6 +17079,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           hybrid: { type: "boolean", default: true, description: "Fuse TF-IDF with vector search (RRF) when available." }
         },
         required: ["query"]
+      }
+    },
+    {
+      name: "rerank_memories",
+      description: "Reorder a candidate list of memory keys by semantic similarity to a query using embeddings. Returns the same keys sorted by cosine score; pass full=true to include the memory body.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The query to compare each candidate memory against." },
+          keys: { type: "array", items: { type: "string" }, description: "Candidate memory keys (e.g. the top-N results from recall_memory or search_index)." },
+          limit: { type: "number", default: 0, description: "Maximum number of keys to return. Default 0 returns all provided keys." },
+          full: { type: "boolean", default: false, description: "Include the full memory content in the result." }
+        },
+        required: ["query", "keys"]
       }
     },
     {
@@ -17132,6 +17218,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 var TOOL_HANDLERS = {
   store_memory: storeMemory,
   recall_memory: recallMemory,
+  rerank_memories: rerankMemories,
   list_memories: listMemories,
   update_memory: updateMemory,
   delete_memory: deleteMemory,

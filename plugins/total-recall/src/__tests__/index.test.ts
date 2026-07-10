@@ -1435,10 +1435,10 @@ describe('reconcileIndex skips unchanged files (#19)', () => {
 // ─── list_tools ───────────────────────────────────────────────────────────────
 
 describe('ListToolsRequestSchema', () => {
-  it('returns exactly 12 tools', async () => {
+  it('returns exactly 13 tools', async () => {
     const handler = registeredHandlers.get('ListToolsRequestSchema')!;
     const res = await handler({ params: {} });
-    expect(res.tools.length).toBe(12);
+    expect(res.tools.length).toBe(13);
   });
 
   it('every tool has name, description, and inputSchema', async () => {
@@ -1457,7 +1457,8 @@ describe('ListToolsRequestSchema', () => {
     expect(tools.map((t: any) => t.name).sort()).toEqual([
       'delete_memory', 'get_memories_by_keys', 'get_related_memories',
       'get_stats', 'get_timeline', 'list_memories', 'prune_memories',
-      'rebuild_index', 'recall_memory', 'search_index', 'store_memory', 'update_memory',
+      'rebuild_index', 'recall_memory', 'rerank_memories', 'search_index',
+      'store_memory', 'update_memory',
     ]);
   });
 
