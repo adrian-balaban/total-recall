@@ -58,6 +58,9 @@ if [ ! -d "$ORG_VAULT/.git" ]; then
       exit 0
     fi
   fi
+  # The server polls for this marker; drop it so a running session reconciles
+  # the newly cloned org memories without requiring a restart.
+  touch "$HOME/.total-recall/.reconcile-requested"
   echo '{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Org vault cloned."}}'
   exit 0
 fi
@@ -73,6 +76,9 @@ if git pull --ff-only --no-recurse-submodules origin "$BRANCH" 2>/dev/null; then
   if [ "$BEFORE" = "$AFTER" ]; then
     echo '{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Org vault up-to-date."}}'
   else
+    # Ask the running server to reconcile so teammates' pushed memories surface
+    # without a session restart.
+    touch "$HOME/.total-recall/.reconcile-requested"
     echo "{\"continue\":true,\"hookSpecificOutput\":{\"hookEventName\":\"SessionStart\",\"additionalContext\":\"Org vault updated: $BEFORE -> $AFTER\"}}"
   fi
 else

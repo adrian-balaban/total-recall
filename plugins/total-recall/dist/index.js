@@ -6875,12 +6875,12 @@ var require_dist = __commonJS({
         throw new Error(`Unknown format "${name}"`);
       return f;
     };
-    function addFormats(ajv, list, fs7, exportName) {
+    function addFormats(ajv, list, fs8, exportName) {
       var _a3;
       var _b;
       (_a3 = (_b = ajv.opts.code).formats) !== null && _a3 !== void 0 ? _a3 : _b.formats = (0, codegen_1._)`require("ajv-formats/dist/formats").${exportName}`;
       for (const f of list)
-        ajv.addFormat(f, fs7[f]);
+        ajv.addFormat(f, fs8[f]);
     }
     module.exports = exports = formatsPlugin;
     Object.defineProperty(exports, "__esModule", { value: true });
@@ -15488,6 +15488,7 @@ var VECTORS_DB = path.join(PERSONAL_VAULT, "vectors.db");
 var INDEX_PATH = path.join(TOTAL_RECALL_DIR, "index.json");
 var INVERTED_INDEX_PATH = path.join(TOTAL_RECALL_DIR, "invertedIndex.json");
 var INDEX_CACHE_PATH = path.join(TOTAL_RECALL_DIR, ".index-cache.txt");
+var RECONCILE_REQUEST_FLAG = path.join(TOTAL_RECALL_DIR, ".reconcile-requested");
 var EXCLUDED_DIRS = /* @__PURE__ */ new Set([
   "projects",
   "templates",
@@ -16929,8 +16930,40 @@ function rebuildIndex() {
   return { message: `Index rebuilt. ${Object.keys(memIndex).length} memories indexed.` };
 }
 
+// src/auto-reconcile.ts
+import * as fs7 from "fs";
+var DEFAULT_POLL_MS = 1e4;
+function checkReconcileRequest() {
+  try {
+    fs7.statSync(RECONCILE_REQUEST_FLAG);
+  } catch {
+    return false;
+  }
+  try {
+    fs7.unlinkSync(RECONCILE_REQUEST_FLAG);
+  } catch {
+  }
+  try {
+    reconcileIndex();
+    recalcIdfNow();
+    scheduleSave();
+  } catch (e) {
+    recordError(`auto-reconcile: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return true;
+}
+function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
+  const interval = setInterval(() => {
+    checkReconcileRequest();
+  }, pollMs);
+  if ("unref" in interval) {
+    interval.unref();
+  }
+  return interval;
+}
+
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.89" : null.version;
+var PLUGIN_VERSION = true ? "1.0.90" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -17137,6 +17170,7 @@ async function main() {
   markIndexFresh();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  startAutoReconcile();
 }
 
 // src/index.ts

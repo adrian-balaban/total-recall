@@ -20,6 +20,7 @@ import {
   pruneMemories,
 } from './tools/query.js';
 import { updateMemory, deleteMemory, rebuildIndex } from './tools/mutate.js';
+import { startAutoReconcile } from './auto-reconcile.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
 
@@ -274,4 +275,8 @@ export async function main() {
   markIndexFresh();
   const transport = new StdioServerTransport();
   await server.connect(transport);
+  // Polling reconcile trigger: SessionStart hooks drop a marker file when the
+  // org vault changes (e.g. after a git pull); the server picks it up without
+  // requiring a restart.
+  startAutoReconcile();
 }

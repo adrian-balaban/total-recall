@@ -73,6 +73,7 @@ export const VECTORS_DB = path.join(PERSONAL_VAULT, 'vectors.db');
 export const INDEX_PATH = path.join(TOTAL_RECALL_DIR, 'index.json');
 export const INVERTED_INDEX_PATH = path.join(TOTAL_RECALL_DIR, 'invertedIndex.json');
 export const INDEX_CACHE_PATH = path.join(TOTAL_RECALL_DIR, '.index-cache.txt');
+export const RECONCILE_REQUEST_FLAG = path.join(TOTAL_RECALL_DIR, '.reconcile-requested');
 
 export const EXCLUDED_DIRS = new Set([
   'projects', 'templates', '.obsidian', 'reference-docs', 'in-progress', 'completed',
