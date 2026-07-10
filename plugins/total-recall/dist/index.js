@@ -16036,7 +16036,7 @@ function serializeArrayItem(s) {
   if (typeof s === "boolean") return s ? "true" : "false";
   const str = String(s);
   if (/[\r\n]/.test(str)) throw new Error("Frontmatter array item contains a newline \u2014 refusing to emit.");
-  return needsQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
+  return needsArrayItemQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
 }
 function serializeString(s) {
   if (/[\r\n]/.test(s)) throw new Error("Frontmatter value contains a newline \u2014 refusing to emit.");
@@ -16052,6 +16052,10 @@ function needsQuotes(s) {
   if (/^(true|false|null|~|yes|no)$/i.test(s)) return true;
   if (/^-?\d+(\.\d+)?$/.test(s)) return true;
   return false;
+}
+function needsArrayItemQuotes(s) {
+  if (/['"]/.test(s)) return true;
+  return needsQuotes(s);
 }
 
 // src/lru-cache.ts
@@ -17035,7 +17039,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.92" : null.version;
+var PLUGIN_VERSION = true ? "1.0.93" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

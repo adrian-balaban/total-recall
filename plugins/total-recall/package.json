@@ -1,6 +1,6 @@
 {
   "name": "total-recall",
-  "version": "1.0.92",
+  "version": "1.0.93",
   "description": "Persistent memory MCP server for Claude Code",
   "type": "module",
   "main": "dist/index.js",
@@ -24,14 +24,15 @@
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.8",
     "esbuild": "^0.28.1",
+    "fast-check": "^4.9.0",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0",
     "vitest": "^4.1.8"
   },
   "optionalDependencies": {
     "@huggingface/transformers": "^3.8.1",
-    "sqlite-vec": "^0.1.9",
-    "better-sqlite3": "^12.10.0"
+    "better-sqlite3": "^12.10.0",
+    "sqlite-vec": "^0.1.9"
   },
   "engines": {
     "node": ">=18.0.0"

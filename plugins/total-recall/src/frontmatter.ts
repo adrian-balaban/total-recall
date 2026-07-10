@@ -253,7 +253,7 @@ function serializeArrayItem(s: unknown): string {
   // line and inject a following line as a new key on re-parse. Single-quoted
   // YAML scalars can't span lines either, so refuse rather than mis-emit.
   if (/[\r\n]/.test(str)) throw new Error('Frontmatter array item contains a newline — refusing to emit.');
-  return needsQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
+  return needsArrayItemQuotes(str) ? `'${str.replace(/'/g, "''")}'` : str;
 }
 
 function serializeString(s: string): string {
@@ -273,4 +273,13 @@ function needsQuotes(s: string): boolean {
   if (/^(true|false|null|~|yes|no)$/i.test(s)) return true; // YAML keywords
   if (/^-?\d+(\.\d+)?$/.test(s)) return true; // looks numeric
   return false;
+}
+
+function needsArrayItemQuotes(s: string): boolean {
+  // Inline-array items are scanned by a quote-aware comma splitter. Any unquoted
+  // single or double quote inside an item would flip the scanner's quote state
+  // and corrupt the split, so array items must be quoted when they contain a
+  // quote character anywhere (not just at the start).
+  if (/['"]/.test(s)) return true;
+  return needsQuotes(s);
 }
