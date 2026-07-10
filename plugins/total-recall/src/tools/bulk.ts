@@ -61,14 +61,22 @@ export function importMemories(args: any): any {
       const title = String(m.title ?? '');
       const content = m.content !== undefined ? String(m.content) : undefined;
       const category = m.category !== undefined ? String(m.category) : 'knowledge';
-      const tags = Array.isArray(m.tags) ? m.tags.map((t: unknown) => String(t)) : [];
+      const tags = Array.isArray(m.tags)
+        ? m.tags.map((t: unknown) => (t === null || t === undefined ? '' : String(t))).filter(Boolean)
+        : [];
       const importanceScore = typeof m.importanceScore === 'number' ? m.importanceScore : undefined;
       const author = m.author !== undefined ? String(m.author) : undefined;
 
       if (!title) throw new Error('Missing title');
       if (content === undefined) throw new Error('Missing content');
 
-      const res = storeMemory({ title, content, category, tags, importanceScore, author, force });
+      const res = storeMemory({
+        title, content, category, tags, importanceScore, author, force,
+        key: m.key,
+        created: m.created,
+        updated: m.updated,
+        sessions: Array.isArray(m.sessions) ? m.sessions : undefined,
+      });
       imported++;
       results.push({ key: res.key, status: 'imported' });
     } catch (e: any) {

@@ -11,7 +11,7 @@ Total-recall is a plugin that gives the AI (compatible with Claude Code, Gemini 
 ```
 src/
 ├── index.ts          boot stub — signal handlers + calls main()
-├── server.ts         MCP Server construction, 12 tool schemas, CallTool dispatch
+├── server.ts         MCP Server construction, 17 tool schemas, CallTool dispatch
 ├── state.ts          shared in-memory singletons (memIndex, invertedIndex, errors, perfSamples)
 ├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
 ├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex
@@ -108,7 +108,7 @@ On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced ch
 
 ---
 
-## The 12 MCP Tools
+## The 17 MCP Tools
 
 ### Write
 | Tool | Description |
@@ -116,6 +116,14 @@ On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced ch
 | `store_memory` | Create a new memory; routes to org vault if tagged `org`; `force=true` overwrites |
 | `update_memory` | Patch title/content/tags/importanceScore; author-protected for org |
 | `delete_memory` | Remove file + index entry + vector; invalidates LRU |
+| `confirm_memory` | Increment confirmations/flags to guide retention |
+
+### Bulk
+| Tool | Description |
+|---|---|
+| `export_memories` | Dump selected memories (with full content) for backup/transfer |
+| `import_memories` | Restore memories from an export archive; preserves key/timestamps/sessions |
+| `delete_memories` | Batch delete with explicit confirmation and no-prune awareness |
 
 ### Search / Read
 | Tool | Description |
@@ -123,6 +131,7 @@ On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced ch
 | `recall_memory` | TF-IDF + Ebbinghaus, optionally fused with vector search via RRF |
 | `search_index` | Metadata-only TF-IDF (no file reads, no accessCount bump) |
 | `get_memories_by_keys` | Direct key lookup; reads through LRU cache |
+| `rerank_memories` | Re-rank a candidate list with a query using cross-encoder-style signals |
 
 ### List / Query
 | Tool | Description |

@@ -45,24 +45,39 @@ describe('bulk tools', () => {
   it('export_memories filters by keys, category, and tag', () => {
     seed();
     expect(exportMemories({ keys: ['knowledge/alpha'] }).count).toBe(1);
+    expect(exportMemories({ keys: 'knowledge/alpha' }).count).toBe(1);
     expect(exportMemories({ category: 'journal' }).count).toBe(1);
     expect(exportMemories({ tag: 'x' }).count).toBe(1);
     expect(exportMemories({ category: 'journal', tag: 'x' }).count).toBe(0);
   });
 
-  it('import_memories restores an exported archive', () => {
-    seed();
-    const archive = exportMemories({});
-    // Wipe the originals.
-    deleteMemories({ keys: ['knowledge/alpha', 'journal/beta'], confirm: true });
+  it('import_memories restores an exported archive preserving key, timestamps, and sessions', () => {
+    const original = storeMemory({
+      title: 'Alpha', content: 'Alpha body.', category: 'knowledge', tags: ['x'],
+      importanceScore: 0.5, sessionId: 'session-1',
+    });
+    const archive = exportMemories({ keys: [original.key] });
+    const exported = archive.memories[0];
+    expect(exported.sessions).toContain('session-1');
+
+    // Wipe the original.
+    deleteMemories({ keys: [original.key], confirm: true });
     expect(Object.keys(memIndex).length).toBe(0);
 
-    const res = importMemories({ memories: archive.memories });
-    expect(res.imported).toBe(2);
+    // Import with a changed title: the original key must be preserved.
+    exported.title = 'Alpha Renamed';
+    const res = importMemories({ memories: [exported] });
+    expect(res.imported).toBe(1);
     expect(res.errors).toBe(0);
-    expect(Object.keys(memIndex).length).toBe(2);
-    expect(fs.existsSync(path.join(PERSONAL, 'knowledge', 'alpha.md'))).toBe(true);
-    expect(fs.existsSync(path.join(PERSONAL, 'journal', 'beta.md'))).toBe(true);
+
+    const restored = memIndex[original.key];
+    expect(restored).toBeDefined();
+    expect(restored!.title).toBe('Alpha Renamed');
+    expect(restored!.created).toBe(exported.created);
+    expect(restored!.updated).toBe(exported.updated);
+    expect(restored!.sessions).toContain('session-1');
+    // No duplicate under the new slug.
+    expect(memIndex['knowledge/alpha-renamed']).toBeUndefined();
   });
 
   it('import_memories skips existing keys and overwrites with force=true', () => {
@@ -81,10 +96,34 @@ describe('bulk tools', () => {
     expect(re.memories[0].content).toContain('Updated.');
   });
 
+  it('import_memories normalizes non-string tag elements', () => {
+    const res = importMemories({
+      memories: [{ title: 'Tags', content: 'body', category: 'knowledge', tags: ['x', 123, null] }],
+    });
+    expect(res.imported).toBe(1);
+    const key = res.results[0].key;
+    expect(memIndex[key]?.tags).toEqual(['x', '123']);
+  });
+
+  it('import_memories reports errors for invalid memories', () => {
+    const noTitle = importMemories({ memories: [{ content: 'Missing title' }] });
+    expect(noTitle.imported).toBe(0);
+    expect(noTitle.errors).toBe(1);
+    expect(noTitle.results[0].status).toBe('error');
+
+    const noContent = importMemories({ memories: [{ title: 'No content' }] });
+    expect(noContent.imported).toBe(0);
+    expect(noContent.errors).toBe(1);
+  });
+
   it('delete_memories refuses without explicit confirmation', () => {
     seed();
     expect(() => deleteMemories({ keys: ['knowledge/alpha'] })).toThrow(/confirm=true/);
     expect(memIndex['knowledge/alpha']).toBeDefined();
+  });
+
+  it('delete_memories rejects non-string, non-array keys', () => {
+    expect(() => deleteMemories({ keys: 123, confirm: true })).toThrow(/No keys provided/);
   });
 
   it('delete_memories removes confirmed keys', () => {

@@ -9,7 +9,7 @@ import { memIndex } from '../state.js';
 import { registerDocument } from '../tfidf.js';
 import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
-import { scheduleSave } from '../persistence.js';
+import { scheduleSave, deriveFilePathFromKey } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
 import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 
@@ -40,39 +40,76 @@ export function storeMemory(args: any): any {
   // safe — same blast radius the indexFile hardening guards against for
   // externally-authored frontmatter.
   const { content, sessionId, author, force = false } = args;
+  const explicitKey = typeof args.key === 'string' ? args.key : undefined;
+  const explicitCreated = typeof args.created === 'string' ? args.created : undefined;
+  const explicitUpdated = typeof args.updated === 'string' ? args.updated : undefined;
+  const explicitSessions = Array.isArray(args.sessions) ? args.sessions : undefined;
   // Coerce category to a string at the WRITE path (mirrors title/tags below):
   // a non-string `category` (e.g. `123`, `null` from a malformed caller) would
   // otherwise reach `category.startsWith('org/')` below and throw TypeError
   // (Number has no startsWith) before the memory is stored. MCP does not
   // enforce the tool's inputSchema, so coerce at the boundary like title/tags.
-  const category = String(args.category ?? 'knowledge');
+  const categoryArg = String(args.category ?? 'knowledge');
   const title = String(args.title ?? '');
-  const tags = Array.isArray(args.tags) ? args.tags : [];
+  const tags = Array.isArray(args.tags)
+    ? args.tags
+        .map((t: unknown) => (t === null || t === undefined ? '' : typeof t === 'string' ? t : String(t)))
+        .filter(Boolean)
+    : [];
   // Clamp + coerce importanceScore to a finite [0, 1] number — see
   // clampImportanceScore in ebbinghaus.ts for the full rationale. Centralized
   // so this write path and update_memory / indexFile / coerceMemEntry share one
   // implementation instead of four copies of the clamp expression.
   const importanceScore = clampImportanceScore(args.importanceScore);
-  const isOrg = tags.includes('org');
-  const isPersonal = tags.includes('personal');
-  if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
 
-  // The `org/` key prefix is reserved for the org vault (keyFromPath prefixes org
-  // keys with `org/`; reconcileIndex skips a personal-vault subdir literally named
-  // `org`). A personal memory (no `org` tag) with `category: 'org'` would write to
-  // `personal-vault/org/<slug>.md` → key `org/<slug>`, colliding with org-vault keys
-  // AND being dropped on the next reconcile (the personal walk skips `org/`) — a
-  // silent data-loss footgun. The same trap fires for any `org/`-PREFIXED category
-  // (e.g. `org/architecture`): it writes under `personal-vault/org/...`, reconcile
-  // skips the whole `org/` subtree of the personal vault, and the file is never
-  // indexed — written, invisible to every search/recall/list tool, orphaned until
-  // the user manually moves it. Catch the prefix too (not just the exact string),
-  // so `category: 'org/something'` is rejected at the source instead of silently
-  // lost. Route org memories via the `org` tag, not a reserved `org/` category.
-  if (!isOrg && (category === 'org' || category.startsWith('org/'))) {
-    throw new Error(
-      'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
-    );
+  let isOrg: boolean;
+  let category: string;
+  let filePath: string;
+  let key: string;
+
+  if (explicitKey !== undefined) {
+    // import_memories (and future bulk restore paths) supply the canonical key.
+    // Re-derive the file path from the key instead of from title/category so a
+    // round-trip preserves the original location even if the title changed.
+    const derivedFilePath = deriveFilePathFromKey(explicitKey);
+    if (!derivedFilePath) throw new Error(`Invalid key "${explicitKey}"`);
+    filePath = derivedFilePath;
+    key = explicitKey;
+    isOrg = key.startsWith('org/');
+    category = deriveCategory(filePath, isOrg);
+  } else {
+    isOrg = tags.includes('org');
+    const isPersonal = tags.includes('personal');
+    if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+
+    category = categoryArg;
+    // The `org/` key prefix is reserved for the org vault (keyFromPath prefixes org
+    // keys with `org/`; reconcileIndex skips a personal-vault subdir literally named
+    // `org`). A personal memory (no `org` tag) with `category: 'org'` would write to
+    // `personal-vault/org/<slug>.md` → key `org/<slug>`, colliding with org-vault keys
+    // AND being dropped on the next reconcile (the personal walk skips `org/`) — a
+    // silent data-loss footgun. The same trap fires for any `org/`-PREFIXED category
+    // (e.g. `org/architecture`): it writes under `personal-vault/org/...`, reconcile
+    // skips the whole `org/` subtree of the personal vault, and the file is never
+    // indexed — written, invisible to every search/recall/list tool, orphaned until
+    // the user manually moves it. Catch the prefix too (not just the exact string),
+    // so `category: 'org/something'` is rejected at the source instead of silently
+    // lost. Route org memories via the `org` tag, not a reserved `org/` category.
+    if (!isOrg && (category === 'org' || category.startsWith('org/'))) {
+      throw new Error(
+        'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
+      );
+    }
+
+    const slug = slugify(title);
+    const catDir = isOrg
+      ? path.join(ORG_VAULT, category)
+      : path.join(PERSONAL_VAULT, category);
+    // `category` is caller-supplied but is containment-checked below (resolved must
+    // stay inside the vault root) BEFORE any disk write; the guard runs before
+    // ensureDir. Reviewed path-traversal finding; suppressed inline.
+    filePath = path.join(catDir, `${slug}.md`); // nosemgrep: path-join-resolve-traversal — containment-guarded below.
+    key = keyFromPath(filePath, isOrg);
   }
 
   // Org-config guard (A3): refuse an org store when the shared org vault is not
@@ -90,23 +127,17 @@ export function storeMemory(args: any): any {
     );
   }
 
-  const slug = slugify(title);
-  const catDir = isOrg
-    ? path.join(ORG_VAULT, category)
-    : path.join(PERSONAL_VAULT, category);
-  // `category` is caller-supplied but is containment-checked below (resolved must
-  // stay inside the vault root) BEFORE any disk write; the guard runs before
-  // ensureDir. Reviewed path-traversal finding; suppressed inline.
-  const filePath = path.join(catDir, `${slug}.md`); // nosemgrep: path-join-resolve-traversal — containment-guarded below.
-  const key = keyFromPath(filePath, isOrg);
   // Path-containment guard: `category` is caller-supplied, so a value like
   // "../.." resolves outside the vault and would write an arbitrary file — and,
   // via ensureDir below, create an arbitrary directory. Resolve and confirm the
   // final path stays inside the chosen vault BEFORE creating anything on disk.
+  // When an explicit key is provided the same check is performed by
+  // deriveFilePathFromKey, but we repeat it here so the error message is explicit
+  // about the vault boundary.
   const vaultRoot = path.resolve(isOrg ? ORG_VAULT : PERSONAL_VAULT);
   const resolved = path.resolve(filePath); // nosemgrep: path-join-resolve-traversal — contained by the guard immediately below.
   if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path.sep)) {
-    throw new Error(`Invalid category "${category}": resolves outside the vault.`);
+    throw new Error(`Invalid key "${key}": resolves outside the vault.`);
   }
   // Symlink containment: the path.resolve check above is LEXICAL — it normalizes
   // `.`/`..` as string ops and never calls stat/readlink, so it does NOT detect a
@@ -125,6 +156,7 @@ export function storeMemory(args: any): any {
   // allowed through to ensureDir/writeFileSync. This closes the planted-symlink
   // write-escape; it is not a TOCTOU-proof guard against a microsecond swap
   // race, which would need O_NOFOLLOW per-component opens.
+  const catDir = path.dirname(filePath);
   assertLstat(
     catDir,
     (s) => s.isDirectory(),
@@ -194,8 +226,11 @@ export function storeMemory(args: any): any {
   // (mutate.ts:49) — repeated force-overwrites with distinct session IDs would grow
   // `sessions` without bound otherwise, violating the documented "capped at 50"
   // invariant on this write path too.
+  const priorSessions = Array.isArray(explicitSessions)
+    ? explicitSessions
+    : (preservedSessions ?? []);
   const sessions = [...new Set([
-    ...(preservedSessions ?? []),
+    ...priorSessions,
     ...(sessionId ? [sessionId] : []),
   ])].slice(-50);
   const fm: MemoryFrontmatter = {
@@ -203,8 +238,8 @@ export function storeMemory(args: any): any {
     tags,
     author: effectiveAuthor,
     sessions,
-    created: preservedCreated ?? now,
-    updated: now,
+    created: explicitCreated ?? preservedCreated ?? now,
+    updated: explicitUpdated ?? now,
     importanceScore,
   };
 
@@ -229,7 +264,7 @@ export function storeMemory(args: any): any {
   try { const st = fs.statSync(filePath); mtimeMs = st.mtimeMs; size = st.size; } catch { /* best-effort */ }
   const meta: MemoryMetadata = {
     key, filePath, title, tags,
-    created: fm.created, updated: now, importanceScore, category: deriveCategory(filePath, isOrg),
+    created: fm.created, updated: fm.updated, importanceScore, category: deriveCategory(filePath, isOrg),
     contentPreview: body.trim().slice(0, 500),
     accessCount: existing?.accessCount ?? 0,
     lastAccessed: existing?.lastAccessed ?? now,

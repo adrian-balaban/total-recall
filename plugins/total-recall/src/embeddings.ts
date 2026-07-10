@@ -194,3 +194,11 @@ export function isVectorAvailable(): boolean {
   if (provider !== 'huggingface') return externalEmbedSuccess;
   return pipeline !== null;
 }
+
+/** Test-only seam: reset the external-provider success flag so each test starts clean. */
+export function __testResetVectorAvailability(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('__testResetVectorAvailability is test-only');
+  }
+  externalEmbedSuccess = false;
+}

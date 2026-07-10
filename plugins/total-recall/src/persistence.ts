@@ -94,7 +94,7 @@ function atomicWrite(p: string, data: string) {
 // keys that could escape when joined (`..`/`.` segments, leading `/`, `\`,
 // null bytes, empty segments); return null on any failure so the caller drops
 // the entry rather than indexing a path that points outside the vault.
-function deriveFilePathFromKey(key: unknown): string | null {
+export function deriveFilePathFromKey(key: unknown): string | null {
   if (typeof key !== 'string' || !key) return null;
   if (key.includes('\0') || key.includes('\\')) return null;
   const isOrg = key.startsWith('org/');
@@ -124,7 +124,11 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
     key,        // normalize to the trusted memIndex key (discard any inner key)
     filePath,   // re-derived + containment-checked; discards any persisted filePath
     title: String(e.title ?? ''),
-    tags: Array.isArray(e.tags) ? e.tags : [],
+    tags: Array.isArray(e.tags)
+      ? e.tags
+          .map((t: unknown) => (t === null || t === undefined ? '' : typeof t === 'string' ? t : String(t)))
+          .filter(Boolean)
+      : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.

@@ -101,4 +101,23 @@ describe('confirm_memory', () => {
     const parsed = parseFrontmatter(raw);
     expect(parsed.content).toContain('42');
   });
+
+  it('store_memory normalizes non-string tags to strings', () => {
+    const stored = storeMemory({
+      title: 'Tag coercion', content: 'body', category: 'knowledge',
+      tags: ['x', 123, null as any], importanceScore: 0.5,
+    });
+    expect(memIndex[stored.key]?.tags).toEqual(['x', '123']);
+    // Search must not crash on the normalized tags.
+    expect(() => storeMemory({
+      title: 'Search probe', content: 'x 123', category: 'knowledge',
+      tags: [], importanceScore: 0.5,
+    })).not.toThrow();
+  });
+
+  it('update_memory normalizes non-string tags to strings', () => {
+    const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
+    updateMemory({ key: stored.key, tags: ['a', 2, null as any] });
+    expect(memIndex[stored.key]?.tags).toEqual(['a', '2']);
+  });
 });

@@ -652,6 +652,22 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     expect(meta!.isOrg).toBe(false);
     expect(meta!.category).toBe('knowledge');
   });
+
+  it('loadIndexes normalizes non-string tag elements', () => {
+    const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
+    fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({
+      'knowledge/taggy': {
+        key: 'knowledge/taggy',
+        title: 'Taggy', tags: ['x', 123, null], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5, category: 'knowledge',
+        contentPreview: 't', accessCount: 0, lastAccessed: '2026-01-01T00:00:00Z', tokenEstimate: 1, isOrg: false,
+      },
+    }));
+    for (const k of Object.keys(memIndex)) delete memIndex[k];
+    loadIndexes();
+    expect(memIndex['knowledge/taggy']?.tags).toEqual(['x', '123']);
+  });
 });
 
 // ─── recall_memory ────────────────────────────────────────────────────────────

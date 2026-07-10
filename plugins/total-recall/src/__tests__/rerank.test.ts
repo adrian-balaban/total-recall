@@ -152,4 +152,39 @@ describe('rerank_memories', () => {
     await expect(rerankMemories({ query: '', keys: ['knowledge/alpha'] })).rejects.toThrow();
     await expect(rerankMemories({ query: 'x', keys: [] })).rejects.toThrow();
   });
+
+  it('falls back to keys.length when limit is invalid', async () => {
+    writeMemory('knowledge/alpha', 'Alpha Note', 'alpha content');
+    writeMemory('knowledge/beta', 'Beta Note', 'beta content');
+    reconcileIndex();
+    __testSetEmbedder(null);
+
+    const res = await rerankMemories({ query: 'alpha', keys: ['knowledge/alpha', 'knowledge/beta'], limit: NaN });
+    expect(res).toHaveLength(2);
+  });
+
+  it('handles a zero-norm vector without division by zero', async () => {
+    // A zero vector makes cosineSimilarity's denom 0; the guard must return 0
+    // rather than NaN/Infinity.
+    writeMemory('knowledge/zero', 'Zero Note', 'zero content');
+    reconcileIndex();
+    __testSetEmbedder(() => Promise.resolve([0, 0, 0, 0]));
+
+    const res = await rerankMemories({ query: 'zero', keys: ['knowledge/zero'] });
+    expect(res).toHaveLength(1);
+    expect(res[0].score).toBe(0);
+  });
+
+  it('skips a candidate whose embedding returns null', async () => {
+    writeMemory('knowledge/alpha', 'Alpha Note', 'alpha content');
+    writeMemory('knowledge/beta', 'Beta Note', 'beta content');
+    reconcileIndex();
+    __testSetEmbedder((text: string) =>
+      text.toLowerCase().includes('beta') ? Promise.resolve(null) : Promise.resolve([1, 0, 0, 0])
+    );
+
+    const res = await rerankMemories({ query: 'alpha', keys: ['knowledge/alpha', 'knowledge/beta'] });
+    expect(res).toHaveLength(1);
+    expect(res[0].key).toBe('knowledge/alpha');
+  });
 });

@@ -1,6 +1,6 @@
 // Total-recall MCP server entry point.
 //
-// Server setup (schemas + dispatch) and main() live in ./server.js; the 12 tool
+// Server setup (schemas + dispatch) and main() live in ./server.js; the 17 tool
 // implementations live under ./tools/*.js; shared in-memory state lives in
 // ./state.js. This file just boots the server and flushes pending writes on exit.
 //

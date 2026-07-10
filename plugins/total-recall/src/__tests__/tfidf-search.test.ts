@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // #5: tfidfSearch's boost checks did meta.title.toLowerCase() and
 // meta.tags.map(t => t.toLowerCase()) once per (token, doc) match, but the
@@ -121,5 +123,43 @@ describe('searchIndex tags filter — missing entry guard', () => {
     rebuildInvertedIndex();
     delete (memIndex as any)[KEY];
     expect(() => searchIndex({ query: 'orphan', tags: ['x'] })).not.toThrow();
+  });
+});
+
+describe('multilingual search expansion', () => {
+  it('expands Romanian query terms via BILINGUAL_DICT when enabled', () => {
+    const HOME = process.env.HOME!;
+    const cfgDir = path.join(HOME, '.total-recall');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'config.json'),
+      JSON.stringify({ enableMultilingualSearch: true }),
+    );
+
+    const KEY = 'knowledge/ro';
+    (memIndex as any)[KEY] = {
+      key: KEY,
+      title: 'Architecture Decision',
+      tags: ['adr'],
+      contentPreview: 'Architecture decision body',
+      category: 'knowledge',
+      filePath: '/tmp/ro-probe.md',
+      accessCount: 0,
+      lastAccessed: null,
+      tokenEstimate: 4,
+      isOrg: false,
+      sessions: [],
+      importanceScore: 0.5,
+      created: '2026-06-30T00:00:00.000Z',
+      updated: '2026-06-30T00:00:00.000Z',
+    };
+    rebuildInvertedIndex();
+
+    const results = tfidfSearch('arhitectura', false);
+    expect(results.some((r) => r.key === KEY)).toBe(true);
+
+    delete (memIndex as any)[KEY];
+    rebuildInvertedIndex();
+    fs.rmSync(cfgDir, { recursive: true, force: true });
   });
 });

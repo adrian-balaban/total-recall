@@ -12,6 +12,13 @@ import { embedAndUpsert } from '../embeddings.js';
 import { deleteVector } from '../vectorStore.js';
 import type { MemoryFrontmatter } from '../types.js';
 
+function normalizeTags(tags: unknown): string[] {
+  if (!Array.isArray(tags)) return [];
+  return tags
+    .map((t: unknown) => (t === null || t === undefined ? '' : typeof t === 'string' ? t : String(t)))
+    .filter(Boolean);
+}
+
 export function updateMemory(args: any): any {
   const { key, content, tags, importanceScore, sessionId } = args;
   const meta = memIndex[key];
@@ -70,7 +77,7 @@ export function updateMemory(args: any): any {
     // lenient preserves the user's existing tags. So: array → use it; undefined
     // OR scalar → keep existing (coerced to [] if the existing value is itself a
     // scalar, same as indexFile).
-    tags: Array.isArray(tags) ? tags : (Array.isArray(parsed.data.tags) ? parsed.data.tags : []),
+    tags: normalizeTags(Array.isArray(tags) ? tags : (Array.isArray(parsed.data.tags) ? parsed.data.tags : [])),
     // Clamp to a finite [0, 1] number — see clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(importanceScore ?? parsed.data.importanceScore),
     updated: now,

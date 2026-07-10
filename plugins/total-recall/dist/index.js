@@ -15747,7 +15747,7 @@ function coerceMemEntry(raw, key) {
     filePath,
     // re-derived + containment-checked; discards any persisted filePath
     title: String(e.title ?? ""),
-    tags: Array.isArray(e.tags) ? e.tags : [],
+    tags: Array.isArray(e.tags) ? e.tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean) : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
@@ -16530,32 +16530,51 @@ function orgVaultConfigured() {
 }
 function storeMemory(args) {
   const { content, sessionId, author, force = false } = args;
-  const category = String(args.category ?? "knowledge");
+  const explicitKey = typeof args.key === "string" ? args.key : void 0;
+  const explicitCreated = typeof args.created === "string" ? args.created : void 0;
+  const explicitUpdated = typeof args.updated === "string" ? args.updated : void 0;
+  const explicitSessions = Array.isArray(args.sessions) ? args.sessions : void 0;
+  const categoryArg = String(args.category ?? "knowledge");
   const title = String(args.title ?? "");
-  const tags = Array.isArray(args.tags) ? args.tags : [];
+  const tags = Array.isArray(args.tags) ? args.tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean) : [];
   const importanceScore = clampImportanceScore(args.importanceScore);
-  const isOrg = tags.includes("org");
-  const isPersonal = tags.includes("personal");
-  if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
-  if (!isOrg && (category === "org" || category.startsWith("org/"))) {
-    throw new Error(
-      'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
-    );
+  let isOrg;
+  let category;
+  let filePath;
+  let key;
+  if (explicitKey !== void 0) {
+    const derivedFilePath = deriveFilePathFromKey(explicitKey);
+    if (!derivedFilePath) throw new Error(`Invalid key "${explicitKey}"`);
+    filePath = derivedFilePath;
+    key = explicitKey;
+    isOrg = key.startsWith("org/");
+    category = deriveCategory(filePath, isOrg);
+  } else {
+    isOrg = tags.includes("org");
+    const isPersonal = tags.includes("personal");
+    if (isOrg && isPersonal) throw new Error("Memory cannot have both 'org' and 'personal' tags.");
+    category = categoryArg;
+    if (!isOrg && (category === "org" || category.startsWith("org/"))) {
+      throw new Error(
+        'Category "' + category + '" starts with the reserved "org/" prefix. The "org/" key prefix is reserved for the shared org vault, and a personal write under it would never be indexed (reconcileIndex skips the personal-vault "org/" subtree), silently orphaning the memory. Use a different category, or tag the memory "org" to route it to the org vault.'
+      );
+    }
+    const slug = slugify2(title);
+    const catDir2 = isOrg ? path5.join(ORG_VAULT, category) : path5.join(PERSONAL_VAULT, category);
+    filePath = path5.join(catDir2, `${slug}.md`);
+    key = keyFromPath(filePath, isOrg);
   }
   if (isOrg && !orgVaultConfigured()) {
     throw new Error(
       'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). Writing now would leave an unsynced file that blocks the next clone.'
     );
   }
-  const slug = slugify2(title);
-  const catDir = isOrg ? path5.join(ORG_VAULT, category) : path5.join(PERSONAL_VAULT, category);
-  const filePath = path5.join(catDir, `${slug}.md`);
-  const key = keyFromPath(filePath, isOrg);
   const vaultRoot = path5.resolve(isOrg ? ORG_VAULT : PERSONAL_VAULT);
   const resolved = path5.resolve(filePath);
   if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path5.sep)) {
-    throw new Error(`Invalid category "${category}": resolves outside the vault.`);
+    throw new Error(`Invalid key "${key}": resolves outside the vault.`);
   }
+  const catDir = path5.dirname(filePath);
   assertLstat(
     catDir,
     (s) => s.isDirectory(),
@@ -16591,8 +16610,9 @@ function storeMemory(args) {
     preservedSessions = existingFm.sessions;
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
+  const priorSessions = Array.isArray(explicitSessions) ? explicitSessions : preservedSessions ?? [];
   const sessions = [.../* @__PURE__ */ new Set([
-    ...preservedSessions ?? [],
+    ...priorSessions,
     ...sessionId ? [sessionId] : []
   ])].slice(-50);
   const fm = {
@@ -16600,8 +16620,8 @@ function storeMemory(args) {
     tags,
     author: effectiveAuthor,
     sessions,
-    created: preservedCreated ?? now,
-    updated: now,
+    created: explicitCreated ?? preservedCreated ?? now,
+    updated: explicitUpdated ?? now,
     importanceScore
   };
   const body = withExecutiveSummary(content !== void 0 ? String(content) : "");
@@ -16621,7 +16641,7 @@ function storeMemory(args) {
     title,
     tags,
     created: fm.created,
-    updated: now,
+    updated: fm.updated,
     importanceScore,
     category: deriveCategory(filePath, isOrg),
     contentPreview: body.trim().slice(0, 500),
@@ -16871,6 +16891,10 @@ function pruneMemories(args) {
 // src/tools/mutate.ts
 import * as fs6 from "fs";
 import * as os3 from "os";
+function normalizeTags(tags) {
+  if (!Array.isArray(tags)) return [];
+  return tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean);
+}
 function updateMemory(args) {
   const { key, content, tags, importanceScore, sessionId } = args;
   const meta2 = memIndex[key];
@@ -16909,7 +16933,7 @@ function updateMemory(args) {
     // lenient preserves the user's existing tags. So: array → use it; undefined
     // OR scalar → keep existing (coerced to [] if the existing value is itself a
     // scalar, same as indexFile).
-    tags: Array.isArray(tags) ? tags : Array.isArray(parsed.data.tags) ? parsed.data.tags : [],
+    tags: normalizeTags(Array.isArray(tags) ? tags : Array.isArray(parsed.data.tags) ? parsed.data.tags : []),
     // Clamp to a finite [0, 1] number — see clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(importanceScore ?? parsed.data.importanceScore),
     updated: now,
@@ -17117,12 +17141,24 @@ function importMemories(args) {
       const title = String(m.title ?? "");
       const content = m.content !== void 0 ? String(m.content) : void 0;
       const category = m.category !== void 0 ? String(m.category) : "knowledge";
-      const tags = Array.isArray(m.tags) ? m.tags.map((t) => String(t)) : [];
+      const tags = Array.isArray(m.tags) ? m.tags.map((t) => t === null || t === void 0 ? "" : String(t)).filter(Boolean) : [];
       const importanceScore = typeof m.importanceScore === "number" ? m.importanceScore : void 0;
       const author = m.author !== void 0 ? String(m.author) : void 0;
       if (!title) throw new Error("Missing title");
       if (content === void 0) throw new Error("Missing content");
-      const res = storeMemory({ title, content, category, tags, importanceScore, author, force });
+      const res = storeMemory({
+        title,
+        content,
+        category,
+        tags,
+        importanceScore,
+        author,
+        force,
+        key: m.key,
+        created: m.created,
+        updated: m.updated,
+        sessions: Array.isArray(m.sessions) ? m.sessions : void 0
+      });
       imported++;
       results.push({ key: res.key, status: "imported" });
     } catch (e) {
@@ -17197,7 +17233,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.96" : null.version;
+var PLUGIN_VERSION = true ? "1.0.97" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
