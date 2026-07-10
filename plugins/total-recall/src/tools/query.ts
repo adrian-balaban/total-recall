@@ -84,7 +84,8 @@ export function getMemoriesByKeys(args: any): any {
     // vanished file, swapped symlink, parse error — and the prior code deferred
     // the bump in that case so a broken key can't inflate accessCount).
     const { status, content } = readCachedOrFresh(key, meta.filePath, 'reread');
-    if (status !== 'failed') bumpAccess(meta);
+    if (status === 'failed') return { key, error: 'Failed to read memory file' };
+    bumpAccess(meta);
     return { ...meta, key, content };
   });
 }
@@ -175,13 +176,17 @@ export function getRelatedMemories(args: any): any {
       // policy: a cached '' is a HIT and is NOT re-read (intentional difference
       // from recall_memory / get_memories_by_keys, which re-read a cached empty).
       // No access bump regardless of status — this is a discovery query.
-      const { content } = readCachedOrFresh(m.key, meta.filePath);
+      const { status, content } = readCachedOrFresh(m.key, meta.filePath);
+      if (status === 'failed') return { ...m, error: 'Failed to read memory file' };
       return { ...m, content };
     });
 }
 
 export function pruneMemories(args: any): any {
-  const { threshold = 0.1 } = args;
+  const rawThreshold = Number(args.threshold);
+  // Clamp threshold to a finite [0, 1] number; NaN/negative values produce confusing
+  // candidate sets, and values above 1 never match a valid retention strength.
+  const threshold = Number.isFinite(rawThreshold) ? Math.max(0, Math.min(1, rawThreshold)) : 0.1;
   // Coerce + clamp limit (mirrors listMemories above): MCP does not enforce the
   // inputSchema, so a negative/NaN/huge limit must not produce a wrong slice.
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 20;

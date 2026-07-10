@@ -82,7 +82,9 @@ export function updateMemory(args: any): any {
   // yields on the read path — so contentPreview stays consistent with disk.
   // Use `content !== undefined` so an explicit empty string (`content: ''`) is a
   // legitimate "clear the body" update, not "leave the old content unchanged".
-  const newContent = content !== undefined ? withExecutiveSummary(content) : parsed.content;
+  // Coerce to string: a non-string value (number, null, undefined) would otherwise
+  // throw inside withExecutiveSummary.
+  const newContent = content !== undefined ? withExecutiveSummary(String(content)) : parsed.content;
   const fileContent = stringifyFrontmatter(newContent, newFm);
   fs.writeFileSync(meta.filePath, fileContent);
 
@@ -154,7 +156,10 @@ export function deleteMemory(args: any): any {
 }
 
 export function confirmMemory(args: any): any {
-  const { key, useful = true } = args;
+  const { key } = args;
+  // Coerce explicitly: a string `"false"` is truthy and would increment
+  // confirmations instead of flags; only an explicit false-ish value counts.
+  const useful = args.useful !== false && args.useful !== 'false';
   const meta = memIndex[key];
   if (!meta) throw new Error(`Memory not found: ${key}`);
 

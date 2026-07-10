@@ -1,6 +1,6 @@
 /**
- * Ebbinghaus forgetting curve decay model.
- * strength = clamp(importance × exp(-λ × daysSince) × (1 + accessCount × 0.2), 0, 1)
+ * Ebbinghaus forgetting curve decay model with confirmation/flag feedback.
+ * strength = clamp(importance × exp(-λ × daysSince) × (1 + accessCount × 0.2 + confirmations × 0.1 - flags × 0.1), 0, 1)
  * where λ = 0.16 × (1 − importance × 0.8)
  */
 export function computeRetentionStrength(

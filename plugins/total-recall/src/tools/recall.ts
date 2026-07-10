@@ -14,8 +14,16 @@ import { readCachedOrFresh } from '../vault-scan.js';
 const MAX_PAGE_LIMIT = 1000;
 
 export async function recallMemory(args: any): Promise<any> {
-  const { query, full = false, since, before, minScore = 0, excludeJournal = true, hybrid = true } = args;
+  const { full = false, since, before, excludeJournal = true, hybrid = true } = args;
+  // Coerce `query` to a string at the boundary: a non-string value would otherwise
+  // reach tokenize() and throw inside text.toLowerCase(). Default to empty string
+  // (returns no results) rather than throwing.
+  const query = String(args.query ?? '');
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;
+  // Clamp minScore to a finite number; NaN silently disables the floor and
+  // negative values keep every result. Default 0 = no filtering.
+  const rawMinScore = Number(args.minScore);
+  const minScore = Number.isFinite(rawMinScore) ? Math.max(0, rawMinScore) : 0;
   const tfidfResults = tfidfSearch(query, excludeJournal);
 
   // Optional hybrid path: fuse the TF-IDF rank (already decay-weighted by Ebbinghaus
@@ -136,7 +144,7 @@ export function searchIndex(args: any): any {
     results = results.filter(r => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter(r => memIndex[r.key]?.category === category);
-  if (filterTags.length) results = results.filter(r => filterTags.every((t: string) => memIndex[r.key]?.tags.includes(t)));
+  if (filterTags.length) results = results.filter(r => filterTags.every((t: string) => (memIndex[r.key]?.tags ?? []).includes(t)));
 
   // Minimum-score floor (mirrors danilop/claude-total-recall's `threshold`).
   // Default 0 = no filtering (current behavior). search_index is TF-IDF-only,

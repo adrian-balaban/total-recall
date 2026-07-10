@@ -18,7 +18,7 @@ fi
 # pipefail the pipeline returns 141 → set -e aborts for the same reason. `|| true`
 # collapses both to status 0; the `-z "$OQ_FILE"` / `-f` guards below handle the
 # no-match case explicitly.
-OQ_FILE=$(find "$PERSONAL_VAULT" \( -name "*open*question*" -o -name "*ambient*curiosity*" \) 2>/dev/null | head -1 || true)
+OQ_FILE=$(find "$PERSONAL_VAULT" -type f \( -iname '*open*question*' -o -iname '*ambient*curiosity*' \) 2>/dev/null | head -1 || true)
 
 if [ -z "$OQ_FILE" ] || [ ! -f "$OQ_FILE" ]; then
   echo '{"continue":true}'

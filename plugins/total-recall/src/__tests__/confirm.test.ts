@@ -6,7 +6,7 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-confirm-' + process.pid;
 });
 
-import { confirmMemory } from '../tools/mutate.js';
+import { confirmMemory, updateMemory } from '../tools/mutate.js';
 import { storeMemory } from '../tools/store.js';
 import { pruneMemories } from '../tools/query.js';
 import { memIndex } from '../state.js';
@@ -70,5 +70,35 @@ describe('confirm_memory', () => {
     const bEntry = candidates.find((c: any) => c.key === b.key);
     if (!aEntry || !bEntry) throw new Error('Candidate missing from prune output');
     expect(aEntry.retentionStrength).toBeGreaterThan(bEntry.retentionStrength);
+  });
+
+  it('coerces useful="false" string to a flag, not a confirmation', () => {
+    // The MCP schema declares `useful` as boolean, but a direct caller can pass
+    // the string "false", which is truthy in JS. confirmMemory must only treat
+    // the literal boolean `false` as not-useful.
+    const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
+    const res = confirmMemory({ key: stored.key, useful: 'false' });
+    expect(res.flags).toBe(1);
+    expect(res.confirmations).toBeUndefined();
+  });
+
+  it('update_memory coerces non-string content to string', () => {
+    const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
+    // A numeric content argument must be stringified, not throw inside
+    // withExecutiveSummary.
+    const res = updateMemory({ key: stored.key, content: 12345 });
+    expect(res.message).toBe('Memory updated.');
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.content).toContain('12345');
+  });
+
+  it('store_memory coerces non-string content to string', () => {
+    // A caller may pass a number (or any JSON-serializable value) as content;
+    // store_memory must String() it before building the frontmatter body.
+    const stored = storeMemory({ title: 'Number content', content: 42 as any, category: 'knowledge', tags: [], importanceScore: 0.5 });
+    const raw = fs.readFileSync(stored.filePath, 'utf8');
+    const parsed = parseFrontmatter(raw);
+    expect(parsed.content).toContain('42');
   });
 });

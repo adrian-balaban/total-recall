@@ -212,7 +212,9 @@ export function storeMemory(args: any): any {
   // header it leaves it intact, so we never double-prefix. The cached value and
   // the contentPreview both derive from this same disk body, so a cache hit and a
   // cache miss (re-read from disk via parseFrontmatter) yield identical content.
-  const body = withExecutiveSummary(content);
+  // Coerce to string: MCP does not enforce the schema, and a non-string value
+  // (number, null, undefined) would throw TypeError before the memory is stored.
+  const body = withExecutiveSummary(content !== undefined ? String(content) : '');
   const fileContent = stringifyFrontmatter(body, fm);
   fs.writeFileSync(filePath, fileContent);
 

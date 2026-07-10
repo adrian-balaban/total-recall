@@ -627,6 +627,31 @@ describe('vault-boundary hardening (symlink traversal + poisoned filePath)', () 
     expect(memIndex['org/architecture/legit']).toBeDefined();
     expect(memIndex['org/architecture/legit']!.filePath).toBe(path.join(VAULT, 'org', 'org-vault', 'architecture', 'legit.md'));
   });
+
+  it('loadIndexes supplies safe defaults for missing pre-upgrade fields', () => {
+    // A pre-upgrade index.json may omit fields added in later releases. Without
+    // defaults those fields remain undefined and crash search/prune callers.
+    const INDEX_PATH_LOCAL = path.join(VAULT, 'index.json');
+    fs.writeFileSync(INDEX_PATH_LOCAL, JSON.stringify({
+      'knowledge/legacy': {
+        key: 'knowledge/legacy',
+        title: 'Legacy', tags: [], sessions: [],
+        created: '2026-01-01T00:00:00Z', updated: '2026-01-01T00:00:00Z',
+        importanceScore: 0.5,
+        contentPreview: 'legacy body',
+        tokenEstimate: 1,
+        // Deliberately missing: accessCount, lastAccessed, isOrg, category
+      },
+    }));
+    for (const k of Object.keys(memIndex)) delete memIndex[k];
+    loadIndexes();
+    const meta = memIndex['knowledge/legacy'];
+    expect(meta).toBeDefined();
+    expect(meta!.accessCount).toBe(0);
+    expect(meta!.lastAccessed).toBe('');
+    expect(meta!.isOrg).toBe(false);
+    expect(meta!.category).toBe('knowledge');
+  });
 });
 
 // ─── recall_memory ────────────────────────────────────────────────────────────

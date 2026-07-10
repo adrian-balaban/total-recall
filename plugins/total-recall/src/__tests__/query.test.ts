@@ -243,5 +243,17 @@ describe('query tools', () => {
       const candidates = pruneMemories({ threshold: 2 });
       expect(candidates.map((m: any) => m.key)).toEqual(['dec']);
     });
+
+    it('clamps malformed threshold to [0, 1] finite range', () => {
+      // Negative threshold clamps to 0; every valid retentionStrength is >= 0,
+      // so a threshold of 0 returns no candidates.
+      expect(pruneMemories({ threshold: -5 })).toHaveLength(0);
+      // NaN pre-fix produced no candidates; post-fix defaults to 0.1. The seeded
+      // memories have very low retention (old lastAccessed), so all fall below 0.1.
+      expect(pruneMemories({ threshold: NaN })).toHaveLength(5);
+      // A threshold above 1 clamps back to 1; the seeded memories still have
+      // retention < 1, so all 5 are returned.
+      expect(pruneMemories({ threshold: 1e9 })).toHaveLength(5);
+    });
   });
 });

@@ -49,7 +49,10 @@ printf '%s pid=%s ppid=%s claude_session_id=%s\n' \
 # in normal use, but a SIGTERM to the wrong pid is worse than no SIGTERM).
 MCP_PID=""
 if [ -n "${PPID:-}" ] && [ "$PPID" != "unknown" ]; then
-  MCP_PID="$(ps -o pid= --ppid "$PPID" 2>/dev/null | xargs -I{} sh -c 'ps -o pid=,args= -p "{}" 2>/dev/null' | grep -E "node.*dist/index\.js|tsx.*src/index\.ts" | awk '{print $1}' | head -1 || true)"
+  # Match a child of our parent whose command line contains the MCP entry point.
+  # `pgrep -P` lists children of PPID; the pattern is anchored to the node/tsx
+  # binary and the canonical dist/index.js path to avoid false positives.
+  MCP_PID="$(pgrep -P "$PPID" -fa "(node|tsx).*(dist/index\.js|src/index\.ts)" 2>/dev/null | awk '{print $1}' | head -1 || true)"
 fi
 if [ -n "$MCP_PID" ]; then
   # -TERM (not -KILL): gives the MCP child a chance to run shutdown() and

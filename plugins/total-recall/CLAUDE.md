@@ -39,9 +39,9 @@ Only after all three are green: `git add -A && git commit` from the plugin root,
 
 ## Architecture
 
-This is an MCP server that exposes 12 tools for persistent memory management. It runs as a stdio process compatible with Claude Code, Gemini CLI, and GitHub Copilot CLI. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
+This is an MCP server that exposes 17 tools for persistent memory management. It runs as a stdio process compatible with Claude Code, Gemini CLI, and GitHub Copilot CLI. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
 
-- `src/server.ts` — `Server` construction, the 12 tool schemas, the `CallTool` dispatch table, and `main()`
+- `src/server.ts` — `Server` construction, the 17 tool schemas, the `CallTool` dispatch table, and `main()`
 - `src/state.ts` — the shared in-memory singletons (`memIndex`, `invertedIndex`, `errors`, `perfSamples`). These are `const` objects with a stable identity; every module that reads/writes the index imports them from here so there is exactly one index across the process. Mutate in place (`memIndex[key] = …`, `delete memIndex[key]`); the two sites that formerly reassigned them (`loadIndexes`, `rebuildInvertedIndex`) now clear-then-populate the same object
 - `src/paths.ts` — vault/DB/index paths (supports custom paths resolved from `~/.total-recall/config.json`), `EXCLUDED_DIRS`, `DEFAULT_CATEGORIES`, `ensureDir`
 - `src/types.ts` — `MemoryFrontmatter`, `MemoryMetadata`, `Index`, `InvertedIndex`
@@ -51,7 +51,7 @@ This is an MCP server that exposes 12 tools for persistent memory management. It
 - `src/vault-scan.ts` — `reconcileIndex`, `indexFile`, `deriveCategory`, `keyFromPath`, `slugify`, `tokenEstimate`
 - `src/dates.ts` — `parseRelativeDate`
 - `src/journal.ts` — `appendJournal`
-- `src/tools/{store,recall,query,mutate}.ts` — the 12 tool implementations
+- `src/tools/{store,recall,query,mutate,rerank,bulk}.ts` — the 17 tool implementations
 
 **Data flow:**
 1. On boot, loads `~/.total-recall/index.json` into `memIndex` (invertedIndex.json is NOT loaded — `main()` rebuilds the inverted index synchronously via `recalcIdfNow` right after `reconcileIndex`, so the disk copy was a dead read; `markIndexFresh` then gates the debounced recalc so the boot timer doesn't redo it). Always scans both vaults (unconditional; reconciles against disk to surface newly pulled org memories and catch missed flushes).

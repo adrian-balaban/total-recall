@@ -266,7 +266,9 @@ if (c.embeddingProvider === 'ollama') {
 }
 if (c.enableMultilingualSearch === undefined) { c.enableMultilingualSearch = true; modified = true; }
 if (modified) {
-  fs.writeFileSync(cfgPath, JSON.stringify(c, null, 2) + '\n');
+  const tmp = cfgPath + '.tmp.' + Math.random().toString(36).slice(2);
+  fs.writeFileSync(tmp, JSON.stringify(c, null, 2) + '\n');
+  fs.renameSync(tmp, cfgPath);
 }
 NODE
 fi

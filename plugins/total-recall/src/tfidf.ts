@@ -39,7 +39,17 @@ const BILINGUAL_DICT: Record<string, string> = {
 };
 
 export function tokenize(text: string): string[] {
-  return text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(Boolean);
+  // Preserve Romanian diacritics by normalizing to NFKD and stripping combining
+  // marks, rather than replacing every non-ASCII character with a space. This
+  // turns "întâlnire" into "intalnire" so it matches the bilingual dictionary
+  // entries and keeps the base letters, instead of mangling it to "ntlnire".
+  return text
+    .toLowerCase()
+    .normalize('NFKD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
 }
 
 export function deregisterDocument(key: string) {

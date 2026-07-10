@@ -15594,7 +15594,7 @@ var BILINGUAL_DICT = {
   "memory": "memorie"
 };
 function tokenize(text) {
-  return text.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
+  return text.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
 }
 function deregisterDocument(key) {
   for (const t of Object.keys(invertedIndex)) {
@@ -15752,6 +15752,12 @@ function coerceMemEntry(raw, key) {
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(e.importanceScore),
+    // Provide safe defaults for fields added after earlier index.json formats so
+    // a pre-upgrade entry never carries undefined through to search/pruning.
+    accessCount: typeof e.accessCount === "number" && Number.isFinite(e.accessCount) ? Math.max(0, e.accessCount) : 0,
+    lastAccessed: typeof e.lastAccessed === "string" ? e.lastAccessed : "",
+    isOrg: typeof e.isOrg === "boolean" ? e.isOrg : key.startsWith("org/"),
+    category: typeof e.category === "string" ? e.category : "knowledge",
     // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
     // unchanged files across boots. A pre-#19 index.json (or a corrupted
     // non-numeric value) yields 0 — the "no stat" sentinel that forces a
@@ -16116,12 +16122,21 @@ async function getDb(dbPath) {
       const Database = (await import("better-sqlite3")).default;
       const d = new Database(dbPath);
       sqliteVec.load(d);
+      const existing = d.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+      ).get();
+      const needsRecreate = existing && !/distance_metric\s*=\s*cosine/i.test(existing.sql);
+      if (needsRecreate) {
+        d.exec("DROP TABLE vec_memories");
+      }
       d.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories
-        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384]);
+        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384] distance_metric=cosine);
       `);
       return d;
     } catch {
+      dbPromise = null;
+      cachedDbPath = null;
       return null;
     }
   })();
@@ -16246,7 +16261,9 @@ async function getEmbedder() {
 async function embed(text) {
   const embedder = await getEmbedder();
   if (!embedder) return null;
-  return embedder(text);
+  const result = await embedder(text);
+  if (result) externalEmbedSuccess = true;
+  return result;
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
 function embedAndUpsert(key, text) {
@@ -16271,12 +16288,13 @@ async function flushEmbeddings(timeoutMs = 2e3) {
     if (timer) clearTimeout(timer);
   }
 }
+var externalEmbedSuccess = false;
 function isVectorAvailable() {
   if (testEmbedder !== void 0 && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
-  if (provider !== "huggingface") return true;
+  if (provider !== "huggingface") return externalEmbedSuccess;
   return pipeline !== null;
 }
 
@@ -16586,7 +16604,7 @@ function storeMemory(args) {
     updated: now,
     importanceScore
   };
-  const body = withExecutiveSummary(content);
+  const body = withExecutiveSummary(content !== void 0 ? String(content) : "");
   const fileContent = stringifyFrontmatter(body, fm);
   fs5.writeFileSync(filePath, fileContent);
   const existing = memIndex[key];
@@ -16667,8 +16685,11 @@ function reciprocalRankFusion(lists, k = 60) {
 // src/tools/recall.ts
 var MAX_PAGE_LIMIT = 1e3;
 async function recallMemory(args) {
-  const { query, full = false, since, before, minScore = 0, excludeJournal = true, hybrid = true } = args;
+  const { full = false, since, before, excludeJournal = true, hybrid = true } = args;
+  const query = String(args.query ?? "");
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT, Math.floor(Number(args.limit)))) || 10;
+  const rawMinScore = Number(args.minScore);
+  const minScore = Number.isFinite(rawMinScore) ? Math.max(0, rawMinScore) : 0;
   const tfidfResults = tfidfSearch(query, excludeJournal);
   let ranked;
   if (hybrid) {
@@ -16722,7 +16743,7 @@ function searchIndex(args) {
     results = results.filter((r) => inDateWindow(memIndex[r.key]?.updated, lower, upper));
   }
   if (category) results = results.filter((r) => memIndex[r.key]?.category === category);
-  if (filterTags.length) results = results.filter((r) => filterTags.every((t) => memIndex[r.key]?.tags.includes(t)));
+  if (filterTags.length) results = results.filter((r) => filterTags.every((t) => (memIndex[r.key]?.tags ?? []).includes(t)));
   if (minScore > 0) results = results.filter((r) => r.score >= minScore);
   return results.slice(0, limit).map((r) => {
     const m = memIndex[r.key];
@@ -16770,7 +16791,8 @@ function getMemoriesByKeys(args) {
       return { key, title: meta2.title, category: meta2.category, tags: meta2.tags, summary: execSummary.trim() };
     }
     const { status, content } = readCachedOrFresh(key, meta2.filePath, "reread");
-    if (status !== "failed") bumpAccess(meta2);
+    if (status === "failed") return { key, error: "Failed to read memory file" };
+    bumpAccess(meta2);
     return { ...meta2, key, content };
   });
 }
@@ -16820,12 +16842,14 @@ function getRelatedMemories(args) {
     if (!includeContent) return m;
     const meta2 = memIndex[m.key];
     if (!meta2) return m;
-    const { content } = readCachedOrFresh(m.key, meta2.filePath);
+    const { status, content } = readCachedOrFresh(m.key, meta2.filePath);
+    if (status === "failed") return { ...m, error: "Failed to read memory file" };
     return { ...m, content };
   });
 }
 function pruneMemories(args) {
-  const { threshold = 0.1 } = args;
+  const rawThreshold = Number(args.threshold);
+  const threshold = Number.isFinite(rawThreshold) ? Math.max(0, Math.min(1, rawThreshold)) : 0.1;
   const limit = Math.max(1, Math.min(MAX_PAGE_LIMIT2, Math.floor(Number(args.limit)))) || 20;
   return Object.values(memIndex).map((m) => ({
     key: m.key,
@@ -16891,7 +16915,7 @@ function updateMemory(args) {
     updated: now,
     sessions
   };
-  const newContent = content !== void 0 ? withExecutiveSummary(content) : parsed.content;
+  const newContent = content !== void 0 ? withExecutiveSummary(String(content)) : parsed.content;
   const fileContent = stringifyFrontmatter(newContent, newFm);
   fs6.writeFileSync(meta2.filePath, fileContent);
   let mtimeMs = 0, size = 0;
@@ -16943,7 +16967,8 @@ function deleteMemory(args) {
   return { key, message: "Memory deleted." };
 }
 function confirmMemory(args) {
-  const { key, useful = true } = args;
+  const { key } = args;
+  const useful = args.useful !== false && args.useful !== "false";
   const meta2 = memIndex[key];
   if (!meta2) throw new Error(`Memory not found: ${key}`);
   assertRegularFile(meta2.filePath, key);
@@ -17172,7 +17197,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.95" : null.version;
+var PLUGIN_VERSION = true ? "1.0.96" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -15,8 +15,9 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-tfidf-search-' + process.pid;
 });
 
-import { tfidfSearch, rebuildInvertedIndex } from '../tfidf.js';
+import { tfidfSearch, rebuildInvertedIndex, tokenize } from '../tfidf.js';
 import { memIndex } from '../state.js';
+import { searchIndex } from '../tools/recall.js';
 
 const KEY = 'knowledge/boost-probe';
 
@@ -78,5 +79,47 @@ describe('tfidfSearch per-token toLowerCase memoization (#5)', () => {
     // 'sharedtag' matches the tag (×1.5) but not the title (no ×2). tf>0 so the
     // doc is ranked with a positive score — the boost path ran and matched.
     expect(hit!.score).toBeGreaterThan(0);
+  });
+});
+
+describe('tokenize diacritic normalization (Pass 1 hardening)', () => {
+  it('strips combining marks but keeps the base Romanian letters', () => {
+    // Pre-fix replaced every non-ASCII char with a space, turning "întâlnire"
+    // into separate tokens and losing the word entirely. Post-fix NFKD-decomposes
+    // the diacritics and strips the combining marks, leaving "intalnire".
+    expect(tokenize('întâlnire')).toContain('intalnire');
+    expect(tokenize('șță')).toContain('sta');
+  });
+
+  it('still lowercases and removes pure non-letter punctuation', () => {
+    expect(tokenize('Café!')).toContain('cafe');
+  });
+});
+
+describe('searchIndex tags filter — missing entry guard', () => {
+  it('does not crash when a result key has no memIndex entry', () => {
+    // Seed a doc, then wipe its memIndex entry after rebuilding so the filter
+    // sees a stale tfidf result. The optional-chain guard must keep the search
+    // alive instead of throwing on memIndex[r.key].tags.includes.
+    const KEY = 'knowledge/orphan';
+    (memIndex as any)[KEY] = {
+      key: KEY,
+      title: 'orphan doc',
+      tags: ['x'],
+      contentPreview: 'body',
+      category: 'knowledge',
+      filePath: '/tmp/orphan.md',
+      accessCount: 0,
+      lastAccessed: null,
+      tokenEstimate: 2,
+      isOrg: false,
+      sessions: [],
+      importanceScore: 0.5,
+      created: '2026-06-30T00:00:00.000Z',
+      updated: '2026-06-30T00:00:00.000Z',
+    };
+    rebuildInvertedIndex();
+    delete (memIndex as any)[KEY];
+    expect(() => searchIndex({ query: 'orphan', tags: ['x'] })).not.toThrow();
   });
 });

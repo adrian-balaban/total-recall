@@ -125,7 +125,9 @@ async function getEmbedder(): Promise<((text: string) => Promise<number[] | null
 export async function embed(text: string): Promise<number[] | null> {
   const embedder = await getEmbedder();
   if (!embedder) return null;
-  return embedder(text);
+  const result = await embedder(text);
+  if (result) externalEmbedSuccess = true;
+  return result;
 }
 
 // Fire-and-forget embed → upsert. Centralized so the two write paths (store +
@@ -179,11 +181,16 @@ export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
 // not falsely advertise vector search as enabled. The recall hybrid gate does not
 // consult this — it always attempts embed() when hybrid is requested and degrades
 // to TF-IDF via the embed()->null path, which is what triggers the lazy load.
+// True once an external provider (Ollama/Vertex) has returned a valid vector.
+// We do not probe on every get_stats call, so availability is reported honestly
+// only after an actual embed attempt succeeded.
+let externalEmbedSuccess = false;
+
 export function isVectorAvailable(): boolean {
   if (testEmbedder !== undefined && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
   const config = loadConfig();
   const provider = config.embeddingProvider || 'huggingface';
-  if (provider !== 'huggingface') return true;
+  if (provider !== 'huggingface') return externalEmbedSuccess;
   return pipeline !== null;
 }

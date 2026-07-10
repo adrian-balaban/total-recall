@@ -22,7 +22,7 @@ Two separate vaults live under `~/.total-recall/`:
 
 ---
 
-## 12 MCP Tools
+## 17 MCP Tools
 
 All tool calls operate against an in-memory primary index (`index.json`), making read/search operations extremely fast and free of disk I/O.
 
@@ -40,6 +40,11 @@ All tool calls operate against an in-memory primary index (`index.json`), making
 | `get_timeline` | Chronological view | Lists memories grouped and sorted by modification dates. |
 | `get_related_memories` | Find relations | Scores Jaccard similarity of tags with a category boost. |
 | `prune_memories` | Clean stale entries | Lists Ebbinghaus decay candidates (does not auto-delete). Excludes `no-prune`. |
+| `rerank_memories` | Semantic rerank | Reorders candidate keys by cosine similarity to a query using embeddings. |
+| `export_memories` | Bulk export | Writes a portable JSON archive; filter by keys, category, or tag. |
+| `import_memories` | Bulk import | Restores memories from an `export_memories` archive; skip/force behavior. |
+| `delete_memories` | Bulk delete | Deletes a list of keys; requires `confirm=true`; respects `no-prune`. |
+| `confirm_memory` | Feedback | `useful=true` increments confirmations; `useful=false` increments flags. |
 
 ---
 

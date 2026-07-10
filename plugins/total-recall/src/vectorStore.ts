@@ -22,12 +22,28 @@ async function getDb(dbPath: string): Promise<any> {
       const Database = (await import('better-sqlite3')).default;
       const d = new Database(dbPath);
       sqliteVec.load(d);
+      // sqlite-vec defaults to L2/Euclidean distance. Our embeddings are normalized
+      // (L2 = 1) and we want cosine similarity in [0, 1], so force the table to use
+      // cosine distance. An existing table created before this fix will still say
+      // FLOAT[384] with no metric; detect that and recreate so scores are comparable
+      // to cosine distance instead of raw L2.
+      const existing = d.prepare(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+      ).get() as { sql: string } | undefined;
+      const needsRecreate = existing && !/distance_metric\s*=\s*cosine/i.test(existing.sql);
+      if (needsRecreate) {
+        d.exec("DROP TABLE vec_memories");
+      }
       d.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories
-        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384]);
+        USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[384] distance_metric=cosine);
       `);
       return d;
     } catch {
+      // Only cache successful loads; a transient failure (missing optional dep,
+      // sqlite I/O error) should not permanently disable vector search until restart.
+      dbPromise = null;
+      cachedDbPath = null;
       return null;
     }
   })();

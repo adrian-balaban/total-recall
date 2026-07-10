@@ -129,6 +129,12 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(e.importanceScore),
+    // Provide safe defaults for fields added after earlier index.json formats so
+    // a pre-upgrade entry never carries undefined through to search/pruning.
+    accessCount: typeof e.accessCount === 'number' && Number.isFinite(e.accessCount) ? Math.max(0, e.accessCount) : 0,
+    lastAccessed: typeof e.lastAccessed === 'string' ? e.lastAccessed : '',
+    isOrg: typeof e.isOrg === 'boolean' ? e.isOrg : key.startsWith('org/'),
+    category: typeof e.category === 'string' ? e.category : 'knowledge',
     // #19: preserve persisted mtimeMs/size so reconcileIndex can skip
     // unchanged files across boots. A pre-#19 index.json (or a corrupted
     // non-numeric value) yields 0 — the "no stat" sentinel that forces a

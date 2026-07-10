@@ -55,7 +55,7 @@ Rules:
 # for the same discoverability. stdout stays clean (the hook only emits the
 # final {"continue":true}); only stderr is tee'd to the log.
 EXTRACT_LOG="$HOME/.total-recall/.extract.log"
-claude -p "$EXTRACT_PROMPT" < "$TRANSCRIPT" 2>/dev/null \
+claude -p "$EXTRACT_PROMPT" < "$TRANSCRIPT" 2>>"$EXTRACT_LOG" \
   | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
 
 echo '{"continue":true}'

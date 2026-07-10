@@ -57,7 +57,11 @@ describe('vectorStore — dbPath mismatch', () => {
     vi.doMock('better-sqlite3', () => ({
       default: vi.fn(function (this: any) {
         this.exec = vi.fn();
-        this.prepare = vi.fn().mockReturnValue({ run: vi.fn(), all: vi.fn().mockReturnValue([]) });
+        this.prepare = vi.fn().mockReturnValue({
+          run: vi.fn(),
+          all: vi.fn().mockReturnValue([]),
+          get: vi.fn().mockReturnValue(undefined),
+        });
       }),
     }));
   });
@@ -89,6 +93,7 @@ describe('vectorStore — success path with real sqlite', () => {
         this.prepare = vi.fn().mockReturnValue({
           run: vi.fn(),
           all: vi.fn().mockReturnValue([{ key: 'k/a', distance: 0.1 }]),
+          get: vi.fn().mockReturnValue(undefined),
         });
       }),
     }));
