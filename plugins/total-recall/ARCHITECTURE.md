@@ -22,15 +22,19 @@ src/
 ├── tfidf.ts          tokenize, rebuildInvertedIndex, tfidfSearch
 ├── ebbinghaus.ts     computeRetentionStrength, daysSince
 ├── rrf.ts            reciprocalRankFusion (k=60)
-├── embeddings.ts     lazy HuggingFace pipeline (Xenova/all-MiniLM-L6-v2), no-op if deps absent
+├── embeddings.ts     lazy HuggingFace pipeline (Xenova/all-MiniLM-L6-v2) or external Ollama provider, no-op if deps absent
 ├── vectorStore.ts    sqlite-vec upsert/search/delete wrapper
 ├── dates.ts          parseRelativeDate
 ├── journal.ts        appendJournal
+├── auto-reconcile.ts polls the .reconcile-requested marker (dropped by pull-org-vault.sh) → reconcileIndex
+├── privacy-filter.ts SECRET_TOKEN_RE + email checks — fail-closed gate for org sync
 └── tools/
     ├── store.ts      store_memory
     ├── recall.ts     recall_memory, search_index
+    ├── rerank.ts     rerank_memories
     ├── query.ts      list_memories, get_memories_by_keys, get_stats, get_timeline, get_related_memories, prune_memories
-    └── mutate.ts     update_memory, delete_memory, rebuild_index
+    ├── mutate.ts     update_memory, delete_memory, rebuild_index, confirm_memory
+    └── bulk.ts       export_memories, import_memories, delete_memories
 ```
 
 ---
@@ -131,7 +135,7 @@ On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced ch
 | `recall_memory` | TF-IDF + Ebbinghaus, optionally fused with vector search via RRF |
 | `search_index` | Metadata-only TF-IDF (no file reads, no accessCount bump) |
 | `get_memories_by_keys` | Direct key lookup; reads through LRU cache |
-| `rerank_memories` | Re-rank a candidate list with a query using cross-encoder-style signals |
+| `rerank_memories` | Re-rank a candidate list by cosine similarity to a query, using local embeddings (no LLM call) |
 
 ### List / Query
 | Tool | Description |
@@ -230,10 +234,11 @@ The retention strength formula models the forgetting curve:
 
 ```
 λ     = 0.16 × (1 − importance × 0.8)     # high-importance memories decay slower
-decay = importance × exp(−λ × daysSince)  × (1 + accessCount × 0.2)
+decay = clamp(importance × exp(−λ × daysSince)
+              × (1 + accessCount × 0.2 + confirmations × 0.1 − flags × 0.1), 0, 1)
 ```
 
-A memory with `importanceScore=1.0` has `λ=0.032` (slow decay); one with `importanceScore=0.3` has `λ=0.122` (fast decay). Each access adds 20% strength on top.
+A memory with `importanceScore=1.0` has `λ=0.032` (slow decay); one with `importanceScore=0.3` has `λ=0.122` (fast decay). Each access adds 20% strength on top; each `confirm_memory` confirmation adds 10% and each flag subtracts 10% — a frequently accessed memory that was flagged as wrong no longer stays on top.
 
 ---
 

@@ -16,6 +16,10 @@ For detailed features, configuration options, client compatibility matrices, and
 👉 **[Go to total-recall Plugin Documentation](plugins/total-recall/README.md)**
 👉 **[Installation guide (INSTALL.md)](plugins/total-recall/INSTALL.md)**
 
+## 🎤 Talks
+
+*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 16 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin)
+
 ## 💡 Proactive Memory Saving
 
 The total-recall plugin is designed to automatically capture and save memories (without explicit user command) when:

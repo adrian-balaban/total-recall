@@ -72,7 +72,7 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 
 **Supporting modules:**
 - `src/frontmatter.ts` — minimal YAML-frontmatter parse/stringify (replaces gray-matter; formats/sorts keys consistently: title, tags, author, sessions, created, updated, importanceScore, custom)
-- `src/ebbinghaus.ts` — retention strength formula: `importance × exp(-λ × days) × (1 + accessCount × 0.2)`
+- `src/ebbinghaus.ts` — retention strength formula: `clamp(importance × exp(-λ × days) × (1 + accessCount × 0.2 + confirmations × 0.1 − flags × 0.1), 0, 1)` (confirmations/flags come from `confirm_memory`)
 - `src/embeddings.ts` — supports in-process HuggingFace and Ollama API embeddings
 - `src/vectorStore.ts` — sqlite-vec upsert/search/delete wrapper
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)

@@ -228,12 +228,14 @@ Configure total-recall by editing `~/.total-recall/config.json`:
   "allowedEmailDomains": ["yourcompany.com"],
   "embeddingProvider": "huggingface",
   "embeddingModel": "bge-m3",
+  "embeddingTimeoutMs": 10000,
   "enableMultilingualSearch": true
 }
 ```
 
 *   **embeddingProvider**: `'huggingface'` (local MiniLM) or `'ollama'` (local API). `install.sh` auto-selects `ollama` when Ollama is on PATH with the `bge-m3` model pulled, else `huggingface`; an existing explicit value is never overwritten.
 *   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
+*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `10000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon.
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 
 ---
