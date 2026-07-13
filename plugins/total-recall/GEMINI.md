@@ -16,8 +16,8 @@ This copies the plugin into `~/.gemini/extensions/total-recall/`, registers
 the MCP server (from `gemini-extension.json`), and wires the lifecycle hooks
 from `hooks/hooks.gemini.json` (Gemini's event renames: `PostToolUse` →
 `AfterTool`, `PreCompact` → `PreCompress`) and a full `mcp_total-recall_*` matcher. Verify with `gemini mcp list`.
-For MCP-only registration without hooks, see the README's *Gemini
-compatibility* section.
+For MCP-only registration without hooks, see the README's *💻 Client
+Compatibility* section.
 
 ## Always-true rules
 

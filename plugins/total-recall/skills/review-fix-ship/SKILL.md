@@ -125,7 +125,7 @@ If the next pass surfaces a new finding, fix it, bump patch, commit, push — an
 
 ## Worked example: total-recall plugin
 
-User: "review ; fix all" on `/home/adrianb/_/claude/github/claude-plugins-total-recall/plugins/total-recall`.
+User: "review ; fix all" on `/home/adrianb/_/ai-assisted/github/total-recall/plugins/total-recall`.
 
 Pass 1 (3 findings):
 

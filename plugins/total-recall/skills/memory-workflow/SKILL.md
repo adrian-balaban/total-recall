@@ -46,7 +46,7 @@ Follow this order strictly — earlier steps are cheaper:
 
 - Tag with `org` to route to shared org vault
 - **Never** use both `org` and `personal` tags on the same memory
-- Personal vault takes precedence: if a key exists in both vaults, the personal version is used
+- Key collisions between vaults are prevented by design, not resolved by precedence: org keys are always prefixed `org/`, and the personal vault reserves (skips scanning) any `org/` subdirectory — so the same key can never resolve to both a personal and an org memory
 - Org sync uses `spawnSync` with args as array — no shell interpolation risk
 
 ## Quality Checklist
