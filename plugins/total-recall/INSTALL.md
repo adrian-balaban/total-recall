@@ -11,14 +11,14 @@ One plugin, four clients — Claude Code, GitHub Copilot CLI, Gemini CLI, and st
 
 ## Install profiles
 
-On start, `install.sh` asks which profile you want (skip the prompt with a flag):
+On start, `install.sh` asks which profile you want (skip the prompt with a flag). **Complete is the default** — pressing Enter, `-y`, or a non-interactive run all select it:
 
 | Profile | Flag | What you get |
 |---|---|---|
-| **a. Default** | `--default` | No optional dependencies, no local LLM. TF-IDF + Ebbinghaus search only. Smallest footprint, works air-gapped. |
-| **b. Complete** | `--complete` | Everything: hybrid vector search with a local embedding model (HuggingFace MiniLM via `@huggingface/transformers` + `sqlite-vec`, ~200 MB downloaded on first use). |
+| **a. Minimal** | `--default` | No optional dependencies, no local LLM. TF-IDF + Ebbinghaus search only. Smallest footprint, works air-gapped. |
+| **b. Complete** (default) | `--complete` | Hybrid vector search. The embedding provider is auto-detected: if `ollama` is on PATH **and** `ollama list` shows the `bge-m3` model, embeddings come from Ollama (no model download); otherwise a local HuggingFace MiniLM via `@huggingface/transformers` (~200 MB downloaded on first use). `sqlite-vec` is installed either way. |
 
-Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
+The detected provider only seeds `embeddingProvider` in `~/.total-recall/config.json` when it is unset — an explicit value there is never overwritten on re-run. Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
 
 ## Quick install by client
 

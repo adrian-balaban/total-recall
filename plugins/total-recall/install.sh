@@ -13,7 +13,7 @@
 #   5c. Gemini extension   (optional, --gemini)
 #   5d. Copilot extension  (optional, --copilot)
 #   6. Org vault            (optional)
-#   7. Vector search        (optional)
+#   7. Vector search        (default on; provider auto-detected)
 #   8. Verify
 #
 # Every step checks current state before acting, so the script is SAFE TO
@@ -24,17 +24,21 @@
 #
 # On start (interactive, unless a profile flag or --vector/--no-vector/-y is
 # given) the script asks which install profile you want:
-#   a. Default  — no optional dependencies, no local LLM. TF-IDF + Ebbinghaus
+#   a. Minimal  — no optional dependencies, no local LLM. TF-IDF + Ebbinghaus
 #                 search only; smallest footprint, works air-gapped.
-#   b. Complete — everything: hybrid vector search with a local embedding
-#                 model (HuggingFace MiniLM via @huggingface/transformers +
-#                 sqlite-vec, ~200 MB on first use).
+#   b. Complete — DEFAULT. Hybrid vector search. The embedding provider is
+#                 auto-detected: if `ollama` is on PATH and `ollama list`
+#                 shows the bge-m3 model, embeddings come from Ollama
+#                 (no extra npm model download); otherwise a local
+#                 HuggingFace MiniLM via @huggingface/transformers
+#                 (~200 MB on first use). sqlite-vec is installed either way.
 #
 # Options:
-#   --default                 Non-interactive profile a (no optional deps, no
-#                             local LLM). Same as --no-vector.
-#   --complete                Non-interactive profile b (vector search + local
-#                             embeddings). Same as --vector.
+#   --default                 Non-interactive profile a (minimal: no optional
+#                             deps, no local LLM). Same as --no-vector.
+#   --complete                Non-interactive profile b (hybrid vector search,
+#                             auto-detected provider). Same as --vector.
+#                             This is the default when no profile is chosen.
 #   --plugin-root PATH        Path to the total-recall plugin dir
 #                             (default: this script's own directory)
 #   --standalone              Wire hooks into ~/.claude/settings.json.
@@ -60,12 +64,13 @@
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
 #                             privacy filter (default blocks ALL emails)
-#   --vector                  Enable hybrid vector search (installs HuggingFace
-#                             deps + rebuilds; ~200 MB on first use)
+#   --vector                  Enable hybrid vector search (auto-detects the
+#                             embedding provider: Ollama bge-m3 if available,
+#                             else HuggingFace deps, ~200 MB on first use)
 #   --no-vector               Skip vector search without prompting
-#   -y, --yes                 Non-interactive: take defaults, skip optional
-#                             prompts (org vault / vector search) unless their
-#                             flags were given
+#   -y, --yes                 Non-interactive: take defaults (Complete profile
+#                             with vector search), skip optional prompts (org
+#                             vault) unless their flags were given
 #   -h, --help                Show this help and exit
 #
 # Windows:
@@ -127,8 +132,9 @@
 #      effects (pull vault, sync to org, flush writes) all still run.
 #   6. Org vault (optional) — prompts or --org-repo/--allowed-email-domain;
 #      writes config.json, runs pull-org-vault.sh.
-#   7. Vector search (optional) — prompts or --vector/--no-vector;
-#      npm install … && npm run build.
+#   7. Vector search (default on) — --vector/--no-vector or the profile choice;
+#      installs sqlite-vec + better-sqlite3 (plus @huggingface/transformers
+#      unless Ollama+bge-m3 was detected), then npm run build.
 #   8. Verify + a summary of what was set up vs. skipped.
 #
 # It adds a prerequisite check (Node ≥18, gh auth), flags for non-interactive
@@ -222,13 +228,39 @@ done
 # by a flag (--vector/--no-vector/--complete/--default) or -y (defaults apply).
 if [ -z "$VECTOR" ] && [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
   step "Install profile"
-  info "a. Default  — no optional dependencies, no local LLM (TF-IDF search only)"
-  info "b. Complete — hybrid vector search with local embeddings (~200 MB on first use)"
-  read -rp "  Which profile? [A/b] " PROFILE_REPLY
-  case "${PROFILE_REPLY:-a}" in
-    [Bb]*) VECTOR="yes"; ok "Profile: complete (vector search + local embeddings)";;
-    *)     VECTOR="no";  ok "Profile: default (no optional dependencies)";;
+  info "a. Minimal  — no optional dependencies, no local LLM (TF-IDF search only)"
+  info "b. Complete — hybrid vector search; embeddings via Ollama bge-m3 if detected, else local HuggingFace MiniLM (~200 MB on first use)"
+  read -rp "  Which profile? [a/B] " PROFILE_REPLY
+  case "${PROFILE_REPLY:-b}" in
+    [Aa]*) VECTOR="no";  ok "Profile: minimal (no optional dependencies)";;
+    *)     VECTOR="yes"; ok "Profile: complete (hybrid vector search)";;
   esac
+fi
+# Non-interactive (-y or no tty) with no explicit --vector/--no-vector flag:
+# the default profile is Complete (hybrid vector search).
+[ -z "$VECTOR" ] && VECTOR="yes"
+
+# --------------------------------------------------------------------------
+# Step 0b — Embedding provider auto-detection (Complete profile only)
+# --------------------------------------------------------------------------
+# Prefer Ollama when it can serve embeddings locally already: `ollama` on PATH
+# AND `ollama list` shows the bge-m3 model (any tag, e.g. bge-m3:latest).
+# Otherwise fall back to the in-process HuggingFace MiniLM (~200 MB download
+# on first use). The result seeds config.json's embeddingProvider in Step 2
+# (an existing explicit value there is never overwritten) and decides which
+# npm deps Step 7 installs.
+EMBED_PROVIDER="huggingface"
+if [ "$VECTOR" = "yes" ]; then
+  step "Embedding provider"
+  if command -v ollama >/dev/null 2>&1 && ollama list 2>/dev/null | awk '{print $1}' | grep -q '^bge-m3'; then
+    EMBED_PROVIDER="ollama"
+    ok "Ollama with bge-m3 detected — using Ollama for embeddings (no model download needed)."
+  elif command -v ollama >/dev/null 2>&1; then
+    info "Ollama found, but 'ollama list' does not show bge-m3 (pull it with: ollama pull bge-m3)."
+    ok "Using local HuggingFace MiniLM for embeddings (~200 MB on first use)."
+  else
+    ok "Ollama not on PATH — using local HuggingFace MiniLM for embeddings (~200 MB on first use)."
+  fi
 fi
 
 # --------------------------------------------------------------------------
@@ -296,14 +328,17 @@ ORG_DIR="$VAULT_HOME/org"
 mkdir -p "$VAULT_HOME"
 NODE_BIN=$(command -v node || echo "")
 if [ -n "$NODE_BIN" ]; then
-  "$NODE_BIN" - "$CONFIG_FILE" <<'NODE'
+  "$NODE_BIN" - "$CONFIG_FILE" "$EMBED_PROVIDER" <<'NODE'
 const fs = require('fs');
-const [, , cfgPath] = process.argv;
+const [, , cfgPath, detectedProvider] = process.argv;
 let c = {};
 try { c = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
 let modified = false;
-if (c.embeddingProvider === undefined) { c.embeddingProvider = 'huggingface'; modified = true; }
+// Seed the auto-detected provider only when unset — an explicit value in an
+// existing config.json is the user's choice and is never overwritten on re-run.
+if (c.embeddingProvider === undefined) { c.embeddingProvider = detectedProvider; modified = true; }
 if (c.embeddingProvider === 'ollama') {
+  // bge-m3: multilingual, better than the old nomic-embed-text default
   if (c.embeddingModel === undefined || c.embeddingModel === 'nomic-embed-text') {
     c.embeddingModel = 'bge-m3';
     modified = true;
@@ -676,13 +711,18 @@ fi
 # --------------------------------------------------------------------------
 # Step 7 — Vector search (optional)
 # --------------------------------------------------------------------------
-step "Step 7 — Vector search (optional)"
-if [ -z "$VECTOR" ]; then
-  if ask_yes_no "Enable hybrid vector search (TF-IDF + HuggingFace embeddings, ~200 MB)?" "n"; then
-    VECTOR="yes"; else VECTOR="no"; fi
-fi
+step "Step 7 — Vector search"
 if [ "$VECTOR" = "yes" ]; then
-  info "Installing vector-search dependencies in $PLUGIN_ROOT ..."
+  # sqlite-vec + better-sqlite3 are needed for the vector store regardless of
+  # provider; @huggingface/transformers only for the in-process MiniLM path
+  # (Ollama serves embeddings over its local HTTP API instead).
+  if [ "$EMBED_PROVIDER" = "ollama" ]; then
+    VEC_DEPS="sqlite-vec better-sqlite3"
+    info "Installing vector-store dependencies (Ollama provides embeddings) in $PLUGIN_ROOT ..."
+  else
+    VEC_DEPS="@huggingface/transformers sqlite-vec better-sqlite3"
+    info "Installing vector-search dependencies (HuggingFace MiniLM) in $PLUGIN_ROOT ..."
+  fi
   # --no-save: these deps are ALREADY declared in package.json `optionalDependencies`
   # (so the bundle externalizes them and the plugin loads without them). A bare
   # `npm install <pkg>` (npm 7+) defaults to --save, which would duplicate them into
@@ -690,14 +730,15 @@ if [ "$VECTOR" = "yes" ]; then
   # package.json, consumers' `claude plugin update` would treat them as required,
   # defeating graceful degradation. --no-save installs into node_modules only,
   # leaving package.json untouched.
-  if ( cd "$PLUGIN_ROOT" && npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3 && npm run build ); then
-    ok "Vector search enabled (TF-IDF + embeddings via RRF)."
-    note "Vector search enabled."
+  # shellcheck disable=SC2086  # VEC_DEPS is an intentional word-split list
+  if ( cd "$PLUGIN_ROOT" && npm install --no-save $VEC_DEPS && npm run build ); then
+    ok "Vector search enabled (TF-IDF + $EMBED_PROVIDER embeddings via RRF)."
+    note "Vector search enabled ($EMBED_PROVIDER embeddings)."
   else
     warn "npm install/build failed — plugin will fall back to TF-IDF only."
   fi
 else
-  ok "Vector search skipped. Plugin uses TF-IDF + Ebbinghaus decay by default."
+  ok "Vector search skipped. Plugin uses TF-IDF + Ebbinghaus decay only."
   note "Vector search skipped."
 fi
 

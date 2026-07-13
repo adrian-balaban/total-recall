@@ -4,7 +4,7 @@ Persistent knowledge and memory management for Claude Code, GitHub Copilot CLI, 
 
 Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject relevant context automatically at session start.
 
-> **Installation:** see [INSTALL.md](INSTALL.md) — profiles (default / complete), per-client setup, Windows notes, org vault.
+> **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ---
@@ -232,7 +232,7 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 }
 ```
 
-*   **embeddingProvider**: `'huggingface'` (default, local MiniLM) or `'ollama'` (local API).
+*   **embeddingProvider**: `'huggingface'` (local MiniLM) or `'ollama'` (local API). `install.sh` auto-selects `ollama` when Ollama is on PATH with the `bge-m3` model pulled, else `huggingface`; an existing explicit value is never overwritten.
 *   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 

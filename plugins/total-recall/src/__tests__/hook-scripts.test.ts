@@ -425,12 +425,22 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
   // `dependencies` and break graceful degradation if the mutated package.json were
   // ever committed. Static-assert the --no-save guard is on the install line (a
   // real --vector run would pull ~200 MB and is too heavy for a unit test).
+  // The dep list now lives in $VEC_DEPS (provider-dependent: the Ollama path
+  // skips @huggingface/transformers), so assert the install line uses --no-save
+  // with $VEC_DEPS, and that both VEC_DEPS variants carry the vector-store deps.
   it('install.sh: --vector installs optional deps with --no-save (never mutates package.json)', () => {
     const src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');
-    const vectorLine = src.split('\n').find(l => l.includes('npm install') && l.includes('@huggingface/transformers'));
-    expect(vectorLine, 'expected an npm install line pulling @huggingface/transformers').toBeDefined();
+    const vectorLine = src.split('\n').find(l => l.includes('npm install') && l.includes('$VEC_DEPS'));
+    expect(vectorLine, 'expected an npm install line using $VEC_DEPS').toBeDefined();
     expect(vectorLine).toContain('--no-save');
     expect(vectorLine).not.toMatch(/npm install\s+--save\b/);
+    const depAssignments = src.split('\n').filter(l => l.trim().startsWith('VEC_DEPS='));
+    expect(depAssignments.length, 'expected two VEC_DEPS variants (ollama + huggingface)').toBe(2);
+    for (const l of depAssignments) {
+      expect(l).toContain('sqlite-vec');
+      expect(l).toContain('better-sqlite3');
+    }
+    expect(depAssignments.some(l => l.includes('@huggingface/transformers'))).toBe(true);
   });
 
   // Pass 6 fix: install.sh's org-config block used to delete allowedEmailDomains
