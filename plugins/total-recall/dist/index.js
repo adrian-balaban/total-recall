@@ -16029,42 +16029,6 @@ async function getExternalEmbedding(text) {
       return null;
     }
   }
-  if (provider === "vertexai") {
-    const region = config3.vertexRegion || "us-central1";
-    const projectId = config3.vertexProjectId;
-    const model = config3.embeddingModel || "text-embedding-004";
-    if (!projectId) {
-      recordError("Vertex AI embedding failed: vertexProjectId is not configured");
-      return null;
-    }
-    const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:predict`;
-    const token = config3.embeddingApiKey || process.env.VERTEX_API_KEY || process.env.GCLOUD_ACCESS_TOKEN;
-    if (!token) {
-      recordError("Vertex AI embedding failed: no authentication token found (configure embeddingApiKey or GCLOUD_ACCESS_TOKEN)");
-      return null;
-    }
-    try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          instances: [{ content: text }]
-        })
-      });
-      if (!response.ok) throw new Error(`Vertex AI returned status ${response.status}`);
-      const data = await response.json();
-      if (data.predictions?.[0]?.embeddings?.values) {
-        return data.predictions[0].embeddings.values;
-      }
-      throw new Error("Unexpected Vertex AI response structure");
-    } catch (e) {
-      recordError(`Vertex AI embedding failed: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
-    }
-  }
   return null;
 }
 async function getEmbedder() {
@@ -17309,7 +17273,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.101" : null.version;
+var PLUGIN_VERSION = true ? "1.0.102" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

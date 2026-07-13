@@ -232,8 +232,8 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 }
 ```
 
-*   **embeddingProvider**: `'huggingface'` (default, local MiniLM), `'ollama'` (local API), or `'vertexai'` (GCP).
-*   **embeddingModel**: used only for external providers. Ollama defaults to `bge-m3`, Vertex AI to `text-embedding-004`.
+*   **embeddingProvider**: `'huggingface'` (default, local MiniLM) or `'ollama'` (local API).
+*   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 
 ---

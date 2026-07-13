@@ -13,12 +13,9 @@ export interface TotalRecallConfig {
   orgVault?: string;
   orgRepo?: string;
   allowedEmailDomains?: string[];
-  embeddingProvider?: 'huggingface' | 'ollama' | 'vertexai';
+  embeddingProvider?: 'huggingface' | 'ollama';
   embeddingUrl?: string;
   embeddingModel?: string;
-  embeddingApiKey?: string;
-  vertexRegion?: string;
-  vertexProjectId?: string;
   enableMultilingualSearch?: boolean;
 }
 

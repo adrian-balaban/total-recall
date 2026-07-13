@@ -68,12 +68,12 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 - Primary: TF-IDF (`invertedIndex.json`) × Ebbinghaus retention decay (`src/ebbinghaus.ts`). Expanded with RO/EN translations if `enableMultilingualSearch` is true.
 - TF-IDF tokenizes over `title + tags + contentPreview` (first ~500 chars of body stored in the index, not the full file); the boost path (`×2` title match, `×1.5` tag match) memoizes the lowercased title + tags per doc-key across the query-token loop, so a Q-token query matching D docs pays one `toLowerCase` per doc, not Q·D — never re-introduce a per-(token, doc) `toLowerCase` in `tfidfSearch`
 - Optional hybrid: TF-IDF + vector embeddings fused via Reciprocal Rank Fusion (`src/rrf.ts`)
-- Vector path supports HuggingFace (`Xenova/all-MiniLM-L6-v2`), Ollama, and Vertex AI embedding providers. Gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
+- Vector path supports HuggingFace (`Xenova/all-MiniLM-L6-v2`) and Ollama embedding providers. Gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
 
 **Supporting modules:**
 - `src/frontmatter.ts` — minimal YAML-frontmatter parse/stringify (replaces gray-matter; formats/sorts keys consistently: title, tags, author, sessions, created, updated, importanceScore, custom)
 - `src/ebbinghaus.ts` — retention strength formula: `importance × exp(-λ × days) × (1 + accessCount × 0.2)`
-- `src/embeddings.ts` — supports in-process HuggingFace, Ollama API, and GCP Vertex AI embeddings
+- `src/embeddings.ts` — supports in-process HuggingFace and Ollama API embeddings
 - `src/vectorStore.ts` — sqlite-vec upsert/search/delete wrapper
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)
 

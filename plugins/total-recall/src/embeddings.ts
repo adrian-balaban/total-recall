@@ -55,45 +55,6 @@ async function getExternalEmbedding(text: string): Promise<number[] | null> {
     }
   }
 
-  if (provider === 'vertexai') {
-    const region = config.vertexRegion || 'us-central1';
-    const projectId = config.vertexProjectId;
-    const model = config.embeddingModel || 'text-embedding-004';
-    if (!projectId) {
-      recordError('Vertex AI embedding failed: vertexProjectId is not configured');
-      return null;
-    }
-    const url = `https://${region}-aiplatform.googleapis.com/v1/projects/${projectId}/locations/${region}/publishers/google/models/${model}:predict`;
-    const token = config.embeddingApiKey || process.env.VERTEX_API_KEY || process.env.GCLOUD_ACCESS_TOKEN;
-    if (!token) {
-      recordError('Vertex AI embedding failed: no authentication token found (configure embeddingApiKey or GCLOUD_ACCESS_TOKEN)');
-      return null;
-    }
-    try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          instances: [{ content: text }]
-        })
-      });
-      if (!response.ok) throw new Error(`Vertex AI returned status ${response.status}`);
-      const data = await response.json() as {
-        predictions: { embeddings: { values: number[] } }[]
-      };
-      if (data.predictions?.[0]?.embeddings?.values) {
-        return data.predictions[0].embeddings.values;
-      }
-      throw new Error('Unexpected Vertex AI response structure');
-    } catch (e) {
-      recordError(`Vertex AI embedding failed: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
-    }
-  }
-
   return null;
 }
 
@@ -181,7 +142,7 @@ export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
 // not falsely advertise vector search as enabled. The recall hybrid gate does not
 // consult this — it always attempts embed() when hybrid is requested and degrades
 // to TF-IDF via the embed()->null path, which is what triggers the lazy load.
-// True once an external provider (Ollama/Vertex) has returned a valid vector.
+// True once an external provider (Ollama) has returned a valid vector.
 // We do not probe on every get_stats call, so availability is reported honestly
 // only after an actual embed attempt succeeded.
 let externalEmbedSuccess = false;

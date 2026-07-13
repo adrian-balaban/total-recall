@@ -54,65 +54,9 @@ describe('embeddings — external providers', () => {
     expect(isVectorAvailable()).toBe(false);
   });
 
-  it('Vertex AI success sets vector available', async () => {
-    (loadConfig as any).mockReturnValue({
-      embeddingProvider: 'vertexai',
-      vertexProjectId: 'proj',
-      embeddingApiKey: 'token',
-    });
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        predictions: [{ embeddings: { values: [0.4, 0.5, 0.6] } }],
-      }),
-    });
-
-    const vec = await embed('hello');
-    expect(vec).toEqual([0.4, 0.5, 0.6]);
-    expect(isVectorAvailable()).toBe(true);
-  });
-
-  it('Vertex AI failure without token keeps unavailable', async () => {
-    (loadConfig as any).mockReturnValue({ embeddingProvider: 'vertexai' });
-
-    const vec = await embed('hello');
-    expect(vec).toBeNull();
-    expect(isVectorAvailable()).toBe(false);
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
   it('Ollama fetch rejection records error and keeps vector unavailable', async () => {
     (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
     mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
-
-    const vec = await embed('hello');
-    expect(vec).toBeNull();
-    expect(isVectorAvailable()).toBe(false);
-  });
-
-  it('Vertex AI request failure records error and keeps vector unavailable', async () => {
-    (loadConfig as any).mockReturnValue({
-      embeddingProvider: 'vertexai',
-      vertexProjectId: 'proj',
-      embeddingApiKey: 'token',
-    });
-    mockFetch.mockResolvedValue({ ok: false, status: 503 });
-
-    const vec = await embed('hello');
-    expect(vec).toBeNull();
-    expect(isVectorAvailable()).toBe(false);
-  });
-
-  it('Vertex AI malformed response records error and keeps vector unavailable', async () => {
-    (loadConfig as any).mockReturnValue({
-      embeddingProvider: 'vertexai',
-      vertexProjectId: 'proj',
-      embeddingApiKey: 'token',
-    });
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ predictions: [] }),
-    });
 
     const vec = await embed('hello');
     expect(vec).toBeNull();
