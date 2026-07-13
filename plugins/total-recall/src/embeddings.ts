@@ -33,6 +33,32 @@ export function __testSetEmbedder(
   }
 }
 
+// One bounded attempt at the Ollama embed endpoint. AbortController turns a
+// hung request (Ollama busy loading/swapping another model) into a clean
+// timeout instead of an indefinite fetch — the plugin has no other watchdog
+// on this call, and embed() is awaited on the read path (recall_memory with
+// hybrid=true), so a stuck fetch would stall that request until the OS-level
+// socket timeout (or forever, for some proxies).
+async function ollamaEmbedAttempt(
+  url: string, model: string, text: string, timeoutMs: number
+): Promise<number[]> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, prompt: text }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
+    const data = await response.json() as { embedding: number[] };
+    return data.embedding;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function getExternalEmbedding(text: string): Promise<number[] | null> {
   const config = loadConfig();
   const provider = config.embeddingProvider || 'huggingface';
@@ -40,18 +66,24 @@ async function getExternalEmbedding(text: string): Promise<number[] | null> {
   if (provider === 'ollama') {
     const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
     const model = config.embeddingModel || 'bge-m3';
+    const timeoutMs = config.embeddingTimeoutMs ?? 10000;
+
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, prompt: text })
-      });
-      if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
-      const data = await response.json() as { embedding: number[] };
-      return data.embedding;
-    } catch (e) {
-      recordError(`Ollama embedding failed: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
+      return await ollamaEmbedAttempt(url, model, text, timeoutMs);
+    } catch {
+      // One retry after a short backoff. Observed failure mode (2026-07-11):
+      // Ollama returns a bare HTTP 500 while it's busy loading/evicting another
+      // large model from VRAM — a few hundred ms later the same request
+      // succeeds. A single retry absorbs that class of transient failure
+      // without turning a genuinely-down Ollama into a multi-attempt stall
+      // (still just 2 bounded attempts, each capped at timeoutMs).
+      await new Promise(r => setTimeout(r, 200));
+      try {
+        return await ollamaEmbedAttempt(url, model, text, timeoutMs);
+      } catch (e) {
+        recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
     }
   }
 

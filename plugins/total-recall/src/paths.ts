@@ -16,6 +16,7 @@ export interface TotalRecallConfig {
   embeddingProvider?: 'huggingface' | 'ollama';
   embeddingUrl?: string;
   embeddingModel?: string;
+  embeddingTimeoutMs?: number;
   enableMultilingualSearch?: boolean;
 }
 

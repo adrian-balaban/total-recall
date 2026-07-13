@@ -16009,24 +16009,40 @@ async function listVectorKeys(dbPath) {
 var pipeline = null;
 var loadPromise = null;
 var testEmbedder = void 0;
+async function ollamaEmbedAttempt(url, model, text, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model, prompt: text }),
+      signal: controller.signal
+    });
+    if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
+    const data = await response.json();
+    return data.embedding;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 async function getExternalEmbedding(text) {
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
   if (provider === "ollama") {
     const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
     const model = config3.embeddingModel || "bge-m3";
+    const timeoutMs = config3.embeddingTimeoutMs ?? 1e4;
     try {
-      const response = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model, prompt: text })
-      });
-      if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
-      const data = await response.json();
-      return data.embedding;
-    } catch (e) {
-      recordError(`Ollama embedding failed: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
+      return await ollamaEmbedAttempt(url, model, text, timeoutMs);
+    } catch {
+      await new Promise((r) => setTimeout(r, 200));
+      try {
+        return await ollamaEmbedAttempt(url, model, text, timeoutMs);
+      } catch (e) {
+        recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
+        return null;
+      }
     }
   }
   return null;
@@ -17273,7 +17289,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.103" : null.version;
+var PLUGIN_VERSION = true ? "1.0.104" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
