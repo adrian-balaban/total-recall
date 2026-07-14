@@ -248,9 +248,9 @@ See **[INSTALL.md](INSTALL.md)** for the full guide (profiles, Windows, org vaul
 cd plugins/total-recall && npm install && npm run build
 
 claude plugin install "$(pwd)"       # Claude Code
-./install.sh --copilot               # GitHub Copilot CLI
 ./install.sh --gemini                # Gemini CLI
 ./install.sh --standalone            # Standalone (~/.claude/settings.json)
+Work in progress for: ./install.sh --copilot               # GitHub Copilot CLI
 ```
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
@@ -262,8 +262,8 @@ claude plugin install "$(pwd)"       # Claude Code
 | Client | MCP Tools | Hook Side Effects (Sync/Index) | Context Injection (`additionalContext`) | Playbook Skills |
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
-| **Copilot CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Copilot) | ❌ No |
 | **Gemini CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
+| **Work in progress for Copilot CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Copilot) | ❌ No |
 | **Codex CLI** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 
 ### Client-Specific Integration Details
@@ -277,7 +277,7 @@ claude plugin install "$(pwd)"       # Claude Code
 
 ---
 
-## 📝 Obsidian Integration
+## 📝 [Obsidian](https://obsidian.md/) Integration
 
 Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
@@ -292,11 +292,11 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 Projects and ideas this plugin drew on:
 
-*   **[mozilla-ai/cq](https://github.com/mozilla-ai/cq)** — the open standard for *shared agent learning*. Complementary, not competing: cq = operational lessons shared between agents via a reviewed store; total-recall = *your* context memory (decisions, preferences, architecture) as `.md` files + git, no server, no review pipeline. cq's endorsement mechanism directly inspired total-recall's `confirm_memory` confirmations/flags signal in the retention score.
 *   **[strvmarv/total-recall](https://github.com/strvmarv/total-recall)** and **[davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall)** — same name, different trade-offs (see table below); studying them shaped the "bounded local memory, plain files" positioning.
 *   **Hermann Ebbinghaus (1885)** — the forgetting curve `e^(−t/S)` behind retention scoring.
 *   **Reciprocal Rank Fusion** (Cormack, Clarke & Buettcher, 2009) — the scale-free rank fusion (k=60) used for the hybrid lexical+vector merge.
 *   **[Obsidian](https://obsidian.md/)** — the "your knowledge is a folder of Markdown files with frontmatter" storage model.
+*   **[mozilla-ai/cq](https://github.com/mozilla-ai/cq)** — the open standard for *shared agent learning*. Complementary, not competing: cq = operational lessons shared between agents via a reviewed store; total-recall = *your* context memory (decisions, preferences, architecture) as `.md` files + git, no server, no review pipeline. cq's endorsement mechanism directly inspired total-recall's `confirm_memory` confirmations/flags signal in the retention score.
 
 | | This Plugin | [strvmarv/total-recall](https://github.com/strvmarv/total-recall) | [davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall) | [mozilla-ai/cq](https://github.com/mozilla-ai/cq) |
 |---|---|---|---|---|

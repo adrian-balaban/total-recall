@@ -19,6 +19,10 @@ npx vitest run src/__tests__/ebbinghaus.test.ts  # run a single test file
 
 Tests run sequentially (maxWorkers=1) because the server has module-level state (the shared singletons in `src/state.ts`).
 
+## Docs must track install.sh
+
+`README.md` / `INSTALL.md` client-support claims (profile flags, per-client status like Copilot/Gemini) must match `install.sh`'s actual flags/behavior — they've drifted before (e.g. README labeling a fully-supported client as "work in progress"). Cross-check all three when touching any one.
+
 ## Install / setup
 
 `install.sh` (plugin root) is the one-shot, state-aware setup script: profile prompt (a. minimal — no optional deps / b. complete — hybrid vector search, the DEFAULT; embedding provider auto-detected: Ollama if `ollama` is on PATH with `bge-m3` pulled, else local HuggingFace MiniLM — an existing `embeddingProvider` in config.json is never overwritten) → vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--default`/`--complete`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). User-facing install docs live in `INSTALL.md` (incl. Windows/Git Bash notes) — keep it in sync with install.sh flags. Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.

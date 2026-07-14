@@ -1,7 +1,6 @@
 # 🧠 total-recall plugin
 
-Repository containing the **total-recall** plugin — a persistent, searchable memory system for Claude Code, and Gemini CLI. 
-GitHub Copilot CLI update is in progress.
+Repository containing the **total-recall** plugin — a persistent, searchable memory system for Claude Code, GitHub Copilot CLI, and Gemini CLI.
 
 ## 🔌 Main Plugin
 
@@ -19,7 +18,7 @@ For detailed features, configuration options, client compatibility matrices, and
 
 ## 🎤 Talks
 
-*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 16 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin)
+*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 21 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin)
 
 ## 💡 Proactive Memory Saving
 
