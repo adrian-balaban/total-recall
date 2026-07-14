@@ -47,6 +47,9 @@ claude plugin install "$(pwd)"
 ./install.sh --gemini
 
 # Standalone (writes absolute hook paths into ~/.claude/settings.json)
+# Refuses (with a confirm prompt) if total-recall is already installed via the
+# plugin manager — running both would start two MCP servers and inject the
+# memory index twice per session. Pick one mode.
 ./install.sh --standalone
 ```
 
@@ -71,9 +74,9 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
-1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt)
+1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags the repo until `claude plugin update`) or when `--standalone` would duplicate an existing plugin-manager install
 2. Create vault directories under `~/.total-recall/`
-3. Register the MCP server (`claude mcp add-json`, user scope)
+3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed and `--standalone` wasn't requested
 4. Build the initial index
 5. Wire hooks (`--standalone` only), optional statusline (`--statusline`), Gemini (`--gemini`), Copilot (`--copilot`)
 6. Org vault (optional — `--org-repo URL`, `--allowed-email-domain D`)

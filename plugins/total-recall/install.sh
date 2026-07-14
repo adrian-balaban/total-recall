@@ -314,6 +314,39 @@ fi
 PLUGIN_ROOT="$(cd -- "$PLUGIN_ROOT" && pwd -P)"
 ok "Plugin root: $PLUGIN_ROOT"
 
+# Surface which version is actually being installed. A resolved PLUGIN_ROOT
+# inside the Claude plugin cache is pinned to the git SHA of the last
+# `claude plugin update` and can silently lag a newer checkout — this has
+# happened (a --standalone run wired 1.0.101 while the repo was at 1.0.105).
+PLUGIN_VERSION=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1]+"/.claude-plugin/plugin.json","utf8")).version||"unknown")}catch{process.stdout.write("unknown")}' "$PLUGIN_ROOT" 2>/dev/null || echo unknown)
+info "Plugin version: $PLUGIN_VERSION"
+case "$PLUGIN_ROOT" in
+  */.claude/plugins/cache/*)
+    warn "PLUGIN_ROOT is inside the Claude plugin cache — this copy is pinned to the last 'claude plugin update' and may lag the repo."
+    warn "If you have a checkout, re-run this script from there (or pass --plugin-root <checkout>/plugins/total-recall)."
+    ;;
+esac
+
+# Detect an active plugin-manager install of total-recall. Running install.sh's
+# MCP/hook wiring on top of it produces TWO servers and DOUBLE index injection
+# per session (the plugin's .mcp.json + the user-scope registration below).
+PLUGIN_MANAGED=0
+INSTALLED_PLUGINS_FILE="$HOME/.claude/plugins/installed_plugins.json"
+if [ -f "$INSTALLED_PLUGINS_FILE" ]; then
+  if node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(Object.keys(d.plugins||{}).some(k=>k.split("@")[0]==="total-recall")?0:1)' "$INSTALLED_PLUGINS_FILE" 2>/dev/null; then
+    PLUGIN_MANAGED=1
+  fi
+fi
+if [ "$PLUGIN_MANAGED" -eq 1 ] && [ "$STANDALONE" -eq 1 ]; then
+  warn "total-recall is already installed via the Claude plugin manager."
+  warn "Continuing with --standalone would run TWO MCP servers and inject the memory index twice per session."
+  if ask_yes_no "Continue with --standalone anyway?" "n"; then
+    warn "Proceeding — consider 'claude plugin uninstall total-recall' to avoid duplicates."
+  else
+    die "Aborted. Either uninstall the plugin first ('claude plugin uninstall total-recall') or re-run without --standalone."
+  fi
+fi
+
 # --------------------------------------------------------------------------
 # Step 2 — Create vault directories
 # --------------------------------------------------------------------------
@@ -376,6 +409,18 @@ step "Step 3 — Register MCP server"
 if ! command -v claude >/dev/null 2>&1; then
   warn "'claude' CLI unavailable — skipping MCP registration."
   note "MCP registration skipped (no claude CLI)."
+elif [ "$PLUGIN_MANAGED" -eq 1 ] && [ "$STANDALONE" -ne 1 ]; then
+  # The plugin manager already provides the server via the plugin's .mcp.json —
+  # a user-scope registration on top of it would start a second server and
+  # inject the memory index twice per session. Clean up any stale one instead.
+  if claude mcp get total-recall >/dev/null 2>&1; then
+    info "Removing user-scope MCP registration (duplicate of the plugin-managed server)."
+    claude mcp remove total-recall -s user 2>/dev/null \
+      || claude mcp remove total-recall 2>/dev/null \
+      || true
+  fi
+  ok "Plugin-managed install — MCP server comes from the plugin's .mcp.json; skipping user-scope registration."
+  note "MCP registration skipped (plugin-managed)."
 else
   if claude mcp get total-recall >/dev/null 2>&1; then
     info "MCP server 'total-recall' already registered — removing for clean re-install."
