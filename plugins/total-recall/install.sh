@@ -34,8 +34,6 @@
 #                 (~200 MB on first use). sqlite-vec is installed either way.
 #
 # Options:
-#   --default                 Non-interactive profile a (minimal: no optional
-#                             deps, no local LLM). Same as --no-vector.
 #   --complete                Non-interactive profile b (hybrid vector search,
 #                             auto-detected provider). Same as --vector.
 #                             This is the default when no profile is chosen.
@@ -214,7 +212,7 @@ while [ $# -gt 0 ]; do
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector|--complete)   VECTOR="yes"; shift;;
-    --no-vector|--default) VECTOR="no"; shift;;
+    --no-vector) VECTOR="no"; shift;;
     -y|--yes)              ASSUME_YES=1; shift;;
     -h|--help)             usage; exit 0;;
     *) die "Unknown option: $1  (try --help)";;
@@ -225,7 +223,7 @@ done
 # Step 0 — Install profile
 # --------------------------------------------------------------------------
 # Ask up front which profile to install, unless the choice is already implied
-# by a flag (--vector/--no-vector/--complete/--default) or -y (defaults apply).
+# by a flag (--vector/--no-vector/--complete) or -y (defaults apply).
 if [ -z "$VECTOR" ] && [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
   step "Install profile"
   info "a. Minimal  — no optional dependencies, no local LLM (TF-IDF search only)"

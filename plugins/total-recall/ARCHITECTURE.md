@@ -2,8 +2,9 @@
 
 ## What it is
 
-Total-recall is a plugin that gives the AI (compatible with Claude Code, Gemini CLI, and GitHub Copilot CLI) persistent, searchable memory across sessions. It runs as an MCP stdio server. The compiled entry point is `dist/index.js`; the source is TypeScript under `src/`.
-
+Total-recall is a plugin that gives the AI persistent, searchable memory across sessions. It runs as an MCP stdio server. The compiled entry point is `dist/index.js`; the source is TypeScript under `src/`.
+Is compatible with Claude Code and Gemini CLI.
+GitHub Copilot CLI update is in progress.
 ---
 
 ## Module Map

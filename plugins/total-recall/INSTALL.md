@@ -8,6 +8,13 @@ One plugin, four clients — Claude Code, GitHub Copilot CLI, Gemini CLI, and st
 - `claude` CLI (for MCP registration; skipped with a warning if absent)
 - `gh` CLI authenticated — **only** if you enable the shared org vault
 - `gemini` / `copilot` CLI — **only** for `--gemini` / `--copilot`
+- **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))
+
+## Windows
+
+Run `install.sh` from **Git Bash** (ships with [Git for Windows](https://gitforwindows.org/)). Claude Code on Windows also executes the plugin's lifecycle hooks through Git Bash, so having it installed covers both.
+
+Use a **Windows Node.js** (`node.exe` on PATH). Node installed only inside WSL is not visible to Git Bash/Claude Code.
 
 ## Install profiles
 
@@ -15,8 +22,8 @@ On start, `install.sh` asks which profile you want (skip the prompt with a flag)
 
 | Profile | Flag | What you get |
 |---|---|---|
-| **a. Minimal** | `--default` | No optional dependencies, no local LLM. TF-IDF + Ebbinghaus search only. Smallest footprint, works air-gapped. |
-| **b. Complete** (default) | `--complete` | Hybrid vector search. The embedding provider is auto-detected: if `ollama` is on PATH **and** `ollama list` shows the `bge-m3` model, embeddings come from Ollama (no model download); otherwise a local HuggingFace MiniLM via `@huggingface/transformers` (~200 MB downloaded on first use). `sqlite-vec` is installed either way. |
+| **a. Minimal** | `--default` (alias `--no-vector`) | No optional dependencies, no local LLM. TF-IDF + Ebbinghaus search only. Smallest footprint, works air-gapped. |
+| **b. Complete** (default) | `--complete` (alias `--vector`) | Hybrid vector search. The embedding provider is auto-detected: if `ollama` is on PATH **and** `ollama list` shows the `bge-m3` model, embeddings come from Ollama (no model download); otherwise a local HuggingFace MiniLM via `@huggingface/transformers` (~200 MB downloaded on first use). `sqlite-vec` is installed either way (regardless of which embedding provider is used). |
 
 The detected provider only seeds `embeddingProvider` in `~/.total-recall/config.json` when it is unset — an explicit value there is never overwritten on re-run. Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
 
@@ -43,6 +50,25 @@ claude plugin install "$(pwd)"
 ./install.sh --standalone
 ```
 
+### From inside a Claude Code session
+
+Instead of running `claude plugin install` from the shell, you can add and install it interactively with slash commands:
+
+```
+/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
+/plugin install total-recall
+```
+
+This is equivalent to `claude plugin install "$(pwd)"` above but doesn't require a local clone — Claude Code fetches the marketplace and plugin directly. Hooks still auto-load from `hooks/hooks.json`.
+
+If you only want the MCP server registered (no hooks, e.g. to inspect/manage it) without going through the plugin flow, use `/mcp`:
+
+```
+/mcp add total-recall -- node /absolute/path/to/plugins/total-recall/dist/index.js
+```
+
+`/mcp` also lists and can remove already-registered servers — useful for checking that `install.sh` registered `total-recall` correctly (equivalent to `claude mcp get total-recall` from the shell).
+
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
 1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt)
@@ -55,26 +81,6 @@ claude plugin install "$(pwd)"
 8. Verify + summary
 
 Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
-
-## Windows
-
-Run `install.sh` from **Git Bash** (ships with [Git for Windows](https://gitforwindows.org/)). Claude Code on Windows also executes the plugin's lifecycle hooks through Git Bash, so having it installed covers both.
-
-Notes:
-
-- Use a **Windows Node.js** (`node.exe` on PATH). Node installed only inside WSL is not visible to Git Bash/Claude Code.
-- `flock` is not available in Git Bash — org-sync coalescing degrades gracefully to one sync per write (handled inside `sync-org-memory.sh`; you'll see a note in `~/.total-recall/org/.sync.log`).
-- Memory keys and git pathspecs are normalized to `/` separators internally, so vaults created on Windows are fully interchangeable with Linux/macOS vaults (including the shared org vault).
-
-## Codex CLI (MCP only, no hooks)
-
-Register the stdio server in `~/.codex/config.toml`:
-
-```toml
-[mcp_servers.total-recall]
-command = "node"
-args = ["/absolute/path/to/plugins/total-recall/dist/index.js"]
-```
 
 ## Org vault (team memory)
 
