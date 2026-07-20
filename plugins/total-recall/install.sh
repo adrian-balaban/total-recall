@@ -543,6 +543,13 @@ const cmd = (p, timeout) => ({ type: 'command', command: quote(plugin + '/hooks/
 (s.hooks.PreCompact = s.hooks.PreCompact || []).push({ hooks: [
   cmd('extract-and-store-memories.sh', 60),
 ] });
+// REVIEW 5.1: the standalone block previously omitted SessionEnd (present in
+// the canonical hooks/hooks.json since the session-end memory-capture hook
+// landed), so a --standalone install never asked "is there anything from
+// today I should remember?" at session close. Mirror it here.
+(s.hooks.SessionEnd = s.hooks.SessionEnd || []).push({ hooks: [
+  cmd('session-end.sh', 5),
+] });
 fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n');
 console.log('WROTE: total-recall hooks added.');
