@@ -2983,7 +2983,7 @@ var require_compile = __commonJS({
       const schOrFunc = root.refs[ref];
       if (schOrFunc)
         return schOrFunc;
-      let _sch = resolve4.call(this, root, ref);
+      let _sch = resolve5.call(this, root, ref);
       if (_sch === void 0) {
         const schema = (_a3 = root.localRefs) === null || _a3 === void 0 ? void 0 : _a3[ref];
         const { schemaId } = this.opts;
@@ -3010,7 +3010,7 @@ var require_compile = __commonJS({
     function sameSchemaEnv(s1, s2) {
       return s1.schema === s2.schema && s1.root === s2.root && s1.baseId === s2.baseId;
     }
-    function resolve4(root, ref) {
+    function resolve5(root, ref) {
       let sch;
       while (typeof (sch = this.refs[ref]) == "string")
         ref = sch;
@@ -3228,8 +3228,8 @@ var require_utils = __commonJS({
       }
       return ind;
     }
-    function removeDotSegments(path7) {
-      let input = path7;
+    function removeDotSegments(path8) {
+      let input = path8;
       const output = [];
       let nextSlash = -1;
       let len = 0;
@@ -3481,8 +3481,8 @@ var require_schemes = __commonJS({
         wsComponent.secure = void 0;
       }
       if (wsComponent.resourceName) {
-        const [path7, query] = wsComponent.resourceName.split("?");
-        wsComponent.path = path7 && path7 !== "/" ? path7 : void 0;
+        const [path8, query] = wsComponent.resourceName.split("?");
+        wsComponent.path = path8 && path8 !== "/" ? path8 : void 0;
         wsComponent.query = query;
         wsComponent.resourceName = void 0;
       }
@@ -3641,7 +3641,7 @@ var require_fast_uri = __commonJS({
       }
       return uri;
     }
-    function resolve4(baseURI, relativeURI, options) {
+    function resolve5(baseURI, relativeURI, options) {
       const schemelessOptions = options ? Object.assign({ scheme: "null" }, options) : { scheme: "null" };
       const resolved = resolveComponent(parse3(baseURI, schemelessOptions), parse3(relativeURI, schemelessOptions), schemelessOptions, true);
       schemelessOptions.skipEscape = true;
@@ -3899,7 +3899,7 @@ var require_fast_uri = __commonJS({
     var fastUri = {
       SCHEMES,
       normalize,
-      resolve: resolve4,
+      resolve: resolve5,
       resolveComponent,
       equal,
       serialize,
@@ -6889,7 +6889,7 @@ var require_dist = __commonJS({
 });
 
 // src/server.ts
-import * as path6 from "path";
+import * as path7 from "path";
 
 // node_modules/zod/v4/core/core.js
 var _a;
@@ -7131,10 +7131,10 @@ function mergeDefs(...defs) {
 function cloneDef(schema) {
   return mergeDefs(schema._zod.def);
 }
-function getElementAtPath(obj, path7) {
-  if (!path7)
+function getElementAtPath(obj, path8) {
+  if (!path8)
     return obj;
-  return path7.reduce((acc, key) => acc?.[key], obj);
+  return path8.reduce((acc, key) => acc?.[key], obj);
 }
 function promiseAllObject(promisesObj) {
   const keys = Object.keys(promisesObj);
@@ -7543,11 +7543,11 @@ function explicitlyAborted(x, startIndex = 0) {
   }
   return false;
 }
-function prefixIssues(path7, issues) {
+function prefixIssues(path8, issues) {
   return issues.map((iss) => {
     var _a3;
     (_a3 = iss).path ?? (_a3.path = []);
-    iss.path.unshift(path7);
+    iss.path.unshift(path8);
     return iss;
   });
 }
@@ -7694,16 +7694,16 @@ function flattenError(error2, mapper = (issue2) => issue2.message) {
 }
 function formatError(error2, mapper = (issue2) => issue2.message) {
   const fieldErrors = { _errors: [] };
-  const processError = (error3, path7 = []) => {
+  const processError = (error3, path8 = []) => {
     for (const issue2 of error3.issues) {
       if (issue2.code === "invalid_union" && issue2.errors.length) {
-        issue2.errors.map((issues) => processError({ issues }, [...path7, ...issue2.path]));
+        issue2.errors.map((issues) => processError({ issues }, [...path8, ...issue2.path]));
       } else if (issue2.code === "invalid_key") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path8, ...issue2.path]);
       } else if (issue2.code === "invalid_element") {
-        processError({ issues: issue2.issues }, [...path7, ...issue2.path]);
+        processError({ issues: issue2.issues }, [...path8, ...issue2.path]);
       } else {
-        const fullpath = [...path7, ...issue2.path];
+        const fullpath = [...path8, ...issue2.path];
         if (fullpath.length === 0) {
           fieldErrors._errors.push(mapper(issue2));
         } else {
@@ -14209,7 +14209,7 @@ var Protocol = class {
           return;
         }
         const pollInterval = task2.pollInterval ?? this._options?.defaultTaskPollInterval ?? 1e3;
-        await new Promise((resolve4) => setTimeout(resolve4, pollInterval));
+        await new Promise((resolve5) => setTimeout(resolve5, pollInterval));
         options?.signal?.throwIfAborted();
       }
     } catch (error2) {
@@ -14226,7 +14226,7 @@ var Protocol = class {
    */
   request(request, resultSchema, options) {
     const { relatedRequestId, resumptionToken, onresumptiontoken, task, relatedTask } = options ?? {};
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       const earlyReject = (error2) => {
         reject(error2);
       };
@@ -14304,7 +14304,7 @@ var Protocol = class {
           if (!parseResult.success) {
             reject(parseResult.error);
           } else {
-            resolve4(parseResult.data);
+            resolve5(parseResult.data);
           }
         } catch (error2) {
           reject(error2);
@@ -14565,12 +14565,12 @@ var Protocol = class {
       }
     } catch {
     }
-    return new Promise((resolve4, reject) => {
+    return new Promise((resolve5, reject) => {
       if (signal.aborted) {
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
         return;
       }
-      const timeoutId = setTimeout(resolve4, interval);
+      const timeoutId = setTimeout(resolve5, interval);
       signal.addEventListener("abort", () => {
         clearTimeout(timeoutId);
         reject(new McpError(ErrorCode.InvalidRequest, "Request cancelled"));
@@ -15440,12 +15440,12 @@ var StdioServerTransport = class {
     this.onclose?.();
   }
   send(message) {
-    return new Promise((resolve4) => {
+    return new Promise((resolve5) => {
       const json = serializeMessage(message);
       if (this._stdout.write(json)) {
-        resolve4();
+        resolve5();
       } else {
-        this._stdout.once("drain", resolve4);
+        this._stdout.once("drain", resolve5);
       }
     });
   }
@@ -15512,7 +15512,7 @@ function ensureDir(p) {
 
 // src/persistence.ts
 import * as fs3 from "fs";
-import * as path3 from "path";
+import * as path4 from "path";
 
 // src/ebbinghaus.ts
 function computeRetentionStrength(importance, daysSince2, accessCount, confirmations = 0, flags = 0) {
@@ -15694,7 +15694,7 @@ function tfidfSearch(query, excludeJournal = true) {
 
 // src/vault-scan.ts
 import * as fs2 from "fs";
-import * as path2 from "path";
+import * as path3 from "path";
 
 // src/frontmatter.ts
 var FM_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/;
@@ -15922,8 +15922,65 @@ var LRUCache = class {
 var contentCache = new LRUCache(100, 30 * 60 * 1e3);
 
 // src/vectorStore.ts
+import { fileURLToPath } from "node:url";
+import * as path2 from "node:path";
+import { spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 var dbPromise = null;
 var cachedDbPath = null;
+var rebuildAttempted = false;
+function pluginRootForRebuild() {
+  try {
+    const here = path2.dirname(fileURLToPath(import.meta.url));
+    const root = path2.resolve(here, "..");
+    return existsSync(path2.join(root, "node_modules", "better-sqlite3")) ? root : null;
+  } catch {
+    return null;
+  }
+}
+function resolveNpmCli() {
+  const nodeDir = path2.dirname(process.execPath);
+  const candidates = [
+    path2.join(nodeDir, "..", "lib", "node_modules", "npm", "bin", "npm-cli.js"),
+    path2.join(nodeDir, "node_modules", "npm", "bin", "npm-cli.js")
+  ];
+  for (const c of candidates) if (existsSync(c)) return c;
+  return null;
+}
+async function rebuildNativeBindings() {
+  const root = pluginRootForRebuild();
+  if (!root) return { attempted: false, ok: false };
+  const npmCli = resolveNpmCli();
+  const tail = (s) => typeof s === "string" ? s.slice(-500) : "";
+  try {
+    const result = npmCli ? spawnSync(process.execPath, [npmCli, "rebuild", "better-sqlite3"], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 18e4,
+      stdio: ["ignore", "pipe", "pipe"]
+    }) : spawnSync("npm", ["rebuild", "better-sqlite3"], {
+      cwd: root,
+      encoding: "utf8",
+      timeout: 18e4,
+      shell: true,
+      stdio: ["ignore", "pipe", "pipe"]
+    });
+    if (result.error || result.status !== 0) {
+      return {
+        attempted: true,
+        ok: false,
+        detail: `exit ${result.status ?? "n/a"}: ${result.error ? result.error.message : tail(result.stderr)}`.trim()
+      };
+    }
+    return { attempted: true, ok: true };
+  } catch (e) {
+    return { attempted: true, ok: false, detail: `threw: ${e?.message ?? String(e)}` };
+  }
+}
+var __rebuildImpl = async () => {
+  if (process.env.NODE_ENV === "test") return { attempted: false, ok: false };
+  return rebuildNativeBindings();
+};
 async function getDb(dbPath) {
   if (cachedDbPath !== null && cachedDbPath !== dbPath) {
     throw new Error(`vectorStore already initialized with ${cachedDbPath}, cannot switch to ${dbPath}`);
@@ -15937,7 +15994,25 @@ async function getDb(dbPath) {
       const d = new Database(dbPath);
       sqliteVec.load(d);
       return d;
-    } catch {
+    } catch (loadErr) {
+      if (!rebuildAttempted) {
+        rebuildAttempted = true;
+        const r = await __rebuildImpl();
+        if (r.attempted) {
+          try {
+            const sqliteVec = await import("sqlite-vec");
+            const Database = (await import("better-sqlite3")).default;
+            const d = new Database(dbPath);
+            sqliteVec.load(d);
+            return d;
+          } catch (retryErr) {
+            const outcome = r.ok ? `npm rebuild reported success (exit 0) but the binding is still absent (prebuild-install likely failed to download \u2014 offline or no matching prebuild for this Node ABI \u2014 and node-gyp is not installed to compile from source)` : `npm rebuild failed (${r.detail ?? "non-zero exit"})`;
+            recordError(
+              `vectorStore: better-sqlite3 native binding missing and in-process rebuild did not restore it (${outcome}; original load error: ${loadErr?.message ?? loadErr}; retry load error: ${retryErr?.message ?? retryErr}). Run 'npm rebuild better-sqlite3' in the plugin dir to restore vector search. TF-IDF search still works.`
+            );
+          }
+        }
+      }
       dbPromise = null;
       cachedDbPath = null;
       return null;
@@ -16204,7 +16279,7 @@ function slugify2(title) {
 }
 function keyFromPath(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path2.relative(base, filePath).split(path2.sep).join("/").replace(/\.md$/, "");
+  const rel = path3.relative(base, filePath).split(path3.sep).join("/").replace(/\.md$/, "");
   return isOrg ? `org/${rel}` : rel;
 }
 function tokenEstimate(text) {
@@ -16270,7 +16345,7 @@ function reconcileIndex() {
     }
     for (const e of entries) {
       if (e.isSymbolicLink()) continue;
-      const fp = path2.join(dir, e.name);
+      const fp = path3.join(dir, e.name);
       if (e.isDirectory()) {
         const reservedOrgPrefix = !isOrg && e.name === "org";
         if (!EXCLUDED_DIRS.has(e.name.toLowerCase()) && !reservedOrgPrefix) walk(fp, isOrg);
@@ -16323,7 +16398,7 @@ function indexFile(filePath, isOrg) {
     const realBase = realBaseFor(base);
     if (realBase === null) return;
     const realFile = fs2.realpathSync(filePath);
-    if (realFile !== realBase && !realFile.startsWith(realBase + path2.sep)) return;
+    if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
     const key = keyFromPath(filePath, isOrg);
     if (isReservedKey(key)) {
       recordError(`indexFile: reserved key skipped: ${key}`);
@@ -16349,7 +16424,7 @@ function indexFile(filePath, isOrg) {
       // always quotes numeric-looking titles, so this only affects externally
       // authored files — but the threat model is the same as the frontmatter-key
       // ReDoS hardening (teammate-pushed malformed frontmatter).
-      title: String(fm.title ?? path2.basename(filePath, ".md")),
+      title: String(fm.title ?? path3.basename(filePath, ".md")),
       // Coerce arrays defensively: a teammate-pushed (or hand-edited) frontmatter
       // with a scalar `tags: foo` or `sessions: bar` would otherwise crash
       // tfidfSearch (meta.tags.some/join) and getRelatedMemories (Set(m.tags)) —
@@ -16385,8 +16460,8 @@ function indexFile(filePath, isOrg) {
 }
 function deriveCategory(filePath, isOrg) {
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path2.relative(base, filePath);
-  const parts = rel.split(path2.sep);
+  const rel = path3.relative(base, filePath);
+  const parts = rel.split(path3.sep);
   return parts.length > 1 ? parts[0] ?? "knowledge" : "knowledge";
 }
 
@@ -16413,7 +16488,7 @@ function unwrapIndexEntries(parsed) {
   return obj;
 }
 function atomicWrite(p, data) {
-  ensureDir(path3.dirname(p));
+  ensureDir(path4.dirname(p));
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
   try {
     fs3.writeFileSync(tmp, data);
@@ -16445,10 +16520,10 @@ function deriveFilePathFromKey(key) {
   const segments = rel.split("/");
   if (segments.some((s) => s === ".." || s === "." || s === "")) return null;
   const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const filePath = path3.join(base, rel + ".md");
-  const vaultRoot = path3.resolve(base);
-  const resolved = path3.resolve(filePath);
-  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path3.sep)) return null;
+  const filePath = path4.join(base, rel + ".md");
+  const vaultRoot = path4.resolve(base);
+  const resolved = path4.resolve(filePath);
+  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path4.sep)) return null;
   return filePath;
 }
 function coerceMemEntry(raw, key) {
@@ -16597,22 +16672,22 @@ function buildIndexCache() {
     const tags = m.tags.slice(0, 3).join(", ") + (m.tags.length > 3 ? ", ..." : "");
     lines.push(`- ${m.key}: ${shortTitle} [${tags}] (${m.category})`);
   }
-  ensureDir(path3.dirname(INDEX_CACHE_PATH));
+  ensureDir(path4.dirname(INDEX_CACHE_PATH));
   atomicWrite(INDEX_CACHE_PATH, lines.join("\n"));
 }
 
 // src/tools/store.ts
 import * as fs5 from "fs";
 import * as os2 from "os";
-import * as path5 from "path";
+import * as path6 from "path";
 
 // src/journal.ts
 import * as fs4 from "fs";
-import * as path4 from "path";
+import * as path5 from "path";
 function appendJournal(action, key, title) {
   const today = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-  const journalPath = path4.join(PERSONAL_VAULT, "journal", `${today}.md`);
-  ensureDir(path4.dirname(journalPath));
+  const journalPath = path5.join(PERSONAL_VAULT, "journal", `${today}.md`);
+  ensureDir(path5.dirname(journalPath));
   try {
     assertRegularFile(journalPath, key);
   } catch {
@@ -16630,13 +16705,13 @@ function appendJournal(action, key, title) {
 // src/tools/store.ts
 function orgVaultConfigured() {
   try {
-    const cfgPath = path5.join(HOME, ".total-recall", "config.json");
+    const cfgPath = path6.join(HOME, ".total-recall", "config.json");
     const raw = fs5.readFileSync(cfgPath, "utf8");
     const parsed = JSON.parse(raw);
     if (parsed && typeof parsed.orgRepo === "string" && parsed.orgRepo) return true;
   } catch {
   }
-  return fs5.existsSync(path5.join(HOME, ".total-recall", "org", ".git"));
+  return fs5.existsSync(path6.join(HOME, ".total-recall", "org", ".git"));
 }
 function storeMemory(args) {
   const { content, force = false } = args;
@@ -16672,8 +16747,8 @@ function storeMemory(args) {
       );
     }
     const slug = slugify2(title);
-    const catDir2 = isOrg ? path5.join(ORG_VAULT, category) : path5.join(PERSONAL_VAULT, category);
-    filePath = path5.join(catDir2, `${slug}.md`);
+    const catDir2 = isOrg ? path6.join(ORG_VAULT, category) : path6.join(PERSONAL_VAULT, category);
+    filePath = path6.join(catDir2, `${slug}.md`);
     key = keyFromPath(filePath, isOrg);
   }
   if (isReservedKey(key)) {
@@ -16684,12 +16759,12 @@ function storeMemory(args) {
       'Org vault is not configured. Tag a memory "org" only after enabling the shared org vault: set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). Writing now would leave an unsynced file that blocks the next clone.'
     );
   }
-  const vaultRoot = path5.resolve(isOrg ? ORG_VAULT : PERSONAL_VAULT);
-  const resolved = path5.resolve(filePath);
-  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path5.sep)) {
+  const vaultRoot = path6.resolve(isOrg ? ORG_VAULT : PERSONAL_VAULT);
+  const resolved = path6.resolve(filePath);
+  if (resolved !== vaultRoot && !resolved.startsWith(vaultRoot + path6.sep)) {
     throw new Error(`Invalid key "${key}": resolves outside the vault.`);
   }
-  const catDir = path5.dirname(filePath);
+  const catDir = path6.dirname(filePath);
   assertLstat(
     catDir,
     (s) => s.isDirectory(),
@@ -17389,7 +17464,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.108" : null.version;
+var PLUGIN_VERSION = true ? "1.0.109" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -17656,7 +17731,7 @@ async function main() {
 `);
   ensureDir(PERSONAL_VAULT);
   ensureDir(ORG_VAULT);
-  for (const cat of DEFAULT_CATEGORIES) ensureDir(path6.join(PERSONAL_VAULT, cat));
+  for (const cat of DEFAULT_CATEGORIES) ensureDir(path7.join(PERSONAL_VAULT, cat));
   loadIndexes();
   reconcileIndex();
   recalcIdfNow();
