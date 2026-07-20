@@ -70,3 +70,33 @@ describe('loadMemIndex records a corrupt index.json parse failure (#13)', () => 
     expect(errors.length).toBe(before);
   });
 });
+
+// REVIEW 9.2: index.json is wrapped as { v, entries } so a future incompatible
+// format can be detected (and refused) instead of misread. The legacy flat
+// `Record<key, entry>` shape still loads so an upgrade needs no migration.
+describe('loadMemIndex index.json schema version (REVIEW 9.2)', () => {
+  const entry = { title: 'Wrapper', tags: ['org'], importanceScore: 0.5 };
+
+  it('loads the wrapped { v, entries } shape', () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({ v: 1, entries: { 'knowledge/9-2-wrapper': entry } }));
+    loadIndexes();
+    expect(memIndex['knowledge/9-2-wrapper']).toBeDefined();
+    expect((memIndex['knowledge/9-2-wrapper'] as any).title).toBe('Wrapper');
+  });
+
+  it('still loads the legacy flat shape (no migration step on upgrade)', () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({ 'knowledge/9-2-legacy': entry }));
+    loadIndexes();
+    expect(memIndex['knowledge/9-2-legacy']).toBeDefined();
+    expect((memIndex['knowledge/9-2-legacy'] as any).title).toBe('Wrapper');
+  });
+
+  it('refuses a forward-incompatible version, records an error, and loads nothing', () => {
+    fs.writeFileSync(INDEX_PATH, JSON.stringify({ v: 999, entries: { 'knowledge/9-2-future': entry } }));
+    const before = errors.length;
+    expect(() => loadIndexes()).not.toThrow();
+    expect(errors.length).toBeGreaterThan(before);
+    expect(errors[errors.length - 1]!.msg).toMatch(/schema version newer|malformed wrapper/);
+    expect(memIndex['knowledge/9-2-future']).toBeUndefined();
+  });
+});

@@ -34,6 +34,40 @@ let dirtyTokens = false;
 
 // ─── Index persistence ───────────────────────────────────────────────────────
 
+// On-disk index.json schema version. The file is wrapped as
+// `{ v: INDEX_VERSION, entries: Record<key, MemoryMetadata> }`. loadMemIndex
+// still reads the legacy flat `Record<key, MemoryMetadata>` shape (pre-9.2
+// files) so an upgrade needs no migration step. A future incompatible format
+// bumps INDEX_VERSION; loadMemIndex refuses a `v` higher than it knows and
+// falls back to reconcileIndex's rebuild from the .md files, so a downgrade
+// never silently misreads a newer index. REVIEW 9.2.
+const INDEX_VERSION = 1;
+
+function serializeIndex(): string {
+  return JSON.stringify({ v: INDEX_VERSION, entries: memIndex }, null, 2);
+}
+
+// Unwrap the on-disk object into the entries map, accepting both the current
+// wrapped shape and the legacy flat shape. Returns null for a forward-
+// incompatible version (caller bails to the reconcileIndex rebuild).
+function unwrapIndexEntries(parsed: unknown): Record<string, unknown> | null {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+  // Wrapped shape: { v: number, entries: {...} }. A flat legacy index never
+  // has a numeric `v` at top level (keys are slugs like `knowledge/x`), so the
+  // `typeof obj.v === 'number'` guard cleanly distinguishes the two shapes.
+  if (typeof obj.v === 'number') {
+    if (obj.v > INDEX_VERSION) return null;
+    const entries = obj.entries;
+    if (entries && typeof entries === 'object' && !Array.isArray(entries)) {
+      return entries as Record<string, unknown>;
+    }
+    return null;
+  }
+  // Legacy flat shape: the whole object is the entries map.
+  return obj;
+}
+
 // Write-then-rename so a SIGKILL / power loss mid-write can't leave index.json,
 // invertedIndex.json, or .index-cache.txt half-truncated (which would corrupt
 // the index and lose all metadata on the next boot). rename is atomic on POSIX.
@@ -175,7 +209,16 @@ function loadMemIndex() {
     return;
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return;
-  for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+  const entries = unwrapIndexEntries(parsed);
+  if (entries === null) {
+    // Forward-incompatible index.json (a `v` higher than we know) or a
+    // malformed wrapper. Bail to the reconcileIndex rebuild from the .md files
+    // rather than risk misreading a newer shape; record it so get_stats shows
+    // the user their index.json was ignored.
+    recordError('loadMemIndex: index.json schema version newer than known or malformed wrapper; rebuilding from .md files');
+    return;
+  }
+  for (const [k, v] of Object.entries(entries)) {
     const coerced = coerceMemEntry(v, k);
     if (coerced) (memIndex as any)[k] = coerced;
   }
@@ -223,7 +266,7 @@ function scheduleIndexSave() {
     // — record to the shared `errors` singleton (bounded in state.ts via
     // recordError) and never rethrow from an async timer.
     try {
-      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+      atomicWrite(INDEX_PATH, serializeIndex());
       if (dirtyTokens) {
         dirtyTokens = false;
         scheduleIdfRecalc();
@@ -256,7 +299,7 @@ export function scheduleIdfRecalc() {
 // are written synchronously and are always durable).
 
 export function saveNow() {
-  atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+  atomicWrite(INDEX_PATH, serializeIndex());
 }
 
 export function recalcIdfNow() {
