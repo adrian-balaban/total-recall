@@ -54,10 +54,15 @@
 #                             automatically. Requires the `gemini` CLI on PATH.
 #   --copilot                 Install the plugin as a GitHub Copilot CLI extension.
 #                             Equivalent to `copilot plugin install <plugin-root>`
-#                             — Copilot reads the same `.claude-plugin/plugin.json`
-#                             manifest (with the new `"hooks": "hooks/hooks.copilot.json"`
-#                             field) and registers the MCP server + hooks
-#                             automatically. Requires the `copilot` CLI on PATH.
+#                             — Copilot reads `.claude-plugin/plugin.json` and the
+#                             sibling `.mcp.json` and registers the MCP server +
+#                             hooks (from hooks/hooks.copilot.json) automatically.
+#                             Requires the `copilot` CLI on PATH. NOTE: plugin.json
+#                             deliberately ships NO `hooks` field — Claude Code
+#                             auto-loads hooks/hooks.json by plugin convention, and
+#                             adding a manifest `hooks` key would make Claude Code
+#                             load hooks.copilot.json TOO (same event names) and
+#                             fire every hook twice. See step 5d / REVIEW 5.2.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -114,20 +119,31 @@
 #      mcp_total-recall_* matcher; the script bodies are the same as
 #      the Claude Code hook scripts.
 #   5d. Copilot CLI extension (optional, --copilot) — runs
-#      `copilot plugin install <plugin-root>`, which reads the same
+#      `copilot plugin install <plugin-root>`, which reads
 #      `.claude-plugin/plugin.json` (one of Copilot's four recognized
-#      manifest locations; the `mcpServers: "./.mcp.json"` path-string and
-#      the new `hooks: "hooks/hooks.copilot.json"` path-string are both
-#      documented Copilot shapes) and registers the MCP server + hooks
-#      automatically. Skipped if `copilot` is not on PATH. The hooks file
-#      uses PascalCase event names (SessionStart/PostToolUse/PreCompact/
-#      SessionEnd) which makes Copilot deliver the Claude-format
-#      (snake_case) stdin payload — the existing script bodies parse it
-#      unchanged. The Claude-format envelope on stdout is NOT recognized
-#      by Copilot (and preCompact/sessionEnd output isn't processed at
-#      all) so `additionalContext` injection into the LLM context is
-#      silently lost — a documented graceful degradation. The side
-#      effects (pull vault, sync to org, flush writes) all still run.
+#      manifest locations) and the sibling `.mcp.json` (the `mcpServers`
+#      path-string Copilot loads) and registers the MCP server + hooks
+#      (from hooks/hooks.copilot.json) automatically. Skipped if `copilot`
+#      is not on PATH. The hooks file uses PascalCase event names
+#      (SessionStart/PostToolUse/PreCompact/SessionEnd) which makes Copilot
+#      deliver the Claude-format (snake_case) stdin payload — the existing
+#      script bodies parse it unchanged. The Claude-format envelope on
+#      stdout is NOT recognized by Copilot (and preCompact/sessionEnd
+#      output isn't processed at all) so `additionalContext` injection into
+#      the LLM context is silently lost — a documented graceful
+#      degradation. The side effects (pull vault, sync to org, flush
+#      writes) all still run.
+#
+#      REVIEW 5.2: plugin.json deliberately ships NO `hooks` field. Claude
+#      Code auto-loads hooks/hooks.json by plugin convention; per the
+#      schemastore manifest schema the manifest `hooks` key is for
+#      ADDITIONAL hooks "in addition to" hooks/hooks.json. hooks.copilot.json
+#      registers the SAME PascalCase event names as hooks.json, so pointing
+#      a manifest `hooks` key at it would make Claude Code load BOTH files
+#      and fire every hook twice (double memory-index injection, double
+#      org-sync, double flush) — the duplicate-injection bug class. Copilot
+#      resolves hooks/hooks.copilot.json via its own convention; no manifest
+#      `hooks` key is needed or safe to add.
 #   6. Org vault (optional) — prompts or --org-repo/--allowed-email-domain;
 #      writes config.json, runs pull-org-vault.sh.
 #   7. Vector search (default on) — --vector/--no-vector or the profile choice;
@@ -682,9 +698,12 @@ elif [ ! -f "$PLUGIN_ROOT/hooks/hooks.copilot.json" ]; then
 else
   # The documented Copilot subcommand is `copilot plugin install <path>`. The
   # plugin loader reads `.claude-plugin/plugin.json` at one of four recognized
-  # locations — we ship at that exact path. The `mcpServers: "./.mcp.json"`
-  # (path-string) and the new `hooks: "hooks/hooks.copilot.json"` (path-string)
-  # are both documented Copilot-acceptable shapes.
+  # locations — we ship at that exact path — and the sibling `.mcp.json`
+  # (`mcpServers` path-string) for the MCP server. hooks/hooks.copilot.json is
+  # resolved by Copilot's own convention; plugin.json deliberately ships NO
+  # `hooks` key (REVIEW 5.2: adding one would make Claude Code load
+  # hooks.copilot.json alongside the convention-loaded hooks/hooks.json and
+  # fire every hook twice — same PascalCase event names in both files).
   #
   # The Copilot install command is documented as non-interactive, but we wrap
   # it with the same guard pattern as the Gemini step (--yes mode skips the
