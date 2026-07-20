@@ -1,5 +1,7 @@
 import { memIndex } from '../state.js';
 import { embed } from '../embeddings.js';
+import { getVectors } from '../vectorStore.js';
+import { VECTORS_DB } from '../paths.js';
 import { readCachedOrFresh, isReservedKey } from '../vault-scan.js';
 
 // ─── Cosine similarity for normalized embeddings ───────────────────────────────
@@ -57,13 +59,22 @@ export async function rerankMemories(args: any): Promise<any> {
     meta: (typeof memIndex)[string];
   }> = [];
 
+  // REVIEW 1.6: read already-stored vectors in one batch query instead of
+  // re-embedding every candidate on every call — embedAndUpsert already wrote
+  // them on store/update. Only candidates missing a stored vector (not yet
+  // embedded, or vector deps absent) fall back to a fresh embed() call.
+  const storedVectors = await getVectors(VECTORS_DB, candidateKeys);
+
   for (const key of candidateKeys) {
     const meta = memIndex[key];
     if (!meta) continue;
 
-    const { content } = readCachedOrFresh(key, meta.filePath, 'reread');
-    const textToEmbed = `${meta.title}\n\n${content || meta.contentPreview || ''}`.slice(0, 2000);
-    const mvec = await embed(textToEmbed);
+    let mvec = storedVectors.get(key);
+    if (!mvec) {
+      const { content } = readCachedOrFresh(key, meta.filePath, 'reread');
+      const textToEmbed = `${meta.title}\n\n${content || meta.contentPreview || ''}`.slice(0, 2000);
+      mvec = (await embed(textToEmbed)) ?? undefined;
+    }
     if (!mvec) continue;
 
     scored.push({ key, score: cosineSimilarity(qvec, mvec), meta });

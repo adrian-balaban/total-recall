@@ -20,6 +20,7 @@ const vectorStoreMocks = vi.hoisted(() => {
     searchVector: vi.fn().mockResolvedValue([]),
     deleteVector: vi.fn().mockResolvedValue(undefined),
     listVectorKeys: vi.fn().mockResolvedValue(null),
+    getVectors: vi.fn().mockResolvedValue(new Map()),
   };
   (globalThis as any).__totalRecallRerankVectorMocks = registry;
   return registry;
@@ -34,6 +35,7 @@ vi.mock('../vectorStore.js', () => ({
   searchVector: (...args: any[]) => getVectorStoreMocks().searchVector(...args),
   deleteVector: (...args: any[]) => getVectorStoreMocks().deleteVector(...args),
   listVectorKeys: (...args: any[]) => getVectorStoreMocks().listVectorKeys(...args),
+  getVectors: (...args: any[]) => getVectorStoreMocks().getVectors(...args),
 }));
 
 const VAULT = path.join(TEST_HOME, '.total-recall', 'personal-vault');
@@ -54,6 +56,8 @@ function resetVault() {
   fs.mkdirSync(VAULT, { recursive: true });
   getVectorStoreMocks().upsertVector.mockClear();
   getVectorStoreMocks().searchVector.mockClear();
+  getVectorStoreMocks().getVectors.mockClear();
+  getVectorStoreMocks().getVectors.mockResolvedValue(new Map());
 }
 
 // Deterministic, dimension-matched fake embedder. Content that contains the word
@@ -173,6 +177,36 @@ describe('rerank_memories', () => {
     const res = await rerankMemories({ query: 'zero', keys: ['knowledge/zero'] });
     expect(res).toHaveLength(1);
     expect(res[0].score).toBe(0);
+  });
+
+  it('uses a stored vector instead of re-embedding a candidate that already has one', async () => {
+    // REVIEW 1.6: a candidate with a stored vector (embedAndUpsert already ran
+    // on store/update) must be scored from that vector, not a fresh embed()
+    // call — only candidates missing a stored vector fall back to embed().
+    writeMemory('knowledge/alpha', 'Alpha Note', 'alpha content');
+    writeMemory('knowledge/beta', 'Beta Note', 'beta content');
+    reconcileIndex();
+
+    getVectorStoreMocks().getVectors.mockResolvedValue(
+      new Map([['knowledge/beta', [0, 1, 0, 0]]]) // stored vector says "beta", body says "alpha"
+    );
+    const embedSpy = vi.fn((text: string) => Promise.resolve(alphaBetaEmbedder(text)));
+    __testSetEmbedder(embedSpy);
+
+    const res = await rerankMemories({ query: 'beta', keys: ['knowledge/alpha', 'knowledge/beta'] });
+
+    expect(getVectorStoreMocks().getVectors).toHaveBeenCalledWith(
+      expect.any(String),
+      ['knowledge/alpha', 'knowledge/beta']
+    );
+    // knowledge/beta scores against its STORED vector (aligned with "beta"),
+    // not a fresh embed of its body — proving the stored vector was used.
+    expect(res[0].key).toBe('knowledge/beta');
+    expect(res[0].score).toBeCloseTo(1, 5);
+    // embed() was called for the query and for knowledge/alpha (no stored
+    // vector), but never for knowledge/beta's content.
+    const embeddedTexts = embedSpy.mock.calls.map((c) => String(c[0]));
+    expect(embeddedTexts.some((t) => t.includes('beta content'))).toBe(false);
   });
 
   it('skips a candidate whose embedding returns null', async () => {

@@ -132,6 +132,35 @@ export async function searchVector(
   return rows.map((r: any) => ({ key: r.key, score: 1 - r.distance }));
 }
 
+// Batch-read stored vectors by key (REVIEW 1.6). rerank_memories previously
+// re-embedded every candidate on every call even though embedAndUpsert already
+// wrote its vector to vec_memories on store/update — up to MAX_KEYS fresh
+// embed() calls per rerank, repeated identically on the next call with the
+// same candidates. vec_to_json() converts sqlite-vec's internal BLOB encoding
+// back to a JSON array string; keys with no stored vector (not yet embedded,
+// or vector deps absent) are simply absent from the returned map, and the
+// caller falls back to embed() only for those.
+export async function getVectors(dbPath: string, keys: string[]): Promise<Map<string, number[]>> {
+  const result = new Map<string, number[]>();
+  if (keys.length === 0) return result;
+  const d = await getDb(dbPath);
+  if (!d) return result;
+  try {
+    const placeholders = keys.map(() => '?').join(',');
+    const rows = d
+      .prepare(`SELECT key, vec_to_json(embedding) AS embedding FROM vec_memories WHERE key IN (${placeholders})`)
+      .all(...keys) as Array<{ key: string; embedding: string }>;
+    for (const r of rows) {
+      result.set(r.key, JSON.parse(r.embedding));
+    }
+  } catch (e: any) {
+    // A freshly-created db with no vectors yet has no vec_memories table.
+    if (e && typeof e.message === 'string' && /no such table/i.test(e.message)) return result;
+    throw e;
+  }
+  return result;
+}
+
 export async function deleteVector(dbPath: string, key: string): Promise<void> {
   const d = await getDb(dbPath);
   if (!d) return;

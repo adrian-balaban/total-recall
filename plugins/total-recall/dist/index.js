@@ -16004,6 +16004,23 @@ async function searchVector(dbPath, queryEmbedding, limit = 20) {
   ).all(JSON.stringify(queryEmbedding), limit);
   return rows.map((r) => ({ key: r.key, score: 1 - r.distance }));
 }
+async function getVectors(dbPath, keys) {
+  const result = /* @__PURE__ */ new Map();
+  if (keys.length === 0) return result;
+  const d = await getDb(dbPath);
+  if (!d) return result;
+  try {
+    const placeholders = keys.map(() => "?").join(",");
+    const rows = d.prepare(`SELECT key, vec_to_json(embedding) AS embedding FROM vec_memories WHERE key IN (${placeholders})`).all(...keys);
+    for (const r of rows) {
+      result.set(r.key, JSON.parse(r.embedding));
+    }
+  } catch (e) {
+    if (e && typeof e.message === "string" && /no such table/i.test(e.message)) return result;
+    throw e;
+  }
+  return result;
+}
 async function deleteVector(dbPath, key) {
   const d = await getDb(dbPath);
   if (!d) return;
@@ -17187,14 +17204,18 @@ async function rerankMemories(args) {
     return candidateKeys.map((key) => ({ key, score: 0 }));
   }
   const scored = [];
+  const storedVectors = await getVectors(VECTORS_DB, candidateKeys);
   for (const key of candidateKeys) {
     const meta2 = memIndex[key];
     if (!meta2) continue;
-    const { content } = readCachedOrFresh(key, meta2.filePath, "reread");
-    const textToEmbed = `${meta2.title}
+    let mvec = storedVectors.get(key);
+    if (!mvec) {
+      const { content } = readCachedOrFresh(key, meta2.filePath, "reread");
+      const textToEmbed = `${meta2.title}
 
 ${content || meta2.contentPreview || ""}`.slice(0, 2e3);
-    const mvec = await embed(textToEmbed);
+      mvec = await embed(textToEmbed) ?? void 0;
+    }
     if (!mvec) continue;
     scored.push({ key, score: cosineSimilarity(qvec, mvec), meta: meta2 });
   }
@@ -17368,7 +17389,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.107" : null.version;
+var PLUGIN_VERSION = true ? "1.0.108" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

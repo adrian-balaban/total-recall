@@ -248,4 +248,18 @@ describe('vectorStore — dynamic dimension migration', () => {
     const createCalls = execMock.mock.calls.filter((c: any) => String(c[0]).includes('CREATE VIRTUAL TABLE'));
     expect(createCalls.length).toBe(0);
   });
+
+  it('getVectors returns an empty map without querying when keys is empty', async () => {
+    const { getVectors } = await import('../vectorStore.js');
+    const res = await getVectors(tmpDb, []);
+    expect(res).toEqual(new Map());
+    expect(prepareAll).not.toHaveBeenCalled();
+  });
+
+  it('getVectors tolerates a missing vec_memories table', async () => {
+    prepareAll.mockImplementation(() => { throw new Error('no such table: vec_memories'); });
+    const { getVectors } = await import('../vectorStore.js');
+    const res = await getVectors(tmpDb, ['k/a']);
+    expect(res).toEqual(new Map());
+  });
 });
