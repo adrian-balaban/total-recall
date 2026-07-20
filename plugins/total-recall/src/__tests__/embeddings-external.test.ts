@@ -72,7 +72,11 @@ describe('embeddings — external providers', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('external vector availability persists after a later embed failure', async () => {
+  // REVIEW 1.4: a successful embed sets the availability latch, but a later
+  // failure must reset it — otherwise isVectorAvailable() keeps reporting true
+  // for the whole session even after Ollama has died. The latch reflects "the
+  // last embed attempt actually succeeded", not "an embed ever succeeded".
+  it('external vector availability resets after a later embed failure', async () => {
     (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -81,8 +85,8 @@ describe('embeddings — external providers', () => {
     await embed('first');
     expect(isVectorAvailable()).toBe(true);
 
-    mockFetch.mockRejectedValueOnce(new Error('network'));
+    mockFetch.mockRejectedValue(new Error('network'));
     await embed('second');
-    expect(isVectorAvailable()).toBe(true);
+    expect(isVectorAvailable()).toBe(false);
   });
 });

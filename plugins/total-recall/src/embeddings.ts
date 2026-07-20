@@ -81,6 +81,10 @@ async function getExternalEmbedding(text: string): Promise<number[] | null> {
       try {
         return await ollamaEmbedAttempt(url, model, text, timeoutMs);
       } catch (e) {
+        // Reset the availability latch on failure: otherwise a single earlier
+        // success keeps isVectorAvailable() reporting true for the whole session
+        // even after Ollama has died. REVIEW 1.4.
+        externalEmbedSuccess = false;
         recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }
