@@ -18,6 +18,7 @@ vi.mock('../vectorStore.js', () => ({
 
 import { embed, isVectorAvailable, __testResetVectorAvailability } from '../embeddings.js';
 import { loadConfig } from '../paths.js';
+import { errors } from '../state.js';
 
 const mockFetch = vi.fn();
 
@@ -25,6 +26,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', mockFetch);
   mockFetch.mockReset();
   __testResetVectorAvailability();
+  errors.length = 0;
 });
 
 afterEach(() => {
@@ -88,5 +90,89 @@ describe('embeddings — external providers', () => {
     mockFetch.mockRejectedValue(new Error('network'));
     await embed('second');
     expect(isVectorAvailable()).toBe(false);
+  });
+});
+
+// REVIEW 1.2: a down/hung Ollama used to stall every hybrid recall for
+// ~2×timeout before falling back to TF-IDF. The session circuit breaker opens
+// after CIRCUIT_OPEN_THRESHOLD consecutive failures and short-circuits embed()
+// to null for CIRCUIT_OPEN_COOLDOWN_MS without calling the provider, with
+// exactly one "circuit open" error logged on the closed→open transition.
+describe('embeddings — session circuit breaker (REVIEW 1.2)', () => {
+  it('opens after 3 consecutive failures and short-circuits the next call (no fetch, one error)', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(new Error('network'));
+
+    // 3 failing embeds: each does 2 bounded attempts → 6 fetch calls total.
+    // The 3rd failure pushes consecutiveFailures to the threshold and opens
+    // the circuit (one recordError on the closed→open transition).
+    for (let i = 0; i < 3; i++) {
+      expect(await embed(`fail${i}`)).toBeNull();
+    }
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+    const openErrors = errors.filter(e => /circuit open/i.test(e.msg));
+    expect(openErrors.length).toBe(1);
+
+    // 4th call while the circuit is open: short-circuits to null, NO fetch.
+    const callsBefore = mockFetch.mock.calls.length;
+    expect(await embed('short')).toBeNull();
+    expect(mockFetch.mock.calls.length).toBe(callsBefore);
+    // The "circuit open" error is logged once on opening, not re-logged per
+    // short-circuited call.
+    expect(errors.filter(e => /circuit open/i.test(e.msg)).length).toBe(1);
+  });
+
+  it('a successful embed resets the failure counter (circuit never opens)', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+
+    // 2 failures (below the threshold of 3).
+    mockFetch.mockRejectedValue(new Error('network'));
+    await embed('f1');
+    await embed('f2');
+
+    // Success resets consecutiveFailures to 0.
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.1] }) });
+    await embed('ok');
+
+    // 2 more failures → counter goes 0→1→2, still below 3: circuit stays closed.
+    mockFetch.mockRejectedValue(new Error('network'));
+    await embed('f3');
+    await embed('f4');
+    expect(errors.filter(e => /circuit open/i.test(e.msg)).length).toBe(0);
+
+    // Circuit closed → the next call actually reaches the provider.
+    const callsBefore = mockFetch.mock.calls.length;
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.2] }) });
+    const vec = await embed('probe');
+    expect(vec).toEqual([0.2]);
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore);
+  });
+
+  it('after the cooldown elapses, one probe call is allowed through (half-open)', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(new Error('network'));
+
+    // Freeze time so the cooldown window is deterministic. All circuit math
+    // in embed() uses Date.now().
+    let fakeNow = 1_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => fakeNow);
+
+    // 3 failures open the circuit: circuitOpenUntil = 1_000_000 + 60_000.
+    for (let i = 0; i < 3; i++) await embed(`fail${i}`);
+
+    // While the cooldown is active: short-circuit, no fetch.
+    const callsAtOpen = mockFetch.mock.calls.length;
+    await embed('blocked');
+    expect(mockFetch.mock.calls.length).toBe(callsAtOpen);
+
+    // Advance past the 60s cooldown → half-open: the next call clears the
+    // open marker and probes the provider. A probe success closes the circuit.
+    fakeNow = 1_070_000;
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.9] }) });
+    const vec = await embed('probe');
+    expect(vec).toEqual([0.9]);
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(callsAtOpen);
+
+    nowSpy.mockRestore();
   });
 });

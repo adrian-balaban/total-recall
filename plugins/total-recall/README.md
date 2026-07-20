@@ -157,7 +157,7 @@ Optional, lazy-loaded, fully local — the plugin degrades cleanly to TF-IDF wit
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or install.sh --complete
 ```
 
-Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for memory pressure"); the 384-dim embedding model handles paraphrase. RRF fuses the two rankings by position only (scale-free), since lexical scores and cosine similarities aren't directly comparable.
+Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model handles paraphrase — and with `bge-m3` via Ollama (1024-dim, multilingual) it also matches **cross-language** (store in Romanian, retrieve in English). `all-MiniLM-L6-v2` via HuggingFace (384-dim) covers English paraphrase only. RRF fuses the two rankings by position only (scale-free), since lexical scores and cosine similarities aren't directly comparable.
 
 ### Multilingual search (EN↔RO)
 
@@ -226,16 +226,16 @@ Configure total-recall by editing `~/.total-recall/config.json`:
   "orgVault": "~/my-custom-org-vault",
   "orgRepo": "https://github.com/you/your-vault.git",
   "allowedEmailDomains": ["yourcompany.com"],
-  "embeddingProvider": "huggingface",
+  "embeddingProvider": "ollama",
   "embeddingModel": "bge-m3",
-  "embeddingTimeoutMs": 10000,
+  "embeddingTimeoutMs": 5000,
   "enableMultilingualSearch": true
 }
 ```
 
 *   **embeddingProvider**: `'huggingface'` (local MiniLM) or `'ollama'` (local API). `install.sh` auto-selects `ollama` when Ollama is on PATH with the `bge-m3` model pulled, else `huggingface`; an existing explicit value is never overwritten.
 *   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
-*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `10000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon.
+*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `5000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon. `embed()` is awaited on the hybrid-recall read path, so the default is tuned for read latency (~10.2s worst case before TF-IDF fallback); a session circuit breaker (3 consecutive failures → 60s cooldown) caps the repeated-hit case so a down Ollama doesn't stall every recall.
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 
 ---

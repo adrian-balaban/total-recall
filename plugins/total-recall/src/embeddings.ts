@@ -79,6 +79,18 @@ async function getEmbedder(): Promise<((text: string) => Promise<number[] | null
 }
 
 export async function embed(text: string): Promise<number[] | null> {
+  // Circuit breaker (REVIEW 1.2): if an external provider has failed
+  // CIRCUIT_OPEN_THRESHOLD times in a row, short-circuit to null for the
+  // cooldown without awaiting the (likely hung) provider. A hybrid recall then
+  // degrades to TF-IDF immediately instead of stalling ~2×timeout per call.
+  if (circuitOpenUntil) {
+    if (Date.now() < circuitOpenUntil) return null;
+    // Cooldown elapsed: half-open probe. Clear the open marker but keep the
+    // failure count so a probe failure re-opens immediately; a probe success
+    // clears it. Only one call per cooldown window gets to probe.
+    circuitOpenUntil = 0;
+  }
+
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
@@ -89,6 +101,28 @@ export async function embed(text: string): Promise<number[] | null> {
   // it. Only consulted by isVectorAvailable() when provider !== 'huggingface';
   // for HuggingFace the pipeline latch is the signal and this stays unused.
   externalEmbedSuccess = Array.isArray(result);
+
+  // Update the circuit breaker only for external providers — HuggingFace's
+  // failure mode is load-time (missing dep), not a per-call hung endpoint.
+  // Success closes the circuit (resets the count); failure bumps it and may
+  // open it. An unknown provider returns no embedder and bailed above, so it
+  // never counts as a failure (a config typo shouldn't open the circuit).
+  const provider = loadConfig().embeddingProvider || 'huggingface';
+  if (provider !== 'huggingface') {
+    if (externalEmbedSuccess) {
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+      if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && !circuitOpenUntil) {
+        circuitOpenUntil = Date.now() + CIRCUIT_OPEN_COOLDOWN_MS;
+        recordError(
+          `Ollama circuit open after ${consecutiveFailures} consecutive embed failures — ` +
+          `hybrid recall falling back to TF-IDF for ${CIRCUIT_OPEN_COOLDOWN_MS / 1000}s ` +
+          `(check ${provider} at ${loadConfig().embeddingUrl || 'http://127.0.0.1:11434/api/embeddings'})`
+        );
+      }
+    }
+  }
   return result;
 }
 
@@ -148,6 +182,21 @@ export async function flushEmbeddings(timeoutMs = 2000): Promise<void> {
 // only after an actual embed attempt succeeded.
 let externalEmbedSuccess = false;
 
+// Session-scoped circuit breaker for external embed providers (REVIEW 1.2).
+// After CIRCUIT_OPEN_THRESHOLD consecutive failures, short-circuit embed() to
+// null for CIRCUIT_OPEN_COOLDOWN_MS WITHOUT calling the (likely hung) provider
+// — otherwise a down Ollama stalls every hybrid recall for ~2× the per-attempt
+// timeout before each one falls back to TF-IDF. The circuit closes again on a
+// successful embed (resets the failure count). Exactly one recordError fires
+// when the circuit OPENS (the closed→open transition); short-circuited calls
+// during the cooldown are silent. HuggingFace is exempt — its failure mode is
+// load-time (missing dep), not a per-call hung endpoint, and the pipeline latch
+// already covers it.
+const CIRCUIT_OPEN_THRESHOLD = 3;
+const CIRCUIT_OPEN_COOLDOWN_MS = 60_000;
+let consecutiveFailures = 0;
+let circuitOpenUntil = 0; // epoch ms; 0 = closed
+
 export function isVectorAvailable(): boolean {
   if (testEmbedder !== undefined && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
@@ -163,4 +212,6 @@ export function __testResetVectorAvailability(): void {
     throw new Error('__testResetVectorAvailability is test-only');
   }
   externalEmbedSuccess = false;
+  consecutiveFailures = 0;
+  circuitOpenUntil = 0;
 }

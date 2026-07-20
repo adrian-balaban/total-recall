@@ -16049,7 +16049,7 @@ var ollamaProvider = {
   async embed(text, config3) {
     const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
     const model = config3.embeddingModel || "bge-m3";
-    const timeoutMs = config3.embeddingTimeoutMs ?? 1e4;
+    const timeoutMs = config3.embeddingTimeoutMs ?? 5e3;
     try {
       return await ollamaEmbedAttempt(url, model, text, timeoutMs);
     } catch {
@@ -16098,10 +16098,28 @@ async function getEmbedder() {
   return (text) => p.embed(text, loadConfig());
 }
 async function embed(text) {
+  if (circuitOpenUntil) {
+    if (Date.now() < circuitOpenUntil) return null;
+    circuitOpenUntil = 0;
+  }
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
   externalEmbedSuccess = Array.isArray(result);
+  const provider = loadConfig().embeddingProvider || "huggingface";
+  if (provider !== "huggingface") {
+    if (externalEmbedSuccess) {
+      consecutiveFailures = 0;
+    } else {
+      consecutiveFailures++;
+      if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && !circuitOpenUntil) {
+        circuitOpenUntil = Date.now() + CIRCUIT_OPEN_COOLDOWN_MS;
+        recordError(
+          `Ollama circuit open after ${consecutiveFailures} consecutive embed failures \u2014 hybrid recall falling back to TF-IDF for ${CIRCUIT_OPEN_COOLDOWN_MS / 1e3}s (check ${provider} at ${loadConfig().embeddingUrl || "http://127.0.0.1:11434/api/embeddings"})`
+        );
+      }
+    }
+  }
   return result;
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
@@ -16128,6 +16146,10 @@ async function flushEmbeddings(timeoutMs = 2e3) {
   }
 }
 var externalEmbedSuccess = false;
+var CIRCUIT_OPEN_THRESHOLD = 3;
+var CIRCUIT_OPEN_COOLDOWN_MS = 6e4;
+var consecutiveFailures = 0;
+var circuitOpenUntil = 0;
 function isVectorAvailable() {
   if (testEmbedder !== void 0 && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;

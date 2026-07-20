@@ -73,7 +73,15 @@ const ollamaProvider: EmbeddingProvider = {
   async embed(text, config) {
     const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
     const model = config.embeddingModel || 'bge-m3';
-    const timeoutMs = config.embeddingTimeoutMs ?? 10000;
+    // REVIEW 1.2: lowered from 10000 to 5000. embed() is awaited on the read
+    // path (recall_memory hybrid=true, the default); 2 attempts + 200ms backoff
+    // at 10s capped ~20.2s worst-case latency on a hung Ollama before falling
+    // back to TF-IDF — too long for an optional ranking signal. 5s → ~10.2s,
+    // and the session circuit breaker in embeddings.ts caps the repeated-hit
+    // case. The write path (embedAndUpsert) is fire-and-forget, so a tighter
+    // cap there only turns a slow success into a tolerated failure (backfilled
+    // on the next boot). Override per-deploy via embeddingTimeoutMs.
+    const timeoutMs = config.embeddingTimeoutMs ?? 5000;
     try {
       return await ollamaEmbedAttempt(url, model, text, timeoutMs);
     } catch {
