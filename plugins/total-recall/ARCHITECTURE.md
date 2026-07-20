@@ -4,7 +4,7 @@
 
 Total-recall is a plugin that gives the AI persistent, searchable memory across sessions. It runs as an MCP stdio server. The compiled entry point is `dist/index.js`; the source is TypeScript under `src/`.
 Is compatible with Claude Code and Gemini CLI.
-GitHub Copilot CLI update is in progress.
+GitHub Copilot CLI is supported (lifecycle hooks wired via `hooks/hooks.copilot.json`; the client drops `additionalContext`, so memory injection degrades gracefully to on-demand search).
 ---
 
 ## Module Map
