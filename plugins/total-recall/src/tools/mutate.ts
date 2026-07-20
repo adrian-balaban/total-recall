@@ -193,9 +193,11 @@ export function deleteMemory(args: any): any {
 
 export function confirmMemory(args: any): any {
   const { key } = args;
-  // Coerce explicitly: a string `"false"` is truthy and would increment
-  // confirmations instead of flags; only an explicit false-ish value counts.
-  const useful = args.useful !== false && args.useful !== 'false';
+  // The schema declares `useful` as a boolean (server.ts), so an explicit
+  // boolean false is the only flag signal. Do not silently coerce a stray
+  // string `"false"` — that hides a client/schema bug; let it surface as a
+  // confirmation instead. REVIEW 3.3.
+  const useful = args.useful !== false;
   if (typeof key !== 'string' || isReservedKey(key)) {
     throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
   }

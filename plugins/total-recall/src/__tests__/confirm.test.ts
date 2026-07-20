@@ -74,14 +74,15 @@ describe('confirm_memory', () => {
     expect(aEntry.retentionStrength).toBeGreaterThan(bEntry.retentionStrength);
   });
 
-  it('coerces useful="false" string to a flag, not a confirmation', () => {
-    // The MCP schema declares `useful` as boolean, but a direct caller can pass
-    // the string "false", which is truthy in JS. confirmMemory must only treat
-    // the literal boolean `false` as not-useful.
+  it('does NOT coerce useful="false" string to a flag — surfaces the schema bug as a confirmation (REVIEW 3.3)', () => {
+    // The MCP schema declares `useful` as boolean. A direct caller passing the
+    // string "false" is a client/schema bug; confirmMemory no longer silently
+    // coerces it (that hid the bug). Only the literal boolean `false` is a flag;
+    // the string "false" is truthy, so it counts as a confirmation.
     const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
     const res = confirmMemory({ key: stored.key, useful: 'false' });
-    expect(res.flags).toBe(1);
-    expect(res.confirmations).toBeUndefined();
+    expect(res.confirmations).toBe(1);
+    expect(res.flags).toBeUndefined();
   });
 
   it('update_memory coerces non-string content to string', () => {
