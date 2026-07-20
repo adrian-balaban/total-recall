@@ -18,7 +18,7 @@ For detailed features, configuration options, client compatibility matrices, and
 
 ## 🎤 Talks
 
-*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 21 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin)
+*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 21 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026)
 
 ## 💡 Proactive Memory Saving
 
