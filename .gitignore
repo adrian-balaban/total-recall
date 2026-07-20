@@ -1,2 +1,6 @@
 .claude/settings.local.json
 .claude/settings.json
+fable-proposals.md
+ollama-minimax-proposals.md
+ollama-gdm-proposals.md
+REVIEW-*.txt

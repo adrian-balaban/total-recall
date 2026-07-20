@@ -28,10 +28,11 @@ function trimTrailingComment(s) {
   return s.trimEnd();
 }
 function parseFrontmatter(raw) {
-  const match = raw.match(FM_RE);
+  const bomless = raw.charCodeAt(0) === 65279 ? raw.slice(1) : raw;
+  const match = bomless.match(FM_RE);
   if (!match) return { data: {}, content: raw };
   const data = parseYamlish(match[1]);
-  const content = raw.slice(match.index + match[0].length);
+  const content = bomless.slice(match.index + match[0].length);
   return { data, content };
 }
 function stringifyFrontmatter(content, data) {

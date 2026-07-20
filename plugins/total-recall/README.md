@@ -250,7 +250,7 @@ cd plugins/total-recall && npm install && npm run build
 claude plugin install "$(pwd)"       # Claude Code
 ./install.sh --gemini                # Gemini CLI
 ./install.sh --standalone            # Standalone (~/.claude/settings.json)
-Work in progress for: ./install.sh --copilot               # GitHub Copilot CLI
+./install.sh --copilot               # GitHub Copilot CLI
 ```
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
@@ -263,7 +263,7 @@ Work in progress for: ./install.sh --copilot               # GitHub Copilot CLI
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
 | **Gemini CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
-| **Work in progress for Copilot CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Copilot) | ❌ No |
+| **Copilot CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Copilot) | ❌ No |
 | **Codex CLI** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 
 ### Client-Specific Integration Details
