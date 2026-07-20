@@ -104,6 +104,12 @@ npm run build
 
 Or just re-run `./install.sh --complete`.
 
+## Codex CLI (MCP only, no hooks)
+
+Codex CLI speaks MCP but does **not** run Claude Code lifecycle hooks, so the SessionStart memory-index injection, PostToolUse org-vault sync, and PreCompact journal extraction do not fire. You get the 17 MCP tools (read/write/search via `recall_memory`, `search_index`, `store_memory`, …) but no automatic capture or proactive injection — call the tools explicitly.
+
+To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`); hooks are simply ignored. Memory is fully usable on demand; only the auto-capture hooks are absent.
+
 ## Verify
 
 Start a new session; the memory index should be injected automatically (Claude Code). Or ask: *"what do you remember about …"* → the model calls `recall_memory`. `get_stats` shows totals, cache stats, and recent errors.
