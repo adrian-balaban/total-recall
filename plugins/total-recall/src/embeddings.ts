@@ -111,7 +111,24 @@ export async function embed(text: string): Promise<number[] | null> {
   if (provider !== 'huggingface') {
     if (externalEmbedSuccess) {
       consecutiveFailures = 0;
+      // Recovery: re-arm the down-episode warning so a fresh outage warns again.
+      vectorDownWarned = false;
     } else {
+      // REVIEW 1.3: one stderr warning at the start of this down-episode, so a
+      // user who never calls get_stats still sees hybrid search degrade to
+      // TF-IDF in their client's stderr. recordError (in providers.ts) already
+      // captures every failure into get_stats.recentErrors; this adds the
+      // visible-by-default signal the review asked for. Fired before the
+      // circuit-breaker count so it surfaces on the very first failure.
+      if (!vectorDownWarned) {
+        vectorDownWarned = true;
+        const url = loadConfig().embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
+        console.error(
+          `[total-recall] external embedding provider "${provider}" failed at ${url} — ` +
+          `hybrid search is falling back to TF-IDF (vector search degraded for this session). ` +
+          `Check the provider is running and reachable; see get_stats for details.`
+        );
+      }
       consecutiveFailures++;
       if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && !circuitOpenUntil) {
         circuitOpenUntil = Date.now() + CIRCUIT_OPEN_COOLDOWN_MS;
@@ -197,6 +214,19 @@ const CIRCUIT_OPEN_COOLDOWN_MS = 60_000;
 let consecutiveFailures = 0;
 let circuitOpenUntil = 0; // epoch ms; 0 = closed
 
+// Proactive vector-down signal (REVIEW 1.3). Every external embed failure is
+// recorded into get_stats.recentErrors via recordError (in providers.ts), but
+// that sink is only visible if the user calls get_stats — so a user who never
+// does sees hybrid search silently become TF-IDF and never learns why. This
+// latch emits ONE stderr warning at the start of each down-episode (the first
+// failure after a success, or the first failure of the session), so the
+// degradation is visible in the client's stderr/log without polling get_stats.
+// Reset on a successful embed so a recovery-then-refailure warns again (one
+// stderr line per down-episode, not once-per-session — the intent of the
+// review is "stop being silent", and a fresh outage deserves a fresh line).
+// HuggingFace is exempt for the same reason as the circuit breaker.
+let vectorDownWarned = false;
+
 export function isVectorAvailable(): boolean {
   if (testEmbedder !== undefined && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
@@ -214,4 +244,5 @@ export function __testResetVectorAvailability(): void {
   externalEmbedSuccess = false;
   consecutiveFailures = 0;
   circuitOpenUntil = 0;
+  vectorDownWarned = false;
 }

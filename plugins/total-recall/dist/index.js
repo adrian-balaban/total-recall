@@ -16110,7 +16110,15 @@ async function embed(text) {
   if (provider !== "huggingface") {
     if (externalEmbedSuccess) {
       consecutiveFailures = 0;
+      vectorDownWarned = false;
     } else {
+      if (!vectorDownWarned) {
+        vectorDownWarned = true;
+        const url = loadConfig().embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
+        console.error(
+          `[total-recall] external embedding provider "${provider}" failed at ${url} \u2014 hybrid search is falling back to TF-IDF (vector search degraded for this session). Check the provider is running and reachable; see get_stats for details.`
+        );
+      }
       consecutiveFailures++;
       if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && !circuitOpenUntil) {
         circuitOpenUntil = Date.now() + CIRCUIT_OPEN_COOLDOWN_MS;
@@ -16150,6 +16158,7 @@ var CIRCUIT_OPEN_THRESHOLD = 3;
 var CIRCUIT_OPEN_COOLDOWN_MS = 6e4;
 var consecutiveFailures = 0;
 var circuitOpenUntil = 0;
+var vectorDownWarned = false;
 function isVectorAvailable() {
   if (testEmbedder !== void 0 && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;

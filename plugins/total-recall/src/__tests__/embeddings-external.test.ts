@@ -16,7 +16,7 @@ vi.mock('../vectorStore.js', () => ({
   listVectorKeys: vi.fn().mockResolvedValue(null),
 }));
 
-import { embed, isVectorAvailable, __testResetVectorAvailability } from '../embeddings.js';
+import { embed, isVectorAvailable, __testSetEmbedder, __testResetVectorAvailability } from '../embeddings.js';
 import { loadConfig } from '../paths.js';
 import { errors } from '../state.js';
 
@@ -174,5 +174,66 @@ describe('embeddings — session circuit breaker (REVIEW 1.2)', () => {
     expect(mockFetch.mock.calls.length).toBeGreaterThan(callsAtOpen);
 
     nowSpy.mockRestore();
+  });
+});
+
+// REVIEW 1.3: an external embed failure is recorded into get_stats.recentErrors
+// (via recordError in providers.ts), but that sink is only visible if the user
+// calls get_stats. The proactive signal emits ONE stderr warning at the start
+// of each down-episode so the degradation is visible in the client's stderr.
+describe('embeddings — proactive vector-down stderr warning (REVIEW 1.3)', () => {
+  it('emits one stderr warning on the first failure of a down-episode, none on the next', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(new Error('network'));
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await embed('f1');
+    // Exactly one warning line on the first failure.
+    const warned = errSpy.mock.calls.some(c => /external embedding provider/.test(String(c[0])));
+    expect(warned).toBe(true);
+
+    await embed('f2');
+    // Second consecutive failure: no additional warning (still one down-episode).
+    const warnCalls = errSpy.mock.calls.filter(c => /external embedding provider/.test(String(c[0])));
+    expect(warnCalls.length).toBe(1);
+
+    errSpy.mockRestore();
+  });
+
+  it('a successful embed re-arms the warning; a later failure warns again', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // First down-episode: one warning.
+    mockFetch.mockRejectedValue(new Error('network'));
+    await embed('f1');
+    let warnCalls = errSpy.mock.calls.filter(c => /external embedding provider/.test(String(c[0])));
+    expect(warnCalls.length).toBe(1);
+
+    // Recovery: success re-arms the latch (vectorDownWarned = false).
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.1] }) });
+    await embed('ok');
+
+    // New down-episode: warns again — one fresh line for this outage.
+    mockFetch.mockRejectedValue(new Error('network'));
+    await embed('f2');
+    warnCalls = errSpy.mock.calls.filter(c => /external embedding provider/.test(String(c[0])));
+    expect(warnCalls.length).toBe(2);
+
+    errSpy.mockRestore();
+  });
+
+  it('does not warn for HuggingFace (exempt — load-time failure mode)', async () => {
+    // HuggingFace path: force the model unavailable via the test seam. embed()
+    // returns null but the provider === 'huggingface' branch skips the warning.
+    __testSetEmbedder(null);
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const vec = await embed('hf-down');
+    expect(vec).toBeNull();
+    const warnCalls = errSpy.mock.calls.filter(c => /external embedding provider/.test(String(c[0])));
+    expect(warnCalls.length).toBe(0);
+
+    errSpy.mockRestore();
   });
 });
