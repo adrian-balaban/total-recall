@@ -15726,10 +15726,11 @@ function trimTrailingComment(s) {
   return s.trimEnd();
 }
 function parseFrontmatter(raw) {
-  const match = raw.match(FM_RE);
+  const bomless = raw.charCodeAt(0) === 65279 ? raw.slice(1) : raw;
+  const match = bomless.match(FM_RE);
   if (!match) return { data: {}, content: raw };
   const data = parseYamlish(match[1]);
-  const content = raw.slice(match.index + match[0].length);
+  const content = bomless.slice(match.index + match[0].length);
   return { data, content };
 }
 function stringifyFrontmatter(content, data) {
@@ -15962,6 +15963,21 @@ function ensureVecTable(d, dim) {
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
 }
+function ensureVecTableForRead(d, dim) {
+  const existing = d.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+  ).get();
+  if (existing) {
+    const existingDim = parseExistingDimension(existing.sql);
+    const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
+    if (existingDim !== null && (existingDim !== dim || !hasCosine)) return false;
+    return true;
+  }
+  d.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
+  );
+  return true;
+}
 async function upsertVector(dbPath, key, embedding) {
   const d = await getDb(dbPath);
   if (!d) return;
@@ -15975,7 +15991,12 @@ async function upsertVector(dbPath, key, embedding) {
 async function searchVector(dbPath, queryEmbedding, limit = 20) {
   const d = await getDb(dbPath);
   if (!d) return [];
-  ensureVecTable(d, queryEmbedding.length);
+  if (!ensureVecTableForRead(d, queryEmbedding.length)) {
+    recordError(
+      `vector search skipped: query embedding dim ${queryEmbedding.length} != stored vec_memories dim (embedding model changed? run rebuild_index to re-embed with the new model)`
+    );
+    return [];
+  }
   const rows = d.prepare(
     `SELECT key, distance FROM vec_memories
        WHERE embedding MATCH ?
@@ -16005,10 +16026,7 @@ async function listVectorKeys(dbPath) {
   }
 }
 
-// src/embeddings.ts
-var pipeline = null;
-var loadPromise = null;
-var testEmbedder = void 0;
+// src/embeddings/providers.ts
 async function ollamaEmbedAttempt(url, model, text, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -16026,10 +16044,9 @@ async function ollamaEmbedAttempt(url, model, text, timeoutMs) {
     clearTimeout(timer);
   }
 }
-async function getExternalEmbedding(text) {
-  const config3 = loadConfig();
-  const provider = config3.embeddingProvider || "huggingface";
-  if (provider === "ollama") {
+var ollamaProvider = {
+  name: "ollama",
+  async embed(text, config3) {
     const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
     const model = config3.embeddingModel || "bge-m3";
     const timeoutMs = config3.embeddingTimeoutMs ?? 1e4;
@@ -16045,37 +16062,46 @@ async function getExternalEmbedding(text) {
       }
     }
   }
-  return null;
-}
+};
+var PROVIDERS = {
+  ollama: ollamaProvider
+};
+
+// src/embeddings.ts
+var pipeline = null;
+var loadPromise = null;
+var testEmbedder = void 0;
 async function getEmbedder() {
   if (testEmbedder !== void 0) return testEmbedder;
   const config3 = loadConfig();
   const provider = config3.embeddingProvider || "huggingface";
-  if (provider !== "huggingface") {
-    return getExternalEmbedding;
+  if (provider === "huggingface") {
+    if (loadPromise) return loadPromise;
+    loadPromise = (async () => {
+      try {
+        const { pipeline: hfPipeline } = await import("@huggingface/transformers");
+        const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+        pipeline = async (text) => {
+          const output = await extractor(text, { pooling: "mean", normalize: true });
+          return Array.from(output.data);
+        };
+        return pipeline;
+      } catch {
+        pipeline = null;
+        return null;
+      }
+    })();
+    return loadPromise;
   }
-  if (loadPromise) return loadPromise;
-  loadPromise = (async () => {
-    try {
-      const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-      const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-      pipeline = async (text) => {
-        const output = await extractor(text, { pooling: "mean", normalize: true });
-        return Array.from(output.data);
-      };
-      return pipeline;
-    } catch {
-      pipeline = null;
-      return null;
-    }
-  })();
-  return loadPromise;
+  const p = PROVIDERS[provider];
+  if (!p) return null;
+  return (text) => p.embed(text, loadConfig());
 }
 async function embed(text) {
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
-  if (Array.isArray(result)) externalEmbedSuccess = true;
+  externalEmbedSuccess = Array.isArray(result);
   return result;
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
@@ -16321,6 +16347,23 @@ import * as crypto from "crypto";
 var indexSaveTimer = null;
 var idfTimer = null;
 var dirtyTokens = false;
+var INDEX_VERSION = 1;
+function serializeIndex() {
+  return JSON.stringify({ v: INDEX_VERSION, entries: memIndex }, null, 2);
+}
+function unwrapIndexEntries(parsed) {
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+  const obj = parsed;
+  if (typeof obj.v === "number") {
+    if (obj.v > INDEX_VERSION) return null;
+    const entries = obj.entries;
+    if (entries && typeof entries === "object" && !Array.isArray(entries)) {
+      return entries;
+    }
+    return null;
+  }
+  return obj;
+}
 function atomicWrite(p, data) {
   ensureDir(path3.dirname(p));
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
@@ -16404,7 +16447,12 @@ function loadMemIndex() {
     return;
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return;
-  for (const [k, v] of Object.entries(parsed)) {
+  const entries = unwrapIndexEntries(parsed);
+  if (entries === null) {
+    recordError("loadMemIndex: index.json schema version newer than known or malformed wrapper; rebuilding from .md files");
+    return;
+  }
+  for (const [k, v] of Object.entries(entries)) {
     const coerced = coerceMemEntry(v, k);
     if (coerced) memIndex[k] = coerced;
   }
@@ -16423,7 +16471,7 @@ function scheduleIndexSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
     try {
-      atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+      atomicWrite(INDEX_PATH, serializeIndex());
       if (dirtyTokens) {
         dirtyTokens = false;
         scheduleIdfRecalc();
@@ -16453,7 +16501,7 @@ function scheduleIdfRecalc() {
   }, 2e3);
 }
 function saveNow() {
-  atomicWrite(INDEX_PATH, JSON.stringify(memIndex, null, 2));
+  atomicWrite(INDEX_PATH, serializeIndex());
 }
 function recalcIdfNow() {
   rebuildInvertedIndex();
@@ -17036,7 +17084,7 @@ function deleteMemory(args) {
 }
 function confirmMemory(args) {
   const { key } = args;
-  const useful = args.useful !== false && args.useful !== "false";
+  const useful = args.useful !== false;
   if (typeof key !== "string" || isReservedKey(key)) {
     throw new Error(`Invalid key "${key}": reserved key segment or not a string.`);
   }

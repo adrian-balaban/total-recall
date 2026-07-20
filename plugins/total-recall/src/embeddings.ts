@@ -5,6 +5,7 @@
 import { VECTORS_DB, loadConfig } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError } from './state.js';
+import { PROVIDERS } from './embeddings/providers.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
@@ -33,97 +34,61 @@ export function __testSetEmbedder(
   }
 }
 
-// One bounded attempt at the Ollama embed endpoint. AbortController turns a
-// hung request (Ollama busy loading/swapping another model) into a clean
-// timeout instead of an indefinite fetch — the plugin has no other watchdog
-// on this call, and embed() is awaited on the read path (recall_memory with
-// hybrid=true), so a stuck fetch would stall that request until the OS-level
-// socket timeout (or forever, for some proxies).
-async function ollamaEmbedAttempt(
-  url: string, model: string, text: string, timeoutMs: number
-): Promise<number[]> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, prompt: text }),
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
-    const data = await response.json() as { embedding: number[] };
-    return data.embedding;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-async function getExternalEmbedding(text: string): Promise<number[] | null> {
-  const config = loadConfig();
-  const provider = config.embeddingProvider || 'huggingface';
-
-  if (provider === 'ollama') {
-    const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
-    const model = config.embeddingModel || 'bge-m3';
-    const timeoutMs = config.embeddingTimeoutMs ?? 10000;
-
-    try {
-      return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-    } catch {
-      // One retry after a short backoff. Observed failure mode (2026-07-11):
-      // Ollama returns a bare HTTP 500 while it's busy loading/evicting another
-      // large model from VRAM — a few hundred ms later the same request
-      // succeeds. A single retry absorbs that class of transient failure
-      // without turning a genuinely-down Ollama into a multi-attempt stall
-      // (still just 2 bounded attempts, each capped at timeoutMs).
-      await new Promise(r => setTimeout(r, 200));
-      try {
-        return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-      } catch (e) {
-        // Reset the availability latch on failure: otherwise a single earlier
-        // success keeps isVectorAvailable() reporting true for the whole session
-        // even after Ollama has died. REVIEW 1.4.
-        externalEmbedSuccess = false;
-        recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    }
-  }
-
-  return null;
-}
-
+// External (stateless per-call) embedding providers live in
+// ./embeddings/providers.ts as a PROVIDERS registry — adding a provider = one
+// entry there, no if/else here. embeddings.ts owns the cross-provider
+// orchestration: the HuggingFace lazy-load + in-flight-promise cache, the
+// externalEmbedSuccess availability latch, and the test seam.
+//
+// getEmbedder resolves the configured provider to an embed function:
+//   - huggingface: lazy-load the model once, cache the promise (loadPromise);
+//   - any other name: look it up in PROVIDERS and return a closure that calls
+//     its embed() with a fresh loadConfig() per call (so a runtime config
+//     change is picked up, matching the pre-registry behavior). An unknown
+//     provider name resolves to no embedder → embed() returns null and no
+//     transport call is attempted (clean TF-IDF fallback for a typo or an
+//     as-yet-unimplemented provider).
 async function getEmbedder(): Promise<((text: string) => Promise<number[] | null>) | null> {
   if (testEmbedder !== undefined) return testEmbedder;
   const config = loadConfig();
   const provider = config.embeddingProvider || 'huggingface';
-  if (provider !== 'huggingface') {
-    return getExternalEmbedding;
+  if (provider === 'huggingface') {
+    if (loadPromise) return loadPromise;
+    loadPromise = (async () => {
+      try {
+        const { pipeline: hfPipeline } = await import('@huggingface/transformers');
+        const extractor = await hfPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+        pipeline = async (text: string) => {
+          const output = await extractor(text, { pooling: 'mean', normalize: true });
+          return Array.from(output.data as Float32Array);
+        };
+        return pipeline;
+      } catch {
+        pipeline = null;
+        return null;
+      }
+    })();
+    return loadPromise;
   }
-  if (loadPromise) return loadPromise;
-  loadPromise = (async () => {
-    try {
-      const { pipeline: hfPipeline } = await import('@huggingface/transformers');
-      const extractor = await hfPipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-      pipeline = async (text: string) => {
-        const output = await extractor(text, { pooling: 'mean', normalize: true });
-        return Array.from(output.data as Float32Array);
-      };
-      return pipeline;
-    } catch {
-      pipeline = null;
-      return null;
-    }
-  })();
-  return loadPromise;
+  const p = PROVIDERS[provider];
+  if (!p) return null;
+  // Re-read config per embed so a runtime toggle (url/model/timeout) takes
+  // effect without a restart, exactly as the pre-registry getExternalEmbedding
+  // did by calling loadConfig() inside each embed.
+  return (text: string) => p.embed(text, loadConfig());
 }
 
 export async function embed(text: string): Promise<number[] | null> {
   const embedder = await getEmbedder();
   if (!embedder) return null;
   const result = await embedder(text);
-  if (Array.isArray(result)) externalEmbedSuccess = true;
+  // Centralized availability latch for external providers (REVIEW 1.4): set on
+  // success, RESET on failure. Previously each provider's catch reset it; with
+  // the registry the latch is managed once here so every provider gets the same
+  // "the last embed attempt actually succeeded" semantics without re-implementing
+  // it. Only consulted by isVectorAvailable() when provider !== 'huggingface';
+  // for HuggingFace the pipeline latch is the signal and this stays unused.
+  externalEmbedSuccess = Array.isArray(result);
   return result;
 }
 
