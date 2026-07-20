@@ -224,6 +224,23 @@ describe('vectorStore — dynamic dimension migration', () => {
     await expect(listVectorKeys(tmpDb)).resolves.toEqual([]);
   });
 
+  // REVIEW 1.5: the read path must NOT drop the stored table when the query
+  // embedding dim differs from the stored dim. A single recall with a stale-dim
+  // query (embedding model changed) would otherwise wipe every stored vector.
+  it('searchVector does NOT drop the table on a dim mismatch — returns [] and records the error', async () => {
+    prepareGet.mockReturnValue({ sql: createSql(384) });
+    const { searchVector } = await import('../vectorStore.js');
+    const { errors } = await import('../state.js');
+    const before = errors.length;
+
+    const res = await searchVector(tmpDb, [1, 2, 3], 5); // query dim 3, stored dim 384
+
+    expect(res).toEqual([]);
+    expect(execMock).not.toHaveBeenCalledWith('DROP TABLE vec_memories');
+    expect(errors.length).toBeGreaterThan(before);
+    expect(errors[errors.length - 1]!.msg).toMatch(/query embedding dim 3 != stored/);
+  });
+
   it('upsertVector ignores an empty embedding array', async () => {
     const { upsertVector } = await import('../vectorStore.js');
     await upsertVector(tmpDb, 'k/empty', []);

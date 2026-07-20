@@ -3,6 +3,8 @@
  * Gracefully degrades to no-op if sqlite-vec not installed.
  */
 
+import { recordError } from './state.js';
+
 let dbPromise: Promise<any> | null = null;
 let cachedDbPath: string | null = null;
 
@@ -44,6 +46,14 @@ function parseExistingDimension(sql: string): number | null {
 // the dimension is driven by the incoming vectors rather than hardcoded to 384.
 // If an existing table was created with a different dimension or without the cosine
 // metric (pre-fix tables), drop and recreate it so scores stay comparable.
+//
+// The DROP-on-mismatch is correct on the WRITE path (upsertVector): the new
+// vectors use the new dim, so recreating is the right move. It is destructive
+// on the READ path (searchVector): a single recall with a query whose dim
+// differs from the stored table (e.g. the user switched embedding model) would
+// wipe every stored vector. REVIEW 1.5 splits the two: ensureVecTableForRead
+// creates-if-missing but never drops on a dim mismatch — it returns false so
+// the caller can recordError + return [] instead of nuking the index.
 function ensureVecTable(d: any, dim: number): void {
   const existing = d.prepare(
     "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
@@ -58,6 +68,27 @@ function ensureVecTable(d: any, dim: number): void {
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories ` +
     `USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
+}
+
+// Read-path variant: create the table if it doesn't exist yet (so the MATCH
+// query doesn't throw `no such table`), but NEVER drop an existing table whose
+// dim differs from the query. Returns true when the table is usable for this
+// query dim, false on a dim mismatch (caller bails to [] + recordError).
+function ensureVecTableForRead(d: any, dim: number): boolean {
+  const existing = d.prepare(
+    "SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'"
+  ).get() as { sql: string } | undefined;
+  if (existing) {
+    const existingDim = parseExistingDimension(existing.sql);
+    const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
+    if (existingDim !== null && (existingDim !== dim || !hasCosine)) return false;
+    return true;
+  }
+  d.exec(
+    `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories ` +
+    `USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
+  );
+  return true;
 }
 
 export async function upsertVector(dbPath: string, key: string, embedding: number[]): Promise<void> {
@@ -78,7 +109,19 @@ export async function searchVector(
 ): Promise<Array<{ key: string; score: number }>> {
   const d = await getDb(dbPath);
   if (!d) return [];
-  ensureVecTable(d, queryEmbedding.length);
+  // Read path: never DROP the stored table on a dim mismatch (REVIEW 1.5). A
+  // mismatch means the embedding model changed since the vectors were stored —
+  // surface it via recordError and return [] so recall degrades to TF-IDF; the
+  // next upsertVector (write path) or an explicit rebuild_index recreates the
+  // table with the new dim. Dropping here would wipe every stored vector off a
+  // single recall attempt.
+  if (!ensureVecTableForRead(d, queryEmbedding.length)) {
+    recordError(
+      `vector search skipped: query embedding dim ${queryEmbedding.length} != stored vec_memories dim ` +
+      `(embedding model changed? run rebuild_index to re-embed with the new model)`
+    );
+    return [];
+  }
   const rows = d
     .prepare(
       `SELECT key, distance FROM vec_memories
