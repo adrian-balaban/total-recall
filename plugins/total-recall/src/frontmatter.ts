@@ -55,11 +55,17 @@ function trimTrailingComment(s: string): string {
 }
 
 export function parseFrontmatter(raw: string): Frontmatter {
-  const match = raw.match(FM_RE);
+  // Strip a leading UTF-8 BOM: a teammate's editor (or a git pull through a
+  // BOM-adding tool) can save an org-vault memory with a BOM before the `---`
+  // fence. FM_RE is anchored at ^---, so a BOM would silently break the match
+  // and the whole frontmatter (title/tags/author) would be dropped on boot.
+  // REVIEW 4.5.
+  const bomless = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
+  const match = bomless.match(FM_RE);
   if (!match) return { data: {}, content: raw };
   // Group 1 of FM_RE is guaranteed by the regex when match succeeds.
   const data = parseYamlish(match[1]!);
-  const content = raw.slice(match.index! + match[0]!.length);
+  const content = bomless.slice(match.index! + match[0]!.length);
   return { data, content };
 }
 

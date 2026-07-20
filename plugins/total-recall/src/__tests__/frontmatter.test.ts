@@ -112,6 +112,17 @@ describe('parseFrontmatter', () => {
     expect(data.title).toBe('Foo');
     expect(data.tags).toEqual(['a']);
   });
+
+  it('strips a leading UTF-8 BOM so the frontmatter fence still matches (REVIEW 4.5)', () => {
+    // A teammate's editor (or a BOM-adding git pull tool) can save an org-vault
+    // memory with a BOM before `---`. Without stripping it, FM_RE (anchored at
+    // ^---) fails to match and the whole frontmatter is silently dropped.
+    const raw = `﻿---\ntitle: BOM\ntags: [org]\n---\nbody\n`;
+    const { data, content } = parseFrontmatter(raw);
+    expect(data.title).toBe('BOM');
+    expect(data.tags).toEqual(['org']);
+    expect(content).toBe('body\n');
+  });
 });
 
 describe('stringifyFrontmatter', () => {
