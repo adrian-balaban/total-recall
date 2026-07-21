@@ -1,0 +1,1032 @@
+================================================================================
+  total-recall — code review (ollama / glm-5.2 pass)
+  Repo:   plugins/total-recall/  @ v1.0.110, branch main
+  Scope:  full source tree (src/, hooks/, scripts/, install.sh, docs)
+  Date:   2026-07-21
+  Method: 9-dimension parallel review (workflow fan-out) + inline code verification
+          of every high-severity and "new" finding against the cited file:line.
+  Prior:  REVIEW-ollama-glm-5.2.txt, REVIEW-claude-sonnet.txt,
+          ARCHITECTURE-REVIEW-TODO.md (item numbers referenced inline as REVIEW x.y)
+================================================================================
+
+
+0. VERDICT
+--------------------------------------------------------------------------------
+Ship-blockers: 3 high-severity, all real (verified against code):
+  - install.sh rejects the --default flag INSTALL.md documents as the primary
+    minimal-profile command                (INSTALL.md:25 vs install.sh:230)
+  - --standalone upgrade silently skips wiring the SessionEnd hook for pre-5.1
+    installs                               (install.sh:518-521)
+  - embeddingUrl is POSTed the full memory body with no scheme/host validation
+    (SSRF + content exfiltration)           (src/embeddings/providers.ts:92-108)
+
+The rest are correctness, observability, and docs-drift issues. None of the 42
+unique findings were refuted on verification; all 5 high-severity and 25+ of the
+medium/low claims were read against the actual cited source and held up.
+
+Counts (42 unique; 4 cross-dimension duplicates merged — see Appendix B):
+  high     3   medium  26   low  13
+  new      19  open-prior 17  partial-fix  6
+
+The codebase is in good shape: the prior review's destructive read-path (1.5),
+availability-latch reset (1.4), SessionEnd standalone wiring (5.1), indexVersion
+wrapper (9.2), BOM strip (4.5), confirm_memory bool (3.3), and the rerank batch-
+read (f9feeaa) all landed. What remains is the write-path half of several of
+those fixes, plus a cluster of silent-degradation paths where the read path
+records an event but the write path does not.
+
+Recommended order: fix the 3 high-severity first (all small, all isolated), then
+the write-path dim-mismatch recordError + vec_meta fingerprint (closes the
+noisiest silent-data-loss class), then the schema/boundary migration (closes a
+swarm of validation findings at once).
+
+
+1. PERSISTENCE, CONCURRENCY & MIGRATION
+--------------------------------------------------------------------------------
+
+[1.1] index.json has no lock and no merge-on-read — concurrent windows clobber
+      accessCount/lastAccessed
+  status=open-prior (REVIEW 9.3)  severity=high
+  file=src/persistence.ts:191-225, 259-279
+  Two Claude Code windows load the same index.json, mutate memIndex in memory,
+  and each debounced flush atomicWrites the whole object — the second flush
+  silently overwrites the first session's accessCount/lastAccessed/store_memory
+  updates. No flock, no merge-on-read (max(disk,mem)).
+  evidence: function loadMemIndex() { ... parsed = JSON.parse(fs.readFileSync(
+            INDEX_PATH,'utf8')); ... for (const [k,v] of Object.entries(entries))
+            (memIndex as any)[k] = coerced; }  // whole-object replace
+  why: A user running two sessions loses access-count history and can lose a
+       store_memory that landed in the session whose flush fires first — silent
+       data loss, no error signal.
+  fix: Before atomicWrite in scheduleIndexSave, re-read disk index.json and
+       merge runtime-only fields: accessCount=max(disk,mem), lastAccessed=max.
+       Alternatively flock(LOCK_EX) on a sibling lockfile around load→mutate→
+       flush. REVIEW 9.3 proposed the merge-on-read as the minimal fix.
+
+[1.2] atomicWrite has no fsync of tmp fd or parent dir — power loss corrupts
+      index.json
+  status=open-prior (REVIEW 4.2)  severity=high
+  file=src/persistence.ts:82-107
+  atomicWrite does writeFileSync(tmp) then renameSync(tmp,p) with no fsyncSync
+  and no parent-directory fsync; a power loss between the buffered tmp write and
+  rename can leave a zero-byte/stale index.json. No fsync/fdatasync/O_SYNC
+  anywhere in src/.
+  evidence: fs.writeFileSync(tmp, data); ... fs.renameSync(tmp, p);
+  why: reconcileIndex rebuilds the memory bodies, but the runtime-only
+       accessCount/lastAccessed fields are permanently lost on a crash that
+       catches the buffer un-flushed.
+  fix: fs.openSync(tmp,'w') → fs.writeSync(fd,data) → fs.fsyncSync(fd) →
+       fs.closeSync(fd) → renameSync → fsync parent dir. A few ms per debounced
+       save; index.json holds history reconcileIndex cannot rebuild.
+
+[1.3] atomicWrite tmp-write fallback overwrites the target directly, losing
+      POSIX atomicity
+  status=open-prior (REVIEW 4.3)  severity=medium
+  file=src/persistence.ts:84-98
+  When writeFileSync(tmp) throws (ENOSPC/EACCES/EROFS/EISDIR) the catch falls
+  back to fs.writeFileSync(p, data) directly on the target — a crash during
+  that non-atomic fallback leaves a truncated index.json, exactly the
+  corruption atomic write was meant to prevent.
+  evidence: } catch { try { fs.writeFileSync(p, data); } catch (e) {
+            recordError(`atomicWrite(${p}): ${(e as Error).message}`); } return; }
+  why: On a transient I/O error the still-valid existing index.json is
+       overwritten in-place non-atomically; a crash mid-fallback corrupts the
+       file instead of preserving the last-good copy.
+  fix: On tmp-write failure, do NOT fall back to a direct overwrite —
+       recordError and leave the existing (still-valid) index.json untouched.
+       Reserve the rename-fallback for the rename-failure branch only, behind a
+       platform check.
+
+[1.4] org-sync queue job deleted before the sync runs — a failed push
+      permanently drops the org memory   (merged: reported by 2 dimensions)
+  status=open-prior (REVIEW 6.4)  severity=medium
+  file=hooks/scripts/sync-org-memory.sh:104-108
+  drain_queue does `rm -f "$job"` BEFORE invoking run_queued_sync; if the sync
+  fails (expired gh token, network down, ff-only conflict) or the worker is
+  SIGKILLed between the rm and the sync, the job is gone with no retry. The org
+  memory is in the local working tree but never reaches the shared repo, and no
+  later event re-attempts it.
+  evidence: IFS=$'\t' read -r q_key q_delete q_force < "$job" || true
+            rm -f "$job"
+            ... run_queued_sync "$q_key" "${q_delete:-0}" "${q_force:-0}" || {
+  why: A persistent push failure silently strands the org memory on the
+       author's machine; teammates never see it and the user gets no in-session
+       signal that sync stopped working.
+  fix: Move `rm -f "$job"` to AFTER a successful run_queued_sync; on failure,
+       leave the job for the next worker pass or re-enqueue in the `|| { }` arm.
+
+[1.5] Org-vault reconcile relies on 10s marker-file polling — teammate
+      memories lag up to 10s
+  status=open-prior (ARCH-REVIEW-TODO #5)  severity=low
+  file=src/auto-reconcile.ts:17, 53-61
+  The server polls RECONCILE_REQUEST_FLAG every 10s (DEFAULT_POLL_MS=10_000);
+  after a teammate's memories land via pull-org-vault.sh, up to 10s elapse
+  before reconcileIndex runs and the new memories become searchable.
+  evidence: const DEFAULT_POLL_MS = 10_000; ... setInterval(checkReconcileRequest,
+            pollMs);
+  why: A user who stores an org memory and immediately asks a teammate's
+       session to recall it sees up to 10s staleness with no indication the data
+       is already on disk but unindexed.
+  fix: Optional fs.watch fast path on the org vault (or the marker's dir),
+       falling back to the 10s poll on network filesystems where fs.watch is
+       unreliable.
+
+
+2. SEARCH QUALITY (TF-IDF, RRF, EBBINGHAUS, RERANK)
+--------------------------------------------------------------------------------
+
+[2.1] TF-IDF title/tag boost still uses substring match, not token match
+  status=open-prior (REVIEW 2.1)  severity=medium
+  file=src/tfidf.ts:167-168
+  The title/tag score boost uses substring .includes(token) instead of token-
+  set membership, so a short common query token boosts any title/tag containing
+  it as a substring.
+  evidence: if (low.titleLow.includes(token)) score *= 2;
+            if (low.tagsLow.some(t => t.includes(token))) score *= 1.5;
+  why: A query token 'cat' boosts a memory titled 'Category theory' (title
+       includes 'cat'), inflating its score over genuinely relevant matches and
+       distorting the TF-IDF ranking that RRF then fuses with the vector rank.
+  fix: Tokenize meta.title and meta.tags into Sets once per doc (alongside the
+       existing lowCache) and test with .has(token). The token is already
+       lowercased by tokenize(), so this is a drop-in correctness fix.
+
+[2.2] TF-IDF has no document-length or sublinear TF normalization
+  status=open-prior (REVIEW 2.2)  severity=medium
+  file=src/tfidf.ts:161
+  The score uses raw token frequency with no sublinear saturation and no
+  document-length normalization, so longer memories accumulate higher scores
+  purely from length.
+  evidence: let score = doc.tf * entry.idf;
+  why: Retrieval is biased toward verbose entries: a 2000-token memory that
+       mentions a term twice outranks a 200-token memory that mentions it once,
+       even though the shorter one is denser in the query term.
+  fix: Apply sublinear TF (1 + Math.log(tf)) and divide by
+       Math.sqrt(totalTokensForDoc) (or a precomputed L2 norm stored alongside
+       tf). At minimum divide by sqrt(totalTokens) so a 2000-token memory cannot
+       outrank a 200-token one on the same query terms.
+
+[2.3] RRF fuses with an empty vector list, silently rescaling TF-IDF scores to
+      tiny RRF values and nuking minScore filters
+  status=new  severity=medium
+  file=src/tools/recall.ts:41-46
+  RRF runs even when the vector result list is empty, rescaling every TF-IDF
+  score to a tiny ~1/(60+rank) value for zero information gain.
+  evidence: const vecResults = await searchVector(VECTORS_DB, qvec, 50);
+            const fused = reciprocalRankFusion([tfidfResults, vecResults]);
+            ranked = [...fused.entries()].map(...).sort(...)
+  why: searchVector returns [] on db-null and dim-mismatch, so with hybrid=true
+       (the default) + an empty or model-swapped vector store, every TF-IDF
+       score (~5.0) is replaced by ~1/(60+rank) (~0.016). A user setting
+       minScore=1 expecting TF-IDF scale silently gets zero results, with no
+       signal that the vector store is empty (get_stats.vectorSearchEnabled
+       reflects embedder availability, not vector-store population).
+  fix: Guard the fusion:
+         ranked = vecResults.length > 0
+           ? [...reciprocalRankFusion([tfidfResults, vecResults]).entries()]
+               .map(([key,score])=>({key,score})).sort((a,b)=>b.score-a.score)
+           : tfidfResults;
+       When the vector list is empty there is nothing to fuse — keep the raw
+       TF-IDF ranking and score scale. Also makes minScore behave consistently.
+
+[2.4] rerank_memories silently drops candidates whose body fails to embed,
+      inconsistent with the no-embedder path that returns all keys with score 0
+  status=new  severity=low
+  file=src/tools/rerank.ts:78
+  When the query embeds but a candidate's stored vector is missing and its
+  fresh embed() returns undefined, the candidate is silently dropped instead of
+  being returned with score 0.
+  evidence: if (!mvec) continue;
+  why: The no-qvec path (line 53) returns every candidate key with score 0, but
+       the per-candidate path drops keys whose fresh embed fails. The caller
+       passes N keys and gets back fewer, with no signal which were dropped vs
+       merely low-ranked; the tool description promises "returns the same keys
+       sorted by cosine score".
+  fix: Instead of `continue`, push `{ key, score: 0, meta }` so the candidate
+       is retained and sorted to the bottom — matching the no-qvec graceful
+       path at line 53. Optionally recordError so a recurring per-candidate
+       embed failure is observable.
+
+[2.5] rerank_memories no-embedder degradation is still silent  (merged:
+      reported by 2 dimensions)
+  status=open-prior (REVIEW 7.2, partial)  severity=low
+  file=src/tools/rerank.ts:50-54
+  When no embedder is available (qvec null), rerank returns every key with
+  score 0 in the caller's order with no recordError and no degraded flag —
+  identical response shape to a successful rerank.
+  evidence: if (!qvec) { return candidateKeys.map((key) => ({ key, score: 0 })); }
+  why: A caller with no embedding deps gets a response indistinguishable from a
+       successful rerank and has no way to know no semantic reranking occurred
+       without separately checking get_stats.
+  fix: recordError('rerank_memories: no embedder available, returned caller
+       order unranked') before the return, and/or include `degraded: true` in
+       each returned object, mirroring recall_memory's degradation-visibility
+       pattern (recall.ts:57). Document the no-embedder behavior in the tool
+       description.
+
+
+3. OLLAMA EMBEDDING INTEGRATION (CORRECTNESS & FUTURE-PROOFING)
+--------------------------------------------------------------------------------
+
+[3.1] Write-path dim-mismatch still DROPs the whole vector index with no
+      recordError  (merged: reported by 2 dimensions)
+  status=partial-fix (REVIEW 9.5; read-path half 1.5 fixed in 5e0ff8a)
+  severity=medium
+  file=src/vectorStore.ts:197-211
+  upsertVector calls ensureVecTable which DROPs vec_memories on a dim mismatch,
+  but unlike the read path it records no event, so a model swap silently wipes
+  the entire vector index on the next store_memory.
+  evidence: function ensureVecTable(d, dim) { ... if (existingDim === dim &&
+            hasCosine) return; d.exec("DROP TABLE vec_memories"); }
+  why: A user who edits embeddingModel in config.json (bge-m3 1024 → nomic 768,
+       or HF MiniLM 384 → Ollama bge-m3 1024) silently loses every stored vector
+       on the next write — no recordError, no get_stats signal, no migration
+       event. The read-path half of REVIEW 1.5 was fixed in 5e0ff8a (returns []
+       + recordError); the write-path half still destroys data with no signal,
+       and recovery is a full re-embed of every memory.
+  fix: Emit recordError before the DROP in ensureVecTable's write-path branch
+       (e.g. `vector index rebuilt: stored dim ${existingDim} != new dim ${dim}
+       (embedding model changed? re-embedding all memories)`). Optionally write
+       a vec_meta row with the new provider+model+dim so get_stats can surface
+       "did my config change take?". Pairs with 3.7.
+
+[3.2] Unknown embeddingProvider name silently disables vector search with no
+      recordError, no stderr warning
+  status=new  severity=medium
+  file=src/embeddings.ts:73-74, 94-95
+  A typo'd or capitalised provider name ('Ollama', 'ollma') resolves to no
+  embedder, embed() returns null before any attempt, so the vectorDownWarned
+  stderr path never fires and isVectorAvailable() stays false with zero signal.
+  evidence: const p = PROVIDERS[provider]; if (!p) return null;
+  why: The user gets vector search silently off for the whole session with no
+       hint the cause is a config typo. loadConfig does zero validation of
+       embeddingProvider, and the TS type union is stripped at runtime, so any
+       string is accepted and quietly ignored.
+  fix: When PROVIDERS[provider] is undefined, recordError(`unknown
+       embeddingProvider "${provider}" — falling back to TF-IDF; valid:
+       ${Object.keys(PROVIDERS).join('/')}`) and emit one stderr line, so a
+       typo is visible instead of silently disabling hybrid search.
+
+[3.3] An empty embedding array from Ollama flips the availability latch to true
+      but writes no vector
+  status=new  severity=medium
+  file=src/embeddings.ts:137
+  externalEmbedSuccess is set via Array.isArray(result), which is true for [],
+  so an empty embedding counts as a success (latch true, circuit closed) while
+  upsertVector silently drops the empty vector — the memory is stored without a
+  vector and hybrid search can never find it.
+  evidence: externalEmbedSuccess = Array.isArray(result);
+            ... if (!Array.isArray(embedding) || embedding.length === 0) return;
+  why: If Ollama ever returns { embedding: [] } (provider bug, truncated
+       response, or a future /api/embed shape mismatch where data.embedding is
+       undefined-but-coerced), isVectorAvailable() reports true and the circuit
+       stays closed, so subsequent recalls keep attempting embeds that produce
+       nothing, while the just-stored memory is invisible to hybrid search. No
+       recordError fires because the call "succeeded".
+  fix: Treat a zero-length result as a failure:
+       externalEmbedSuccess = Array.isArray(result) && result.length > 0;
+       and recordError one line so an empty-vector provider response is
+       observable rather than masquerading as success.
+
+[3.4] Still pinned to Ollama's deprecated /api/embeddings endpoint shape with no
+      version-aware fallback
+  status=open-prior  severity=medium
+  file=src/embeddings/providers.ts:78, 82, 92
+  The Ollama provider POSTs the legacy { model, prompt } body to /api/embeddings
+  and reads data.embedding; if Ollama removes the deprecated endpoint, every
+  embed degrades to TF-IDF with no code fix short of a release, surfacing only as
+  a generic "provider failed" warning.
+  evidence: body: JSON.stringify({ model, prompt: text }) ...
+            const data = await response.json() as { embedding: number[] };
+            return data.embedding; ...
+            const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
+  why: Ollama's newer /api/embed uses { input } and returns { embeddings:
+       number[][] }. The legacy endpoint is deprecated; if removed, vector
+       search silently fails for every embed with no code-level fix short of a
+       plugin release. No startup 404 probe, no distinct error class for
+       "endpoint gone" vs "Ollama down".
+  fix: Make the endpoint shape version-aware: probe /api/embed at startup, fall
+       back to /api/embeddings, and parse { embeddings: number[][] } vs
+       { embedding: number[] } accordingly. At minimum, on a 404 emit a distinct
+       recordError naming the endpoint as deprecated/removed so the operator
+       knows the fix is a plugin upgrade, not an Ollama restart.
+
+[3.5] No Ollama probe at boot and get_stats still reports a single
+      vectorSearchEnabled bool (no provider/model/dim)
+  status=open-prior (REVIEW 9.4; sticky-latch half fixed in 8243298)
+  severity=medium
+  file=src/embeddings.ts:236, 234-235
+  isVectorAvailable() only flips after the first successful embed and get_stats
+  emits a single boolean, so a misconfigured Ollama or wrong model is invisible
+  until a real query and the user cannot tell which provider/model/dim is in use
+  or whether Ollama is actually up.
+  evidence: let externalEmbedSuccess = false; ...
+            // We do not probe on every get_stats call ...
+            vectorSearchEnabled: isVectorAvailable(),
+  why: A user who never calls recall_memory(hybrid=true) sees
+       vectorSearchEnabled=false with no explanation. A user whose Ollama is up
+       but model is wrong (forgot `ollama pull bge-m3`) gets no signal until a
+       real query fails. There is no way to distinguish "Ollama down" from
+       "vector deps missing" from "wrong model" from "never tried" via get_stats
+       today. The sticky-latch half of 9.4 was fixed (8243298 resets on failure),
+       but the probe and structured-block halves remain open.
+  fix: Add a provider.probe() (GET /api/tags for Ollama) called once on first
+       get_stats / SessionStart; replace the bool with a structured
+       `vector: { enabled, provider, model, dim, lastProbeAt, lastProbeOk }`
+       block. Additive, mostly testable without a live Ollama.
+
+[3.6] No vec_meta fingerprint table — "did my config change actually take?" is
+      not a one-call check
+  status=open-prior (REVIEW 9.5)  severity=low
+  file=src/vectorStore.ts:207-210
+  vectorStore.ts creates only vec_memories; there is no vec_meta table recording
+  provider+model+dim, so a config change's effect on the vector store can only
+  be inferred from errors after the fact, not queried.
+  evidence: d.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING
+            vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}]
+            distance_metric=cosine);`);
+  why: After editing config.json to swap embeddingModel, the only way to
+       confirm the new model/dim took effect is to trigger an embed and watch
+       recentErrors. There is no stored fingerprint to compare against, and the
+       dim-mismatch DROP in 3.1 would be far less harmful if the operator could
+       see provider/model/dim in get_stats before the DROP happens.
+  fix: Add a `vec_meta(key TEXT PRIMARY KEY, value TEXT)` table written on first
+       upsert with rows for provider/model/dim; surface them in get_stats.
+       Unblocked now that 9.2 (indexVersion) has landed.
+
+[3.7] embeddingTimeoutMs is not validated — 0, negative, or NaN silently
+      disables vectors
+  status=new  severity=low
+  file=src/embeddings/providers.ts:106, 73
+  config.embeddingTimeoutMs passes through to setTimeout unchanged, so a
+  misconfigured 0 or negative value makes AbortController fire immediately on
+  every embed, producing a timeout-only degradation with no validation that the
+  config is sane.
+  evidence: const timeoutMs = config.embeddingTimeoutMs ?? 15000; ...
+            const timer = setTimeout(() => controller.abort(), timeoutMs);
+  why: A user who sets embeddingTimeoutMs: 0 (or a typo'd number like -1) gets
+       every embed aborted instantly; the timeoutWarned hint fires once pointing
+       them at embeddingTimeoutMs, but the root cause — their own invalid config
+       — is never named. The hint tells them to raise it, not that 0 is invalid.
+  fix: Coerce and clamp in loadConfig or at the provider boundary:
+       const timeoutMs = Number.isFinite(config.embeddingTimeoutMs) &&
+         config.embeddingTimeoutMs > 0 ? config.embeddingTimeoutMs : 15000;
+       and recordError once if the configured value was out of range.
+
+
+4. SERVER / TOOLS API SURFACE & VALIDATION
+--------------------------------------------------------------------------------
+
+[4.1] Still on the deprecated low-level Server class
+  status=open-prior (REVIEW 3.1 / ARCH-REVIEW #8)  severity=medium
+  file=src/server.ts:2, 43-52, 54, 300
+  server.ts still imports and instantiates the SDK's deprecated low-level Server
+  class with manual setRequestHandler, not McpServer/registerTool.
+  evidence: import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+            ... const server = new Server({ name:'total-recall', version:
+            PLUGIN_VERSION }, { capabilities: { tools: {} } ... });
+  why: The installed SDK (1.29.0) marks Server @deprecated in favor of McpServer.
+       New features (outputSchema/structured content, tools/list_changed,
+       elicitation, completions) land in McpServer first, and Server is a
+       candidate for removal in SDK 2.x. Staying on it means migrating eventually
+       under time pressure, with no boundary validation (see 4.2).
+  fix: Migrate to `new McpServer(...)` + `server.registerTool(name, { description,
+       inputSchema: zodShape }, handler)`. This also closes 4.2 and 4.4 in one
+       pass, since registerTool co-locates schema + handler and Zod-validates
+       args before the handler runs. Add schema-parity integration tests
+       before/after — Zod→JSON-Schema can subtly change how default/minimum/
+       maximum render in tools/list.
+
+[4.2] No schema enforcement at the dispatch boundary
+  status=open-prior (REVIEW 3.2)  severity=medium
+  file=src/server.ts:280, 314
+  The dispatch boundary passes raw client args straight through to handlers
+  typed (args: any) => any, with no schema validation between the JSON Schema
+  advertised in tools/list and the handler.
+  evidence: const TOOL_HANDLERS: Record<string, (args: any) => any> = {
+            store_memory: storeMemory, ... }; ...
+            const result = await handler(args ?? {});
+  why: The JSON Schema in tools/list is descriptive only. Every handler
+       re-implements coercion ad hoc with different policies (store_memory
+       coerces title/tags/category, update_memory silently ignores a scalar
+       tags arg to preserve existing tags, search_index wraps a scalar tags
+       string, rerank throws on non-string query). Malformed calls are handled
+       inconsistently rather than rejected uniformly — the root cause of the
+       scalar-tags leniency the project had to pin as T3.
+  fix: Adopt registerTool with Zod shapes so malformed calls are rejected
+       uniformly at the boundary, and retire the ad-hoc per-tool coercion in
+       favor of typed args. Same fix as 4.1; listed separately because the
+       symptom is independent.
+
+[4.3] import_memories classifies skips by regex-matching error message text
+  status=open-prior (REVIEW 3.4)  severity=medium
+  file=src/tools/bulk.ts:82-89
+  import_memories distinguishes a duplicate-key skip from a real error by
+  regex-matching the literal phrase 'already exists' in the thrown Error
+  message, rather than branching on a typed error or structured return.
+  evidence: } catch (e: any) { if (/already exists/.test(e.message)) {
+            skipped++; results.push({ status:'skipped', error: e.message });
+  why: If store.ts ever rewords the 'Memory ... already exists' error
+       (store.ts:221), every duplicate key is suddenly counted as an error
+       instead of a skip, silently corrupting the import summary and losing the
+       idempotent-reimport behavior.
+  fix: Have storeMemory throw a typed MemoryExistsError (or return a structured
+       {status:'exists'} for the bulk path) and branch on the type/shape, not the
+       message string. store.ts:221 is the only producer of the 'already exists'
+       wording today, but any future reword silently breaks the classification.
+
+[4.4] 17 tool schemas + dispatch in one 356-line file
+  status=open-prior (ARCH-REVIEW #4)  severity=medium
+  file=src/server.ts:54-298
+  17 tool schemas + the dispatch table + both setRequestHandler handlers all
+  live in a single 356-line server.ts, with schemas visually far from their
+  implementations in src/tools/*.ts.
+  evidence: server.setRequestHandler(ListToolsRequestSchema, async () => ({
+            tools: [ { name: 'store_memory', ... } ... ] })); ...
+            const TOOL_HANDLERS: Record<string, (args: any) => any> = { ... };
+  why: Adding or changing a tool requires editing two distant regions of the
+       same file (the tools/list array and the TOOL_HANDLERS map) with no
+       compile-time link between them; a description/schema drift between the
+       two regions is invisible until runtime.
+  fix: Co-locate each tool's name, description, inputSchema, and handler in its
+       tools/*.ts module (export a `register(server)` per file), and have
+       server.ts import + register them. With the 4.1 migration, each
+       registerTool call lives next to its handler. Shrinks server.ts to the
+       boot stub and makes adding a tool a one-file change.
+
+[4.5] store_memory schema omits key/created/updated/sessions that the handler
+      accepts
+  status=new  severity=medium
+  file=src/tools/store.ts:45-48
+  The public store_memory inputSchema lists only title/content/tags/category/
+  importanceScore/sessionId/author/force, but storeMemory reads args.key,
+  args.created, args.updated, and args.sessions — undocumented parameters that
+  override key derivation and timestamps.
+  evidence: const explicitKey = typeof args.key === 'string' ? args.key : undefined;
+            const explicitCreated = typeof args.created === 'string' ? args.created : undefined;
+            const explicitUpdated = typeof args.updated === 'string' ? args.updated : undefined;
+            const explicitSessions = Array.isArray(args.sessions) ? args.sessions : undefined;
+  why: A direct store_memory caller (buggy agent, hostile plugin consumer, hand-
+       crafted stdio request) can pass key:'org/anything' to choose the canonical
+       key directly, or set created/updated/sessions to forge metadata, none of
+       which is advertised in the schema the client reads. The org-config and
+       path-containment guards still hold, but the schema no longer describes
+       the real input contract.
+  fix: Either declare these params in the store_memory schema (with descriptions
+       noting they are intended for import_memories round-trips), or split the
+       internal restore path into a dedicated function that store_memory does
+       not expose. The current state is a hidden, undocumented tool surface.
+
+[4.6] rerank_memories silently truncates keys to MAX_KEYS=200; schema/description
+      don't mention the cap
+  status=new  severity=low
+  file=src/tools/rerank.ts:27, 47; src/server.ts:99
+  rerank_memories caps the candidate set at MAX_KEYS=200 with
+  keys.slice(0, MAX_KEYS), but the tool's inputSchema declares keys as an
+  unbounded array (`keys: { type: 'array', items: { type: 'string' } }`, no
+  maxItems) and the description never mentions the cap.
+  evidence: const MAX_KEYS = 200; ... const candidateKeys = keys.slice(0,
+            MAX_KEYS).map(String).filter(k => !isReservedKey(k));
+  why: A caller passing 300+ keys gets only the first 200 ranked and the rest
+       silently dropped from the response with no error and no truncated flag;
+       the schema advertises no upper bound.
+  fix: Add `maxItems: 200` to the keys array schema in server.ts and note the
+       cap in the keys description, so a client sending 500 keys is told it's
+       over the limit rather than silently losing 300 candidates.
+
+[4.7] delete_memories marks confirm as required AND gives it a default:false
+      (contradictory)
+  status=new  severity=low
+  file=src/server.ts:138, 140
+  The delete_memories schema marks confirm as required (line 140) while also
+  giving it a default of false (line 138), which is contradictory.
+  evidence: confirm: { type: 'boolean', default: false, description: 'Must be
+            true to confirm the bulk deletion.' }, },
+            required: ['keys', 'confirm'],
+  why: In JSON Schema, required means the property must be present, so the
+       default never applies. The handler enforces args.confirm === true anyway,
+       so the requirement is correct; the default:false is dead and misleading
+       to any client or validator that reads the schema.
+  fix: Drop `default: false` from the confirm property (a required field cannot
+       be absent, so the default is unreachable), or drop `confirm` from the
+       required array and rely on the handler's `args.confirm === true` check.
+
+
+5. PERFORMANCE & SCALABILITY
+--------------------------------------------------------------------------------
+
+[5.1] Full vault walk on every boot still recurses into unchanged directories
+  status=open-prior (TODO#3 / REVIEW 4.4)  severity=medium
+  file=src/vault-scan.ts:205-250
+  reconcileIndex walks both vaults top-to-bottom on every boot and on every
+  auto-reconcile marker fire, with no persisted directory-mtime cache to skip
+  unchanged subtrees.
+  evidence: const walk = (dir, isOrg) => { let entries = fs.readdirSync(dir,
+            { withFileTypes: true }); ... if (e.isDirectory()) { ...
+            if (!EXCLUDED_DIRS.has(...) && !reservedOrgPrefix) walk(fp, isOrg); } }
+  why: At a few thousand files the readdir+lstat per entry is the dominant boot
+       cost before server.connect. The #19 file-level mtime skip only avoids
+       readFileSync+parseFrontmatter for unchanged files; it does NOT avoid the
+       readdirSync/lstat/realpath walk itself, and there is no directory-level
+       mtime snapshot to prune whole unchanged subtrees. The only committed
+       mitigation is realBaseCache (#17, 2 entries) which memoizes the vault-root
+       realpath, not directory mtimes.
+  fix: Persist a per-directory mtime snapshot (dir → mtimeMs) in index.json
+       alongside entries; on walk, stat the dir once and recurse only if its
+       mtime changed since the last scan. On cache miss/first boot, fall back to
+       the full walk. Honor RECONCILE_REQUEST_FLAG to force a full walk.
+
+[5.2] #19 mtime fast-path still pays a realpathSync syscall per file, undermining
+      the skip at scale
+  status=partial-fix  severity=medium
+  file=src/vault-scan.ts:343-379
+  fs.realpathSync(filePath) runs at line 345 BEFORE the mtime+size skip at line
+  376, so even unchanged files pay a per-file realpath syscall on every boot.
+  evidence: const realFile = fs.realpathSync(filePath); ...
+            if (existing && existing.mtimeMs === st.mtimeMs && existing.size ===
+            st.size) { memIndex[key] = { ...existing, filePath }; return; }
+  why: realpathSync resolves every path component. For 10k unchanged files this
+       is 10k realpathSync calls per boot that the mtime skip was supposed to
+       make cheap. The skip saves readFileSync+parseFrontmatter but not the
+       realpath, so the O(N) syscall floor remains. The lstat symlink guard
+       (line 336) already rejects swapped files before this point.
+  fix: Move the mtimeMs+size fast-path check (lines 376-379) above the
+       realpathSync (line 345), guarded by the existing lstat. On the fast path,
+       skip realpathSync entirely; keep the realpath containment check on the
+       slow path (file changed or first scan) where it is needed for defense-
+       in-depth against path-component symlink swaps.
+
+[5.3] rerank_memories falls back to per-candidate embed() in a loop when stored
+      vectors are missing — up to 200 sequential embeds
+  status=partial-fix (REVIEW 1.6 / f9feeaa)  severity=medium
+  file=src/tools/rerank.ts:66-78
+  The getVectors batch read fixed the steady-state re-embed, but when a
+  candidate has no stored vector (fresh vectors.db, post-model-swap table drop,
+  or no-such-table) rerank falls back to a per-candidate await embed() with no
+  cap and no persistence of the re-embedded vector.
+  evidence: const storedVectors = await getVectors(VECTORS_DB, candidateKeys);
+            for (const key of candidateKeys) { ... let mvec = storedVectors.get(key);
+            if (!mvec) { ... mvec = (await embed(textToEmbed)) ?? undefined; } }
+  why: After a model swap (ensureVecTable DROPs vec_memories on the write path)
+       or on a fresh install with no vec_memories table yet, getVectors returns
+       an empty Map and every candidate hits the embed() branch. With MAX_KEYS=200
+       and cold bge-m3 at ~12-15s per embed, one rerank call can stall for up to
+       ~50 minutes. The re-embedded vectors are also not written back
+       (embedAndUpsert is not called here), so the next rerank re-embeds them all.
+  fix: Cap the embed fallback (skip candidates with no stored vector and return
+       them with score 0, or batch-embed the missing set in one provider call).
+       Persist the re-embedded vector via embedAndUpsert(key, textToEmbed) so the
+       next rerank finds it. When getVectors returns an empty map AND the table is
+       missing/no-such-table, short-circuit to the no-embedder degraded path
+       instead of attempting up to 200 fresh embeds.
+
+
+6. DOCS ACCURACY
+--------------------------------------------------------------------------------
+
+[6.1] INSTALL.md/CLAUDE.md document an install.sh --default flag that install.sh
+      rejects
+  status=new  severity=high
+  file=INSTALL.md:25
+  INSTALL.md documents `--default` as the minimal-profile flag (alias for
+  --no-vector), but install.sh's case statement only accepts --no-vector/
+  --vector/--complete — `./install.sh --default` dies with "Unknown option:
+  --default".
+  evidence (INSTALL.md:25): | **a. Minimal** | `--default` (alias `--no-vector`)
+            | No optional dependencies, no local LLM...
+  evidence (install.sh:230-231): --vector|--complete) VECTOR="yes"; shift;;
+            --no-vector) VECTOR="no"; shift;;   // no --default case
+  why: A user following INSTALL.md to install the minimal/air-gapped profile
+       runs `./install.sh --default` and gets a hard failure — the documented
+       primary install command for one of the two profiles is a hard error.
+  fix: Either add `--default) VECTOR="no"; shift;;` to install.sh's case block
+       as a true alias, or remove `--default` from INSTALL.md:25 and CLAUDE.md
+       and document only `--no-vector`. CLAUDE.md itself says "keep INSTALL.md in
+       sync with install.sh flags" — the docs drifted.
+
+[6.2] package.json description still says "for Claude Code" after the
+      Gemini-support update
+  status=new  severity=low
+  file=package.json:4
+  Commit 6c4e50e ("update description to include Gemini support") edited only
+  .claude-plugin/plugin.json; package.json's description was not updated and
+  still omits Gemini (and Copilot), contradicting README.md and plugin.json.
+  evidence: package.json:  "description": "Persistent memory MCP server for
+            Claude Code"
+            plugin.json: "description": "Persistent knowledge management for
+            Claude Code & Gemini. ..."
+  why: package.json is the npm/marketplace manifest surfaced by `npm view` and
+       tooling; its description underclaims supported clients. A user inspecting
+       the package sees a stale single-client claim.
+  fix: Update package.json:4 to match plugin.json:5, e.g. `"description":
+       "Persistent memory MCP server for Claude Code, Gemini CLI, and GitHub
+       Copilot CLI"`.
+
+[6.3] ARCHITECTURE.md module map omits the embeddings/providers.ts PROVIDERS
+      registry
+  status=new (REVIEW 9.1)  severity=medium
+  file=ARCHITECTURE.md:26; CLAUDE.md:80
+  The EmbeddingProvider registry was extracted to src/embeddings/providers.ts
+  (REVIEW 9.1, committed in 1c81478), but ARCHITECTURE.md's module map still
+  lists only `embeddings.ts` and CLAUDE.md:80 still describes `src/embeddings.ts`
+  without the registry — the `embeddings/` subdirectory is invisible in the docs.
+  evidence (ARCHITECTURE.md:26): ├── embeddings.ts     embeddings: Ollama
+            provider (bge-m3, 1024-dim multilingual) or HuggingFace pipeline ...
+  why: A maintainer reading ARCHITECTURE.md to add a provider (OpenAI/Voyage/
+       Cohere — the explicit motivation for REVIEW 9.1) looks in embeddings.ts,
+       finds only the HuggingFace lazy-load + cross-provider orchestration, and
+       misses the PROVIDERS registry in src/embeddings/providers.ts where adding
+       a provider is actually a one-entry change. The doc negates the registry's
+       whole purpose.
+  fix: Add a line to the ARCHITECTURE.md module map: `├── embeddings/providers.ts
+       PROVIDERS registry — Ollama; add a provider = one entry, no if/else
+       (REVIEW 9.1)` and update CLAUDE.md:80 to reference providers.ts.
+
+[6.4] README config section omits the embeddingUrl config key that overrides the
+      Ollama endpoint
+  status=new  severity=medium
+  file=README.md:219-240
+  `embeddingUrl` is a real user-facing config key (paths.ts:17, providers.ts:28/
+  92) but the README's Configuration section documents only embeddingProvider,
+  embeddingModel, embeddingTimeoutMs, and enableMultilingualSearch — never
+  embeddingUrl.
+  evidence: README has zero occurrences of "embeddingUrl" (grep -c = 0), while
+            src/embeddings/providers.ts:92 reads `const url = config.embeddingUrl
+            || 'http://127.0.0.1:11434/api/embeddings'`.
+  why: A user running Ollama on a remote host, a non-default port, or wanting to
+       point at the newer /api/embed endpoint has no documented knob to discover
+       `embeddingUrl`; they must read source to find it. The plugin's own
+       timeout-hint and circuit-breaker messages print this URL, but the config
+       key that changes it is undocumented.
+  fix: Add `"embeddingUrl": "http://127.0.0.1:11434/api/embeddings"` to the
+       README config.json example and a bullet: `**embeddingUrl**: overrides the
+       Ollama embedding endpoint (default the legacy /api/embeddings on
+       127.0.0.1:11434).` Pair with 7.1 (document the threat model too).
+
+[6.5] Copilot hooks use timeoutSec while Claude/Gemini use timeout, and no doc
+      records the per-client contract  (merged: reported by 2 dimensions)
+  status=open-prior (REVIEW 5.4)  severity=low
+  file=hooks/hooks.copilot.json:7-10
+  hooks.copilot.json uses `timeoutSec` while hooks.json/hooks.gemini.json use
+  `timeout`; the divergence is not documented in install.sh, CLAUDE.md, or
+  INSTALL.md.
+  evidence: hooks.copilot.json: { "type":"command", "command":".../pull-org-vault.sh",
+            "timeoutSec": 30 }  vs  hooks.json: { ..., "timeout": 30 }
+  why: A maintainer who copies a hook entry from hooks.json into hooks.copilot.json
+       (or vice versa) silently carries the wrong field name — the timeout is
+       silently ignored by the client that doesn't recognize it. No doc warns
+       them the two clients use different keys.
+  fix: Add a one-line note to CLAUDE.md's gotchas (or the hooks section of
+       ARCHITECTURE.md): "Copilot's hooks.copilot.json uses `timeoutSec`; Claude
+       Code's hooks.json and Gemini's hooks.gemini.json use `timeout` — the field
+       name is per-client, not portable across the three manifests."
+
+
+7. SECURITY & PRIVACY
+--------------------------------------------------------------------------------
+
+[7.1] embeddingUrl accepts any URL with no validation — memory content is POSTed
+      to an arbitrary endpoint (SSRF + exfiltration)
+  status=new  severity=high
+  file=src/embeddings/providers.ts:92-108
+  embeddingUrl is taken straight from config.json with no scheme/host validation,
+  and the memory body is POSTed to it as the `prompt` field on every
+  store/update/rerank.
+  evidence: const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
+            ... const response = await fetch(url, { method:'POST', headers:
+            { 'Content-Type':'application/json' }, body: JSON.stringify({ model,
+            prompt: text }), signal: controller.signal });
+  why: A user (or any process that can write ~/.total-recall/config.json) can set
+       embeddingUrl to http://169.254.169.254/... (cloud metadata), an internal
+       service, or a remote attacker endpoint. Every memory's full body — which
+       may contain secrets the user stored verbatim (see 7.2) — is POSTed to that
+       URL on store_memory/update_memory and on every rerank_memories call, with
+       no warning that content leaves the machine. The default is loopback, but a
+       legitimate "remote embedder" config silently turns the vault into an
+       exfiltration channel.
+  fix: Validate embeddingUrl at load time: require http(s) scheme, and either
+       restrict to loopback/private ranges by default or emit a one-time stderr
+       warning when the host is non-loopback (e.g. `embeddingUrl points at a
+       non-local host — every memory body will be sent there`). At minimum
+       document in INSTALL.md/README that memory content is sent to the configured
+       embedding endpoint.
+
+[7.2] Personal vault stores secrets verbatim — no privacy filter runs on the
+      store/update write path
+  status=new  severity=medium
+  file=src/tools/store.ts:266-268
+  store_memory and update_memory write content verbatim to the personal vault;
+  privacyCheck is invoked only in scripts/sync-org-memory.mjs before pushing to
+  the shared org repo.
+  evidence: const fileContent = stringifyFrontmatter(body, fm);
+            fs.writeFileSync(filePath, fileContent);  // no privacyCheck call
+            anywhere in src/tools/store.ts or mutate.ts; only
+            scripts/sync-org-memory.mjs:347 calls it
+  why: A user who tags a memory 'personal' (or forgets to tag 'org') and pastes an
+       API key, password, or teammate PII stores it unredacted on disk, and — via
+       the embed() call on the next line (store.ts:300 `embedAndUpsert(key,
+       body)`) — sends it to whatever embeddingUrl is configured. The privacy
+       filter that guards the shared repo never runs for personal memories, so
+       the only thing standing between a pasted secret and a remote embedding
+       endpoint is the user remembering the filter is org-only.
+  fix: Run privacyCheck (or a lighter secret-only scan) on
+       store_memory/update_memory content and emit a stderr warning (not a
+       block — the personal vault is the user's own) when a secret-shaped token
+       is detected, so a user pasting ~/.aws/credentials into a memory is alerted
+       before it lands on disk and before it is embedded to embeddingUrl. At
+       minimum document the threat model in INSTALL.md: "the personal vault
+       stores content verbatim — do not paste credentials; secrets are only
+       filtered before org-vault sync".
+
+[7.3] get_stats.recentErrors leaks the absolute vault path (and $HOME) to any
+      MCP client
+  status=new  severity=medium
+  file=src/vault-scan.ts:443
+  recordError sites interpolate absolute vault file paths into the error
+  message, and get_stats exposes the last 10 errors verbatim to any MCP client.
+  evidence: recordError(`indexFile ${filePath}: ${e.message}`); ...
+            recordError(`atomicWrite(${p}): ${(e as Error).message}`); ...
+            recordError(`reconcile readdirSync(${dir}): ${(e as Error).message}`);
+            ... recentErrors: errors.slice(-10),
+  why: filePath is an absolute path built from PERSONAL_VAULT/ORG_VAULT (which
+       embed $HOME and any custom personalVault/orgVault the user configured). Any
+       MCP client — including subagents, plugins, or a remote Claude consumer —
+       that calls get_stats reads the user's home directory and vault location
+       from recentErrors. For a user who relocated the vault to a sensitive or
+       non-default path, this is an unexpected metadata leak via the tool surface.
+  fix: Redact the vault root prefix in recordError messages (replace
+       PERSONAL_VAULT/ORG_VAULT with '<vault>/') or log only the memory key, not
+       the absolute path. Keep the full path only in stderr (which stays local),
+       not in the MCP-exposed recentErrors array.
+
+[7.4] Secret-token filter still matches only known-prefix tokens
+  status=open-prior (REVIEW 6.1)  severity=medium
+  file=src/privacy-filter.ts:101
+  SECRET_TOKEN_RE is still an alternation of literal provider prefixes; a secret
+  without one of those prefixes (a generic api_key=…, a Bearer token, a
+  Heroku/Stripe key, a raw high-entropy string) is not detected and is committed
+  to the shared org repo.
+  evidence: export const SECRET_TOKEN_RE = /-----BEGIN ... PRIVATE KEY-----|\b
+            (?:sk-[...]|sk_live_[...]|...|glpat-[...]|...)\b|aws_secret_access_key.../i;
+  why: A teammate-pushed or hand-edited org memory carrying a non-prefixed secret
+       (e.g. `api_key: 1f2e...`, a Bearer token, a Cloudflare API key) passes the
+       filter and is pushed to the shared org-vault branch, reaching every
+       teammate with repo access.
+  fix: Add a labeled-generic pattern (api[_-]?key|token|secret|password["'\s:=]+
+       \S{16,}) and a bare high-entropy detector (Shannon entropy over 40+ char
+       base64/hex runs) as a fail-closed second pass, as the prior review
+       recommended.
+
+[7.5] Privacy filter still covers only email + secret tokens — phone/CC/IBAN/
+      address/DOB never added
+  status=open-prior (REVIEW 6.2)  severity=medium
+  file=src/privacy-filter.ts:12-16
+  privacyCheck only runs findSuspiciousEmail and SECRET_TOKEN_RE; the file header
+  documents that pronouns and phone numbers were intentionally removed, and no
+  other PII class (credit card, IBAN, SSN, address, DOB, personal name) was ever
+  added.
+  evidence: // Personal pronouns and phone numbers were intentionally removed...
+            if (SECRET_TOKEN_RE.test(text)) return 'secret token or API key detected';
+            if (findSuspiciousEmail(text, allowedDomains)) return '...';
+            return null;
+  why: A user who tags a memory 'org' and pastes a teammate's phone, salary, home
+       address, or credit-card number leaks it to the shared org-vault repo
+       unredacted; the filter never sees it.
+  fix: Re-add a scoped phone detector (clearly phone-shaped, e.g. +\d{6,15} with
+       separators) and a credit-card/IBAN Luhn check, or make the threat-model
+       limitation prominent in the org-sync setup path (install.sh Step 6 and the
+       org-sync error message) so users know only secrets and emails are filtered.
+
+
+8. VECTOR STORE CORRECTNESS (sqlite-vec, self-heal, dims)
+--------------------------------------------------------------------------------
+
+[8.1] getVectors skips the dimension-mismatch guard that searchVector has, so
+      rerank silently produces garbage after an embedding-model swap
+  status=new  severity=medium
+  file=src/vectorStore.ts:283-302; src/tools/rerank.ts:13
+  getVectors reads stored vectors without comparing their dimension to the query
+  vector's dimension, unlike searchVector's ensureVecTableForRead guard; rerank's
+  cosineSimilarity then silently truncates mismatched-length vectors via
+  Math.min, producing meaningless scores.
+  evidence: const rows = d.prepare(`SELECT key, vec_to_json(embedding) AS embedding
+            FROM vec_memories WHERE key IN (${placeholders})`).all(...keys);
+            ... cosineSimilarity: const len = Math.min(a.length, b.length);
+  why: After a user swaps embedding model (e.g. bge-m3 1024 → nomic 768) and
+       before the first store/update drops+recreates the table, a rerank_memories
+       call reads 1024-dim stored vectors and compares them against a 768-dim
+       query vector. cosineSimilarity uses Math.min=768, computing a dot product
+       over the first 768 dims of a 1024-dim vector against a 768-dim query — a
+       meaningless score. No recordError, no [] fallback (recall_memory's
+       searchVector path DOES bail with a recordError on the same mismatch). The
+       user gets silently wrong reranking with no signal in get_stats.recentErrors.
+  fix: In getVectors, after opening the db, call ensureVecTableForRead(d,
+       expectedDim) with the caller's expected dim (pass it in, or read the stored
+       table dim via parseExistingDimension and compare). On mismatch, recordError
+       (mirroring searchVector's message) and return an empty Map so rerank falls
+       back to fresh embed() for every candidate. Alternatively, add an expectedDim
+       param to getVectors and have rerank pass qvec.length.
+
+[8.2] Write-path dimension mismatch silently drops the entire vec_memories index
+      with no recordError
+  → see [3.1] (merged; same code site src/vectorStore.ts:197-206, REVIEW 9.5).
+
+[8.3] searchVector lacks the empty/non-array input guard that upsertVector has
+  status=new  severity=low
+  file=src/vectorStore.ts:245-249
+  searchVector has no Array.isArray/empty guard, so a buggy embedder returning []
+  (truthy, passes the if (qvec) check in recall.ts:39) reaches
+  ensureVecTableForRead(d, 0), which on a tableless db issues CREATE VIRTUAL TABLE
+  ... embedding FLOAT[0] — a malformed schema that later upserts must
+  drop+recreate.
+  evidence (upsertVector guard, line 237): if (!Array.isArray(embedding) ||
+            embedding.length === 0) return;   // searchVector has no equivalent
+  why: recall_memory catches the resulting throw and falls back to TF-IDF, but
+       the error surfaces as a confusing sqlite-vec message in
+       get_stats.recentErrors, and if no table existed yet the malformed FLOAT[0]
+       table is left behind until the next upsert drops+recreates it. Narrow
+       trigger (embed() returning [] is itself a bug, and 3.3 makes that
+       observable), but the asymmetry is a real defensive gap.
+  fix: Add `if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0)
+       return [];` at the top of searchVector, mirroring upsertVector's guard, so
+       a malformed query embedding degrades to TF-IDF via the empty-result path
+       instead of reaching ensureVecTableForRead with dim 0.
+
+
+9. INSTALL, LIFECYCLE HOOKS & STANDALONE WIRING
+--------------------------------------------------------------------------------
+
+[9.1] install.sh --standalone SKIP guard prevents SessionEnd from being added
+      on upgrade
+  status=new  severity=high
+  file=install.sh:518-521
+  The standalone hook-wiring node block skips entirely if build-memory-index.sh
+  is already in settings.json, so a pre-5.1 standalone install (SessionStart/
+  PostToolUse/PreCompact wired, SessionEnd absent) never receives the SessionEnd
+  hook on re-run.
+  evidence: if (JSON.stringify(s.hooks).includes('hooks/scripts/build-memory-index.sh')) {
+              console.log('SKIP: total-recall hooks already present.');
+              process.exit(0);
+            }
+            // ... SessionEnd push happens only AFTER this guard, at line ~566
+  why: A user who installed --standalone before commit a9e0bca (REVIEW 5.1 fix)
+       and re-runs install.sh --standalone to upgrade hits the SKIP at line 519
+       and exits before the SessionEnd block at line ~566. The session-end
+       memory-capture hook silently never wires; the user gets no signal that the
+       5.1 fix did not reach them.
+  fix: Check for each hook independently rather than one proxy. Replace the
+       single includes('build-memory-index.sh') guard with per-event checks:
+       only skip an event block if its specific script is already present, and
+       always run the SessionEnd block if session-end.sh is missing. E.g. add
+       `if (!JSON.stringify(s.hooks.SessionEnd||[]).includes('session-end.sh'))`
+       before the SessionEnd push, and gate the SKIP on all four scripts being
+       present.
+
+[9.2] sync-org-memory.sh deletes queue job before running sync — failed push
+      permanently drops org memory
+  → see [1.4] (merged; same code site hooks/scripts/sync-org-memory.sh:104-108).
+
+[9.3] sync-org-memory.mjs push failures are written to .sync-errors.log but
+      never surfaced to the user
+  status=open-prior  severity=medium
+  file=scripts/sync-org-memory.mjs:359-370
+  main().catch logs the error to ~/.total-recall/org/.sync-errors.log and exits
+  0, but no SessionStart hook or MCP tool ever reads that log to warn the user
+  that org sync has been silently failing.
+  evidence: main().catch(e => { const logPath = path.join(os.homedir(),
+            '.total-recall','org','.sync-errors.log'); ... fs.appendFileSync(logPath,
+            `[${new Date().toISOString()}] ${e.message}\n`); ... process.exit(0); });
+  why: A persistent push failure (expired gh token, ff-only conflict, network
+       down) is invisible: the memory appears stored locally but never reaches
+       the shared org-vault branch. The user gets no in-session or next-session
+       signal that teammates are not seeing their org-tagged memories. The
+       session-start pull-org-vault.sh surfaces pull failures but nothing
+       surfaces push failures.
+  fix: Have a SessionStart hook (pull-org-vault.sh or a dedicated check) stat
+       .sync-errors.log and emit a one-line additionalContext warning when it has
+       grown since the last successful sync, OR have the MCP server check the log
+       on startup and report stale unsynced org memories in its initialize
+       response.
+
+[9.4] load-memory-index.sh unconditionally injects — no hook-level dedup when two
+      servers run
+  status=open-prior  severity=low
+  file=hooks/scripts/load-memory-index.sh:1-52
+  The SessionStart hook emits additionalContext on every invocation without
+  checking whether a total-recall marker is already present in the session, so if
+  two MCP servers run (user overrides the --standalone duplicate guard), the
+  memory index is injected twice with no hook-level mitigation.
+  evidence: INSTRUCTIONS="## Total Recall v$VERSION — Active Memory Index\n...
+            $INDEX_CONTENT"
+            ADDCONTEXT=$(printf '%s' "$INSTRUCTIONS" | "$NODE_BIN" -e '...' ) ||
+            ADDCONTEXT='""'
+            echo "{\"continue\":true,\"hookSpecificOutput\":{\"hookEventName\":
+            \"SessionStart\",\"additionalContext\":$ADDCONTEXT}}"
+  why: The install.sh duplicate-instance guard prompts but the user can override
+       with 'y', running two servers. Both fire load-memory-index.sh, doubling
+       the index in context and wasting tokens. No belt-and-braces dedup at the
+       hook level as the prior review requested.
+  fix: Read the hook stdin JSON and check if the additionalContext already
+       contains a total-recall marker; if so, emit {"continue":true} with no
+       additionalContext. Belt-and-braces behind the install.sh prompt.
+
+[9.5] hooks.copilot.json uses timeoutSec while hooks.json/hooks.gemini.json use
+      timeout — divergence undocumented
+  → see [6.5] (merged; same finding, REVIEW 5.4).
+
+
+10. ALREADY-FIXED (landed since the prior review — do not re-fix)
+--------------------------------------------------------------------------------
+These are verified as fixed in git history (kept here so the delta is explicit
+and so a future reviewer does not re-report them). Each is the *positive* half
+of a prior-review item; the still-open half is cross-referenced above.
+
+  8243298  REVIEW 1.4 — reset vector availability latch on Ollama failure.
+           (The sticky-latch half of 9.4/3.5; the probe + structured-block half
+           remains open — see [3.5].)
+  f775a84  REVIEW 3.3 — confirm_memory stops coercing string 'false' to a flag
+           (bool-only).
+  56103bb  REVIEW 4.5 — strip leading UTF-8 BOM before matching the frontmatter
+           fence.
+  c649bb7  REVIEW 9.2 — index.json wrapped with { v, entries } version + legacy
+           fallback. (Unblocks [3.6] vec_meta fingerprint.)
+  5e0ff8a  REVIEW 1.5 — read-path dim mismatch returns [] + recordError instead
+           of DROPping vec_memories. (Write-path half remains open — see [3.1].)
+  a9e0bca  REVIEW 5.1 — --standalone wires the SessionEnd hook in fresh installs.
+           (The upgrade-SKIP regression for pre-5.1 installs remains — see [9.1].)
+  64078e8  REVIEW 5.2 — corrected the false claim that plugin.json ships a hooks
+           field (fixed install.sh comments instead of adding the field, which
+           would double-fire).
+  1c81478  REVIEW 9.1 — extracted EmbeddingProvider registry to
+           src/embeddings/providers.ts (adding a provider = one entry). (Docs
+           half remains — see [6.3].)
+  d70622d  REVIEW 1.2 — session circuit breaker + lower read-path timeout.
+  f15ee93  REVIEW 1.3 — proactive vector-down stderr warning.
+  d7c4d80  REVIEW 1.6 — distinguish timeout (EmbedTimeoutError) from down;
+           raised default timeout 5s → 15s; retry transient HTTP 500.
+  f9feeaa  REVIEW 1.6 — rerank reads stored vectors in one batch query instead
+           of re-embedding every candidate (steady state). (Cold/empty-store
+           fallback remains uncapped and unpersisted — see [5.3].)
+  e25cb3b — self-heal a missing better-sqlite3 native binding after a plugin
+           update.
+
+
+APPENDIX A — OPEN-PRIOR ITEM INDEX (for tracking against prior reviews)
+--------------------------------------------------------------------------------
+All 17 open-prior / partial-fix items, grouped by the prior-review number they
+trace to. Items marked "(open)" are still fully open; "(partial)" had one half
+fixed and the other half is still cited above.
+
+  REVIEW 1.2  (open)  [3.4] deprecated /api/embeddings endpoint, no version-aware fallback
+  REVIEW 1.6  (partial) [3.1] write-path dim-mismatch DROP silent | [5.3] rerank cold/empty embed fallback uncapped+unpersisted
+  REVIEW 2.1  (open)  [2.1] TF-IDF substring boost
+  REVIEW 2.2  (open)  [2.2] TF-IDF no length/sublinear TF normalization
+  REVIEW 3.1  (open)  [4.1] deprecated low-level Server class
+  REVIEW 3.2  (open)  [4.2] no schema enforcement at dispatch boundary
+  REVIEW 3.4  (open)  [4.3] import_memories classifies skips by regex on error text
+  REVIEW 4.2  (open)  [1.2] atomicWrite no fsync
+  REVIEW 4.3  (open)  [1.3] atomicWrite tmp-fallback loses atomicity
+  REVIEW 4.4  (open)  [5.1] full vault walk, no dir-mtime cache | [5.2] realpath-per-file before mtime skip
+  REVIEW 5.4  (open)  [6.5]/[9.5] hooks timeoutSec vs timeout divergence undocumented
+  REVIEW 6.1  (open)  [7.4] secret-token filter prefix-only
+  REVIEW 6.2  (open)  [7.5] privacy filter only email + secret tokens
+  REVIEW 6.4  (open)  [1.4]/[9.2] org-sync queue job deleted before sync
+  REVIEW 7.2  (partial) [2.5] rerank no-embedder degradation silent
+  REVIEW 9.3  (open)  [1.1] index.json no lock / no merge-on-read
+  REVIEW 9.4  (partial) [3.5] no boot probe, single bool get_stats
+  REVIEW 9.5  (open)  [3.6] no vec_meta fingerprint (and the recordError half in [3.1])
+  ARCH-REVIEW #4  (open)  [4.4] monolithic server.ts
+  ARCH-REVIEW #5  (open)  [1.5] org-vault reconcile 10s polling
+  ARCH-REVIEW #8  (open)  [4.1] deprecated Server class (same as REVIEW 3.1)
+  TODO #3  (open)  [5.1] full vault walk (same as REVIEW 4.4)
+
+
+APPENDIX B — DUPLICATES MERGED / DROPPED (no findings were refuted)
+--------------------------------------------------------------------------------
+No finding was refuted on verification — all 5 high-severity and 25+ medium/low
+claims were read against the cited source and held up. Four findings were
+reported by two review dimensions each and are merged above (the primary write-up
+keeps the finding; the cross-reference lists the duplicate):
+
+  - org-sync queue job deleted before sync
+      [1.4] (Persistence)  ≡  [9.2] (Install/hooks)
+      same site: hooks/scripts/sync-org-memory.sh:104-108
+  - rerank_memories no-embedder silent degradation
+      [2.5] (Search)  ≡  rerank-no-embedder-silent-degradation (Server/tools)
+      same site: src/tools/rerank.ts:50-54
+  - write-path dim-mismatch DROP silent (REVIEW 9.5)
+      [3.1] (Ollama)  ≡  [8.2] (Vector store)
+      same site: src/vectorStore.ts:197-206
+  - hooks timeoutSec vs timeout divergence (REVIEW 5.4)
+      [6.5] (Docs)  ≡  [9.5] (Install/hooks)
+      same site: hooks/hooks.copilot.json:7-10
+
+One review dimension (tests-gaps) produced no findings: its reviewer hit the
+session rate limit before emitting, so test-coverage gaps were not separately
+enumerated. This is a coverage hole in the review, not in the code — a follow-up
+pass focused on Vitest coverage of the rerank/vectorStore dim-mismatch and
+atomicWrite paths would be worthwhile, given those are the highest-impact
+silent-failure sites cited above.
+
+================================================================================
+  end of review-ollama.txt — 42 unique findings (3 high, 26 medium, 13 low)
+================================================================================

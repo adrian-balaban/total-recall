@@ -1,0 +1,243 @@
+REVIEW: total-recall plugin — list of changes to be done
+=========================================================
+Reviewer:  claude-fable-5, 2026-07-21
+Version:   1.0.110 (package.json), git HEAD d7c4d80
+Source:    plugins/total-recall/ (src/, src/tools/, hooks/, scripts/, install.sh)
+Tests:     565 tests, 37 files — ALL PASS (vitest, 40.5s)
+Scope:     Fresh pass after REVIEW-claude-sonnet.txt / REVIEW-ollama-glm-5.2.txt.
+           Items already fixed there (1.2–1.6, 3.3, 4.5, 5.1, 5.2, 9.1, 9.2, …)
+           are not repeated. Numbering below is new: C-1 … C-22.
+
+
+## P1 — HIGH (correctness bugs, act on these first)
+
+C-1  rebuild_index does NOT re-embed after an embedding-model change, but the
+     error message tells users it does.
+     Where: src/vectorStore.ts:259-262 ("run rebuild_index to re-embed with the
+     new model") vs src/tools/mutate.ts:242 (rebuildIndex) and
+     src/vault-scan.ts:298-311 (reconcileVectors).
+     Why: reconcileVectors only backfills keys MISSING from vec_memories. After
+     a model switch (e.g. MiniLM 384-dim → bge-m3 1024-dim) every key still HAS
+     a row (old dim), so nothing is re-embedded; hybrid search stays dead with
+     the read path returning [] on every recall. This is exactly the incident
+     hit on 2026-07-21 (manual serial re-embed script was needed).
+     Change: teach reconcileVectors (or rebuild_index directly) to compare the
+     stored vec_memories dim against a probe embed of a short string; on
+     mismatch, drop the table and re-embed ALL keys (serially, respecting the
+     circuit breaker). At minimum, correct the searchVector error text so it
+     stops recommending a tool call that cannot fix the condition.
+
+C-2  Three different texts are embedded for the "same" memory vector.
+     Where: src/tools/store.ts:300 + src/tools/mutate.ts:133 embed the full
+     body; src/vault-scan.ts:309 (boot backfill) embeds contentPreview (first
+     500 chars); src/tools/rerank.ts:75 (fallback) embeds
+     `${title}\n\n${content}`.slice(0, 2000).
+     Why: cosine scores are only meaningful if candidate vectors are built from
+     comparable text. The backfill comment justifies the preview via MiniLM's
+     256-token truncation — that assumption is dead now that the default/
+     recommended model is bge-m3 (8k context). A memory embedded via backfill
+     ranks differently from the identical memory embedded at store time.
+     Change: add one shared helper (e.g. embedTextFor(meta, body) in
+     embeddings.ts) that defines the canonical embedded text (suggest:
+     `title + '\n\n' + body.slice(0, N)`), and use it from all four call sites.
+     Update the vault-scan comment.
+
+C-3  cosineSimilarity silently compares vectors of different dimensions.
+     Where: src/tools/rerank.ts:13 (`Math.min(a.length, b.length)`).
+     Why: after a model switch, stored 384-dim vectors are scored against a
+     1024-dim query over the common prefix — meaningless numbers presented as
+     real scores. searchVector guards this case; rerank does not.
+     Change: when `mvec.length !== qvec.length`, treat the stored vector as
+     missing (fall through to the fresh-embed path at rerank.ts:73-77) instead
+     of scoring it. Optionally recordError once per call.
+
+
+## P2 — MEDIUM
+
+C-4  confirm_memory does not affect search ranking, only pruning.
+     Where: src/tfidf.ts:181-185 calls computeRetentionStrength WITHOUT
+     meta.confirmations / meta.flags; src/tools/query.ts:200-206 (prune) passes
+     them.
+     Why: the tool description promises "useful=true … reinforces retention";
+     a user confirming a memory expects it to surface better in recall, and a
+     flagged memory should sink. Today the signal is invisible in tfidfSearch.
+     Change: pass meta.confirmations / meta.flags in tfidf.ts (both are already
+     on MemoryMetadata via indexFile/coerceMemEntry). One-line fix + test.
+
+C-5  Ollama response shape is not validated — wrong endpoint looks like "down".
+     Where: src/embeddings/providers.ts:82 (`return data.embedding`).
+     Why: pointing embeddingUrl at the newer /api/embed endpoint (returns
+     `{embeddings: [[…]]}`) or any 200-with-unexpected-body yields `undefined`
+     with NO recordError from the provider; embed() then treats it as a generic
+     failure and the stderr warning says "check the provider is running" —
+     misleading, since Ollama answered fine. Also the declared return type
+     (number[] | null) is violated (undefined).
+     Change: after response.json(), `if (!Array.isArray(data.embedding)) throw
+     new Error('Ollama returned no embedding array — check embeddingUrl points
+     at /api/embeddings (…)')`. Optionally accept the /api/embed shape
+     (`data.embeddings?.[0]`) as a courtesy.
+
+C-6  A persistently-slow provider stalls EVERY hybrid recall forever.
+     Where: src/embeddings.ts:109-121 (EmbedTimeoutError exempt from breaker).
+     Why: the exemption is right for a cold-start blip, but an Ollama that
+     always exceeds embeddingTimeoutMs (undersized box, big model) now costs
+     15s on every recall_memory(hybrid=true) for the whole session, with a
+     single stderr hint. The breaker exists precisely to bound this.
+     Change: add a parallel timeout counter — after N (e.g. 3) CONSECUTIVE
+     timeouts, open the same circuit (keep the distinct "slow, raise
+     embeddingTimeoutMs" message). A success resets it, preserving REVIEW 1.6's
+     intent while restoring the latency bound.
+
+C-7  Org-sync queue job files are not actually atomic.
+     Where: hooks/scripts/sync-org-memory.sh — `JOB_TMP=$(mktemp)` (defaults to
+     /tmp) then `mv "$JOB_TMP" "$QUEUE_DIR/"`.
+     Why: /tmp is routinely tmpfs while $HOME is not; a cross-filesystem mv is
+     copy+unlink, NOT an atomic rename — contradicting the script's own
+     invariant ("Each job file is an atomic, complete record created … via
+     mktemp+rename") that drain_queue depends on. A drain racing the copy reads
+     a partial job. build-memory-index.sh already does this correctly (mktemp
+     sibling of the target).
+     Change: create the temp on the same filesystem, e.g.
+     `JOB_TMP=$(mktemp "$HOME/.total-recall/org/.job.XXXXXXXX")` (outside
+     $QUEUE_DIR so find never sees it) then `mv` into the queue.
+
+C-8  PreCompact-extracted learnings stay invisible until the next boot.
+     Where: hooks/scripts/store-learning.mjs (writes .md files directly);
+     src/auto-reconcile.ts (marker-polling reconcile already exists).
+     Why: the extract path predates the reconcile marker, so its header comment
+     still says "picked up by the next boot's reconcile_index" — but the
+     running server now polls ~/.total-recall/.reconcile-requested every 10s.
+     One touch() makes the learnings searchable in the SAME session.
+     Change: in store-learning.mjs, after `written > 0`, touch
+     ~/.total-recall/.reconcile-requested (mirror pull-org-vault.sh). Consider
+     also invoking build-memory-index.sh from extract-and-store-memories.sh so
+     the injected index reflects the new files.
+
+C-9  export_memories silently exports '' for unreadable bodies.
+     Where: src/tools/bulk.ts:28-32 (`content: content ?? ''`).
+     Why: readMemoryContent returns null on a failed read (vanished file,
+     swapped symlink, parse error); the export masks that as an empty body. A
+     later import_memories(force=true) of that archive OVERWRITES the real
+     content with '' — silent data loss through a backup that looked fine.
+     Change: on null, emit `{ key, error: 'Failed to read memory file' }` (and
+     skip content), plus an `errors` count in the summary; make importMemories
+     skip entries carrying `error`.
+
+
+## P3 — LOW (cleanups, comment fixes, small hardening)
+
+C-10 HuggingFace load failure is latched for the process lifetime.
+     Where: src/embeddings.ts:56-71 — the catch caches loadPromise resolving
+     null forever; contrast vectorStore.getDb ("Only cache successful loads",
+     resets dbPromise on failure).
+     Change: set `loadPromise = null` in the catch so a transient failure
+     (e.g. first-run model download hiccup) can retry on the next embed.
+
+C-11 Auto-reconcile does the inverted-index rebuild twice.
+     Where: src/auto-reconcile.ts:37-40 (reconcileIndex; recalcIdfNow;
+     scheduleSave) vs the boot sequence server.ts:337-350 which additionally
+     calls markIndexFresh().
+     Why: without markIndexFresh, the 1s save timer sees dirtyTokens=true and
+     chains scheduleIdfRecalc (+2s) — a second invertedIndex.json write + cache
+     rebuild that recalcIdfNow just did synchronously.
+     Change: add markIndexFresh() after scheduleSave(), mirroring main().
+
+C-12 update_memory re-embeds identical text on tag-only / importance-only
+     updates.
+     Where: src/tools/mutate.ts:123-133.
+     Why: the comment claims the vector was "built from the stale tags/score
+     context", but embedAndUpsert embeds ONLY the body — a tag change produces
+     a byte-identical embed input. On CPU bge-m3 that is ~12s of wasted work
+     per tag edit.
+     Change: re-embed only when `content !== undefined` (and the body actually
+     changed); fix the comment. If C-2's helper adds title/tags to the embedded
+     text, keep the current trigger and update the comment instead.
+
+C-13 atomicWrite's rename-failure fallback can still throw.
+     Where: src/persistence.ts:101-106 — the rename catch calls
+     fs.writeFileSync(p, data) unguarded, unlike the tmp-write fallback right
+     above it (persistence.ts:96) which wraps + recordError.
+     Why: if rename AND the direct overwrite both fail (Windows lock + EACCES),
+     the throw escapes; at boot recalcIdfNow runs outside any try and main()
+     would exit(1).
+     Change: wrap the second fallback in the same try/recordError.
+
+C-14 shutdown() can run twice concurrently.
+     Where: src/index.ts:41-42 — stdin 'end' and 'close' both typically fire,
+     each invoking the async shutdown (flushPending is guarded, but
+     flushEmbeddings drains twice and process.exit races itself).
+     Change: add a `let shuttingDown = false` latch at the top of shutdown()
+     (or process.stdin.once + a shared latch with the signal handlers).
+
+C-15 `~user` home-dir expansion is mangled everywhere paths are expanded.
+     Where: src/paths.ts:63,67; scripts/sync-org-memory.mjs:21,25;
+     hooks/scripts/store-learning.mjs:27; the inline node -e snippets in
+     build-memory-index.sh / load-open-questions.sh / pull-org-vault.sh.
+     Why: `.replace(/^~/, HOME)` turns `~bob/x` into `<HOME>bob/x`. Only `~/`
+     is meant to be supported.
+     Change: replace only `^~(?=\/|$)` (one shared regex, same in all copies).
+
+C-16 store-learning.mjs skips the Executive Summary normalization.
+     Where: hooks/scripts/store-learning.mjs:130 (`const body =
+     `\n${obj.content}``) — the TS write path uses withExecutiveSummary
+     (store.ts:266).
+     Why: the extract prompt asks the model for the header, but models drift;
+     without it, get_memories_by_keys(summary=true) falls back to a blind
+     slice(0,500).
+     Change: import withExecutiveSummary from ../../dist/frontmatter.mjs and
+     apply it to the body (it is already exported and bundled).
+
+C-17 loadConfig cache comment overclaims runtime reconfigurability.
+     Where: src/paths.ts:23-34 — claims a runtime toggle of "personalVault …
+     is picked up without a restart", but PERSONAL_VAULT/ORG_VAULT are consts
+     computed once at module load (paths.ts:60-68).
+     Change: fix the comment (vault paths require a server restart; only
+     enableMultilingualSearch / embedding* are live-reloaded).
+
+C-18 Half-open circuit probe is not single-flight.
+     Where: src/embeddings.ts:86-92 — comment says "Only one call per cooldown
+     window gets to probe", but every concurrent caller after the cooldown
+     sees circuitOpenUntil elapsed/cleared and probes the possibly-hung
+     provider in parallel.
+     Change: either fix the comment, or set a `probing` latch so exactly one
+     caller probes and the rest short-circuit to null.
+
+C-19 delete_memories rejects the whole batch on one reserved key.
+     Where: src/tools/bulk.ts:105-107.
+     Why: inconsistent with the tool's own per-key error reporting (results[]
+     with status per key) and with get_memories_by_keys, which reports the bad
+     key and continues.
+     Change: drop the up-front throw; let the per-key deleteMemory call fail
+     that key into results[] like every other error.
+
+C-20 session-end.sh: EXIT_STATUS is computed and never used.
+     Where: hooks/scripts/session-end.sh (bottom) — dead variable; the printf
+     uses MCP_PID/LOG.
+     Change: delete it, or include it in the additionalContext string.
+
+C-21 parseFrontmatter returns the BOM'd string on the no-frontmatter path.
+     Where: src/frontmatter.ts:63-65 — `if (!match) return { data: {},
+     content: raw }` (raw still carries the BOM the function just stripped for
+     matching; the matched path returns bomless-based content).
+     Change: return `content: bomless` for consistency.
+
+C-22 Org index contentPreview drifts from the TS preview by a trim.
+     Where: scripts/sync-org-memory.mjs:137 (`content.slice(0, 500)`) vs
+     indexFile/store.ts (`content.trim().slice(0, 500)`).
+     Change: add .trim() so the committed org index.json preview matches what
+     teammates' indexFile derives from the same file.
+
+
+## NOT CHANGED, VERIFIED OK (so the next reviewer doesn't re-litigate)
+
+- server.ts `require('../package.json')` dev fallback: DCE'd out of the esbuild
+  bundle (0 occurrences in dist/index.js); tsx shims require in dev. Fine.
+- getVectors IN(...) placeholders: capped at MAX_KEYS=200, far below SQLite's
+  variable limit. Fine.
+- parseYamlish "attach block item to last array key": insertion order makes
+  the last array-typed key the open one in all reachable shapes. Fine.
+- sync-org-memory.sh \x1f-delimited hook parse, flock coalescing, and the
+  worker's release-then-recheck: race windows exist but converge (a late job
+  starts a fresh worker). Fine.
+- privacy-filter, frontmatter serializer quoting, prototype-pollution and
+  symlink guards: reviewed line-by-line; no gaps found this pass.
