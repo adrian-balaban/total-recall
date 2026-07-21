@@ -8,6 +8,7 @@ vi.hoisted(() => {
 });
 
 import { PROVIDERS } from '../embeddings/providers.js';
+import { EmbedTimeoutError } from '../embeddings/providers.js';
 import { errors } from '../state.js';
 
 const mockFetch = vi.fn();
@@ -90,6 +91,32 @@ describe('PROVIDERS embedding-provider registry (REVIEW 9.1)', () => {
     const vec = await PROVIDERS.ollama!.embed('hello', { embeddingProvider: 'ollama' });
     expect(vec).toBeNull();
     expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(errors[0]!.msg).toMatch(/ECONNREFUSED/);
+  });
+
+  // REVIEW 1.6: a timeout (AbortController fired — reachable but slow) is a
+  // different failure class from "down". The provider surfaces it by THROWING
+  // EmbedTimeoutError (not returning null) so embeddings.ts can skip the circuit
+  // breaker and emit a targeted hint. Crucially a timeout does NOT retry: a
+  // slow model would be just as slow 200ms later, so one attempt only.
+  it('ollama.embed throws EmbedTimeoutError on an abort (timeout), without retrying', async () => {
+    const abortErr = Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+    mockFetch.mockRejectedValue(abortErr);
+
+    await expect(
+      PROVIDERS.ollama!.embed('slow', { embeddingProvider: 'ollama', embeddingTimeoutMs: 15000 })
+    ).rejects.toBeInstanceOf(EmbedTimeoutError);
+    // One attempt only — a timeout is not retried.
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    // A timeout is not a "down" failure, so no recordError from the provider.
+    expect(errors.length).toBe(0);
+  });
+
+  it('a non-abort rejection still returns null with a recorded error (down, not timeout)', async () => {
+    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'));
+    const vec = await PROVIDERS.ollama!.embed('down', { embeddingProvider: 'ollama' });
+    expect(vec).toBeNull();
+    expect(errors.length).toBe(1);
     expect(errors[0]!.msg).toMatch(/ECONNREFUSED/);
   });
 

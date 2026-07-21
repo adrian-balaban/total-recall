@@ -42,6 +42,24 @@ export interface EmbeddingProvider {
   embed(text: string, config: EmbeddingConfig): Promise<number[] | null>;
 }
 
+// A reachable-but-slow endpoint: the AbortController fired (REVIEW 1.6) before
+// the embed returned — the model is healthy but took longer than
+// embeddingTimeoutMs (e.g. bge-m3 cold inference ~12s on CPU vs a 5s default).
+// This is a DIFFERENT failure class from "Ollama is down" (connection refused /
+// HTTP 500): the daemon answered, it was just slow. embeddings.ts's embed()
+// catches it to skip the session circuit breaker (a slow success must not
+// force-disable vectors for 60s on a working daemon) and emit a targeted hint
+// naming embeddingTimeoutMs, rather than the generic "provider failed" warning
+// that misleads users into thinking Ollama is down.
+export class EmbedTimeoutError extends Error {
+  readonly timeoutMs: number;
+  constructor(timeoutMs: number) {
+    super(`embedding timed out after ${timeoutMs}ms`);
+    this.name = 'EmbedTimeoutError';
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 // One bounded attempt at the Ollama embed endpoint. AbortController turns a
 // hung request (Ollama busy loading/swapping another model) into a clean
 // timeout instead of an indefinite fetch — the plugin has no other watchdog
@@ -73,18 +91,29 @@ const ollamaProvider: EmbeddingProvider = {
   async embed(text, config) {
     const url = config.embeddingUrl || 'http://127.0.0.1:11434/api/embeddings';
     const model = config.embeddingModel || 'bge-m3';
-    // REVIEW 1.2: lowered from 10000 to 5000. embed() is awaited on the read
-    // path (recall_memory hybrid=true, the default); 2 attempts + 200ms backoff
-    // at 10s capped ~20.2s worst-case latency on a hung Ollama before falling
-    // back to TF-IDF — too long for an optional ranking signal. 5s → ~10.2s,
-    // and the session circuit breaker in embeddings.ts caps the repeated-hit
-    // case. The write path (embedAndUpsert) is fire-and-forget, so a tighter
-    // cap there only turns a slow success into a tolerated failure (backfilled
-    // on the next boot). Override per-deploy via embeddingTimeoutMs.
-    const timeoutMs = config.embeddingTimeoutMs ?? 5000;
+    // REVIEW 1.6: raised from 5000 to 15000. The previous 5s default (set in
+    // REVIEW 1.2 to cap a hung Ollama at ~10.2s read latency) is BELOW the
+    // cold-inference time of the model install.sh --complete AUTO-SELECTS when
+    // it's available — bge-m3, ~12s on a CPU-only laptop — so the plugin's own
+    // recommended config silently kept vectorSearchEnabled=false on every
+    // CPU machine (every embed aborted at 5s, the availability latch never
+    // flipped). 15s covers bge-m3 cold while the session circuit breaker in
+    // embeddings.ts (REVIEW 1.2, 3 fails → 60s cooldown) still caps the
+    // genuinely-hung case: worst-case read latency is now 2×15s+200ms ≈ 30s
+    // before TF-IDF fallback, then 60s cooldown on a truly dead daemon. A
+    // timeout no longer counts toward that breaker (see EmbedTimeoutError) —
+    // a slow success is not "down". Override per-deploy via embeddingTimeoutMs.
+    const timeoutMs = config.embeddingTimeoutMs ?? 15000;
     try {
       return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-    } catch {
+    } catch (firstErr) {
+      // Don't retry a timeout: a slow model will be just as slow 200ms later,
+      // and retrying would double the wait (2×timeoutMs) before giving up.
+      // Only retry the transient "Ollama busy loading/evicting another model"
+      // HTTP 500 / network-blip class, which resolves in a few hundred ms.
+      if (firstErr && (firstErr as Error).name === 'AbortError') {
+        throw new EmbedTimeoutError(timeoutMs);
+      }
       // One retry after a short backoff. Observed failure mode (2026-07-11):
       // Ollama returns a bare HTTP 500 while it's busy loading/evicting another
       // large model from VRAM — a few hundred ms later the same request
@@ -95,6 +124,9 @@ const ollamaProvider: EmbeddingProvider = {
       try {
         return await ollamaEmbedAttempt(url, model, text, timeoutMs);
       } catch (e) {
+        if (e && (e as Error).name === 'AbortError') {
+          throw new EmbedTimeoutError(timeoutMs);
+        }
         recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }

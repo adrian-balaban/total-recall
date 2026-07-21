@@ -228,14 +228,14 @@ Configure total-recall by editing `~/.total-recall/config.json`:
   "allowedEmailDomains": ["yourcompany.com"],
   "embeddingProvider": "ollama",
   "embeddingModel": "bge-m3",
-  "embeddingTimeoutMs": 5000,
+  "embeddingTimeoutMs": 15000,
   "enableMultilingualSearch": true
 }
 ```
 
 *   **embeddingProvider**: `'huggingface'` (local MiniLM) or `'ollama'` (local API). `install.sh` auto-selects `ollama` when Ollama is on PATH with the `bge-m3` model pulled, else `huggingface`; an existing explicit value is never overwritten.
 *   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
-*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `5000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon. `embed()` is awaited on the hybrid-recall read path, so the default is tuned for read latency (~10.2s worst case before TF-IDF fallback); a session circuit breaker (3 consecutive failures → 60s cooldown) caps the repeated-hit case so a down Ollama doesn't stall every recall.
+*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `15000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon. The default covers `bge-m3` cold inference (~12s on a CPU-only laptop — the model `install.sh --complete` auto-selects); a 5s default silently kept `vectorSearchEnabled` false on every CPU machine because every embed aborted before the latch could flip. `embed()` is awaited on the hybrid-recall read path, so the default is tuned for read latency (~30.2s worst case before TF-IDF fallback). A *timeout* (reachable-but-slow) is NOT counted as a "down" failure: it does not trip the session circuit breaker (3 *down* failures → 60s cooldown) and emits a one-line hint naming this knob instead of the generic "provider failed" warning, so a slow model is not mistaken for a dead daemon.
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 
 ---

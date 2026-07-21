@@ -16119,6 +16119,14 @@ async function listVectorKeys(dbPath) {
 }
 
 // src/embeddings/providers.ts
+var EmbedTimeoutError = class extends Error {
+  timeoutMs;
+  constructor(timeoutMs) {
+    super(`embedding timed out after ${timeoutMs}ms`);
+    this.name = "EmbedTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+};
 async function ollamaEmbedAttempt(url, model, text, timeoutMs) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -16141,14 +16149,20 @@ var ollamaProvider = {
   async embed(text, config3) {
     const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
     const model = config3.embeddingModel || "bge-m3";
-    const timeoutMs = config3.embeddingTimeoutMs ?? 5e3;
+    const timeoutMs = config3.embeddingTimeoutMs ?? 15e3;
     try {
       return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-    } catch {
+    } catch (firstErr) {
+      if (firstErr && firstErr.name === "AbortError") {
+        throw new EmbedTimeoutError(timeoutMs);
+      }
       await new Promise((r) => setTimeout(r, 200));
       try {
         return await ollamaEmbedAttempt(url, model, text, timeoutMs);
       } catch (e) {
+        if (e && e.name === "AbortError") {
+          throw new EmbedTimeoutError(timeoutMs);
+        }
         recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
         return null;
       }
@@ -16196,13 +16210,29 @@ async function embed(text) {
   }
   const embedder = await getEmbedder();
   if (!embedder) return null;
-  const result = await embedder(text);
+  let result;
+  try {
+    result = await embedder(text);
+  } catch (e) {
+    if (e instanceof EmbedTimeoutError) {
+      externalEmbedSuccess = false;
+      if (!timeoutWarned) {
+        timeoutWarned = true;
+        console.error(
+          `[total-recall] embedding timed out after ${e.timeoutMs}ms \u2014 the model is reachable but slow (common for bge-m3 on CPU, ~12s cold). Hybrid search fell back to TF-IDF for this query. Raise "embeddingTimeoutMs" in ~/.total-recall/config.json if this is persistent.`
+        );
+      }
+      return null;
+    }
+    throw e;
+  }
   externalEmbedSuccess = Array.isArray(result);
   const provider = loadConfig().embeddingProvider || "huggingface";
   if (provider !== "huggingface") {
     if (externalEmbedSuccess) {
       consecutiveFailures = 0;
       vectorDownWarned = false;
+      timeoutWarned = false;
     } else {
       if (!vectorDownWarned) {
         vectorDownWarned = true;
@@ -16251,6 +16281,7 @@ var CIRCUIT_OPEN_COOLDOWN_MS = 6e4;
 var consecutiveFailures = 0;
 var circuitOpenUntil = 0;
 var vectorDownWarned = false;
+var timeoutWarned = false;
 function isVectorAvailable() {
   if (testEmbedder !== void 0 && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
@@ -17464,7 +17495,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.109" : null.version;
+var PLUGIN_VERSION = true ? "1.0.110" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

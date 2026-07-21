@@ -5,7 +5,7 @@
 import { VECTORS_DB, loadConfig } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError } from './state.js';
-import { PROVIDERS } from './embeddings/providers.js';
+import { PROVIDERS, EmbedTimeoutError } from './embeddings/providers.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
@@ -93,7 +93,41 @@ export async function embed(text: string): Promise<number[] | null> {
 
   const embedder = await getEmbedder();
   if (!embedder) return null;
-  const result = await embedder(text);
+  let result: number[] | null;
+  try {
+    result = await embedder(text);
+  } catch (e) {
+    // Provider contract: throw EmbedTimeoutError ONLY for a reachable-but-slow
+    // endpoint (REVIEW 1.6). A timeout is not a "down" failure — Ollama is
+    // healthy, just slower than embeddingTimeoutMs — so it must NOT count
+    // toward the session circuit breaker: without this exemption, three cold
+    // bge-m3 recalls on a CPU laptop would force-disable vectors for 60s on a
+    // working daemon. Degrade this call to TF-IDF, reset the availability latch
+    // honestly (isVectorAvailable reflects "last embed succeeded"), and emit
+    // one targeted hint naming the knob — instead of the generic "provider
+    // failed" warning that misleads users into thinking Ollama is down.
+    if (e instanceof EmbedTimeoutError) {
+      externalEmbedSuccess = false;
+      if (!timeoutWarned) {
+        timeoutWarned = true;
+        console.error(
+          `[total-recall] embedding timed out after ${e.timeoutMs}ms — the model is ` +
+          `reachable but slow (common for bge-m3 on CPU, ~12s cold). Hybrid search ` +
+          `fell back to TF-IDF for this query. Raise "embeddingTimeoutMs" in ` +
+          `~/.total-recall/config.json if this is persistent.`
+        );
+      }
+      return null;
+    }
+    // Any other throw is a provider bug. The production Ollama provider never
+    // throws here (it catches its own errors and returns null), so reaching
+    // this branch means a test seam or a buggy custom provider. Re-throw so the
+    // fire-and-forget write path's .catch attributes it under the key prefix
+    // (embedAndUpsert(key): …) and the read-path caller sees it — preserving
+    // the pre-timeout-classification behavior rather than swallowing it as a
+    // generic "provider threw" error.
+    throw e;
+  }
   // Centralized availability latch for external providers (REVIEW 1.4): set on
   // success, RESET on failure. Previously each provider's catch reset it; with
   // the registry the latch is managed once here so every provider gets the same
@@ -113,6 +147,8 @@ export async function embed(text: string): Promise<number[] | null> {
       consecutiveFailures = 0;
       // Recovery: re-arm the down-episode warning so a fresh outage warns again.
       vectorDownWarned = false;
+      // Also re-arm the timeout hint: a fresh slow-episode deserves a fresh line.
+      timeoutWarned = false;
     } else {
       // REVIEW 1.3: one stderr warning at the start of this down-episode, so a
       // user who never calls get_stats still sees hybrid search degrade to
@@ -227,6 +263,13 @@ let circuitOpenUntil = 0; // epoch ms; 0 = closed
 // HuggingFace is exempt for the same reason as the circuit breaker.
 let vectorDownWarned = false;
 
+// REVIEW 1.6: a separate latch for the slow-but-reachable case. A timeout is
+// not a "down" episode (vectorDownWarned covers that), so it gets its own
+// one-line-per-episode hint naming embeddingTimeoutMs — the actionable knob
+// for a bge-m3-on-CPU deploy. Reset on success for the same reason as
+// vectorDownWarned: a fresh slow-episode deserves a fresh line.
+let timeoutWarned = false;
+
 export function isVectorAvailable(): boolean {
   if (testEmbedder !== undefined && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
@@ -245,4 +288,11 @@ export function __testResetVectorAvailability(): void {
   consecutiveFailures = 0;
   circuitOpenUntil = 0;
   vectorDownWarned = false;
+  timeoutWarned = false;
+  // Also clear the test-embedder seam: a prior test that called
+  // __testSetEmbedder(null) (e.g. the HuggingFace "model unavailable" case)
+  // leaves testEmbedder=null, which makes getEmbedder() return null for EVERY
+  // later test — embed() then bails before calling the provider, so no fetch,
+  // no hint, no circuit. Resetting here keeps tests isolated by file order.
+  testEmbedder = undefined;
 }

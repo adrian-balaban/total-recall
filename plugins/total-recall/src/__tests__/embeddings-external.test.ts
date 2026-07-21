@@ -237,3 +237,103 @@ describe('embeddings — proactive vector-down stderr warning (REVIEW 1.3)', () 
     errSpy.mockRestore();
   });
 });
+
+// REVIEW 1.6: a timeout (reachable-but-slow endpoint, AbortController fired)
+// is a DIFFERENT failure class from "Ollama is down". It must NOT count toward
+// the session circuit breaker — otherwise three cold bge-m3 recalls on a CPU
+// laptop would force-disable vectors for 60s on a healthy daemon. It degrades
+// the call to TF-IDF, resets the availability latch honestly, and emits a
+// targeted hint naming embeddingTimeoutMs (not the generic "provider failed"
+// warning that misleads users into thinking Ollama is down).
+describe('embeddings — timeout vs down (REVIEW 1.6)', () => {
+  // fetch rejects with an AbortError → ollamaProvider throws EmbedTimeoutError.
+  const abortErr = () => Object.assign(new Error('The operation was aborted'), { name: 'AbortError' });
+
+  it('a timeout does NOT open the circuit: 3 timeouts still reach the provider on the next call', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(abortErr());
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    // 3 "timeouts" — under the old logic these would open the circuit. They
+    // must not: a slow endpoint is not a down endpoint.
+    for (let i = 0; i < 3; i++) {
+      expect(await embed(`slow${i}`)).toBeNull();
+    }
+    // No "circuit open" error was ever recorded.
+    expect(errors.filter(e => /circuit open/i.test(e.msg)).length).toBe(0);
+
+    // The circuit is still CLOSED: the next call actually reaches the provider
+    // (no short-circuit). A timeout returns null, so the embed() wrapper never
+    // opens the breaker for it.
+    const callsBefore = mockFetch.mock.calls.length;
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.7] }) });
+    const vec = await embed('probe');
+    expect(vec).toEqual([0.7]);
+    expect(mockFetch.mock.calls.length).toBeGreaterThan(callsBefore);
+
+    errSpy.mockRestore();
+  });
+
+  it('a timeout emits the targeted embeddingTimeoutMs hint, NOT the generic down-warning', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(abortErr());
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await embed('slow');
+    const hintCalls = errSpy.mock.calls.filter(c => /embedding timed out/.test(String(c[0])));
+    const downCalls = errSpy.mock.calls.filter(c => /external embedding provider/.test(String(c[0])));
+    expect(hintCalls.length).toBe(1);
+    expect(downCalls.length).toBe(0);
+    // The hint names the actionable knob.
+    expect(String(hintCalls[0]![0])).toMatch(/embeddingTimeoutMs/);
+
+    errSpy.mockRestore();
+  });
+
+  it('the timeout hint fires once per slow-episode, not per call', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockRejectedValue(abortErr());
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    await embed('slow1');
+    await embed('slow2');
+    const hintCalls = errSpy.mock.calls.filter(c => /embedding timed out/.test(String(c[0])));
+    expect(hintCalls.length).toBe(1);
+
+    errSpy.mockRestore();
+  });
+
+  it('a successful embed re-arms the timeout hint; a later timeout warns again', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    mockFetch.mockRejectedValue(abortErr());
+    await embed('slow1');
+    expect(errSpy.mock.calls.filter(c => /embedding timed out/.test(String(c[0]))).length).toBe(1);
+
+    // Recovery re-arms the latch.
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.1] }) });
+    await embed('ok');
+
+    // Fresh slow-episode: a fresh hint line.
+    mockFetch.mockRejectedValue(abortErr());
+    await embed('slow2');
+    expect(errSpy.mock.calls.filter(c => /embedding timed out/.test(String(c[0]))).length).toBe(2);
+
+    errSpy.mockRestore();
+  });
+
+  it('a timeout resets the availability latch (isVectorAvailable reflects last embed)', async () => {
+    (loadConfig as any).mockReturnValue({ embeddingProvider: 'ollama' });
+    mockFetch.mockResolvedValue({ ok: true, json: async () => ({ embedding: [0.1, 0.2] }) });
+    await embed('ok');
+    expect(isVectorAvailable()).toBe(true);
+
+    mockFetch.mockRejectedValue(abortErr());
+    const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await embed('slow');
+    errSpy.mockRestore();
+    // A timeout did not succeed → availability resets honestly.
+    expect(isVectorAvailable()).toBe(false);
+  });
+});
