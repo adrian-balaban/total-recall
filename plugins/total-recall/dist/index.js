@@ -16118,139 +16118,35 @@ async function listVectorKeys(dbPath) {
   }
 }
 
-// src/embeddings/providers.ts
-var EmbedTimeoutError = class extends Error {
-  timeoutMs;
-  constructor(timeoutMs) {
-    super(`embedding timed out after ${timeoutMs}ms`);
-    this.name = "EmbedTimeoutError";
-    this.timeoutMs = timeoutMs;
-  }
-};
-async function ollamaEmbedAttempt(url, model, text, timeoutMs) {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model, prompt: text }),
-      signal: controller.signal
-    });
-    if (!response.ok) throw new Error(`Ollama returned status ${response.status}`);
-    const data = await response.json();
-    return data.embedding;
-  } finally {
-    clearTimeout(timer);
-  }
-}
-var ollamaProvider = {
-  name: "ollama",
-  async embed(text, config3) {
-    const url = config3.embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
-    const model = config3.embeddingModel || "bge-m3";
-    const timeoutMs = config3.embeddingTimeoutMs ?? 15e3;
-    try {
-      return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-    } catch (firstErr) {
-      if (firstErr && firstErr.name === "AbortError") {
-        throw new EmbedTimeoutError(timeoutMs);
-      }
-      await new Promise((r) => setTimeout(r, 200));
-      try {
-        return await ollamaEmbedAttempt(url, model, text, timeoutMs);
-      } catch (e) {
-        if (e && e.name === "AbortError") {
-          throw new EmbedTimeoutError(timeoutMs);
-        }
-        recordError(`Ollama embedding failed after retry: ${e instanceof Error ? e.message : String(e)}`);
-        return null;
-      }
-    }
-  }
-};
-var PROVIDERS = {
-  ollama: ollamaProvider
-};
-
 // src/embeddings.ts
 var pipeline = null;
 var loadPromise = null;
 var testEmbedder = void 0;
 async function getEmbedder() {
   if (testEmbedder !== void 0) return testEmbedder;
-  const config3 = loadConfig();
-  const provider = config3.embeddingProvider || "huggingface";
-  if (provider === "huggingface") {
-    if (loadPromise) return loadPromise;
-    loadPromise = (async () => {
-      try {
-        const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-        const extractor = await hfPipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-        pipeline = async (text) => {
-          const output = await extractor(text, { pooling: "mean", normalize: true });
-          return Array.from(output.data);
-        };
-        return pipeline;
-      } catch {
-        pipeline = null;
-        return null;
-      }
-    })();
-    return loadPromise;
-  }
-  const p = PROVIDERS[provider];
-  if (!p) return null;
-  return (text) => p.embed(text, loadConfig());
-}
-async function embed(text) {
-  if (circuitOpenUntil) {
-    if (Date.now() < circuitOpenUntil) return null;
-    circuitOpenUntil = 0;
-  }
-  const embedder = await getEmbedder();
-  if (!embedder) return null;
-  let result;
-  try {
-    result = await embedder(text);
-  } catch (e) {
-    if (e instanceof EmbedTimeoutError) {
-      externalEmbedSuccess = false;
-      if (!timeoutWarned) {
-        timeoutWarned = true;
-        console.error(
-          `[total-recall] embedding timed out after ${e.timeoutMs}ms \u2014 the model is reachable but slow (common for bge-m3 on CPU, ~12s cold). Hybrid search fell back to TF-IDF for this query. Raise "embeddingTimeoutMs" in ~/.total-recall/config.json if this is persistent.`
-        );
-      }
+  if (loadPromise) return loadPromise;
+  loadPromise = (async () => {
+    try {
+      const { pipeline: hfPipeline } = await import("@huggingface/transformers");
+      const model = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
+      const extractor = await hfPipeline("feature-extraction", model);
+      pipeline = async (text) => {
+        const output = await extractor(text, { pooling: "mean", normalize: true });
+        return Array.from(output.data);
+      };
+      return pipeline;
+    } catch {
+      pipeline = null;
+      loadPromise = null;
       return null;
     }
-    throw e;
-  }
-  externalEmbedSuccess = Array.isArray(result);
-  const provider = loadConfig().embeddingProvider || "huggingface";
-  if (provider !== "huggingface") {
-    if (externalEmbedSuccess) {
-      consecutiveFailures = 0;
-      vectorDownWarned = false;
-      timeoutWarned = false;
-    } else {
-      if (!vectorDownWarned) {
-        vectorDownWarned = true;
-        const url = loadConfig().embeddingUrl || "http://127.0.0.1:11434/api/embeddings";
-        console.error(
-          `[total-recall] external embedding provider "${provider}" failed at ${url} \u2014 hybrid search is falling back to TF-IDF (vector search degraded for this session). Check the provider is running and reachable; see get_stats for details.`
-        );
-      }
-      consecutiveFailures++;
-      if (consecutiveFailures >= CIRCUIT_OPEN_THRESHOLD && !circuitOpenUntil) {
-        circuitOpenUntil = Date.now() + CIRCUIT_OPEN_COOLDOWN_MS;
-        recordError(
-          `Ollama circuit open after ${consecutiveFailures} consecutive embed failures \u2014 hybrid recall falling back to TF-IDF for ${CIRCUIT_OPEN_COOLDOWN_MS / 1e3}s (check ${provider} at ${loadConfig().embeddingUrl || "http://127.0.0.1:11434/api/embeddings"})`
-        );
-      }
-    }
-  }
-  return result;
+  })();
+  return loadPromise;
+}
+async function embed(text) {
+  const embedder = await getEmbedder();
+  if (!embedder) return null;
+  return await embedder(text);
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
 function embedAndUpsert(key, text) {
@@ -16275,19 +16171,9 @@ async function flushEmbeddings(timeoutMs = 2e3) {
     if (timer) clearTimeout(timer);
   }
 }
-var externalEmbedSuccess = false;
-var CIRCUIT_OPEN_THRESHOLD = 3;
-var CIRCUIT_OPEN_COOLDOWN_MS = 6e4;
-var consecutiveFailures = 0;
-var circuitOpenUntil = 0;
-var vectorDownWarned = false;
-var timeoutWarned = false;
 function isVectorAvailable() {
   if (testEmbedder !== void 0 && testEmbedder !== null) return true;
   if (testEmbedder === null) return false;
-  const config3 = loadConfig();
-  const provider = config3.embeddingProvider || "huggingface";
-  if (provider !== "huggingface") return externalEmbedSuccess;
   return pipeline !== null;
 }
 
@@ -17495,7 +17381,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.110" : null.version;
+var PLUGIN_VERSION = true ? "1.0.111" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
