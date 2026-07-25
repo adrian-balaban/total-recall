@@ -89,8 +89,11 @@ run_queued_sync() {
 }
 
 # Process every job file currently in the queue directory. Each job file is an
-# atomic, complete record created by the hook via mktemp+rename, so a concurrent
-# hook can add new files while we drain without corrupting the queue.
+# atomic, complete record created by the hook via mktemp+rename (same-fs, see
+# 4.3 below), so a concurrent hook can add new files while we drain without
+# corrupting the queue. Returns non-zero if a sync FAILED and a job was left
+# for retry, so start_worker can stop instead of busy-looping on the same
+# failing job.
 drain_queue() {
   local job_files=()
   while IFS= read -r -d '' f; do
@@ -101,13 +104,27 @@ drain_queue() {
     [ -f "$job" ] || continue
     local q_key="" q_delete="0" q_force="0"
     IFS=$'\t' read -r q_key q_delete q_force < "$job" || true
-    rm -f "$job"
-    [ -z "$q_key" ] && continue
-    [[ "$q_key" != org/* ]] && continue
-    run_queued_sync "$q_key" "${q_delete:-0}" "${q_force:-0}" || {
-      echo "sync failed for $q_key" >>"$SYNC_LOG"
-    }
+    # 4.2: drop un-retryable malformed jobs immediately (empty key / non-org) so
+    # they can't block the queue forever — a bad key never becomes valid by
+    # retrying. Valid org/* jobs are removed only AFTER a successful sync.
+    if [ -z "$q_key" ] || [[ "$q_key" != org/* ]]; then
+      rm -f "$job"
+      continue
+    fi
+    # 4.2: rm the job only AFTER a successful sync. The old code did `rm -f` then
+    # ran the sync, so a failed push (network/auth down) permanently dropped the
+    # org memory with no retry. Leaving the job re-queues it for the next drain
+    # (the next PostToolUse org write re-acquires the lock and retries once the
+    # network/auth is back). Return non-zero on the first failure so start_worker
+    # breaks instead of re-reading the same failing job in a tight loop.
+    if run_queued_sync "$q_key" "${q_delete:-0}" "${q_force:-0}"; then
+      rm -f "$job"
+    else
+      echo "sync failed for $q_key (job left for retry: $(basename "$job"))" >>"$SYNC_LOG"
+      return 1
+    fi
   done
+  return 0
 }
 
 # Background worker: holds the exclusive lock, drains the queue repeatedly, and
@@ -117,7 +134,13 @@ drain_queue() {
 start_worker() {
   (
     while true; do
-      drain_queue
+      # 4.2: drain_queue returns non-zero when a sync failed and the job was
+      # left for retry. Stop the worker instead of busy-looping on the same
+      # failing job — the next PostToolUse org write re-acquires the lock and
+      # retries once the network/auth is back.
+      if ! drain_queue; then
+        break
+      fi
       # After draining, see if more jobs arrived during the last pass.
       any_jobs=$(find "$QUEUE_DIR" -maxdepth 1 -type f -print0 2>/dev/null | head -c 1)
       if [ -z "$any_jobs" ]; then
@@ -139,7 +162,13 @@ case "$KEY" in
     # worker only if none is already running (flock -n). The worker drains the
     # entire queue, so a burst of org writes results in one git sync process per
     # session instead of one per key.
-    JOB_TMP=$(mktemp)
+    # 4.3 (REVIEW 1.6): mktemp in the org dir (the queue's PARENT, same fs) so the
+    # `mv` into the queue is a rename (atomic). The old `mktemp` defaulted to
+    # /tmp (often tmpfs, a different fs from $HOME), making `mv` a copy+unlink —
+    # a concurrent drain could read a partially-written job. Same-fs rename
+    # closes that window: the job appears in the queue only once it's complete.
+    ORG_DIR="$(dirname "$QUEUE_DIR")"
+    JOB_TMP=$(mktemp "$ORG_DIR/.job.XXXXXXXX")
     printf '%s\t%s\t%s\n' "$KEY" "$DELETE_FLAG" "$FORCE_FLAG" > "$JOB_TMP"
     mv "$JOB_TMP" "$QUEUE_DIR/"
 

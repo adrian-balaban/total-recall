@@ -305,4 +305,58 @@ process.exit(0);
     fs.writeFileSync(stubPath, STUB_MJS);
     fs.chmodSync(stubPath, 0o755);
   }, 10000);
+
+  it('leaves the failed job in the queue for retry when the sync stub fails (4.2)', async () => {
+    // 4.2 (REVIEW 1.6): drain_queue must rm the job only AFTER a successful sync.
+    // The old code did `rm -f` then ran the sync, so a failed push (network/auth
+    // down) permanently dropped the org memory with no retry. With a failing
+    // stub (exit 1), run_queued_sync returns non-zero, drain_queue logs + returns
+    // 1 (instead of rm), and start_worker breaks — the job file survives for the
+    // next PostToolUse org write to retry. Assert the job is NOT removed and
+    // still carries our key.
+    const failStub = `#!/usr/bin/env node
+process.exit(1);
+`;
+    const stubPath = path.join(fakeRoot, 'scripts', 'sync-org-memory.mjs');
+    fs.writeFileSync(stubPath, failStub);
+    fs.chmodSync(stubPath, 0o755);
+    const queueDir = path.join(tmpHome, '.total-recall', 'org', '.sync-queue');
+    fs.rmSync(queueDir, { recursive: true, force: true });
+
+    const json = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'mcp__total-recall__store_memory',
+      tool_input: { title: 'F', content: '...', tags: ['org'] },
+      tool_response: { content: [{ type: 'text', text: JSON.stringify({ key: 'org/retry/fail', message: 'stored' }) }] },
+    });
+    const r = runHook(json);
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+
+    // Wait for the worker to create the job file (mv into the queue) and attempt
+    // the failing drain. The stub exits instantly, so drain_queue returns 1 and
+    // start_worker breaks — leaving the job in place.
+    const deadline = Date.now() + 4000;
+    let jobFiles: string[] = [];
+    while (Date.now() < deadline) {
+      jobFiles = fs.existsSync(queueDir) ? fs.readdirSync(queueDir) : [];
+      if (jobFiles.length > 0) break;
+      await new Promise((res) => setTimeout(res, 20));
+    }
+    expect(jobFiles.length).toBeGreaterThan(0);
+    // Give the worker time to run drain_queue (stub exits instantly) and hit the
+    // failure branch. If 4.2 regressed to rm-before-sync, the job would be gone.
+    await new Promise((res) => setTimeout(res, 400));
+    const jobFilesAfter = fs.existsSync(queueDir) ? fs.readdirSync(queueDir) : [];
+    expect(jobFilesAfter.length).toBeGreaterThan(0);
+    // The surviving job must be OUR job (carries the org/ key), not a stale file.
+    const jobName = jobFilesAfter[0]!;
+    const jobPath = path.join(queueDir, jobName);
+    const content = fs.readFileSync(jobPath, 'utf8');
+    expect(content).toContain('org/retry/fail');
+
+    // Restore the original overwrite stub for subsequent tests.
+    fs.writeFileSync(stubPath, STUB_MJS);
+    fs.chmodSync(stubPath, 0o755);
+  }, 10000);
 }, 60000);
