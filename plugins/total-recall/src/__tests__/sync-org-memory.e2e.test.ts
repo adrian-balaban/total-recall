@@ -284,6 +284,31 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     expect(remoteTree()).toContain('org-vault/knowledge/--delete.md');
   });
 
+  // 2nd-step plan (Tier A.5): refuse-to-write-when-newer. A teammate on a NEWER
+  // client writes {v:2, entries} to the shared org branch; an OLDER client (this
+  // code, ORG_INDEX_VERSION=1) pulls it and must NOT silently treat the wrapper as
+  // the entry map, mutate it, and commit a downgraded index back to the branch.
+  // loadOrgIndex must refuse (throw) so main().catch logs + exits 0, leaving the
+  // newer file untouched for manual recovery — same fail-closed path as #2 below.
+  it('refuses to rewrite a forward-incompatible org index.json (newer teammate version)', () => {
+    const indexPath = path.join(orgVault, 'index.json');
+    // A prior test committed a valid {v:1, entries} index to HEAD. Simulate a
+    // newer teammate's pull by overwriting the working-tree copy with a v:2 file.
+    const NEWER = JSON.stringify({ v: 2, entries: { 'org/knowledge/from-future': { key: 'org/knowledge/from-future' } } }, null, 2);
+    fs.writeFileSync(indexPath, NEWER);
+    // Store mode on the existing org-tagged flink-cdc file reaches updateOrgIndex,
+    // which calls loadOrgIndex and must throw BEFORE atomicWrite (no downgrade).
+    const res = runMjs('org/architecture/flink-cdc');
+    expect(res.stderr).toMatch(/refusing to rewrite org index/i);
+    // The newer file on disk is NOT rewritten (no downgrade wipe).
+    expect(fs.readFileSync(indexPath, 'utf8')).toBe(NEWER);
+    // The error was logged to the persistent sync-errors log (main().catch).
+    const logPath = path.join(tmpHome, '.total-recall', 'org', '.sync-errors.log');
+    expect(fs.readFileSync(logPath, 'utf8')).toMatch(/forward-incompatible/i);
+    // Restore the valid committed index.json so the fixture doesn't leak.
+    git(['checkout', '--', path.relative(orgDir, indexPath)], { cwd: orgDir });
+  });
+
   // #2: a corrupt org index.json (interrupted atomicWrite, bad manual edit, or a git-
   // merge conflict marker) used to parse to undefined → the bare `catch {}` set
   // `index = {}` → updateOrgIndex wrote a one-entry index and commitAndPush committed

@@ -91,29 +91,69 @@ for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP']) {
 // tests import the SAME source, so the old KEEP-IN-SYNC replica is gone.
 const ALLOWED_DOMAINS = sanitizeAllowedDomains(config.allowedEmailDomains);
 
-// Load the shared org index.json, bailing (throwing) when it EXISTS but is corrupt,
-// rather than catch-wiping it. A teammate's interrupted atomicWrite, a bad manual edit,
-// or a git-merge conflict marker left in index.json would parse to undefined → the old
-// bare `catch {}` set `index = {}` and the function then wrote a one-entry (store) or
-// empty (delete) index and commitAndPush committed it to the shared org-vault branch —
-// every teammate's next pull replaced their full org index with the single-entry/empty
-// one. Unlike the personal-vault loadMemIndex (self-healing via reconcileIndex from .md
-// files), the org index.json IS the source of truth that gets committed, so a silent
-// wipe propagates. The throw propagates to main().catch (logs to ~/.total-recall/org/
-// .sync-errors.log, exit 0 — non-blocking for the hook); the file on disk is left
-// untouched for manual recovery. Cold start (no index.json yet) returns {} — there is
-// nothing to corrupt, and the first sync must be allowed to create it.
+// On-disk org index.json schema version. The file is wrapped as
+// `{ v: ORG_INDEX_VERSION, entries: Record<key, entry> }`. This mirrors the primary
+// index versioning (src/persistence.ts INDEX_VERSION, landed c649bb7) but extends it
+// to the WRITE side the 2nd-step plan calls out: a teammate on a NEWER client writes
+// `{v:2, entries}` to the shared org branch, an OLDER client pulls it, and — without
+// a version guard — would treat the wrapper itself as the entry map, mutate it, and
+// commit a downgraded/corrupted index back to the shared branch (silently rewriting
+// every teammate's org index on their next pull). The guard REFUSES to write when the
+// on-disk `v` is higher than this client knows, leaving the newer file untouched for
+// manual recovery (same fail-closed discipline as the corrupt-parse path below).
+// Legacy flat `Record<key, entry>` files (pre-this-change) carry no numeric `v` at
+// top level and are read as-is, then re-wrapped on the next write (no migration step).
+const ORG_INDEX_VERSION = 1;
+
+// Unwrap a parsed org index into the flat entries map. Returns null for a
+// forward-incompatible version (caller refuses to write) or a structurally
+// invalid shape. Accepts both the wrapped shape and the legacy flat shape.
+function unwrapOrgIndex(parsed) {
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  if (typeof parsed.v === 'number') {
+    if (parsed.v > ORG_INDEX_VERSION) return null; // forward-incompatible → refuse
+    const e = parsed.entries;
+    if (e && typeof e === 'object' && !Array.isArray(e)) return e;
+    return null;
+  }
+  // Legacy flat shape: no numeric `v` at top level (keys are slugs), so the
+  // whole object is the entries map.
+  return parsed;
+}
+
+function wrapOrgIndex(entries) {
+  return { v: ORG_INDEX_VERSION, entries };
+}
+
+// Load the shared org index.json, bailing (throwing) when it EXISTS but is corrupt
+// OR forward-incompatible (a newer teammate's version this client would silently
+// downgrade), rather than catch-wiping it. A teammate's interrupted atomicWrite, a
+// bad manual edit, or a git-merge conflict marker left in index.json would parse to
+// undefined → the old bare `catch {}` set `index = {}` and the function then wrote a
+// one-entry (store) or empty (delete) index and commitAndPush committed it to the
+// shared org-vault branch — every teammate's next pull replaced their full org index
+// with the single-entry/empty one. Unlike the personal-vault loadMemIndex
+// (self-healing via reconcileIndex from .md files), the org index.json IS the source
+// of truth that gets committed, so a silent wipe propagates. The throw propagates to
+// main().catch (logs to ~/.total-recall/org/.sync-errors.log, exit 0 — non-blocking
+// for the hook); the file on disk is left untouched for manual recovery. Cold start
+// (no index.json yet) returns {} — there is nothing to corrupt, and the first sync
+// must be allowed to create it. Returns the flat entries map (callers mutate + re-wrap).
 function loadOrgIndex(indexPath) {
   if (!fs.existsSync(indexPath)) return {};
+  let parsed;
   try {
-    const parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('org index.json is not a JSON object');
-    }
-    return parsed;
+    parsed = JSON.parse(fs.readFileSync(indexPath, 'utf8'));
   } catch (e) {
     throw new Error(`refusing to rewrite org index (parse failed: ${e.message})`);
   }
+  const entries = unwrapOrgIndex(parsed);
+  if (entries === null) {
+    throw new Error(
+      `refusing to rewrite org index (forward-incompatible or invalid shape; local ORG_INDEX_VERSION=${ORG_INDEX_VERSION})`,
+    );
+  }
+  return entries;
 }
 
 function normalizeTags(data) {
@@ -136,14 +176,14 @@ function updateOrgIndex(key, data, content) {
     importanceScore: data.importanceScore ?? 0.5,
     contentPreview: content.trim().slice(0, 500),
   };
-  atomicWrite(indexPath, JSON.stringify(index, null, 2));
+  atomicWrite(indexPath, JSON.stringify(wrapOrgIndex(index), null, 2));
 }
 
 function removeFromOrgIndex(key) {
   const indexPath = path.join(ORG_VAULT, 'index.json');
   const index = loadOrgIndex(indexPath);
   delete index[key];
-  atomicWrite(indexPath, JSON.stringify(index, null, 2));
+  atomicWrite(indexPath, JSON.stringify(wrapOrgIndex(index), null, 2));
 }
 
 // Prototype-pollution guard: keys like `__proto__`, `constructor`, or `prototype`
