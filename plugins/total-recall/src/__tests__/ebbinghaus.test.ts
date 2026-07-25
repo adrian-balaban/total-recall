@@ -56,6 +56,22 @@ describe('computeRetentionStrength', () => {
       computeRetentionStrength(0.5, 7, 0, 0, 0)
     );
   });
+
+  it('11.1: falls back per-axis on non-finite inputs — no NaN propagates through the formula', () => {
+    // The Number.isFinite guard at each axis (importance/days/access/confirmations/
+    // flags) is the whole point: a hand-edited `importanceScore: NaN` (or a NaN
+    // daysSince from a corrupt `updated` field) must fall back to a safe default
+    // per axis instead of propagating NaN through Math.min/max and the exponential
+    // into the final retention score (branch coverage gap GLM 7.1).
+    expect(Number.isFinite(computeRetentionStrength(NaN, 0, 0))).toBe(true);
+    expect(Number.isFinite(computeRetentionStrength(0.5, NaN, 0))).toBe(true);
+    expect(Number.isFinite(computeRetentionStrength(0.5, 7, NaN))).toBe(true);
+    expect(Number.isFinite(computeRetentionStrength(0.5, 7, 0, NaN, 0))).toBe(true);
+    expect(Number.isFinite(computeRetentionStrength(0.5, 7, 0, 0, NaN))).toBe(true);
+    expect(Number.isFinite(computeRetentionStrength(NaN, NaN, NaN, NaN, NaN))).toBe(true);
+    // importance=NaN falls back to 0.5 at daysSince=0/accessCount=0 → strength ≈ 0.5
+    expect(computeRetentionStrength(NaN, 0, 0)).toBeCloseTo(0.5, 1);
+  });
 });
 
 describe('clampImportanceScore', () => {

@@ -4,6 +4,18 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-recall-' + process.pid;
 });
 
+// 11.3b (3.6): mock the vector path so the hybrid branch ENTERS (embed returns a
+// non-null query vector) but contributes nothing (searchVector returns []). This
+// is the cold-store / dim-mismatch / deps-absent case the RRF-empty guard exists
+// for. The mocks are file-wide; the existing tests all pass hybrid:false, so embed
+// and searchVector are never called there — the mocks are inert for them.
+vi.mock('../embeddings.js', () => ({
+  embed: vi.fn(async () => Array(384).fill(0.1)),
+}));
+vi.mock('../vectorStore.js', () => ({
+  searchVector: vi.fn(async () => []),
+}));
+
 import { recallMemory, searchIndex } from '../tools/recall.js';
 import { memIndex } from '../state.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
@@ -85,5 +97,40 @@ describe('recall_memory boundary hardening', () => {
     // A huge positive minScore should legitimately filter everything out.
     const strict = await recallMemory({ query: 'alpha', minScore: 1e9, hybrid: false });
     expect(strict.length).toBe(0);
+  });
+});
+
+describe('recall_memory hybrid — RRF empty-vector guard (3.6)', () => {
+  beforeEach(() => {
+    resetIndex();
+    memIndex['knowledge/alpha'] = mkMeta({
+      key: 'knowledge/alpha',
+      title: 'Alpha memory',
+      contentPreview: 'alpha body',
+      tags: ['alpha'],
+    });
+    rebuildInvertedIndex();
+  });
+
+  afterEach(resetIndex);
+
+  it('keeps the TF-IDF score scale when the vector path returns empty (no RRF rescaling)', async () => {
+    // 3.6: when searchVector returns [] (cold store / dim mismatch / deps absent),
+    // the guard short-circuits to raw tfidfResults instead of fusing. Pre-fix, RRF
+    // would rescale every TF-IDF hit to ~1/(60+rank) ≈ 0.0167 — orders of magnitude
+    // below the raw TF-IDF score — so a minScore tuned for TF-IDF would drop
+    // everything. Post-fix, the hybrid score stays on the TF-IDF scale.
+    const tfidf = await recallMemory({ query: 'alpha', hybrid: false });
+    const hybridEmpty = await recallMemory({ query: 'alpha', hybrid: true });
+    expect(tfidf.length).toBeGreaterThan(0);
+    expect(hybridEmpty.length).toBe(tfidf.length);
+    // Same top result (RRF with empty vecResults keeps TF-IDF order).
+    expect(hybridEmpty[0]!.key).toBe(tfidf[0]!.key);
+    // Score stays on the TF-IDF scale: the access bump between the two calls shifts
+    // the score by ~1.2×, but RRF rescaling would shrink it ~30×. A (0.3, 3) band
+    // admits the access bump and kills the RRF-rescale mutant.
+    const ratio = hybridEmpty[0]!.score / tfidf[0]!.score;
+    expect(ratio).toBeGreaterThan(0.3);
+    expect(ratio).toBeLessThan(3);
   });
 });

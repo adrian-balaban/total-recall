@@ -15482,8 +15482,8 @@ function loadConfig() {
   }
 }
 var config2 = loadConfig();
-var PERSONAL_VAULT = config2.personalVault ? path.resolve(config2.personalVault.replace(/^~/, HOME)) : path.join(TOTAL_RECALL_DIR, "personal-vault");
-var ORG_VAULT = config2.orgVault ? path.resolve(config2.orgVault.replace(/^~/, HOME)) : path.join(TOTAL_RECALL_DIR, "org", "org-vault");
+var PERSONAL_VAULT = config2.personalVault ? path.resolve(config2.personalVault.replace(/^~(?=\/|$)/, HOME)) : path.join(TOTAL_RECALL_DIR, "personal-vault");
+var ORG_VAULT = config2.orgVault ? path.resolve(config2.orgVault.replace(/^~(?=\/|$)/, HOME)) : path.join(TOTAL_RECALL_DIR, "org", "org-vault");
 var VECTORS_DB = path.join(PERSONAL_VAULT, "vectors.db");
 var INDEX_PATH = path.join(TOTAL_RECALL_DIR, "index.json");
 var INVERTED_INDEX_PATH = path.join(TOTAL_RECALL_DIR, "invertedIndex.json");
@@ -15752,7 +15752,7 @@ function trimTrailingComment(s) {
 function parseFrontmatter(raw) {
   const bomless = raw.charCodeAt(0) === 65279 ? raw.slice(1) : raw;
   const match = bomless.match(FM_RE);
-  if (!match) return { data: {}, content: raw };
+  if (!match) return { data: {}, content: bomless };
   const data = parseYamlish(match[1]);
   const content = bomless.slice(match.index + match[0].length);
   return { data, content };
@@ -17565,7 +17565,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.117" : null.version;
+var PLUGIN_VERSION = true ? "1.0.118" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

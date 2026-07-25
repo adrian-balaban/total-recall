@@ -4,3 +4,6 @@ fable-proposals.md
 ollama-minimax-proposals.md
 ollama-gdm-proposals.md
 REVIEW-*.txt
+
+# 3rd-party reference PDFs (Technology Radar etc.) — not source, kept local
+tr_technology_radar_*.pdf

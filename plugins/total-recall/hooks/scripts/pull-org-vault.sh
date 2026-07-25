@@ -8,7 +8,7 @@ BRANCH="org-vault"
 CONFIG_FILE="$HOME/.total-recall/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
-  ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').dirname(require('path').resolve(p)); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
+  ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~(?=\/|$)/, require('os').homedir()); p=require('path').dirname(require('path').resolve(p)); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
 fi
 # Read orgRepo from config.json via node (node is a hard dependency of this
 # plugin; python3 is not guaranteed). Falls back to '' on any error.

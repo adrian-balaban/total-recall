@@ -24,7 +24,7 @@ try {
   if (fs.existsSync(CONFIG_FILE)) {
     const config = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
     if (config.personalVault) {
-      VAULT = path.resolve(config.personalVault.replace(/^~/, os.homedir()));
+      VAULT = path.resolve(config.personalVault.replace(/^~(?=\/|$)/, os.homedir()));
     }
   }
 } catch {}

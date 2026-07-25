@@ -7,7 +7,7 @@ PERSONAL_VAULT="$HOME/.total-recall/personal-vault"
 CONFIG_FILE="$HOME/.total-recall/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
-  PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
+  PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~(?=\/|$)/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
 fi
 # `|| true` is load-bearing under `set -euo pipefail`: (1) if the personal vault
 # dir is absent (fresh install before any store_memory), find exits non-zero and

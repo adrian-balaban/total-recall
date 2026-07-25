@@ -382,8 +382,8 @@ fi
 if [ -f "$CONFIG_FILE" ]; then
   NODE_BIN=$(command -v node || echo "")
   if [ -n "$NODE_BIN" ]; then
-    PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
-    ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
+    PERSONAL_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.personalVault; if(p){ p=p.replace(/^~(?=\/|$)/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$PERSONAL_VAULT'); } catch { console.log('$PERSONAL_VAULT'); }")
+    ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~(?=\/|$)/, require('os').homedir()); p=require('path').resolve(p); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
     ORG_DIR=$(dirname "$ORG_VAULT")
   fi
 fi
