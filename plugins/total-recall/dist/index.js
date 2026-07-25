@@ -16505,12 +16505,8 @@ function atomicWrite(p, data) {
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString("hex")}`;
   try {
     fs3.writeFileSync(tmp, data);
-  } catch {
-    try {
-      fs3.writeFileSync(p, data);
-    } catch (e) {
-      recordError(`atomicWrite(${p}): ${e.message}`);
-    }
+  } catch (e) {
+    recordError(`atomicWrite(${p}) tmp-write failed (last-good left intact): ${e.message}`);
     return;
   }
   try {
@@ -16524,8 +16520,12 @@ function atomicWrite(p, data) {
   }
   try {
     fs3.renameSync(tmp, p);
-  } catch {
-    fs3.writeFileSync(p, data);
+  } catch (renErr) {
+    try {
+      fs3.writeFileSync(p, data);
+    } catch (e) {
+      recordError(`atomicWrite(${p}) rename-fallback: rename=${renErr.message}; write=${e.message}`);
+    }
     try {
       fs3.unlinkSync(tmp);
     } catch {
@@ -17523,7 +17523,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.114" : null.version;
+var PLUGIN_VERSION = true ? "1.0.115" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -356,7 +356,22 @@ async function main() {
   console.log(`Synced ${key} to org vault.`);
 }
 
-main().catch(e => {
+main().then(() => {
+  // 4.4 (REVIEW 1.6): stamp a success marker on any non-throwing main() resolution
+  // (a clean sync, "nothing to sync", or a privacy-blocked early return — none of
+  // those is a push failure). The SessionStart check-sync-errors.sh hook compares
+  // this marker's mtime to .sync-errors.log's mtime: errors logged AFTER the last
+  // success mean a push failed since the vault was last healthy → surface a
+  // one-line warning on next session start. Without this stamp the check could
+  // only see "errors exist" (which includes stale, already-recovered failures),
+  // not "errors arrived since the last good sync". Best-effort: a stamp failure
+  // must not turn a successful sync into a reported failure.
+  try {
+    const okPath = path.join(os.homedir(), '.total-recall', 'org', '.sync-ok');
+    fs.mkdirSync(path.dirname(okPath), { recursive: true });
+    fs.writeFileSync(okPath, new Date().toISOString());
+  } catch {}
+}).catch(e => {
   // Log to a persistent file so sync failures are discoverable — the PostToolUse hook
   // backgrounds this process, so stderr is otherwise lost. Exit 0 keeps the hook
   // non-blocking (see setup/SKILL.md "Hook output format" gotcha).

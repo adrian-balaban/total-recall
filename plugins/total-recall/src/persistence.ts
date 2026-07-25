@@ -133,19 +133,21 @@ function atomicWrite(p: string, data: string) {
   const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
   try {
     fs.writeFileSync(tmp, data);
-  } catch {
-    // Tmp write failed (ENOSPC / EACCES / EROFS / EISDIR). atomicWrite is
-    // called from debounced setTimeout callbacks AND from flushPending on the
-    // SIGTERM/SIGINT/beforeExit path; an uncaught throw here escapes the timer
-    // callback → uncaughtException → the stdio server dies mid-session (index.ts
-    // registers no uncaughtException handler). Fall back to a direct overwrite
-    // of the target (loses POSIX atomicity, same trade-off as the rename-fallback
-    // below) rather than crashing. The .md files are already durable and
-    // reconcileIndex rebuilds the index on next boot, so a transient I/O error
-    // must not take the process down. Callers (scheduleSave / scheduleIdfRecalc
-    // / flushPending) additionally wrap their own bodies so a remaining throw is
-    // recorded via recordError, not fatal.
-    try { fs.writeFileSync(p, data); } catch (e) { recordError(`atomicWrite(${p}): ${(e as Error).message}`); }
+  } catch (e) {
+    // 4.1 (REVIEW 1.6): tmp write failed (ENOSPC / EACCES / EROFS / EISDIR).
+    // Leave the LAST-GOOD target untouched. A direct overwrite here would
+    // DEFEAT atomicWrite's whole purpose — a crash mid-fallback would corrupt
+    // the file atomic-write was meant to protect, trading a transient I/O error
+    // (which reconcileIndex rebuilds from on next boot) for permanent data
+    // corruption. The tmp lives in the same dir/fs as the target, so whatever
+    // blocked the tmp write (no space, no permission, read-only fs) blocks a
+    // direct write too — the overwrite only ever added corruption risk, never
+    // benefit. recordError (not throw): atomicWrite runs from debounced
+    // setTimeouts AND the SIGTERM/SIGINT/beforeExit path, where an uncaught
+    // throw escapes the timer → uncaughtException → the stdio server dies
+    // mid-session (index.ts registers no uncaughtException handler). The
+    // .md files stay durable; the last-good index survives for next boot.
+    recordError(`atomicWrite(${p}) tmp-write failed (last-good left intact): ${(e as Error).message}`);
     return;
   }
   // fsync the tmp file's data so the page cache is flushed to disk before the
@@ -158,11 +160,18 @@ function atomicWrite(p: string, data: string) {
   } catch { /* best-effort: fsync unsupported on this FS — rename still atomic */ }
   try {
     fs.renameSync(tmp, p);
-  } catch {
-    // rename can fail on Windows (open handles / cross-volume); fall back to
-    // a direct overwrite — loses POSIX atomicity but avoids a hard crash.
-    fs.writeFileSync(p, data);
-    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup */ }
+  } catch (renErr) {
+    // 4.1 (REVIEW 1.6): rename can fail on Windows (open handles / cross-volume).
+    // Fall back to a direct overwrite — loses POSIX atomicity but lands the data.
+    // The overwrite is GUARDED (try/recordError, not a bare throw) so a boot-time
+    // atomicWrite can't take the process down via an uncaught throw here; the
+    // orphaned tmp is cleaned up either way so it doesn't accumulate on disk.
+    try {
+      fs.writeFileSync(p, data);
+    } catch (e) {
+      recordError(`atomicWrite(${p}) rename-fallback: rename=${(renErr as Error).message}; write=${(e as Error).message}`);
+    }
+    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup of the orphaned tmp */ }
     return;
   }
   // fsync the parent dir so the rename dirent is durable too — otherwise a

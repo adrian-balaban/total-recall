@@ -25,6 +25,7 @@ vi.mock('fs', async () => {
   };
 });
 
+import path from 'path';
 import { flushPending, scheduleSave } from '../persistence.js';
 import { errors } from '../state.js';
 
@@ -58,6 +59,38 @@ describe('flushPending', () => {
   it('is a no-op when no debounce timer is armed (records nothing)', () => {
     expect(() => flushPending()).not.toThrow();
     expect(errors.length).toBe(0);
+  });
+});
+
+// 4.1 (REVIEW 1.6): atomicWrite leaves the last-good target untouched when the
+// tmp write fails (ENOSPC/EACCES/EROFS). The fs mock forces writeFileSync to
+// throw, so the tmp-write catch fires and recordErrors + returns BEFORE the
+// target is ever touched. Staging a real last-good index.json via fd writes
+// (openSync/writeSync/closeSync are NOT mocked — only writeFileSync/renameSync
+// are, via the vi.importActual spread) lets us assert the on-disk content
+// survives the failed flush. The old code's direct-overwrite fallback would
+// have clobbered this with a partial/corrupt write (or thrown mid-fallback,
+// killing the stdio server on the SIGTERM path); the fix leaves it intact for
+// the next boot's reconcileIndex rebuild.
+describe('atomicWrite 4.1: last-good preserved on tmp-write failure', () => {
+  it('leaves the staged index.json untouched and records tmp-write failed', async () => {
+    const { INDEX_PATH } = await import('../paths.js');
+    const fs = await import('fs');
+    // Stage a last-good index.json via fd writes — bypasses the mocked
+    // writeFileSync (forced to throw). openSync/writeSync/closeSync/readFileSync
+    // /mkdirSync all come through the vi.importActual spread untouched.
+    fs.mkdirSync(path.dirname(INDEX_PATH), { recursive: true });
+    const lastGood = JSON.stringify({ 'knowledge/last-good': { key: 'knowledge/last-good' } });
+    const fd = fs.openSync(INDEX_PATH, 'w');
+    try { fs.writeSync(fd, lastGood); } finally { fs.closeSync(fd); }
+    // Arm the debounce timer so flushPending has work to do, then force a flush.
+    scheduleSave();
+    expect(() => flushPending()).not.toThrow();
+    // The tmp-write failure must be recorded with the 4.1 message.
+    expect(errors.some((e) => /tmp-write failed/.test(e.msg))).toBe(true);
+    // The last-good target must survive byte-for-byte — atomicWrite did NOT
+    // fall back to a direct overwrite (which would clobber or corrupt it).
+    expect(fs.readFileSync(INDEX_PATH, 'utf8')).toBe(lastGood);
   });
 });
 // ─── #18: dead boot invertedIndex.json load removed ─────────────────────────
