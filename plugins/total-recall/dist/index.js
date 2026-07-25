@@ -17381,7 +17381,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.111" : null.version;
+var PLUGIN_VERSION = true ? "1.0.112" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
