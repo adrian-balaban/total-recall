@@ -13,7 +13,7 @@
  */
 import { VECTORS_DB, loadConfig } from './paths.js';
 import { upsertVector } from './vectorStore.js';
-import { recordError } from './state.js';
+import { recordError, memIndex } from './state.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
@@ -75,6 +75,21 @@ async function getEmbedder(): Promise<((text: string) => Promise<number[] | null
   return loadPromise;
 }
 
+// Canonical text fed to the embedder for a (title, body) memory (3.3). The
+// title is prefixed (blank-line separated) so a memory's vector reflects its
+// heading as well as its body. Before this helper existed, the two write/read
+// paths used DIFFERENT text shapes: rerank_memories embedded `${title}\n\n
+// ${body}` while embedAndUpsert embedded only the body — so a stored vector
+// (body-only) and a freshly-computed rerank vector (title+body) for the SAME
+// key could disagree, and a query for a memory's title found nothing. One
+// helper, used by every path, makes them agree. The body is sliced to
+// EMBED_BODY_SLICE (MiniLM-L6 truncates at 256 tokens anyway, so a longer body
+// adds no signal — the slice loses nothing and bounds the embed input).
+export const EMBED_BODY_SLICE = 2000;
+export function embedTextFor(title: string, body: string): string {
+  return `${title || ''}\n\n${(body || '').slice(0, EMBED_BODY_SLICE)}`;
+}
+
 export async function embed(text: string): Promise<number[] | null> {
   const embedder = await getEmbedder();
   if (!embedder) return null;
@@ -83,7 +98,23 @@ export async function embed(text: string): Promise<number[] | null> {
   // read-path callers wrap embed() in their own try/catch (recall_memory) or
   // surface it (rerank) — preserving the pre-Phase-0 behavior rather than
   // swallowing it as a silent null.
-  return await embedder(text);
+  const vec = await embedder(text);
+  // 3.4: a model that returns a non-array or empty array would otherwise flow
+  // unchecked into upsertVector (which guards length but not type) and into
+  // cosine/searchVector where an empty vector silently scores 0 and a
+  // non-array throws mid-loop. Treat it as a per-call failure, record it, and
+  // return null so callers degrade (rerank skips the candidate, embedAndUpsert
+  // null-skips the write, recall falls back to TF-IDF) instead of corrupting
+  // the index with a zero-length row. isVectorAvailable() is unaffected — it
+  // reflects pipeline-load state, not a single call's output.
+  if (!Array.isArray(vec) || vec.length === 0) {
+    recordError(
+      `embed: model returned ${Array.isArray(vec) ? 'empty' : 'non-array'} vector ` +
+      `for text of length ${text.length}`
+    );
+    return null;
+  }
+  return vec;
 }
 
 // Fire-and-forget embed → upsert. Centralized so the two write paths (store +
@@ -107,8 +138,17 @@ export async function embed(text: string): Promise<number[] | null> {
 // (vault-scan.ts) closes pre-existing holes; this closes new ones.
 const pendingEmbeds = new Set<Promise<void>>();
 
-export function embedAndUpsert(key: string, text: string): void {
-  const p = embed(text)
+export function embedAndUpsert(key: string, body: string): void {
+  // 3.3: embed the CANONICAL (title + body) text so a memory's vector reflects
+  // its heading — matching what rerank_memories computes for the same key, so a
+  // stored vector and a fresh rerank vector agree (and a title query finds the
+  // memory). The title is looked up from memIndex at call time (already
+  // populated by the time any write path reaches here). The (key, body)
+  // signature is preserved so store/update call sites and their tests stay
+  // unchanged; body is sliced inside embedTextFor (MiniLM truncates past 256
+  // tokens, so the slice loses no signal).
+  const title = memIndex[key]?.title ?? '';
+  const p = embed(embedTextFor(title, body))
     .then(vec => { if (vec) return upsertVector(VECTORS_DB, key, vec); })
     .catch(e => { recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`); });
   pendingEmbeds.add(p);

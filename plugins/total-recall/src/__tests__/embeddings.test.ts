@@ -71,11 +71,37 @@ describe('embeddings — success path', () => {
   });
 
   it('isVectorAvailable returns true for an external embedder that returns an empty array', async () => {
-    // Empty array is a valid (if degenerate) embedding response and must not
-    // disable the vector-search flag just because it is falsy.
+    // 3.4: an empty array is a degenerate model output. embed() now returns null
+    // + records the error (see the dedicated test below), but isVectorAvailable()
+    // reflects pipeline-LOAD state (set by __testSetEmbedder), not a single call's
+    // output — so the flag still reports true. The pipeline is "available"; this
+    // particular call produced nothing usable.
     __testSetEmbedder(async () => []);
     await embed('probe');
     expect(isVectorAvailable()).toBe(true);
+  });
+
+  // 3.4: a model that returns a non-array or empty array must not flow into
+  // upsertVector / cosine / searchVector unchecked. embed() records the failure
+  // and returns null so callers degrade instead of corrupting the index.
+  it('embed() returns null and records when the model returns an empty array (3.4)', async () => {
+    __testSetEmbedder(async () => []);
+    const before = errors.length;
+    const res = await embed('probe');
+    expect(res).toBeNull();
+    const newErrors = errors.slice(before);
+    expect(newErrors.length).toBe(1);
+    expect(newErrors[0]!.msg).toContain('empty');
+  });
+
+  it('embed() returns null and records when the model returns a non-array (3.4)', async () => {
+    __testSetEmbedder(async () => 'not-a-vector' as unknown as number[]);
+    const before = errors.length;
+    const res = await embed('probe');
+    expect(res).toBeNull();
+    const newErrors = errors.slice(before);
+    expect(newErrors.length).toBe(1);
+    expect(newErrors[0]!.msg).toContain('non-array');
   });
 });
 

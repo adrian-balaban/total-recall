@@ -2145,22 +2145,28 @@ describe('embed callback — embedAndUpsert called on write', () => {
     expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, '\n## Executive Summary\n\nupdated vector content');
   });
 
-  it('update_memory calls embedAndUpsert when tags change even if content is omitted (G6)', async () => {
+  it('update_memory does NOT call embedAndUpsert when only tags change (3.11)', async () => {
+    // 3.11: the embedded text is embedTextFor(title, body) — title + body, NOT
+    // tags. A tag-only update changes nothing in the text the vector is built
+    // from, so the existing vector is still correct and re-embedding would just
+    // reproduce it. The old code re-embedded on any tag/importance change (a bug
+    // that paid an embed() to make the identical vector); the trigger is now
+    // content-only.
     const { key } = result(await callTool('store_memory', {
       title: 'Embed Tag Test', content: 'orig', tags: [], category: 'knowledge',
     }));
     vi.mocked(embedMod.embedAndUpsert).mockClear();
     await callTool('update_memory', { key, tags: ['newtag'] });
-    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, expect.stringContaining('orig'));
+    expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
   });
 
-  it('update_memory calls embedAndUpsert when importanceScore changes even if content is omitted (G6)', async () => {
+  it('update_memory does NOT call embedAndUpsert when only importanceScore changes (3.11)', async () => {
     const { key } = result(await callTool('store_memory', {
       title: 'Embed IS Test', content: 'orig', tags: [], category: 'knowledge', importanceScore: 0.3,
     }));
     vi.mocked(embedMod.embedAndUpsert).mockClear();
     await callTool('update_memory', { key, importanceScore: 0.9 });
-    expect(vi.mocked(embedMod.embedAndUpsert)).toHaveBeenCalledWith(key, expect.stringContaining('orig'));
+    expect(vi.mocked(embedMod.embedAndUpsert)).not.toHaveBeenCalled();
   });
 
   it('update_memory does NOT call embedAndUpsert when neither content, tags, nor importanceScore change', async () => {

@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { recordError } from './state.js';
+import { loadConfig } from './paths.js';
 
 let dbPromise: Promise<any> | null = null;
 let cachedDbPath: string | null = null;
@@ -202,12 +203,65 @@ function ensureVecTable(d: any, dim: number): void {
     const existingDim = parseExistingDimension(existing.sql);
     const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
     if (existingDim === dim && hasCosine) return;
+    // 3.1: the DROP here is correct (the write path is about to re-insert vectors
+    // at the new dim), but it wipes every stored vector — record it so a user
+    // wondering where their vector index went sees an actionable entry in
+    // get_stats.recentErrors instead of a silent disappearance.
+    recordError(
+      `vector index rebuilt: stored vec_memories dim ${existingDim} != new dim ${dim} ` +
+      `(embedding model changed?) — re-embedding all memories with the new model`
+    );
     d.exec("DROP TABLE vec_memories");
   }
   d.exec(
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories ` +
     `USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
+  // 3.7: fingerprint the table with the model + dim that created it, so get_stats
+  // can report which model/dim the stored vectors actually belong to (the config
+  // model may have changed since they were embedded — the fingerprint is the
+  // ground truth, not the live config). Best-effort: a write failure leaves
+  // vec_meta absent and getVecMeta returns null (reported as "unknown").
+  writeVecMeta(d, dim);
+}
+
+// 3.7: vec_meta is a tiny key/value table recording the embedding model + dim
+// that built vec_memories. get_stats surfaces it so a user can see "vectors
+// were embedded with model X at dim N" — distinguishing the live config model
+// (what NEW embeds use) from the stored fingerprint (what EXISTING rows are).
+// A mismatch between the two is exactly the dim-correctness bug class 3.1/3.2
+// guard against; making it visible turns a silent degradation into a diagnosable
+// state.
+function writeVecMeta(d: any, dim: number): void {
+  try {
+    d.exec('CREATE TABLE IF NOT EXISTS vec_meta (key TEXT PRIMARY KEY, value TEXT)');
+    const model = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    d.prepare("INSERT OR REPLACE INTO vec_meta(key, value) VALUES ('model', ?), ('dim', ?)")
+      .run(model, String(dim));
+  } catch {
+    // best-effort fingerprint; absence is handled by getVecMeta returning null
+  }
+}
+
+export async function getVecMeta(
+  dbPath: string
+): Promise<{ model: string; dim: number | null } | null> {
+  const d = await getDb(dbPath);
+  if (!d) return null;
+  try {
+    const exists = d
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_meta'")
+      .get();
+    if (!exists) return null;
+    const rows = d
+      .prepare("SELECT key, value FROM vec_meta WHERE key IN ('model', 'dim')")
+      .all() as Array<{ key: string; value: string }>;
+    const m: Record<string, string> = {};
+    for (const r of rows) m[r.key] = r.value;
+    return { model: m.model ?? '', dim: m.dim ? Number(m.dim) : null };
+  } catch {
+    return null;
+  }
 }
 
 // Read-path variant: create the table if it doesn't exist yet (so the MATCH
@@ -228,6 +282,9 @@ function ensureVecTableForRead(d: any, dim: number): boolean {
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories ` +
     `USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
+  // 3.7: fingerprint the freshly-created table (cold read path) too, so get_stats
+  // can report the model/dim even before any upsert lands a row.
+  writeVecMeta(d, dim);
   return true;
 }
 
@@ -247,6 +304,12 @@ export async function searchVector(
   queryEmbedding: number[],
   limit = 20
 ): Promise<Array<{ key: string; score: number }>> {
+  // 3.5: a non-array or empty query embedding (a degenerate model output that
+  // slipped past embed()'s guard, or a caller that bypassed it) would reach
+  // ensureVecTableForRead with queryEmbedding.length = 0 / undefined and either
+  // create a FLOAT[0] table or throw inside MATCH. Bail to [] so recall degrades
+  // to TF-IDF rather than corrupting the table or crashing the query.
+  if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) return [];
   const d = await getDb(dbPath);
   if (!d) return [];
   // Read path: never DROP the stored table on a dim mismatch (REVIEW 1.5). A
@@ -280,18 +343,61 @@ export async function searchVector(
 // back to a JSON array string; keys with no stored vector (not yet embedded,
 // or vector deps absent) are simply absent from the returned map, and the
 // caller falls back to embed() only for those.
-export async function getVectors(dbPath: string, keys: string[]): Promise<Map<string, number[]>> {
+export async function getVectors(
+  dbPath: string,
+  keys: string[],
+  expectedDim?: number
+): Promise<Map<string, number[]>> {
   const result = new Map<string, number[]>();
   if (keys.length === 0) return result;
   const d = await getDb(dbPath);
   if (!d) return result;
+  // 3.2: when the caller knows the dim it will score against (rerank passes its
+  // query vector's length), refuse to return rows from a table built with a
+  // different dim. cosineSimilarity would otherwise silently truncate via
+  // Math.min(a.length, b.length) and score garbage, AND the per-row dim guard
+  // below would re-embed every candidate one-by-one. Detecting the mismatch
+  // once here lets rerank short-circuit to fresh embeds (and record the model
+  // change) instead of reading incomparable rows. The vec_memories table
+  // enforces a single fixed dim, so a table-level check covers every row.
+  if (expectedDim !== undefined) {
+    try {
+      const existing = d
+        .prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'")
+        .get() as { sql: string } | undefined;
+      if (existing) {
+        const existingDim = parseExistingDimension(existing.sql);
+        if (existingDim !== null && existingDim !== expectedDim) {
+          recordError(
+            `getVectors skipped: stored vec_memories dim ${existingDim} != expected ${expectedDim} ` +
+            `(embedding model changed? returning no stored vectors so rerank re-embeds fresh; run rebuild_index to re-embed with the new model)`
+          );
+          return result;
+        }
+      }
+    } catch {
+      // best-effort dim check; fall through to the read
+    }
+  }
   try {
     const placeholders = keys.map(() => '?').join(',');
     const rows = d
       .prepare(`SELECT key, vec_to_json(embedding) AS embedding FROM vec_memories WHERE key IN (${placeholders})`)
       .all(...keys) as Array<{ key: string; embedding: string }>;
     for (const r of rows) {
-      result.set(r.key, JSON.parse(r.embedding));
+      const vec = JSON.parse(r.embedding);
+      // 3.2 per-row guard: a row whose stored length disagrees with the expected
+      // dim (shouldn't happen — the table enforces one dim — but defend against
+      // a corrupt/half-migrated row) is skipped; the caller falls back to a fresh
+      // embed for that key rather than scoring an incomparable vector.
+      if (expectedDim !== undefined && Array.isArray(vec) && vec.length !== expectedDim) {
+        recordError(
+          `getVectors: stored vector dim ${vec.length} != expected ${expectedDim} for key ${r.key} ` +
+          `(skipped; rerank will re-embed this key)`
+        );
+        continue;
+      }
+      result.set(r.key, vec);
     }
   } catch (e: any) {
     // A freshly-created db with no vectors yet has no vec_memories table.

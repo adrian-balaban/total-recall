@@ -16032,11 +16032,37 @@ function ensureVecTable(d, dim) {
     const existingDim = parseExistingDimension(existing.sql);
     const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
     if (existingDim === dim && hasCosine) return;
+    recordError(
+      `vector index rebuilt: stored vec_memories dim ${existingDim} != new dim ${dim} (embedding model changed?) \u2014 re-embedding all memories with the new model`
+    );
     d.exec("DROP TABLE vec_memories");
   }
   d.exec(
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
+  writeVecMeta(d, dim);
+}
+function writeVecMeta(d, dim) {
+  try {
+    d.exec("CREATE TABLE IF NOT EXISTS vec_meta (key TEXT PRIMARY KEY, value TEXT)");
+    const model = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
+    d.prepare("INSERT OR REPLACE INTO vec_meta(key, value) VALUES ('model', ?), ('dim', ?)").run(model, String(dim));
+  } catch {
+  }
+}
+async function getVecMeta(dbPath) {
+  const d = await getDb(dbPath);
+  if (!d) return null;
+  try {
+    const exists = d.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='vec_meta'").get();
+    if (!exists) return null;
+    const rows = d.prepare("SELECT key, value FROM vec_meta WHERE key IN ('model', 'dim')").all();
+    const m = {};
+    for (const r of rows) m[r.key] = r.value;
+    return { model: m.model ?? "", dim: m.dim ? Number(m.dim) : null };
+  } catch {
+    return null;
+  }
 }
 function ensureVecTableForRead(d, dim) {
   const existing = d.prepare(
@@ -16051,6 +16077,7 @@ function ensureVecTableForRead(d, dim) {
   d.exec(
     `CREATE VIRTUAL TABLE IF NOT EXISTS vec_memories USING vec0(key TEXT PRIMARY KEY, embedding FLOAT[${dim}] distance_metric=cosine);`
   );
+  writeVecMeta(d, dim);
   return true;
 }
 async function upsertVector(dbPath, key, embedding) {
@@ -16064,6 +16091,7 @@ async function upsertVector(dbPath, key, embedding) {
   );
 }
 async function searchVector(dbPath, queryEmbedding, limit = 20) {
+  if (!Array.isArray(queryEmbedding) || queryEmbedding.length === 0) return [];
   const d = await getDb(dbPath);
   if (!d) return [];
   if (!ensureVecTableForRead(d, queryEmbedding.length)) {
@@ -16079,16 +16107,38 @@ async function searchVector(dbPath, queryEmbedding, limit = 20) {
   ).all(JSON.stringify(queryEmbedding), limit);
   return rows.map((r) => ({ key: r.key, score: 1 - r.distance }));
 }
-async function getVectors(dbPath, keys) {
+async function getVectors(dbPath, keys, expectedDim) {
   const result = /* @__PURE__ */ new Map();
   if (keys.length === 0) return result;
   const d = await getDb(dbPath);
   if (!d) return result;
+  if (expectedDim !== void 0) {
+    try {
+      const existing = d.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='vec_memories'").get();
+      if (existing) {
+        const existingDim = parseExistingDimension(existing.sql);
+        if (existingDim !== null && existingDim !== expectedDim) {
+          recordError(
+            `getVectors skipped: stored vec_memories dim ${existingDim} != expected ${expectedDim} (embedding model changed? returning no stored vectors so rerank re-embeds fresh; run rebuild_index to re-embed with the new model)`
+          );
+          return result;
+        }
+      }
+    } catch {
+    }
+  }
   try {
     const placeholders = keys.map(() => "?").join(",");
     const rows = d.prepare(`SELECT key, vec_to_json(embedding) AS embedding FROM vec_memories WHERE key IN (${placeholders})`).all(...keys);
     for (const r of rows) {
-      result.set(r.key, JSON.parse(r.embedding));
+      const vec = JSON.parse(r.embedding);
+      if (expectedDim !== void 0 && Array.isArray(vec) && vec.length !== expectedDim) {
+        recordError(
+          `getVectors: stored vector dim ${vec.length} != expected ${expectedDim} for key ${r.key} (skipped; rerank will re-embed this key)`
+        );
+        continue;
+      }
+      result.set(r.key, vec);
     }
   } catch (e) {
     if (e && typeof e.message === "string" && /no such table/i.test(e.message)) return result;
@@ -16143,14 +16193,28 @@ async function getEmbedder() {
   })();
   return loadPromise;
 }
+var EMBED_BODY_SLICE = 2e3;
+function embedTextFor(title, body) {
+  return `${title || ""}
+
+${(body || "").slice(0, EMBED_BODY_SLICE)}`;
+}
 async function embed(text) {
   const embedder = await getEmbedder();
   if (!embedder) return null;
-  return await embedder(text);
+  const vec = await embedder(text);
+  if (!Array.isArray(vec) || vec.length === 0) {
+    recordError(
+      `embed: model returned ${Array.isArray(vec) ? "empty" : "non-array"} vector for text of length ${text.length}`
+    );
+    return null;
+  }
+  return vec;
 }
 var pendingEmbeds = /* @__PURE__ */ new Set();
-function embedAndUpsert(key, text) {
-  const p = embed(text).then((vec) => {
+function embedAndUpsert(key, body) {
+  const title = memIndex[key]?.title ?? "";
+  const p = embed(embedTextFor(title, body)).then((vec) => {
     if (vec) return upsertVector(VECTORS_DB, key, vec);
   }).catch((e) => {
     recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`);
@@ -16869,8 +16933,12 @@ async function recallMemory(args) {
       const qvec = await embed(query);
       if (qvec) {
         const vecResults = await searchVector(VECTORS_DB, qvec, 50);
-        const fused = reciprocalRankFusion([tfidfResults, vecResults]);
-        ranked = [...fused.entries()].map(([key, score]) => ({ key, score })).sort((a, b) => b.score - a.score);
+        if (vecResults.length > 0) {
+          const fused = reciprocalRankFusion([tfidfResults, vecResults]);
+          ranked = [...fused.entries()].map(([key, score]) => ({ key, score })).sort((a, b) => b.score - a.score);
+        } else {
+          ranked = tfidfResults;
+        }
       } else {
         ranked = tfidfResults;
       }
@@ -16970,20 +17038,36 @@ function getMemoriesByKeys(args) {
     return { ...meta2, key, content };
   });
 }
-function getStats() {
+async function getStats() {
   const byCategory = {};
   for (const m of Object.values(memIndex)) {
     byCategory[m.category] = (byCategory[m.category] ?? 0) + 1;
   }
   const perf = [...perfSamples].sort((a, b) => a - b);
   const pct = (p) => perf[Math.floor(perf.length * p)] ?? 0;
+  const depsPresent = isVectorAvailable();
+  const configuredModel = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
+  let stored = null;
+  try {
+    stored = await getVecMeta(VECTORS_DB);
+  } catch {
+    stored = null;
+  }
   return {
     total: Object.keys(memIndex).length,
     byCategory,
     cache: contentCache.stats(),
     performance: { samples: perf.length, p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
     recentErrors: errors.slice(-10),
-    vectorSearchEnabled: isVectorAvailable()
+    vector: {
+      enabled: depsPresent,
+      depsPresent,
+      model: configuredModel,
+      storedModel: stored?.model ?? null,
+      dim: stored?.dim ?? null
+    },
+    // Back-compat alias: callers/tests that read the old boolean still get it.
+    vectorSearchEnabled: depsPresent
   };
 }
 function getTimeline(args) {
@@ -17123,11 +17207,7 @@ function updateMemory(args) {
   contentCache.delete(key);
   registerDocument(key, meta2.title, meta2.tags, meta2.contentPreview);
   scheduleSave();
-  const previousTags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
-  const tagsChanged = Array.isArray(tags) && JSON.stringify(tags) !== JSON.stringify(previousTags);
-  const previousImportance = clampImportanceScore(parsed.data.importanceScore);
-  const importanceChanged = importanceScore !== void 0 && Number(importanceScore) !== previousImportance;
-  if (content !== void 0 || tagsChanged || importanceChanged) embedAndUpsert(key, newContent);
+  if (content !== void 0) embedAndUpsert(key, newContent);
   return { key, message: "Memory updated." };
 }
 function deleteMemory(args) {
@@ -17225,6 +17305,7 @@ function cosineSimilarity(a, b) {
   return denom ? dot / denom : 0;
 }
 var MAX_KEYS = 200;
+var MAX_FRESH_EMBEDS_PER_CALL = 50;
 async function rerankMemories(args) {
   const { query, keys, full = false } = args;
   if (typeof query !== "string" || query.trim().length === 0) {
@@ -17241,20 +17322,36 @@ async function rerankMemories(args) {
     return candidateKeys.map((key) => ({ key, score: 0 }));
   }
   const scored = [];
-  const storedVectors = await getVectors(VECTORS_DB, candidateKeys);
+  const storedVectors = await getVectors(VECTORS_DB, candidateKeys, qvec.length);
+  let freshEmbeds = 0;
+  let missingCount = 0;
   for (const key of candidateKeys) {
     const meta2 = memIndex[key];
     if (!meta2) continue;
     let mvec = storedVectors.get(key);
-    if (!mvec) {
-      const { content } = readCachedOrFresh(key, meta2.filePath, "reread");
-      const textToEmbed = `${meta2.title}
-
-${content || meta2.contentPreview || ""}`.slice(0, 2e3);
-      mvec = await embed(textToEmbed) ?? void 0;
+    let attempted = false;
+    if (!mvec || mvec.length !== qvec.length) {
+      missingCount++;
+      if (freshEmbeds < MAX_FRESH_EMBEDS_PER_CALL) {
+        freshEmbeds++;
+        attempted = true;
+        const { content } = readCachedOrFresh(key, meta2.filePath, "reread");
+        const body = content || meta2.contentPreview || "";
+        mvec = await embed(embedTextFor(meta2.title, body)) ?? void 0;
+        if (mvec) upsertVector(VECTORS_DB, key, mvec).catch(() => {
+        });
+      }
     }
-    if (!mvec) continue;
-    scored.push({ key, score: cosineSimilarity(qvec, mvec), meta: meta2 });
+    if (mvec && mvec.length === qvec.length) {
+      scored.push({ key, score: cosineSimilarity(qvec, mvec), meta: meta2 });
+    } else if (!attempted) {
+      scored.push({ key, score: 0, meta: meta2 });
+    }
+  }
+  if (missingCount > MAX_FRESH_EMBEDS_PER_CALL) {
+    recordError(
+      `rerank_memories: ${missingCount} candidates missing stored vectors, capped fresh-embed batch at ${MAX_FRESH_EMBEDS_PER_CALL} (${missingCount - MAX_FRESH_EMBEDS_PER_CALL} scored 0 this call; persisted vectors warm the store for the next rerank)`
+    );
   }
   scored.sort((a, b) => b.score - a.score);
   const top = scored.slice(0, limit);
@@ -17426,7 +17523,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.113" : null.version;
+var PLUGIN_VERSION = true ? "1.0.114" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

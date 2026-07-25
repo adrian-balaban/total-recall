@@ -38,12 +38,23 @@ export async function recallMemory(args: any): Promise<any> {
       const qvec = await embed(query);
       if (qvec) {
         const vecResults = await searchVector(VECTORS_DB, qvec, 50);
-        const fused = reciprocalRankFusion([tfidfResults, vecResults]);
-        // RRF returns a Map keyed by first-seen order (TF-IDF rank), NOT by fused
-        // score — sort by score desc before slicing so the top-N reflect the fused
-        // ranking rather than the TF-IDF insertion order.
-        ranked = [...fused.entries()].map(([key, score]) => ({ key, score }))
-          .sort((a, b) => b.score - a.score);
+        // 3.6: when the vector path returns nothing (cold store, dim mismatch,
+        // optional deps absent), fusing TF-IDF with an empty list is wasted work
+        // AND changes the scores: RRF still adds 1/(60+rank_tf) to every TF-IDF
+        // hit, rescaling them onto the tiny fused scale — so a caller's minScore
+        // tuned for raw TF-IDF silently drops everything. Skip the fusion entirely
+        // and keep the TF-IDF ranking (and its score scale) when vectors
+        // contribute nothing.
+        if (vecResults.length > 0) {
+          const fused = reciprocalRankFusion([tfidfResults, vecResults]);
+          // RRF returns a Map keyed by first-seen order (TF-IDF rank), NOT by fused
+          // score — sort by score desc before slicing so the top-N reflect the
+          // fused ranking rather than the TF-IDF insertion order.
+          ranked = [...fused.entries()].map(([key, score]) => ({ key, score }))
+            .sort((a, b) => b.score - a.score);
+        } else {
+          ranked = tfidfResults;
+        }
       } else {
         ranked = tfidfResults;
       }
