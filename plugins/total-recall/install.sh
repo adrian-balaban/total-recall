@@ -494,10 +494,6 @@ const [, , settingsPath, plugin] = process.argv;
 let s = {};
 try { s = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (_) {}
 s.hooks = s.hooks || {};
-if (JSON.stringify(s.hooks).includes('hooks/scripts/build-memory-index.sh')) {
-  console.log('SKIP: total-recall hooks already present.');
-  process.exit(0);
-}
 // String concat, not a template literal: `plugin` is $PLUGIN_ROOT from argv,
 // and a backtick or `${` sequence in that path would break the template literal
 // and abort the hook-wiring heredoc (silent: hooks never get wired). Plain
@@ -525,29 +521,53 @@ if (JSON.stringify(s.hooks).includes('hooks/scripts/build-memory-index.sh')) {
 // by the scope difference.
 const quote = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
 const cmd = (p, timeout) => ({ type: 'command', command: quote(plugin + '/hooks/scripts/' + p), timeout });
-(s.hooks.SessionStart = s.hooks.SessionStart || []).push({ hooks: [
-  cmd('pull-org-vault.sh', 30),
-  cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh
-  cmd('load-memory-index.sh', 5),
-  cmd('load-open-questions.sh', 5),
-] });
-(s.hooks.PostToolUse = s.hooks.PostToolUse || []).push({
-  matcher: 'store_memory|update_memory|delete_memory',
-  hooks: [ cmd('sync-org-memory.sh', 30) ],
-});
-(s.hooks.PreCompact = s.hooks.PreCompact || []).push({ hooks: [
-  cmd('extract-and-store-memories.sh', 60),
-] });
-// REVIEW 5.1: the standalone block previously omitted SessionEnd (present in
-// the canonical hooks/hooks.json since the session-end memory-capture hook
-// landed), so a --standalone install never asked "is there anything from
-// today I should remember?" at session close. Mirror it here.
-(s.hooks.SessionEnd = s.hooks.SessionEnd || []).push({ hooks: [
-  cmd('session-end.sh', 5),
-] });
+// Per-event presence check (REVIEW 5.1 / Phase 2.1). The old guard bailed on
+// ANY total-recall hook via a single `includes('build-memory-index.sh')`,
+// so a pre-5.1 standalone install (SessionStart/PostToolUse/PreCompact
+// present, SessionEnd absent) re-running install.sh hit SKIP and never got
+// the SessionEnd hook. Now each event is added only if its canonical
+// total-recall script is absent — a re-run fills in the missing SessionEnd
+// without duplicating the events already wired.
+const has = (arr, script) => Array.isArray(arr) && arr.some(g =>
+  Array.isArray(g.hooks) && g.hooks.some(h =>
+    typeof h === 'object' && h !== null && typeof h.command === 'string' &&
+    h.command.includes('/hooks/scripts/' + script)));
+const added = [];
+if (!has(s.hooks.SessionStart, 'build-memory-index.sh')) {
+  (s.hooks.SessionStart = s.hooks.SessionStart || []).push({ hooks: [
+    cmd('pull-org-vault.sh', 30),
+    cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh
+    cmd('load-memory-index.sh', 5),
+    cmd('load-open-questions.sh', 5),
+  ] });
+  added.push('SessionStart');
+}
+if (!has(s.hooks.PostToolUse, 'sync-org-memory.sh')) {
+  (s.hooks.PostToolUse = s.hooks.PostToolUse || []).push({
+    matcher: 'store_memory|update_memory|delete_memory',
+    hooks: [ cmd('sync-org-memory.sh', 30) ],
+  });
+  added.push('PostToolUse');
+}
+if (!has(s.hooks.PreCompact, 'extract-and-store-memories.sh')) {
+  (s.hooks.PreCompact = s.hooks.PreCompact || []).push({ hooks: [
+    cmd('extract-and-store-memories.sh', 60),
+  ] });
+  added.push('PreCompact');
+}
+if (!has(s.hooks.SessionEnd, 'session-end.sh')) {
+  (s.hooks.SessionEnd = s.hooks.SessionEnd || []).push({ hooks: [
+    cmd('session-end.sh', 5),
+  ] });
+  added.push('SessionEnd');
+}
+if (added.length === 0) {
+  console.log('SKIP: total-recall hooks already present.');
+  process.exit(0);
+}
 fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
 fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n');
-console.log('WROTE: total-recall hooks added.');
+console.log('WROTE: total-recall hooks added: ' + added.join(', ') + '.');
 NODE
   if [ $? -eq 0 ]; then
     ok "Hook wiring complete."

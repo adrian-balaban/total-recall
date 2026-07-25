@@ -47,6 +47,42 @@ function serializeIndex(): string {
   return JSON.stringify({ v: INDEX_VERSION, entries: memIndex }, null, 2);
 }
 
+// 2.2: concurrent-session clobber protection. Each Claude Code window spawns
+// its own total-recall stdio process; both load memIndex at boot, mutate in
+// memory, and flush via atomicWrite (write-`.tmp`+rename) on exit / debounce.
+// Last rename wins, so a flush from this process silently overwrites another
+// process's recent writes — and the runtime-only accessCount/lastAccessed
+// fields (Ebbinghaus retention signals NOT stored in .md frontmatter) cannot
+// be recovered by reconcileIndex, which re-derives only the disk-durable
+// title/tags/content/sessions from the .md files. Before writing, re-read the
+// on-disk index and take the per-key max of those runtime-only fields, so a
+// flush from this process never regresses another process's access/lastAccessed
+// bumps. The disk-durable fields are intentionally NOT merged: a losing writer's
+// stale title would regress the .md-truth, and a concurrent store's new entry is
+// rebuilt from its .md on the next boot's reconcileIndex (the .md is written
+// synchronously and is always durable, so the memory content is never lost —
+// only its index entry can lag one boot). This is the minimal, no-lock fix the
+// review scopes; a real CAS/flock would be needed to also preserve a concurrent
+// store's index entry within the same session.
+function mergeRuntimeFieldsFromDisk() {
+  let parsed: unknown;
+  try { parsed = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); }
+  catch { return; } // ENOENT (cold start) or corrupt — nothing to merge
+  const entries = unwrapIndexEntries(parsed);
+  if (!entries) return;
+  for (const [k, v] of Object.entries(entries)) {
+    const mem = (memIndex as Record<string, any>)[k];
+    if (!mem || typeof v !== 'object' || v === null || Array.isArray(v)) continue;
+    const disk = v as Record<string, unknown>;
+    if (typeof disk.accessCount === 'number' && Number.isFinite(disk.accessCount)) {
+      mem.accessCount = Math.max(typeof mem.accessCount === 'number' ? mem.accessCount : 0, disk.accessCount);
+    }
+    if (typeof disk.lastAccessed === 'string' && disk.lastAccessed) {
+      if (!mem.lastAccessed || disk.lastAccessed > mem.lastAccessed) mem.lastAccessed = disk.lastAccessed;
+    }
+  }
+}
+
 // Unwrap the on-disk object into the entries map, accepting both the current
 // wrapped shape and the legacy flat shape. Returns null for a forward-
 // incompatible version (caller bails to the reconcileIndex rebuild).
@@ -71,6 +107,22 @@ function unwrapIndexEntries(parsed: unknown): Record<string, unknown> | null {
 // Write-then-rename so a SIGKILL / power loss mid-write can't leave index.json,
 // invertedIndex.json, or .index-cache.txt half-truncated (which would corrupt
 // the index and lose all metadata on the next boot). rename is atomic on POSIX.
+//
+// 2.3 (fsync): writeFileSync returns once the data is in the OS page cache, not
+// on disk — a power loss between write and rename can leave a zero-byte/stale
+// index despite a "successful" rename, and the rename dirent itself isn't
+// durable without a parent-dir fsync. We now fsync the tmp file's data before
+// rename and fsync the parent dir after, so the atomic-rename guarantee
+// actually survives a crash. Both fsyncs are best-effort (network FS / Windows
+// may not support them); the rename atomicity holds regardless — fsync only
+// adds crash durability on top.
+function fsyncDir(dir: string) {
+  try {
+    const fd = fs.openSync(dir, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  } catch { /* Windows / network FS don't support dir fsync; best-effort */ }
+}
+
 function atomicWrite(p: string, data: string) {
   ensureDir(path.dirname(p));
   // Random tmp suffix (not a predictable `${p}.tmp`): a local attacker who can
@@ -96,6 +148,14 @@ function atomicWrite(p: string, data: string) {
     try { fs.writeFileSync(p, data); } catch (e) { recordError(`atomicWrite(${p}): ${(e as Error).message}`); }
     return;
   }
+  // fsync the tmp file's data so the page cache is flushed to disk before the
+  // rename — without this, a crash after writeFileSync can leave the tmp empty
+  // even though rename "succeeded", producing a zero-byte index. Best-effort:
+  // some FS don't support fsync; the rename atomicity below still holds.
+  try {
+    const fd = fs.openSync(tmp, 'r');
+    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
+  } catch { /* best-effort: fsync unsupported on this FS — rename still atomic */ }
   try {
     fs.renameSync(tmp, p);
   } catch {
@@ -103,7 +163,12 @@ function atomicWrite(p: string, data: string) {
     // a direct overwrite — loses POSIX atomicity but avoids a hard crash.
     fs.writeFileSync(p, data);
     try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup */ }
+    return;
   }
+  // fsync the parent dir so the rename dirent is durable too — otherwise a
+  // crash after rename can leave the dir entry pointing at the old inode.
+  // Best-effort (dir fsync is unsupported on Windows / some network FS).
+  fsyncDir(path.dirname(p));
 }
 
 // Per-entry coercion on the memIndex restore path. A pre-v1.0.6 install may
@@ -266,6 +331,7 @@ function scheduleIndexSave() {
     // — record to the shared `errors` singleton (bounded in state.ts via
     // recordError) and never rethrow from an async timer.
     try {
+      mergeRuntimeFieldsFromDisk();
       atomicWrite(INDEX_PATH, serializeIndex());
       if (dirtyTokens) {
         dirtyTokens = false;
@@ -299,6 +365,7 @@ export function scheduleIdfRecalc() {
 // are written synchronously and are always durable).
 
 export function saveNow() {
+  mergeRuntimeFieldsFromDisk();
   atomicWrite(INDEX_PATH, serializeIndex());
 }
 

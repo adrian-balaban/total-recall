@@ -25,9 +25,11 @@ vi.mock('../tfidf.js', async () => {
   };
 });
 
-import { flushPending, scheduleAccessSave, scheduleSave, scheduleIdfRecalc } from '../persistence.js';
+import { flushPending, saveNow, scheduleAccessSave, scheduleSave, scheduleIdfRecalc } from '../persistence.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex } from '../state.js';
+import { INDEX_PATH } from '../paths.js';
+import * as fs from 'node:fs';
 
 function seed(key: string) {
   (memIndex as any)[key] = {
@@ -50,6 +52,8 @@ function seed(key: string) {
 
 afterEach(() => {
   vi.mocked(rebuildInvertedIndex).mockClear();
+  // Clean any index.json written to the tmp HOME so suites don't cross-contaminate.
+  try { fs.rmSync(INDEX_PATH, { force: true }); } catch { /* best-effort */ }
 });
 
 describe('flushPending read-only recalc gate (#4)', () => {
@@ -96,5 +100,70 @@ describe('flushPending read-only recalc gate (#4)', () => {
     expect(() => flushPending()).not.toThrow();
     expect(rebuildInvertedIndex).toHaveBeenCalled();
     delete (memIndex as any)['knowledge/idf-pending-probe'];
+  });
+});
+
+// 2.2: concurrent-session clobber protection. Two total-recall processes load
+// memIndex at boot and flush via atomicWrite (last-rename-wins). Without
+// merge-on-read, this process's flush overwrites the other process's recent
+// accessCount/lastAccessed bumps — runtime-only Ebbinghaus signals NOT stored
+// in .md frontmatter, so reconcileIndex can't recover them. Before writing,
+// saveNow re-reads the on-disk index and takes the per-key max of those
+// runtime-only fields. Disk-durable fields (title) stay as mem's (the .md
+// truth), so a stale losing writer doesn't regress them.
+describe('saveNow merges runtime fields from disk (2.2)', () => {
+  it('takes max(disk, mem) for accessCount and lastAccessed', () => {
+    const key = 'knowledge/merge-probe';
+    seed(key);
+    const mem = (memIndex as any)[key];
+    mem.accessCount = 2;
+    mem.lastAccessed = '2026-01-01T00:00:00.000Z';
+    mem.title = 'fresh-from-mem';
+    // Disk has a HIGHER accessCount and a LATER lastAccessed (another process's
+    // bumps we must not overwrite), plus a stale title we must NOT adopt.
+    fs.writeFileSync(
+      INDEX_PATH,
+      JSON.stringify({
+        v: 1,
+        entries: {
+          [key]: {
+            key,
+            title: 'stale-from-disk',
+            tags: ['t'],
+            contentPreview: 'x',
+            category: 'knowledge',
+            filePath: '/tmp/merge-probe.md',
+            accessCount: 10,
+            lastAccessed: '2026-07-20T00:00:00.000Z',
+            tokenEstimate: 4,
+            isOrg: false,
+            sessions: [],
+            importanceScore: 0.5,
+            created: '2026-06-30T00:00:00.000Z',
+            updated: '2026-06-30T00:00:00.000Z',
+          },
+        },
+      }),
+    );
+    expect(() => saveNow()).not.toThrow();
+    const written = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+    const e = written.entries[key];
+    expect(e.accessCount).toBe(10);            // max(disk=10, mem=2)
+    expect(e.lastAccessed).toBe('2026-07-20T00:00:00.000Z'); // max(disk, mem)
+    expect(e.title).toBe('fresh-from-mem');    // durable field: mem wins, disk stale not adopted
+    delete (memIndex as any)[key];
+  });
+
+  it('is a no-op merge when no index.json is on disk (cold start)', () => {
+    const key = 'knowledge/cold-merge-probe';
+    seed(key);
+    (memIndex as any)[key].accessCount = 7;
+    (memIndex as any)[key].lastAccessed = '2026-03-01T00:00:00.000Z';
+    // No disk index.json — merge must silently no-op and saveNow writes mem as-is.
+    expect(() => saveNow()).not.toThrow();
+    const written = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8'));
+    expect(written.entries[key].accessCount).toBe(7);
+    expect(written.entries[key].lastAccessed).toBe('2026-03-01T00:00:00.000Z');
+    delete (memIndex as any)[key];
   });
 });
