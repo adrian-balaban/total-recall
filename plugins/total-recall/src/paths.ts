@@ -22,8 +22,10 @@ export interface TotalRecallConfig {
 // toggle) — so the uncached version did an existsSync + readFileSync + JSON.parse
 // per call. mtimeMs (nanosecond precision on Linux/macOS) keys the cache: an edit to
 // config.json changes its mtime → the next loadConfig re-reads, so a runtime toggle
-// of enableMultilingualSearch / personalVault is picked up
-// without a restart, exactly as before. statSync replaces the existsSync+read
+// of enableMultilingualSearch is picked up without a restart (tfidf.ts reads
+// loadConfig() per search). NOTE: vault paths personalVault/orgVault are resolved
+// ONCE at module load into the PERSONAL_VAULT/ORG_VAULT consts below, so changing
+// those needs a restart — the cached loadConfig() re-read is moot for them. statSync replaces the existsSync+read
 // pair (one syscall on a cache hit instead of two); ENOENT (no config / cold
 // start) resets the cache and returns {}. A parse error also resets, so a later
 // valid write re-reads. No test toggles config in-process within a sub-second
@@ -57,11 +59,11 @@ export function loadConfig(): TotalRecallConfig {
 const config = loadConfig();
 
 export const PERSONAL_VAULT = config.personalVault 
-  ? path.resolve(config.personalVault.replace(/^~/, HOME))
+  ? path.resolve(config.personalVault.replace(/^~(?=\/|$)/, HOME))
   : path.join(TOTAL_RECALL_DIR, 'personal-vault');
 
 export const ORG_VAULT = config.orgVault
-  ? path.resolve(config.orgVault.replace(/^~/, HOME))
+  ? path.resolve(config.orgVault.replace(/^~(?=\/|$)/, HOME))
   : path.join(TOTAL_RECALL_DIR, 'org', 'org-vault');
 
 export const VECTORS_DB = path.join(PERSONAL_VAULT, 'vectors.db');

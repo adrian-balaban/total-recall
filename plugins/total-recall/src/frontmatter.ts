@@ -62,7 +62,9 @@ export function parseFrontmatter(raw: string): Frontmatter {
   // REVIEW 4.5.
   const bomless = raw.charCodeAt(0) === 0xfeff ? raw.slice(1) : raw;
   const match = bomless.match(FM_RE);
-  if (!match) return { data: {}, content: raw };
+  // 10.4 (REVIEW C-21): return bomless, not raw — a BOM-prefixed file with no
+  // frontmatter would otherwise leak the BOM into the content body.
+  if (!match) return { data: {}, content: bomless };
   // Group 1 of FM_RE is guaranteed by the regex when match succeeds.
   const data = parseYamlish(match[1]!);
   const content = bomless.slice(match.index! + match[0]!.length);

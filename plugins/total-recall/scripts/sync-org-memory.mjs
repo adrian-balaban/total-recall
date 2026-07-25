@@ -18,11 +18,11 @@ function loadConfig() {
 const config = loadConfig();
 
 const PERSONAL_VAULT = config.personalVault 
-  ? path.resolve(config.personalVault.replace(/^~/, os.homedir()))
+  ? path.resolve(config.personalVault.replace(/^~(?=\/|$)/, os.homedir()))
   : path.join(TOTAL_RECALL_DIR, 'personal-vault');
 
 const ORG_VAULT = config.orgVault
-  ? path.resolve(config.orgVault.replace(/^~/, os.homedir()))
+  ? path.resolve(config.orgVault.replace(/^~(?=\/|$)/, os.homedir()))
   : path.join(TOTAL_RECALL_DIR, 'org', 'org-vault');
 
 const ORG_VAULT_DIR = path.dirname(ORG_VAULT);
@@ -134,7 +134,7 @@ function updateOrgIndex(key, data, content) {
     updated: data.updated ?? now,
     created: data.created ?? now,
     importanceScore: data.importanceScore ?? 0.5,
-    contentPreview: content.slice(0, 500),
+    contentPreview: content.trim().slice(0, 500),
   };
   atomicWrite(indexPath, JSON.stringify(index, null, 2));
 }

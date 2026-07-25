@@ -30,7 +30,7 @@ function trimTrailingComment(s) {
 function parseFrontmatter(raw) {
   const bomless = raw.charCodeAt(0) === 65279 ? raw.slice(1) : raw;
   const match = bomless.match(FM_RE);
-  if (!match) return { data: {}, content: raw };
+  if (!match) return { data: {}, content: bomless };
   const data = parseYamlish(match[1]);
   const content = bomless.slice(match.index + match[0].length);
   return { data, content };
