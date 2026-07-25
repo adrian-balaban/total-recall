@@ -15561,6 +15561,7 @@ function bumpAccess(meta2) {
 }
 
 // src/tfidf.ts
+var docLengths = /* @__PURE__ */ new Map();
 var BILINGUAL_DICT = {
   // Romanian -> English
   "decizie": "decision",
@@ -15606,6 +15607,7 @@ function deregisterDocument(key) {
       }
     }
   }
+  docLengths.delete(key);
 }
 function registerDocument(key, title, tags, contentPreview) {
   deregisterDocument(key);
@@ -15618,6 +15620,9 @@ function registerDocument(key, title, tags, contentPreview) {
     }
     invertedIndex[t].docs.push({ key, tf: count });
   }
+  let totalTokens = 0;
+  for (const c of Object.values(tf)) totalTokens += c;
+  docLengths.set(key, Math.sqrt(totalTokens));
   const N = Object.keys(memIndex).length;
   for (const t of Object.keys(invertedIndex)) {
     invertedIndex[t].idf = Math.log((N + 1) / (invertedIndex[t].docs.length + 1)) + 1;
@@ -15637,11 +15642,15 @@ function rebuildInvertedIndex() {
     }
   }
   for (const t of Object.keys(invertedIndex)) delete invertedIndex[t];
+  docLengths.clear();
   for (const [key, tf] of Object.entries(tfByDoc)) {
+    let totalTokens = 0;
     for (const [t, count] of Object.entries(tf)) {
       if (!invertedIndex[t]) invertedIndex[t] = { docs: [], idf: 0 };
       invertedIndex[t].docs.push({ key, tf: count });
+      totalTokens += count;
     }
+    docLengths.set(key, Math.sqrt(totalTokens));
   }
   for (const t of Object.keys(invertedIndex)) {
     invertedIndex[t].idf = Math.log((N + 1) / (docFreq[t] + 1)) + 1;
@@ -15660,7 +15669,7 @@ function tfidfSearch(query, excludeJournal = true) {
     tokens = expanded;
   }
   const rawScores = {};
-  const lowCache = /* @__PURE__ */ new Map();
+  const tokenCache = /* @__PURE__ */ new Map();
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
@@ -15668,14 +15677,17 @@ function tfidfSearch(query, excludeJournal = true) {
       const meta2 = memIndex[doc.key];
       if (!meta2) continue;
       if (excludeJournal && meta2.category === "journal") continue;
-      let score = doc.tf * entry.idf;
-      let low = lowCache.get(doc.key);
-      if (!low) {
-        low = { titleLow: meta2.title.toLowerCase(), tagsLow: meta2.tags.map((t) => t.toLowerCase()) };
-        lowCache.set(doc.key, low);
+      let score = (1 + Math.log(doc.tf)) * entry.idf;
+      let cached2 = tokenCache.get(doc.key);
+      if (!cached2) {
+        cached2 = {
+          titleTokens: new Set(tokenize(meta2.title)),
+          tagTokens: new Set(meta2.tags.flatMap((t) => tokenize(t)))
+        };
+        tokenCache.set(doc.key, cached2);
       }
-      if (low.titleLow.includes(token)) score *= 2;
-      if (low.tagsLow.some((t) => t.includes(token))) score *= 1.5;
+      if (cached2.titleTokens.has(token)) score *= 2;
+      if (cached2.tagTokens.has(token)) score *= 1.5;
       rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }
@@ -15685,9 +15697,12 @@ function tfidfSearch(query, excludeJournal = true) {
     const decay = computeRetentionStrength(
       meta2.importanceScore,
       daysSince(meta2.lastAccessed || meta2.updated),
-      meta2.accessCount
+      meta2.accessCount,
+      meta2.confirmations,
+      meta2.flags
     );
-    scores.push({ key, score: rawScores[key] * decay });
+    const norm = docLengths.get(key) || 1;
+    scores.push({ key, score: rawScores[key] / norm * decay });
   }
   return scores.sort((a, b) => b.score - a.score);
 }
@@ -17507,6 +17522,7 @@ function checkReconcileRequest() {
     reconcileIndex();
     recalcIdfNow();
     scheduleSave();
+    markIndexFresh();
   } catch (e) {
     recordError(`auto-reconcile: ${e instanceof Error ? e.message : String(e)}`);
   }
@@ -17523,7 +17539,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.115" : null.version;
+var PLUGIN_VERSION = true ? "1.0.116" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -10,7 +10,7 @@ vi.hoisted(() => {
 import { checkReconcileRequest, startAutoReconcile } from '../auto-reconcile.js';
 import { RECONCILE_REQUEST_FLAG } from '../paths.js';
 import { reconcileIndex } from '../vault-scan.js';
-import { recalcIdfNow, scheduleSave } from '../persistence.js';
+import { recalcIdfNow, scheduleSave, markIndexFresh } from '../persistence.js';
 import { recordError } from '../state.js';
 
 vi.mock('../vault-scan.js', () => ({
@@ -20,6 +20,7 @@ vi.mock('../vault-scan.js', () => ({
 vi.mock('../persistence.js', () => ({
   recalcIdfNow: vi.fn(),
   scheduleSave: vi.fn(),
+  markIndexFresh: vi.fn(),
   loadIndexes: vi.fn(),
 }));
 
@@ -51,6 +52,23 @@ describe('checkReconcileRequest', () => {
     expect(reconcileIndex).toHaveBeenCalledTimes(1);
     expect(recalcIdfNow).toHaveBeenCalledTimes(1);
     expect(scheduleSave).toHaveBeenCalledTimes(1);
+  });
+
+  it('8.3: calls markIndexFresh after scheduleSave to skip the redundant +2s rebuild', () => {
+    // recalcIdfNow() rebuilds the inverted index synchronously; scheduleSave()
+    // sets dirtyTokens, so without markIndexFresh the 1s index-save timer would
+    // chain scheduleIdfRecalc (+2s) and rebuild the SAME inverted index again.
+    // markIndexFresh clears dirtyTokens, mirroring main()'s boot sequence, so
+    // the timer writes index.json only. A regression that drops markIndexFresh
+    // fails this assertion (it's never called).
+    fs.writeFileSync(RECONCILE_REQUEST_FLAG, '');
+    expect(checkReconcileRequest()).toBe(true);
+    expect(markIndexFresh).toHaveBeenCalledTimes(1);
+    // Ordering matters: markIndexFresh must run AFTER scheduleSave (clearing
+    // the flag scheduleSave just set), not before. Verify call order.
+    const calls = vi.mocked(scheduleSave).mock.invocationCallOrder[0]!;
+    const fresh = vi.mocked(markIndexFresh).mock.invocationCallOrder[0]!;
+    expect(fresh).toBeGreaterThan(calls);
   });
 
   it('records an error and still deletes the marker when reconcileIndex throws', () => {

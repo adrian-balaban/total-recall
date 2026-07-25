@@ -165,4 +165,49 @@ suite('store-learning.mjs clamps importanceScore to [0, 1] on write', () => {
     expect(fs.existsSync(path.join(outside, 'symlink-escape.md'))).toBe(false);
     expect(fs.existsSync(path.join(vault, 'evil', 'symlink-escape.md'))).toBe(false);
   });
+
+  // 8.1 (REVIEW C-8): store-learning.mjs must touch ~/.total-recall/.reconcile-
+  // requested when it writes ≥1 learning, so the long-running MCP server's 10s
+  // poll picks up the new .md files same-session (otherwise they're invisible
+  // until the next boot's reconcileIndex). Pre-fix the hook wrote .md files but
+  // never signaled the server. The marker must be created on a real write and
+  // NOT touched when nothing was written (all errors/skipped) — a spurious
+  // marker on a no-op run would force a wasted reconcile every PreCompact.
+  it('8.1: touches .reconcile-requested when a learning is written', () => {
+    const marker = path.join(tmpHome, '.total-recall', '.reconcile-requested');
+    fs.rmSync(marker, { force: true });
+    runMjs([line('reconcile-touch', 0.5)]);
+    expect(fs.existsSync(marker)).toBe(true);
+  });
+
+  it('8.1: does NOT touch .reconcile-requested when nothing is written', () => {
+    const marker = path.join(tmpHome, '.total-recall', '.reconcile-requested');
+    fs.rmSync(marker, { force: true });
+    // No title → errors++, written=0 → marker must NOT be created.
+    runMjs([JSON.stringify({ content: 'no title here', tags: ['x'] })]);
+    expect(fs.existsSync(marker)).toBe(false);
+  });
+
+  // 8.2 (REVIEW C-16): store-learning.mjs must normalize the body through
+  // withExecutiveSummary (already exported from dist/frontmatter.mjs) so an
+  // extract lands with the "## Executive Summary" preamble the TS store_memory
+  // path enforces. Pre-fix the hook built the body as a raw `\n${content}` and
+  // skipped the normalization, so extracts without the header were inconsistent
+  // with the rest of the vault. Pass content WITHOUT the header and assert the
+  // written file gains exactly one.
+  it('8.2: applies withExecutiveSummary to content lacking the header', () => {
+    runMjs([JSON.stringify({
+      title: 'Exec Summary Probe',
+      content: 'raw body with no header',
+      tags: ['exec-probe'],
+      category: 'knowledge',
+    })]);
+    const file = path.join(vault, 'knowledge', 'exec-summary-probe.md');
+    const raw = fs.readFileSync(file, 'utf8');
+    const headers = raw.match(/^## Executive Summary$/gm) ?? [];
+    expect(headers.length).toBe(1);
+    // The body (after the closing ---) must start with the header, then the
+    // original content — withExecutiveSummary prepended, not appended.
+    expect(raw).toContain('## Executive Summary\n\nraw body with no header');
+  });
 }, 60000);

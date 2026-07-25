@@ -163,3 +163,104 @@ describe('multilingual search expansion', () => {
     fs.rmSync(cfgDir, { recursive: true, force: true });
   });
 });
+
+// ─── 5.1 / 5.2 / 5.3 (REVIEW): TF-IDF ranking-quality regressions ─────────────
+// 5.1: title/tag boost must use exact TOKEN match, not substring .includes.
+//      'cat' must NOT boost a doc titled 'Category theory' (substring 'cat' in
+//      'category') — only a doc whose title actually tokenizes to 'cat'.
+// 5.2: sublinear TF (1+log tf) + length norm (÷ sqrt(totalTokens)) so a verbose
+//      memory repeating a term many times doesn't drown out a concise one.
+// 5.3: confirmations/flags feed computeRetentionStrength so a confirmed memory
+//      surfaces better in search (not just survives pruning).
+
+const baseMeta = {
+  category: 'knowledge',
+  filePath: '/tmp/probe.md',
+  accessCount: 0,
+  lastAccessed: null,
+  tokenEstimate: 4,
+  isOrg: false,
+  sessions: [],
+  importanceScore: 0.5,
+  created: '2026-06-30T00:00:00.000Z',
+  updated: '2026-06-30T00:00:00.000Z',
+};
+
+function seedDoc(key: string, title: string, tags: string[], contentPreview: string, extra: Partial<any> = {}) {
+  (memIndex as any)[key] = { key, title, tags, contentPreview, ...baseMeta, ...extra };
+}
+
+function cleanKeys(keys: string[]) {
+  for (const k of keys) delete (memIndex as any)[k];
+  rebuildInvertedIndex();
+}
+
+describe('5.1: title boost is exact-token, not substring', () => {
+  it('does NOT boost "Category theory" for query "cat" (substring was a false match)', () => {
+    // docSubstr: title 'Category theory' contains the substring 'cat' but does
+    // NOT tokenize to 'cat' — the old .includes('cat') boost wrongly fired ×2.
+    // docEqual: title 'feline animal' has no 'cat' anywhere; same tf & norm so
+    // the ONLY score difference under the old code was the false substring boost.
+    const A = 'knowledge/substr-false';
+    const B = 'knowledge/equal-tf';
+    seedDoc(A, 'Category theory', [], 'cat');          // 3 tokens: category, theory, cat
+    seedDoc(B, 'feline animal', [], 'cat');            // 3 tokens: feline, animal, cat
+    rebuildInvertedIndex();
+    const r = tfidfSearch('cat', false);
+    const a = r.find((x) => x.key === A);
+    const b = r.find((x) => x.key === B);
+    expect(a).toBeDefined();
+    expect(b).toBeDefined();
+    // Both have tf(cat)=1 and norm=sqrt(3) and (post-5.1) NO title boost for 'cat'.
+    // Under the old substring code A would be ×2 (false 'cat' in 'category') and
+    // outrank B; post-fix they are equal.
+    expect(a!.score).toBeCloseTo(b!.score, 6);
+    cleanKeys([A, B]);
+  });
+});
+
+describe('5.2: sublinear TF + length norm — verbose does not dominate', () => {
+  it('ranks a concise cat-titled doc above a verbose one repeating "cat" 9×', () => {
+    // Concise: title 'cat', body 'cat' → tf(cat)=2, totalTokens=2.
+    // Verbose: title 'cat', body 'cat cat cat cat cat cat cat cat cat' → tf=10, totalTokens=10.
+    // Both get the ×2 title boost. Old linear-TF/no-norm: verbose 10 > concise 2
+    // → verbose wins. Post-5.2: concise (1+log2)·2/√2 ≈ 2.39·idf > verbose
+    // (1+log10)·2/√10 ≈ 2.09·idf → concise wins.
+    const C = 'knowledge/concise-cat';
+    const V = 'knowledge/verbose-cat';
+    seedDoc(C, 'cat', [], 'cat');
+    seedDoc(V, 'cat', [], 'cat cat cat cat cat cat cat cat cat');
+    rebuildInvertedIndex();
+    const r = tfidfSearch('cat', false);
+    const c = r.find((x) => x.key === C);
+    const v = r.find((x) => x.key === V);
+    expect(c).toBeDefined();
+    expect(v).toBeDefined();
+    expect(c!.score).toBeGreaterThan(v!.score);
+    cleanKeys([C, V]);
+  });
+});
+
+describe('5.3: confirmations/flags affect search ranking, not just pruning', () => {
+  it('ranks a confirmed memory above a flagged one with equal other inputs', () => {
+    // Two docs, identical title/tags/body/importance/age/accessCount. Only
+    // confirmations vs flags differ. computeRetentionStrength multiplies by
+    // (1 + access·0.2 + confirm·0.1 − flags·0.1): confirmed (c=5) → ×1.5,
+    // flagged (f=3) → ×0.7. Pre-5.3 tfidfSearch called computeRetentionStrength
+    // WITHOUT confirmations/flags, so both decayed identically and ranked
+    // equal — defeating the tool's promise that confirm_memory / flag surface
+    // in search. Post-5.3 the confirmed doc ranks strictly higher.
+    const CONF = 'knowledge/confirmed-probe';
+    const FLAG = 'knowledge/flagged-probe';
+    seedDoc(CONF, 'probe', [], 'probe', { confirmations: 5, flags: 0 });
+    seedDoc(FLAG, 'probe', [], 'probe', { confirmations: 0, flags: 3 });
+    rebuildInvertedIndex();
+    const r = tfidfSearch('probe', false);
+    const conf = r.find((x) => x.key === CONF);
+    const flag = r.find((x) => x.key === FLAG);
+    expect(conf).toBeDefined();
+    expect(flag).toBeDefined();
+    expect(conf!.score).toBeGreaterThan(flag!.score);
+    cleanKeys([CONF, FLAG]);
+  });
+});

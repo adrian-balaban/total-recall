@@ -2,6 +2,16 @@ import { computeRetentionStrength, daysSince } from './ebbinghaus.js';
 import { memIndex, invertedIndex } from './state.js';
 import { loadConfig } from './paths.js';
 
+// 5.2 (REVIEW): per-doc length norm sqrt(totalTokens) for sublinear-TF length
+// normalization. totalTokens = total token occurrences in the indexed text
+// (title + tags + contentPreview). Maintained alongside the inverted index:
+// rebuilt in rebuildInvertedIndex, set per-doc in registerDocument, dropped in
+// deregisterDocument. Runtime-only (not persisted) — recomputed on boot, same
+// as the inverted index itself. Dividing the raw TF-IDF score by this penalizes
+// verbose memories so a query term isn't dominated by a doc that merely
+// repeats it. The Map is module-level (one per process), mirroring invertedIndex.
+const docLengths = new Map<string, number>();
+
 // ─── TF-IDF ──────────────────────────────────────────────────────────────────
 
 const BILINGUAL_DICT: Record<string, string> = {
@@ -62,6 +72,9 @@ export function deregisterDocument(key: string) {
       }
     }
   }
+  // 5.2: drop the length norm when the doc leaves the index so a re-register
+  // (different text) replaces it rather than reading a stale norm.
+  docLengths.delete(key);
 }
 
 export function registerDocument(key: string, title: string, tags: string[], contentPreview: string) {
@@ -77,6 +90,13 @@ export function registerDocument(key: string, title: string, tags: string[], con
     }
     invertedIndex[t]!.docs.push({ key, tf: count });
   }
+
+  // 5.2: cache sqrt(totalTokens) for this doc — the length norm used at score
+  // time. totalTokens is the sum of the per-term tf counts (total token
+  // occurrences in the indexed text), not the unique-term count.
+  let totalTokens = 0;
+  for (const c of Object.values(tf)) totalTokens += c;
+  docLengths.set(key, Math.sqrt(totalTokens));
 
   // Recalculate IDFs for all active terms
   const N = Object.keys(memIndex).length;
@@ -102,13 +122,18 @@ export function rebuildInvertedIndex() {
 
   // Clear-then-populate the shared singleton (formerly `invertedIndex = {}`).
   for (const t of Object.keys(invertedIndex)) delete invertedIndex[t];
+  // 5.2: rebuild the per-doc length-norm cache alongside the inverted index.
+  docLengths.clear();
   for (const [key, tf] of Object.entries(tfByDoc)) {
+    let totalTokens = 0;
     for (const [t, count] of Object.entries(tf)) {
       // Store the precomputed tf per (term, doc) so tfidfSearch never has to
       // re-tokenize the document body to score it (the prior O(Q·D·L) hot path).
       if (!invertedIndex[t]) invertedIndex[t] = { docs: [], idf: 0 };
       invertedIndex[t].docs.push({ key, tf: count });
+      totalTokens += count;
     }
+    docLengths.set(key, Math.sqrt(totalTokens));
   }
   for (const t of Object.keys(invertedIndex)) {
     // invertedIndex[t] was just iterated from the same object above, so it
@@ -139,15 +164,15 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
   // recomputations for the same constant multiplier. Algebraically identical
   // output (not an approximation); just one decay eval per matched doc.
   const rawScores: Record<string, number> = {};
-  // #5: memoize the lowercased title + tags per doc. The boost checks below call
-  // toLowerCase on meta.title and every meta.tags entry once per (token, doc)
-  // match, but the lower casings are constant per doc — a query with Q tokens
-  // matching D docs paid Q·D title toLowerCase + Q·D·|tags| tag toLowerCase
-  // allocations, all recomputing the same per-doc strings. `token` is already
-  // lowercased by tokenize, so caching the lowercased title/tags and comparing
-  // with .includes(token) is algebraically identical output, just one toLowerCase
-  // per doc per query instead of one per (token, doc).
-  const lowCache = new Map<string, { titleLow: string; tagsLow: string[] }>();
+  // #5: memoize the tokenized title + tags per doc. The boost checks below
+  // would otherwise tokenize meta.title and every meta.tags entry once per
+  // (token, doc) match, but the tokenizations are constant per doc — a query
+  // with Q tokens matching D docs paid Q·D title tokenize + Q·D·|tags| tag
+  // tokenize allocations, all recomputing the same per-doc Sets. `token` is
+  // already lowercased + NFKD-normalized by tokenize, so caching the tokenized
+  // title/tags as Sets and testing .has(token) is one tokenize per doc per
+  // query instead of one per (token, doc).
+  const tokenCache = new Map<string, { titleTokens: Set<string>; tagTokens: Set<string> }>();
 
   for (const token of tokens) {
     const entry = invertedIndex[token];
@@ -158,14 +183,22 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
       if (excludeJournal && meta.category === 'journal') continue;
       // tf is precomputed in rebuildInvertedIndex over title + tags + contentPreview,
       // so a tag-only match retains its tf here (no re-tokenization, no silent drop).
-      let score = doc.tf * entry.idf;
-      let low = lowCache.get(doc.key);
-      if (!low) {
-        low = { titleLow: meta.title.toLowerCase(), tagsLow: meta.tags.map(t => t.toLowerCase()) };
-        lowCache.set(doc.key, low);
+      // 5.2: sublinear TF (1 + log tf) biases against verbose memories — a doc that
+      // repeats a term 10× contributes 1+log(10)≈3.3, not 10. tf≥1 for every indexed
+      // (term, doc) so log is ≥0; the +1 keeps a single-occurrence term at weight 1.
+      let score = (1 + Math.log(doc.tf)) * entry.idf;
+      let cached = tokenCache.get(doc.key);
+      if (!cached) {
+        cached = {
+          titleTokens: new Set(tokenize(meta.title)),
+          tagTokens: new Set(meta.tags.flatMap(t => tokenize(t))),
+        };
+        tokenCache.set(doc.key, cached);
       }
-      if (low.titleLow.includes(token)) score *= 2;
-      if (low.tagsLow.some(t => t.includes(token))) score *= 1.5;
+      // 5.1: exact token-match boost (was substring .includes). 'cat' no longer
+      // boosts a doc titled 'Category theory' — only an exact token counts.
+      if (cached.titleTokens.has(token)) score *= 2;
+      if (cached.tagTokens.has(token)) score *= 1.5;
       rawScores[doc.key] = (rawScores[doc.key] ?? 0) + score;
     }
   }
@@ -174,16 +207,27 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
   // retrieval), not `updated` — otherwise a memory never recalled after creation
   // decays from its creation date and a frequently-recalled one never decays at
   // all, both defeating the model. Fall back to `updated` for legacy index
-  // entries lacking lastAccessed.
+  // entries lacking lastAccessed. 5.3: pass confirmations/flags so a confirmed
+  // memory surfaces better in search (not just survives pruning) — the tool
+  // promises exactly that. computeRetentionStrength's Number.isFinite guards
+  // map undefined (legacy index entries) to 0.
   const scores: Array<{ key: string; score: number }> = [];
   for (const key of Object.keys(rawScores)) {
     const meta = memIndex[key]!;
     const decay = computeRetentionStrength(
       meta.importanceScore,
       daysSince(meta.lastAccessed || meta.updated),
-      meta.accessCount
+      meta.accessCount,
+      meta.confirmations,
+      meta.flags,
     );
-    scores.push({ key, score: rawScores[key]! * decay });
+    // 5.2: divide by the per-doc length norm sqrt(totalTokens) so a verbose
+    // memory's higher raw score (more term occurrences) doesn't dominate a
+    // concise one matching the same terms. norm ≥ sqrt(1) > 0 always; the
+    // `|| 1` guards a doc present in the index but missing from docLengths
+    // (shouldn't happen, but a divide-by-zero would nuke the whole result).
+    const norm = docLengths.get(key) || 1;
+    scores.push({ key, score: (rawScores[key]! / norm) * decay });
   }
 
   // #23: full sort, not partial top-K selection. Two reasons this is intentional:

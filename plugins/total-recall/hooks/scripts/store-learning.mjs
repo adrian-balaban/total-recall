@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { stringifyFrontmatter } from '../../dist/frontmatter.mjs';
+import { stringifyFrontmatter, withExecutiveSummary } from '../../dist/frontmatter.mjs';
 import { atomicWrite, cleanupInFlightTmp } from '../../scripts/atomic-write.mjs';
 
 const CONFIG_FILE = path.join(os.homedir(), '.total-recall', 'config.json');
@@ -127,11 +127,33 @@ process.stdin.on('end', () => {
       updated: now,
       importanceScore: clampImportance(obj.importanceScore),
     };
-    const body = `\n${obj.content}`;
+    // 8.2 (REVIEW C-16): normalize the body through withExecutiveSummary so a
+    // PreCompact extract lands with the same "## Executive Summary" preamble
+    // the TS store_memory path enforces. Without this, extracted memories
+    // skipped the executive-summary normalization and were inconsistent with
+    // the rest of the vault on disk (and on the org-sync push).
+    const body = withExecutiveSummary(String(obj.content));
     try {
       atomicWrite(filePath, stringifyFrontmatter(body, fm));
       written++;
     } catch { errors++; }
+  }
+  // 8.1 (REVIEW C-8): the long-running MCP server polls ~/.total-recall/
+  // .reconcile-requested every 10s to pick up changes it can't be notified of
+  // directly. PreCompact-extracted learnings are written here as .md files, but
+  // without touching the marker they're invisible to the running server until
+  // the NEXT boot's reconcileIndex. Touch the marker when we actually wrote
+  // something so the server reconciles them into the in-memory index within
+  // the poll window — same-session visibility, no extra boot.
+  if (written > 0) {
+    try {
+      const marker = path.join(os.homedir(), '.total-recall', '.reconcile-requested');
+      fs.mkdirSync(path.dirname(marker), { recursive: true });
+      // utimesSync with now updates mtime on an existing file (cheap re-reconcile
+      // trigger) and is a no-op-ish create on a missing one via openSync+'w'.
+      const fd = fs.openSync(marker, 'w');
+      fs.closeSync(fd);
+    } catch { /* marker is best-effort; the next boot still reconciles */ }
   }
   // Keep stdout clean (hooks must not spam it). Summary goes to stderr for debugging.
   process.stderr.write(`store-learning: ${written} written, ${skipped} skipped (existing), ${errors} errors\n`);
