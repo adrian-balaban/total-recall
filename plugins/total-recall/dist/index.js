@@ -15495,7 +15495,12 @@ var EXCLUDED_DIRS = /* @__PURE__ */ new Set([
   ".obsidian",
   "reference-docs",
   "in-progress",
-  "completed"
+  "completed",
+  // Graphiti "supersede, don't overwrite" archive (Tech Radar vol.34 #45): on a
+  // store_memory(force=true) overwrite, the prior body is archived here. The
+  // archive is a provenance sidecar — never re-indexed — so the superseded fact
+  // stays recoverable ("what did I believe and when") without polluting search.
+  ".superseded"
 ]);
 var REDACT_PAIRS = [];
 for (const p of [PERSONAL_VAULT, ORG_VAULT, HOME]) {
@@ -15760,7 +15765,7 @@ function parseFrontmatter(raw) {
 function stringifyFrontmatter(content, data) {
   const lines = [];
   const rawData = data;
-  const orderedKeys = ["title", "tags", "author", "sessions", "created", "updated", "importanceScore"];
+  const orderedKeys = ["title", "tags", "author", "sessions", "created", "updated", "importanceScore", "supersededAt"];
   const customKeys = Object.keys(rawData).filter((k) => !orderedKeys.includes(k)).sort();
   const keysToSerialize = [...orderedKeys.filter((k) => k in rawData), ...customKeys];
   for (const k of keysToSerialize) {
@@ -16457,6 +16462,9 @@ function indexFile(filePath, isOrg) {
     if (fm.flags !== void 0 && Number.isFinite(fm.flags) && fm.flags > 0) {
       meta2.flags = Math.max(0, fm.flags);
     }
+    if (Array.isArray(fm.supersededAt)) {
+      meta2.supersededAt = fm.supersededAt.filter((t) => typeof t === "string");
+    }
     memIndex[key] = meta2;
     contentCache.delete(key);
   } catch (e) {
@@ -16588,6 +16596,12 @@ function coerceMemEntry(raw, key) {
     title: String(e.title ?? ""),
     tags: Array.isArray(e.tags) ? e.tags.map((t) => t === null || t === void 0 ? "" : typeof t === "string" ? t : String(t)).filter(Boolean) : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
+    // Graphiti supersede provenance (Tech Radar vol.34 #45): coerce the chain
+    // to a string array so a corrupt/hand-edited index.json (scalar, non-string
+    // items) can't poison the in-memory meta. The spread above already carried
+    // the raw value through; this overrides it with a sanitized copy. Absent on
+    // pre-upgrade index.json → undefined (no supersession history yet).
+    supersededAt: Array.isArray(e.supersededAt) ? e.supersededAt.filter((t) => typeof t === "string") : void 0,
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(e.importanceScore),
@@ -16833,6 +16847,7 @@ function storeMemory(args) {
   const effectiveAuthor = isOrg ? osUser : author ?? osUser;
   let preservedCreated;
   let preservedSessions;
+  let supersededAt;
   if (fs5.existsSync(filePath)) {
     const existingFm = parseFrontmatter(fs5.readFileSync(filePath, "utf8")).data;
     if (isOrg && existingFm.author !== effectiveAuthor) {
@@ -16850,6 +16865,20 @@ function storeMemory(args) {
       );
     }
     preservedCreated = existingFm.created;
+    const supersessionTs = (/* @__PURE__ */ new Date()).toISOString();
+    try {
+      const archiveRoot = path6.join(vaultRoot, ".superseded", category);
+      ensureDir(archiveRoot);
+      const ts = supersessionTs.replace(/[:.]/g, "-");
+      const slugBase = path6.basename(filePath, ".md");
+      const archivePath = path6.join(archiveRoot, `${slugBase}.${ts}.md`);
+      fs5.writeFileSync(archivePath, fs5.readFileSync(filePath, "utf8"));
+    } catch {
+    }
+    supersededAt = [
+      ...Array.isArray(existingFm.supersededAt) ? existingFm.supersededAt : [],
+      supersessionTs
+    ];
     preservedSessions = Array.isArray(existingFm.sessions) ? existingFm.sessions : [];
   }
   const now = (/* @__PURE__ */ new Date()).toISOString();
@@ -16867,6 +16896,7 @@ function storeMemory(args) {
     updated: explicitUpdated ?? now,
     importanceScore
   };
+  if (supersededAt !== void 0) fm.supersededAt = supersededAt;
   const body = withExecutiveSummary(content !== void 0 ? String(content) : "");
   const fileContent = stringifyFrontmatter(body, fm);
   fs5.writeFileSync(filePath, fileContent);
@@ -17565,7 +17595,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.118" : null.version;
+var PLUGIN_VERSION = true ? "1.0.119" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

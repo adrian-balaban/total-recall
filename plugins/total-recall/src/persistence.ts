@@ -243,6 +243,14 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
           .filter(Boolean)
       : [],
     sessions: Array.isArray(e.sessions) ? e.sessions : [],
+    // Graphiti supersede provenance (Tech Radar vol.34 #45): coerce the chain
+    // to a string array so a corrupt/hand-edited index.json (scalar, non-string
+    // items) can't poison the in-memory meta. The spread above already carried
+    // the raw value through; this overrides it with a sanitized copy. Absent on
+    // pre-upgrade index.json → undefined (no supersession history yet).
+    supersededAt: Array.isArray(e.supersededAt)
+      ? e.supersededAt.filter((t: unknown): t is string => typeof t === 'string')
+      : undefined,
     // Clamp + coerce importanceScore to a finite [0, 1] number — see
     // clampImportanceScore in ebbinghaus.ts.
     importanceScore: clampImportanceScore(e.importanceScore),

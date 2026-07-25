@@ -38,7 +38,7 @@ function parseFrontmatter(raw) {
 function stringifyFrontmatter(content, data) {
   const lines = [];
   const rawData = data;
-  const orderedKeys = ["title", "tags", "author", "sessions", "created", "updated", "importanceScore"];
+  const orderedKeys = ["title", "tags", "author", "sessions", "created", "updated", "importanceScore", "supersededAt"];
   const customKeys = Object.keys(rawData).filter((k) => !orderedKeys.includes(k)).sort();
   const keysToSerialize = [...orderedKeys.filter((k) => k in rawData), ...customKeys];
   for (const k of keysToSerialize) {
