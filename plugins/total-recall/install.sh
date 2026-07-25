@@ -35,6 +35,9 @@
 #   --complete                Non-interactive profile b (hybrid vector search,
 #                             local HuggingFace embeddings). Same as --vector.
 #                             This is the default when no profile is chosen.
+#   --default                 Alias for --complete (the default profile = hybrid
+#                             vector search with the local embedder). Kept so a
+#                             bare "install the default" maps to semantic-on.
 #   --plugin-root PATH        Path to the total-recall plugin dir
 #                             (default: this script's own directory)
 #   --standalone              Wire hooks into ~/.claude/settings.json.
@@ -224,7 +227,7 @@ while [ $# -gt 0 ]; do
     --copilot)             COPILOT=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
-    --vector|--complete)   VECTOR="yes"; shift;;
+    --vector|--complete|--default)   VECTOR="yes"; shift;;
     --no-vector) VECTOR="no"; shift;;
     -y|--yes)              ASSUME_YES=1; shift;;
     -h|--help)             usage; exit 0;;
@@ -773,8 +776,28 @@ if [ "$VECTOR" = "yes" ]; then
   # leaving package.json untouched.
   # shellcheck disable=SC2086  # VEC_DEPS is an intentional word-split list
   if ( cd "$PLUGIN_ROOT" && npm install --no-save $VEC_DEPS && npm run build ); then
-    ok "Vector search enabled (TF-IDF + local HuggingFace embeddings via RRF)."
-    note "Vector search enabled (local HuggingFace embeddings)."
+    # Verify the better-sqlite3 native binding actually loads. npm install runs
+    # prebuild-install as better-sqlite3's postinstall, but a source-only dir
+    # (e.g. a `claude plugin update` landing without a matching prebuild, or a
+    # musl/glibc mismatch) leaves the .node file absent — `require()` throws.
+    # The runtime getDb() self-heal + honest "still missing" error in
+    # vectorStore.ts is the backstop; this install-time check catches it now and
+    # attempts a node-gyp rebuild before deferring to the backstop.
+    if ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
+      ok "Vector search enabled (TF-IDF + local HuggingFace embeddings via RRF)."
+      note "Vector search enabled (local HuggingFace embeddings)."
+    else
+      warn "better-sqlite3 native binding missing — attempting node-gyp rebuild ..."
+      if [ -d "$PLUGIN_ROOT/node_modules/better-sqlite3" ] && \
+         ( cd "$PLUGIN_ROOT/node_modules/better-sqlite3" && npx --no-install node-gyp rebuild ) 2>/dev/null && \
+         ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
+        ok "Vector search enabled (native binding rebuilt via node-gyp)."
+        note "Vector search enabled (local HuggingFace embeddings)."
+      else
+        warn "better-sqlite3 native binding still missing — plugin will run TF-IDF only (getDb self-heals on next start)."
+        note "Vector search unavailable — native binding missing."
+      fi
+    fi
   else
     warn "npm install/build failed — plugin will fall back to TF-IDF only."
   fi
