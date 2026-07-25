@@ -338,16 +338,6 @@ export function indexFile(filePath: string, isOrg: boolean) {
       st = fs.lstatSync(filePath);
     } catch { return; }
     if (st.isSymbolicLink()) return;
-    // #17: `base` is one of two constants (PERSONAL_VAULT/ORG_VAULT), so its
-    // realpath is identical for every file in the walk — resolve it once per
-    // vault root and memoize, instead of an lstat+readlink syscall per .md.
-    // realpathSync(filePath) below stays per-file (it IS per-file). realpathSync
-    // throws ENOENT/TMPRESOLVED if the vault root vanished mid-scan; treat that
-    // as "nothing to index here" and bail, matching the lstat guard's swallow.
-    const realBase = realBaseFor(base);
-    if (realBase === null) return;
-    const realFile = fs.realpathSync(filePath);
-    if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
 
     const key = keyFromPath(filePath, isOrg);
     // Prototype-pollution guard: a teammate-pushed file named `__proto__.md` or
@@ -363,24 +353,46 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // entries are now refreshed too (previously skipped via the !memIndex[key] guard,
     // which left org contentPreview/tags stale after a git pull).
     const existing = memIndex[key];
-    // #19: skip the readFileSync + parseFrontmatter when the file is unchanged
-    // since the last scan. mtimeMs+size identify the file body cheaply from the
-    // lstat above; an unchanged file has the same contentPreview/tokenEstimate/
-    // tags/title/updated as the cached entry, so re-reading + re-parsing is pure
-    // boot cost (the dominant cost at personal scale — linear in file count ×
-    // size). Path containment is already re-validated above (realpath check), so
-    // refreshing filePath and keeping the cached body is safe. Caveat: mtime is
-    // filesystem-local, so the skip only helps same-machine session-to-session
-    // boots — a git pull changes mtime and forces a re-read (correct: pulled
-    // content must be re-indexed). Pre-#19 index.json entries have mtimeMs=0/
-    // size=0 (coerceMemEntry default), so the first reconcile after upgrade
-    // re-reads once and backfills real values; subsequent boots skip. The 0
-    // sentinel never matches a real file, so corrupt/missing stats always force
-    // a full read — the skip never fires on stale data.
+    // #19 + 9.2 (review-ollama 5.2): skip the readFileSync + parseFrontmatter when
+    // the file is unchanged since the last scan, AND skip the per-file realpathSync
+    // too. mtimeMs+size identify the file body cheaply from the lstat above; an
+    // unchanged file has the same contentPreview/tokenEstimate/tags/title/updated
+    // as the cached entry, so re-reading + re-parsing is pure boot cost (the
+    // dominant cost at personal scale — linear in file count × size). The
+    // per-file realpathSync was the OTHER per-file syscall on this hot path: it
+    // ran BEFORE the mtime/size skip, so even unchanged files paid a readlink
+    // resolution just to immediately short-circuit. Move the fast-path ABOVE
+    // realpathSync (guarded by the existing lstat, which already rejected
+    // symlinks at line 340): the cached entry was containment-checked via
+    // realpathSync when it was FIRST indexed, and a same-mtime/same-size regular
+    // file (lstat already confirmed it's not a symlink) can't have become an
+    // escape since, so refreshing filePath and keeping the cached body is safe
+    // without re-resolving. The slow path (changed/new file) keeps the full
+    // realpath containment check below. Caveat: mtime is filesystem-local, so
+    // the skip only helps same-machine session-to-session boots — a git pull
+    // changes mtime and forces a re-read (correct: pulled content must be
+    // re-indexed). Pre-#19 index.json entries have mtimeMs=0/size=0
+    // (coerceMemEntry default), so the first reconcile after upgrade re-reads
+    // once and backfills real values; subsequent boots skip. The 0 sentinel never
+    // matches a real file, so corrupt/missing stats always force a full read —
+    // the skip never fires on stale data.
     if (existing && existing.mtimeMs === st.mtimeMs && existing.size === st.size) {
       memIndex[key] = { ...existing, filePath };
       return;
     }
+
+    // Slow path: changed or new file. NOW resolve the vault root once (memoized
+    // per root — `base` is one of two constants, so realBase is identical for
+    // every file in the walk) and realpath the file for the defense-in-depth
+    // symlink-traversal containment check. realpathSync throws ENOENT/TMPRESOLVED
+    // if the vault root or file vanished mid-scan; treat that as "nothing to
+    // index here" and bail, matching the lstat guard's swallow. This per-file
+    // syscall now runs ONLY for files that actually changed — the unchanged-file
+    // majority never reaches here.
+    const realBase = realBaseFor(base);
+    if (realBase === null) return;
+    const realFile = fs.realpathSync(filePath);
+    if (realFile !== realBase && !realFile.startsWith(realBase + path.sep)) return;
 
     const raw = fs.readFileSync(filePath, 'utf8');
     const { data, content } = parseFrontmatter(raw);

@@ -27,7 +27,7 @@ const nextT = () => (t += 1000);
 // Imported AFTER vi.mock so its module-level `const config = loadConfig()` runs with
 // the mocked fs (statMock returns undefined → statSync path throws → {} ; primes an
 // empty cache as a clean baseline).
-const { loadConfig } = await import('../paths.js');
+const { loadConfig, redactPaths, HOME, PERSONAL_VAULT, ORG_VAULT } = await import('../paths.js');
 
 beforeEach(() => {
   statMock.mockReset();
@@ -82,5 +82,41 @@ describe('loadConfig mtime cache', () => {
     statMock.mockReturnValue(fakeStats(T2));
     readMock.mockReturnValue('{"orgRepo":"fixed"}');
     expect(loadConfig().orgRepo).toBe('fixed');
+  });
+});
+
+// 7.1 (REVIEW 7.3): redactPaths collapses absolute vault/HOME prefixes so an MCP
+// client calling get_stats can't read another user's $HOME or vault root out of
+// an error message. The in-memory `errors` array keeps full paths for stderr; only
+// the surfaced view is redacted. The replacements run longest-path-first so a
+// personal-vault nested under HOME collapses to <personal-vault>/... before HOME
+// is touched, instead of leaving a partial ~/.total-recall/personal-vault fragment.
+describe('redactPaths (7.1)', () => {
+  it('collapses a personal-vault path to the <personal-vault> label', () => {
+    const msg = `reconcile readdirSync(${PERSONAL_VAULT}/locked) failed: EACCES`;
+    const out = redactPaths(msg);
+    expect(out).toContain('<personal-vault>/locked');
+    // The absolute $HOME prefix must NOT appear in the redacted output.
+    expect(out).not.toContain(HOME);
+  });
+
+  it('collapses an org-vault path to the <org-vault> label', () => {
+    const msg = `indexFile(${ORG_VAULT}/decisions/adr-001.md) threw`;
+    const out = redactPaths(msg);
+    expect(out).toContain('<org-vault>/decisions/adr-001.md');
+    expect(out).not.toContain(HOME);
+  });
+
+  it('collapses a bare $HOME prefix to ~ when no vault path is present', () => {
+    const msg = `stat(${HOME}/.total-recall/config.json) ENOENT`;
+    const out = redactPaths(msg);
+    expect(out).toContain('~/.total-recall/config.json');
+    expect(out).not.toContain(HOME);
+  });
+
+  it('is a no-op on a message with no absolute paths', () => {
+    expect(redactPaths('recall_memory hybrid sqlite-vec I/O boom')).toBe(
+      'recall_memory hybrid sqlite-vec I/O boom',
+    );
   });
 });

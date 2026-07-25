@@ -15497,6 +15497,15 @@ var EXCLUDED_DIRS = /* @__PURE__ */ new Set([
   "in-progress",
   "completed"
 ]);
+var REDACT_PAIRS = [];
+for (const p of [PERSONAL_VAULT, ORG_VAULT, HOME]) {
+  if (p) REDACT_PAIRS.push([p, p === HOME ? "~" : `<${path.basename(p)}>`]);
+}
+function redactPaths(msg) {
+  let out = String(msg);
+  for (const [p, label] of REDACT_PAIRS) out = out.split(p).join(label);
+  return out;
+}
 var DEFAULT_CATEGORIES = [
   "architecture",
   "decisions",
@@ -16391,10 +16400,6 @@ function indexFile(filePath, isOrg) {
       return;
     }
     if (st.isSymbolicLink()) return;
-    const realBase = realBaseFor(base);
-    if (realBase === null) return;
-    const realFile = fs2.realpathSync(filePath);
-    if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
     const key = keyFromPath(filePath, isOrg);
     if (isReservedKey(key)) {
       recordError(`indexFile: reserved key skipped: ${key}`);
@@ -16405,6 +16410,10 @@ function indexFile(filePath, isOrg) {
       memIndex[key] = { ...existing, filePath };
       return;
     }
+    const realBase = realBaseFor(base);
+    if (realBase === null) return;
+    const realFile = fs2.realpathSync(filePath);
+    if (realFile !== realBase && !realFile.startsWith(realBase + path3.sep)) return;
     const raw = fs2.readFileSync(filePath, "utf8");
     const { data, content } = parseFrontmatter(raw);
     const fm = data;
@@ -16743,6 +16752,9 @@ function appendJournal(action, key, title) {
   }
 }
 
+// src/privacy-filter.ts
+var SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[oprsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
+
 // src/tools/store.ts
 function orgVaultConfigured() {
   try {
@@ -16858,6 +16870,15 @@ function storeMemory(args) {
   const body = withExecutiveSummary(content !== void 0 ? String(content) : "");
   const fileContent = stringifyFrontmatter(body, fm);
   fs5.writeFileSync(filePath, fileContent);
+  try {
+    if (SECRET_TOKEN_RE.test(body)) {
+      process.stderr.write(
+        `total-recall: warning \u2014 memory "${title}" looks like it contains a secret token; the personal vault stores content in the clear.
+`
+      );
+    }
+  } catch {
+  }
   const existing = memIndex[key];
   let mtimeMs = 0, size = 0;
   try {
@@ -17073,7 +17094,12 @@ async function getStats() {
     byCategory,
     cache: contentCache.stats(),
     performance: { samples: perf.length, p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
-    recentErrors: errors.slice(-10),
+    // 7.1 (REVIEW 7.3): redact absolute vault/HOME paths before surfacing to an
+    // MCP client — a teammate calling get_stats must not read another user's
+    // $HOME or vault root out of an error message. The in-memory `errors` array
+    // (and any stderr log) keeps the full path; only this MCP-exposed view is
+    // redacted via redactPaths (paths.ts).
+    recentErrors: errors.slice(-10).map((e) => ({ time: e.time, msg: redactPaths(e.msg) })),
     vector: {
       enabled: depsPresent,
       depsPresent,
@@ -17539,7 +17565,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.116" : null.version;
+var PLUGIN_VERSION = true ? "1.0.117" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

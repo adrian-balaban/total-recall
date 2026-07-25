@@ -247,6 +247,92 @@ describe('privacyCheck', () => {
     circ.self = circ;
     expect(privacyCheck(circ, 'body')).toMatch(/email/);
   });
+
+  // ── 7.2 (REVIEW 7.4): labeled-generic + high-entropy secret detectors ──
+  // SECRET_TOKEN_RE only matches known-prefix tokens; a secret behind a generic
+  // label (api_key, token, secret, password, bearer) sailed past it. The new
+  // LABELED_GENERIC_RE gates on the label keyword so the FP rate stays low, and
+  // the high-entropy second pass catches unlabeled opaque ≥40-char mixed-class
+  // base64 runs (real secrets; lowercase-hex SHAs/UUIDs are excluded by the
+  // all-three-classes requirement).
+
+  it('7.2: blocks a labeled generic api_key (no known prefix)', () => {
+    expect(privacyCheck({ title: 'Config' }, 'api_key: 9f8e7d6c5b4a3210fedcba9876543210')).toMatch(/labeled secret/);
+  });
+
+  it('7.2: blocks a labeled password (case-insensitive, = separator)', () => {
+    // Value run must be ≥16 chars of the labeled-generic charset [A-Za-z0-9_\-+/=];
+    // `@`/`!`/`#` are NOT in that charset (they'd break the run), so use a
+    // charset-conforming password shape. The case-insensitive `PASSWORD` label
+    // and the ` = ` separator are what this case pins.
+    expect(privacyCheck({ title: 'Config' }, 'PASSWORD = S3cur3-Passw0rdValue123')).toMatch(/labeled secret/);
+  });
+
+  it('7.2: blocks a Bearer token (Authorization header)', () => {
+    expect(privacyCheck({ title: 'Config' }, 'Authorization: Bearer ZXlhbGx5bG9uZ29wdGlvbmFsbWFuaW5lcmVk')).toMatch(/labeled secret/);
+  });
+
+  it('7.2: blocks an unlabeled high-entropy 40-char mixed-class token', () => {
+    // A custom-service API key: 40 chars, mixed case + digits, high entropy. No
+    // label, no known prefix → only the high-entropy pass catches it.
+    expect(privacyCheck({ title: 'Notes' }, 'export FOO=Zm9vYmFyQmF6UXdYek9wVTY3NDY4MjAxMjM0NTY3')).toMatch(/high-entropy/);
+  });
+
+  it('7.2: does NOT false-positive on a 40-char lowercase-hex SHA-1 (no uppercase)', () => {
+    // Lowercase-hex SHA-1 lacks the uppercase class the high-entropy pass
+    // requires, so it must not trip the detector. (SECRET_TOKEN_RE's labeled-only
+    // AWS design already excludes it from the prefix pass.)
+    expect(privacyCheck({ title: 'Notes' }, 'commit da39a3ee5e6b4b0d3255bfef95601890afd80709 fixed it')).toBeNull();
+  });
+
+  it('7.2: does NOT false-positive on a normal prose sentence (low entropy)', () => {
+    // No 40-char token-shaped run, no label — clean.
+    expect(privacyCheck({ title: 'Architecture' }, 'We migrated the auth service to use OAuth2 with PKCE flow.')).toBeNull();
+  });
+
+  // ── 7.3 (REVIEW 7.5): validated CC / IBAN / scoped phone ──
+  // CC/IBAN fire ONLY on a passed checksum (Luhn / mod-97), so random digit and
+  // alphanumeric runs don't trigger. The scoped phone requires a `+` or
+  // `()`/`-`/`.` formatting — a bare 10-digit run is NOT a phone.
+
+  it('7.3: blocks a Luhn-valid Visa test card (4111 1111 1111 1111)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Card: 4111-1111-1111-1111 expires 12/25')).toMatch(/credit card/);
+  });
+
+  it('7.3: blocks an ungrouped Luhn-valid card (4242424242424242)', () => {
+    expect(privacyCheck({ title: 'Notes' }, '4242424242424242')).toMatch(/credit card/);
+  });
+
+  it('7.3: does NOT false-positive on a Luhn-INVALID 16-digit run (timestamps/ids)', () => {
+    // 13–19 digit candidate but fails Luhn → not a card. A real account id /
+    // timestamp that happens to be 16 digits almost never passes Luhn.
+    expect(privacyCheck({ title: 'Notes' }, 'Account id 1234567890123456 here.')).toBeNull();
+  });
+
+  it('7.3: blocks a valid IBAN (mod-97 passes)', () => {
+    // GB82 WEST 1234 5698 7654 32 is a canonical valid test IBAN.
+    expect(privacyCheck({ title: 'Notes' }, 'IBAN: GB82WEST12345698765432')).toMatch(/IBAN/);
+  });
+
+  it('7.3: does NOT false-positive on an INVALID IBAN shape (fails mod-97)', () => {
+    // Same shape but wrong check digits → mod-97 ≠ 1 → not an IBAN.
+    expect(privacyCheck({ title: 'Notes' }, 'GB00WEST12345698765432 in a note')).toBeNull();
+  });
+
+  it('7.3: blocks a formatted international phone number (+country code)', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Call me at +40 712 345 678 after noon.')).toMatch(/phone/);
+  });
+
+  it('7.3: blocks a US-style parenthesized phone number', () => {
+    expect(privacyCheck({ title: 'Notes' }, 'Reach (555) 123-4567 during business hours.')).toMatch(/phone/);
+  });
+
+  it('7.3: does NOT false-positive on a BARE 10-digit run (no separators) — the original FP class', () => {
+    // The bare-run phone FP that killed the original regex must stay excluded:
+    // no +, no parens, no dashes/dots → not a phone. (Also not a CC: 10 digits <
+    // 13-digit minimum; not Luhn-relevant.)
+    expect(privacyCheck({ title: 'Notes' }, 'Timestamp 1719705600 and account id 1234567890 in this note.')).toBeNull();
+  });
 });
 
 // ─── Tests: sanitizeAllowedDomains (bare-TLD footgun) ─────────────────────────
