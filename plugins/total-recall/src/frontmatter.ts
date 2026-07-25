@@ -74,7 +74,7 @@ export function parseFrontmatter(raw: string): Frontmatter {
 export function stringifyFrontmatter(content: string, data: object): string {
   const lines: string[] = [];
   const rawData = data as Record<string, unknown>;
-  const orderedKeys = ['title', 'tags', 'author', 'sessions', 'created', 'updated', 'importanceScore'];
+  const orderedKeys = ['title', 'tags', 'author', 'sessions', 'created', 'updated', 'importanceScore', 'supersededAt'];
 
   const customKeys = Object.keys(rawData)
     .filter(k => !orderedKeys.includes(k))

@@ -447,6 +447,17 @@ export function indexFile(filePath: string, isOrg: boolean) {
     if (fm.flags !== undefined && Number.isFinite(fm.flags) && fm.flags > 0) {
       meta.flags = Math.max(0, fm.flags);
     }
+    // Graphiti supersede provenance (Tech Radar vol.34 #45): carry the
+    // supersededAt chain into the in-memory meta so it survives a reconcile /
+    // rebuild_index and is visible via get_memories_by_keys. The chain is only
+    // ever read back on the next store_memory(force=true) overwrite (store.ts
+    // reads it from disk, not from meta), but keeping it in meta makes the
+    // provenance inspectable without a re-parse. Coerce to a string array: a
+    // hand-edited/teammate-pushed frontmatter with a scalar or non-string value
+    // would otherwise corrupt the chain.
+    if (Array.isArray(fm.supersededAt)) {
+      meta.supersededAt = fm.supersededAt.filter((t): t is string => typeof t === 'string');
+    }
     memIndex[key] = meta;
     // Invalidate any cached content for this key: indexFile re-reads from disk
     // (boot, reconcile, rebuild_index), so the cached body may now be stale (e.g.

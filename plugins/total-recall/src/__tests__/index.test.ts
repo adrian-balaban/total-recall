@@ -22,6 +22,7 @@ vi.hoisted(() => {
 import { loadIndexes, saveNow } from '../persistence.js';
 import { memIndex, errors } from '../state.js';
 import { appendJournal } from '../journal.js';
+import { parseFrontmatter } from '../frontmatter.js';
 import { contentCache, LRUCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { embed, embedAndUpsert } from '../embeddings.js';
@@ -381,8 +382,98 @@ describe('store_memory', () => {
   });
 });
 
-// ─── vault-boundary hardening (symlink traversal + poisoned filePath) ─────────
-//
+// ─── Graphiti "supersede, don't overwrite" (Tech Radar vol.34 #45) ─────────────
+// store_memory(force=true) must NOT silently drop the prior fact: it archives
+// the prior body to <vault>/.superseded/<cat>/<slug>.<ts>.md (excluded from
+// indexing) and records the supersession moment on the new frontmatter's
+// supersededAt[] so "what did I believe and when" is recoverable.
+describe("store_memory — supersede, don't overwrite (Graphiti #45)", () => {
+  it('archives the prior body and records supersededAt on a force-overwrite', async () => {
+    const key = 'knowledge/supersede-trial';
+    const fileRel = path.join(VAULT, 'personal-vault', 'knowledge', 'supersede-trial.md');
+
+    // v1: the original belief.
+    const r1 = result(await callTool('store_memory', {
+      title: 'Supersede Trial', content: 'Original belief: use Ollama.', tags: ['test'], category: 'knowledge',
+    }));
+    expect(r1.key).toBe(key);
+    expect(fs.existsSync(fileRel)).toBe(true);
+    const v1Body = fs.readFileSync(fileRel, 'utf8');
+    expect(v1Body).toContain('Original belief: use Ollama.');
+
+    // v2: a force-overwrite supersedes v1.
+    await new Promise(r => setTimeout(r, 15)); // ensure updated timestamp moves
+    const r2 = result(await callTool('store_memory', {
+      title: 'Supersede Trial', content: 'Revised belief: use HuggingFace in-process.', tags: ['test'], category: 'knowledge', force: true,
+    }));
+    expect(r2.key).toBe(key);
+
+    // The live file now holds the NEW belief, not the old one.
+    const v2Body = fs.readFileSync(fileRel, 'utf8');
+    expect(v2Body).toContain('Revised belief: use HuggingFace in-process.');
+    expect(v2Body).not.toContain('Original belief: use Ollama.');
+
+    // The OLD belief was archived, not dropped — recoverable "what did I believe".
+    const archiveDir = path.join(VAULT, 'personal-vault', '.superseded', 'knowledge');
+    expect(fs.existsSync(archiveDir)).toBe(true);
+    const archives = fs.readdirSync(archiveDir).filter(f => f.startsWith('supersede-trial.'));
+    expect(archives.length).toBe(1);
+    const archived = fs.readFileSync(path.join(archiveDir, archives[0]!), 'utf8');
+    expect(archived).toContain('Original belief: use Ollama.');
+    expect(archived).not.toContain('Revised belief:');
+
+    // The new frontmatter carries a one-entry supersededAt chain (the moment v1
+    // was superseded). Re-parse to verify in-band provenance.
+    const fm2 = parseFrontmatter(v2Body).data as { supersededAt?: string[] };
+    expect(Array.isArray(fm2.supersededAt)).toBe(true);
+    expect(fm2.supersededAt!.length).toBe(1);
+    expect(typeof fm2.supersededAt![0]).toBe('string');
+  });
+
+  it('extends the supersededAt chain across repeated force-overwrites', async () => {
+    const fileRel = path.join(VAULT, 'personal-vault', 'knowledge', 'supersede-chain.md');
+
+    await callTool('store_memory', { title: 'Supersede Chain', content: 'v1', tags: ['test'], category: 'knowledge' });
+    await new Promise(r => setTimeout(r, 15));
+    await callTool('store_memory', { title: 'Supersede Chain', content: 'v2', tags: ['test'], category: 'knowledge', force: true });
+    await new Promise(r => setTimeout(r, 15));
+    await callTool('store_memory', { title: 'Supersede Chain', content: 'v3', tags: ['test'], category: 'knowledge', force: true });
+
+    const fm = parseFrontmatter(fs.readFileSync(fileRel, 'utf8')).data as { supersededAt?: string[] };
+    expect(fm.supersededAt!.length).toBe(2);
+    // Chronological: each supersession appends a later timestamp.
+    expect(new Date(fm.supersededAt![0]!).getTime()).toBeLessThanOrEqual(new Date(fm.supersededAt![1]!).getTime());
+
+    // Two archived prior versions exist.
+    const archives = fs.readdirSync(path.join(VAULT, 'personal-vault', '.superseded', 'knowledge'))
+      .filter(f => f.startsWith('supersede-chain.'));
+    expect(archives.length).toBe(2);
+  });
+
+  it('does NOT archive or mark supersededAt without force (duplicate-key throw)', async () => {
+    const fileRel = path.join(VAULT, 'personal-vault', 'knowledge', 'no-supersede.md');
+    await callTool('store_memory', { title: 'No Supersede', content: 'v1', tags: ['test'], category: 'knowledge' });
+    const dup = await callTool('store_memory', { title: 'No Supersede', content: 'v2', tags: ['test'], category: 'knowledge' });
+    expect(dup.isError).toBe(true);
+    // No archive dir created, no supersededAt on the untouched original.
+    expect(fs.existsSync(path.join(VAULT, 'personal-vault', '.superseded'))).toBe(false);
+    const fm = parseFrontmatter(fs.readFileSync(fileRel, 'utf8')).data as { supersededAt?: string[] };
+    expect(fm.supersededAt).toBeUndefined();
+  });
+
+  it('excludes the .superseded archive from reconcileIndex (search never sees it)', async () => {
+    await callTool('store_memory', { title: 'Archive Invisible', content: 'v1', tags: ['test'], category: 'knowledge' });
+    await new Promise(r => setTimeout(r, 15));
+    await callTool('store_memory', { title: 'Archive Invisible', content: 'v2', tags: ['test'], category: 'knowledge', force: true });
+    await callTool('rebuild_index');
+    const search = result(await callTool('search_index', { query: 'Original belief' }));
+    const hits = Array.isArray(search) ? search : search.results ?? [];
+    const keys = hits.map((h: any) => h.key);
+    // The archived v1 body (which contained "v1") must not surface as a memory.
+    expect(keys.some((k: string) => k.includes('.superseded'))).toBe(false);
+  });
+});
+
 // SEC-001 (Critical): reconcileIndex's walk followed symlinks — a teammate
 // plants a symlink `*.md` → `~/.ssh/id_rsa` via the org vault's `git pull`
 // (which preserves symlinks); readFileSync followed it into contentPreview,

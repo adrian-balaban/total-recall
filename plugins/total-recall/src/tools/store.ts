@@ -189,6 +189,7 @@ export function storeMemory(args: any): any {
 
   let preservedCreated: string | undefined;
   let preservedSessions: string[] | undefined;
+  let supersededAt: string[] | undefined;
   if (fs.existsSync(filePath)) {
     const existingFm = parseFrontmatter(fs.readFileSync(filePath, 'utf8')).data as Partial<MemoryFrontmatter>;
     // Org memories are author-protected regardless of force. Compare against the
@@ -224,6 +225,31 @@ export function storeMemory(args: any): any {
       );
     }
     preservedCreated = existingFm.created;
+    // Graphiti "supersede, don't overwrite" (Tech Radar vol.34 #45): the prior
+    // version of the fact is NOT silently dropped. (1) Archive the existing body
+    // to `<vault>/.superseded/<category>/<slug>.<ts>.md` so "what did I believe"
+    // is recoverable — the archive is excluded from indexing (EXCLUDED_DIRS),
+    // so it never pollutes search/recall/list. (2) Record the supersession
+    // moment on the new frontmatter's `supersededAt[]` so "when" is recoverable
+    // in-band, without reading the archive. The archive filename embeds the
+    // same ISO timestamp (colon-stripped for Windows/Git-Bash safety) so the
+    // archived body is locatable from a supersededAt entry. Incremental: a full
+    // bi-temporal validity-window + relation layer is a later experiment.
+    // Best-effort — an archive write failure must not block the overwrite
+    // (the supersededAt marker still records the supersession in-band).
+    const supersessionTs = new Date().toISOString();
+    try {
+      const archiveRoot = path.join(vaultRoot, '.superseded', category);
+      ensureDir(archiveRoot);
+      const ts = supersessionTs.replace(/[:.]/g, '-');
+      const slugBase = path.basename(filePath, '.md');
+      const archivePath = path.join(archiveRoot, `${slugBase}.${ts}.md`);
+      fs.writeFileSync(archivePath, fs.readFileSync(filePath, 'utf8'));
+    } catch { /* best-effort archive; the marker below still records the supersession */ }
+    supersededAt = [
+      ...(Array.isArray(existingFm.supersededAt) ? existingFm.supersededAt : []),
+      supersessionTs,
+    ];
     // Preserve prior session history on a force-overwrite (A2). Without this, the
     // spread below reset `sessions` to just `[sessionId]` — or `[]` when no new
     // session was supplied — discarding the accumulated session trail. Mirror
@@ -257,6 +283,7 @@ export function storeMemory(args: any): any {
     updated: explicitUpdated ?? now,
     importanceScore,
   };
+  if (supersededAt !== undefined) fm.supersededAt = supersededAt;
 
   // withExecutiveSummary is idempotent: if `content` already begins with the
   // header it leaves it intact, so we never double-prefix. The cached value and

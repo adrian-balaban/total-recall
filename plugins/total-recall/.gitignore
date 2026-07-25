@@ -2,3 +2,6 @@ node_modules/
 coverage/
 *.tsbuildinfo
 **/.remember
+
+# Stryker mutation testing scratch dir (never commit)
+.stryker-tmp/

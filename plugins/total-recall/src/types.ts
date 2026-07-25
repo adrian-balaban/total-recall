@@ -12,6 +12,19 @@ export interface MemoryFrontmatter {
   // flags (wrong/useless signals) reduce it.
   confirmations?: number;
   flags?: number;
+  // Graphiti-style "supersede, don't overwrite" provenance (Tech Radar vol.34,
+  // blip #45). On a store_memory(force=true) overwrite, the prior version of the
+  // fact is NOT silently dropped: its body is archived to
+  // `<vault>/.superseded/<category>/<slug>.<ts>.md` (excluded from indexing via
+  // EXCLUDED_DIRS) and the supersession moment is recorded here as an ISO
+  // timestamp. The array is chronological: supersededAt[i] is the moment version
+  // i was replaced by version i+1. The current version has been believed since
+  // the last entry (or since `created` if empty). To reconstruct "what did I
+  // believe and when": pair supersededAt[i] with the archived body whose
+  // filename embeds that same timestamp. Incremental — a full bi-temporal
+  // validity-window / relation layer is a later assess-level experiment, not
+  // this change.
+  supersededAt?: string[];
 }
 
 export interface MemoryMetadata extends MemoryFrontmatter {

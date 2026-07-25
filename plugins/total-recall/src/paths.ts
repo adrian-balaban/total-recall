@@ -74,6 +74,11 @@ export const RECONCILE_REQUEST_FLAG = path.join(TOTAL_RECALL_DIR, '.reconcile-re
 
 export const EXCLUDED_DIRS = new Set([
   'projects', 'templates', '.obsidian', 'reference-docs', 'in-progress', 'completed',
+  // Graphiti "supersede, don't overwrite" archive (Tech Radar vol.34 #45): on a
+  // store_memory(force=true) overwrite, the prior body is archived here. The
+  // archive is a provenance sidecar — never re-indexed — so the superseded fact
+  // stays recoverable ("what did I believe and when") without polluting search.
+  '.superseded',
 ]);
 
 // 7.1 (REVIEW 7.3): redact absolute vault/HOME paths from strings surfaced to MCP
