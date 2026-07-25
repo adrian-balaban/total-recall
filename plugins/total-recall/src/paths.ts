@@ -13,10 +13,7 @@ export interface TotalRecallConfig {
   orgVault?: string;
   orgRepo?: string;
   allowedEmailDomains?: string[];
-  embeddingProvider?: 'huggingface' | 'ollama';
-  embeddingUrl?: string;
   embeddingModel?: string;
-  embeddingTimeoutMs?: number;
   enableMultilingualSearch?: boolean;
 }
 
@@ -25,7 +22,7 @@ export interface TotalRecallConfig {
 // toggle) — so the uncached version did an existsSync + readFileSync + JSON.parse
 // per call. mtimeMs (nanosecond precision on Linux/macOS) keys the cache: an edit to
 // config.json changes its mtime → the next loadConfig re-reads, so a runtime toggle
-// of enableMultilingualSearch / embeddingProvider / personalVault is picked up
+// of enableMultilingualSearch / personalVault is picked up
 // without a restart, exactly as before. statSync replaces the existsSync+read
 // pair (one syscall on a cache hit instead of two); ENOENT (no config / cold
 // start) resets the cache and returns {}. A parse error also resets, so a later

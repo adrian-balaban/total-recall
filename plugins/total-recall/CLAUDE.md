@@ -25,7 +25,7 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## Install / setup
 
-`install.sh` (plugin root) is the one-shot, state-aware setup script: profile prompt (a. minimal — no optional deps / b. complete — hybrid vector search, the DEFAULT; embedding provider auto-detected: Ollama if `ollama` is on PATH with `bge-m3` pulled, else local HuggingFace MiniLM — an existing `embeddingProvider` in config.json is never overwritten) → vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--default`/`--complete`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). User-facing install docs live in `INSTALL.md` (incl. Windows/Git Bash notes) — keep it in sync with install.sh flags. Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.
+`install.sh` (plugin root) is the one-shot, state-aware setup script: profile prompt (a. minimal — no optional deps / b. complete — hybrid vector search, the DEFAULT; embeddings come from a local in-process HuggingFace MiniLM — no external service or daemon) → vault dirs → MCP registration → index build → optional standalone hook wiring / org vault / vector search → verify. Run `./install.sh --help` for flags (`-y`, `--default`/`--complete`, `--standalone`, `--org-repo`, `--allowed-email-domain`, `--vector`/`--no-vector`). User-facing install docs live in `INSTALL.md` (incl. Windows/Git Bash notes) — keep it in sync with install.sh flags. Its `--standalone` step embeds the canonical hooks JSON inline — keep that block in sync with `hooks/hooks.json` if hook commands, timeouts, or the build→load ordering change.
 
 ## Build artifacts (`dist/`)
 
@@ -72,12 +72,12 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 - Primary: TF-IDF (`invertedIndex.json`) × Ebbinghaus retention decay (`src/ebbinghaus.ts`). Expanded with RO/EN translations if `enableMultilingualSearch` is true.
 - TF-IDF tokenizes over `title + tags + contentPreview` (first ~500 chars of body stored in the index, not the full file); the boost path (`×2` title match, `×1.5` tag match) memoizes the lowercased title + tags per doc-key across the query-token loop, so a Q-token query matching D docs pays one `toLowerCase` per doc, not Q·D — never re-introduce a per-(token, doc) `toLowerCase` in `tfidfSearch`
 - Optional hybrid: TF-IDF + vector embeddings fused via Reciprocal Rank Fusion (`src/rrf.ts`)
-- Vector path supports HuggingFace (`Xenova/all-MiniLM-L6-v2`) and Ollama embedding providers. Gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
+- Vector path uses the in-process HuggingFace pipeline (`Xenova/all-MiniLM-L6-v2`, 384-dim) as its only embedding provider. Gracefully degrades to TF-IDF on any vector-path error (embed/sqlite-vec/RRF), recording the failure to `get_stats.recentErrors` via `recordError` so a recurring vector failure is observable, not silent
 
 **Supporting modules:**
 - `src/frontmatter.ts` — minimal YAML-frontmatter parse/stringify (replaces gray-matter; formats/sorts keys consistently: title, tags, author, sessions, created, updated, importanceScore, custom)
 - `src/ebbinghaus.ts` — retention strength formula: `clamp(importance × exp(-λ × days) × (1 + accessCount × 0.2 + confirmations × 0.1 − flags × 0.1), 0, 1)` (confirmations/flags come from `confirm_memory`)
-- `src/embeddings.ts` — supports in-process HuggingFace and Ollama API embeddings
+- `src/embeddings.ts` — in-process HuggingFace pipeline embeddings (single provider, post-Phase-0); lazy-loaded + no-op if deps absent; a failed load is not cached so the next embed retries
 - `src/vectorStore.ts` — sqlite-vec upsert/search/delete wrapper
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)
 

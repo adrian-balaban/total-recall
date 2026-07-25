@@ -157,7 +157,7 @@ Optional, lazy-loaded, fully local — the plugin degrades cleanly to TF-IDF wit
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or install.sh --complete
 ```
 
-Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model handles paraphrase — and with `bge-m3` via Ollama (1024-dim, multilingual) it also matches **cross-language** (store in Romanian, retrieve in English). `all-MiniLM-L6-v2` via HuggingFace (384-dim) covers English paraphrase only. RRF fuses the two rankings by position only (scale-free), since lexical scores and cosine similarities aren't directly comparable.
+Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model handles paraphrase. The default `all-MiniLM-L6-v2` (384-dim, via the in-process HuggingFace pipeline) covers English paraphrase; cross-language retrieval (store in Romanian, retrieve in English) is handled by the `enableMultilingualSearch` query-token expansion, not the embedder. RRF fuses the two rankings by position only (scale-free), since lexical scores and cosine similarities aren't directly comparable.
 
 ### Multilingual search (EN↔RO)
 
@@ -226,16 +226,12 @@ Configure total-recall by editing `~/.total-recall/config.json`:
   "orgVault": "~/my-custom-org-vault",
   "orgRepo": "https://github.com/you/your-vault.git",
   "allowedEmailDomains": ["yourcompany.com"],
-  "embeddingProvider": "ollama",
-  "embeddingModel": "bge-m3",
-  "embeddingTimeoutMs": 15000,
+  "embeddingModel": "Xenova/all-MiniLM-L6-v2",
   "enableMultilingualSearch": true
 }
 ```
 
-*   **embeddingProvider**: `'huggingface'` (local MiniLM) or `'ollama'` (local API). `install.sh` auto-selects `ollama` when Ollama is on PATH with the `bge-m3` model pulled, else `huggingface`; an existing explicit value is never overwritten.
-*   **embeddingModel**: used only for external providers (Ollama defaults to `bge-m3`).
-*   **embeddingTimeoutMs**: per-attempt cap on Ollama embedding requests (default `15000`). Each embed makes at most 2 bounded attempts (one retry after a 200 ms backoff) — absorbs the transient HTTP 500s Ollama returns while loading/evicting another model, without stalling on a genuinely-down daemon. The default covers `bge-m3` cold inference (~12s on a CPU-only laptop — the model `install.sh --complete` auto-selects); a 5s default silently kept `vectorSearchEnabled` false on every CPU machine because every embed aborted before the latch could flip. `embed()` is awaited on the hybrid-recall read path, so the default is tuned for read latency (~30.2s worst case before TF-IDF fallback). A *timeout* (reachable-but-slow) is NOT counted as a "down" failure: it does not trip the session circuit breaker (3 *down* failures → 60s cooldown) and emits a one-line hint naming this knob instead of the generic "provider failed" warning, so a slow model is not mistaken for a dead daemon.
+*   **embeddingModel**: optional override for the local HuggingFace transformer model (defaults to `Xenova/all-MiniLM-L6-v2`, 384-dim). Point this at a different `@huggingface/transformers`-compatible model if you need a different embedding space — note that changing the model dimension drops the existing vector index (it is rebuilt on the next write).
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
 
 ---

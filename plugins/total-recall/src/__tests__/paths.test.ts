@@ -53,12 +53,12 @@ describe('loadConfig mtime cache', () => {
   it('re-reads after the mtime changes (runtime config edit is picked up)', () => {
     const T1 = nextT();
     statMock.mockReturnValue(fakeStats(T1));
-    readMock.mockReturnValue('{"embeddingProvider":"huggingface"}');
-    expect(loadConfig().embeddingProvider).toBe('huggingface');
+    readMock.mockReturnValue('{"embeddingModel":"Xenova/all-MiniLM-L6-v2"}');
+    expect(loadConfig().embeddingModel).toBe('Xenova/all-MiniLM-L6-v2');
     const T2 = nextT();
     statMock.mockReturnValue(fakeStats(T2));
-    readMock.mockReturnValue('{"embeddingProvider":"ollama"}');
-    expect(loadConfig().embeddingProvider).toBe('ollama');
+    readMock.mockReturnValue('{"enableMultilingualSearch":true}');
+    expect(loadConfig().enableMultilingualSearch).toBe(true);
     expect(readMock).toHaveBeenCalledTimes(2);
   });
 

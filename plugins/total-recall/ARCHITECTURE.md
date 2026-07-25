@@ -23,7 +23,7 @@ src/
 ├── tfidf.ts          tokenize, rebuildInvertedIndex, tfidfSearch
 ├── ebbinghaus.ts     computeRetentionStrength, daysSince
 ├── rrf.ts            reciprocalRankFusion (k=60)
-├── embeddings.ts     embeddings: Ollama provider (bge-m3, 1024-dim multilingual) or HuggingFace pipeline (all-MiniLM-L6-v2, 384-dim); lazy + no-op if deps absent
+├── embeddings.ts     embeddings: in-process HuggingFace pipeline (all-MiniLM-L6-v2, 384-dim); lazy-loaded + no-op if deps absent; failed load is not cached (retried next call)
 ├── vectorStore.ts    sqlite-vec upsert/search/delete wrapper
 ├── dates.ts          parseRelativeDate
 ├── journal.ts        appendJournal
