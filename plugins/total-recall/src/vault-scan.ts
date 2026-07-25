@@ -285,7 +285,11 @@ export function reconcileIndex() {
 // present in memIndex but missing from vec_memories. Re-embed those keys (tracked
 // + drained by flushEmbeddings on the next exit). Embeds the contentPreview (first
 // ~500 chars) — MiniLM-L6 truncates to 256 tokens, so the preview and the full
-// body produce an equivalent vector (no need to re-read the whole file).
+// body produce an equivalent vector (no need to re-read the whole file). 3.3:
+// embedAndUpsert now internally builds the canonical `embedTextFor(title, body)`
+// text (title looked up from memIndex), so the backfill vector matches what
+// store/update would have written — the (key, contentPreview) call site is
+// unchanged because the title prefix is folded in internally.
 //
 // #16 (stale sweep): delete_memory calls deleteVector fire-and-forget, then
 // `delete memIndex[key]` + scheduleSave. If the process exits before deleteVector

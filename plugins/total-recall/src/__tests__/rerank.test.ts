@@ -197,7 +197,9 @@ describe('rerank_memories', () => {
 
     expect(getVectorStoreMocks().getVectors).toHaveBeenCalledWith(
       expect.any(String),
-      ['knowledge/alpha', 'knowledge/beta']
+      ['knowledge/alpha', 'knowledge/beta'],
+      4 // 3.2: qvec.length is now passed as expectedDim so getVectors can refuse
+        // rows from a table built with a different dim
     );
     // knowledge/beta scores against its STORED vector (aligned with "beta"),
     // not a fresh embed of its body — proving the stored vector was used.

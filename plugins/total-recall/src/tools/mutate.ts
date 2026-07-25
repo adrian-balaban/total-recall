@@ -120,17 +120,17 @@ export function updateMemory(args: any): any {
   registerDocument(key, meta.title, meta.tags, meta.contentPreview);
   scheduleSave();
 
-  // Re-embed whenever a search-relevant dimension changes: content, tags, or
-  // importanceScore. A tag-only or importance-only update changes what should
-  // surface in hybrid search / pruning, so the old vector (built from the stale
-  // tags/score context) must be replaced. Use coerced previous values so a
-  // malformed scalar tags arg is treated as "no change" rather than a false
-  // diff against an array-typed default.
-  const previousTags = Array.isArray(parsed.data.tags) ? parsed.data.tags : [];
-  const tagsChanged = Array.isArray(tags) && JSON.stringify(tags) !== JSON.stringify(previousTags);
-  const previousImportance = clampImportanceScore(parsed.data.importanceScore);
-  const importanceChanged = importanceScore !== undefined && Number(importanceScore) !== previousImportance;
-  if (content !== undefined || tagsChanged || importanceChanged) embedAndUpsert(key, newContent);
+  // 3.11: re-embed only when content changes. The embedded text is
+  // `embedTextFor(title, body)` (embeddings.ts 3.3) — the TITLE and the BODY, NOT
+  // the tags or importanceScore. A tag-only or importance-only update changes
+  // nothing in the text the vector is built from, so the old vector is still the
+  // correct vector for the memory; re-embedding on a tag change was a bug — it
+  // paid an embed() to produce the identical vector. (Tags/importance still
+  // affect TF-IDF search and pruning via their own indexes, updated above.)
+  // `content !== undefined` (not truthy) so an explicit empty-string body — a
+  // clear-the-body update — still re-embeds and replaces the wiped content's
+  // vector (the regression pinned by the "explicit empty-string content" test).
+  if (content !== undefined) embedAndUpsert(key, newContent);
 
   return { key, message: 'Memory updated.' };
 }

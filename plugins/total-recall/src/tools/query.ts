@@ -3,8 +3,9 @@ import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable } from '../embeddings.js';
+import { getVecMeta } from '../vectorStore.js';
 import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
-import { NO_PRUNE_TAG } from '../paths.js';
+import { NO_PRUNE_TAG, VECTORS_DB, loadConfig } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
 
 // Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
@@ -91,20 +92,42 @@ export function getMemoriesByKeys(args: any): any {
   });
 }
 
-export function getStats(): any {
+export async function getStats(): Promise<any> {
   const byCategory: Record<string, number> = {};
   for (const m of Object.values(memIndex)) {
     byCategory[m.category] = (byCategory[m.category] ?? 0) + 1;
   }
   const perf = [...perfSamples].sort((a, b) => a - b);
   const pct = (p: number) => perf[Math.floor(perf.length * p)] ?? 0;
+  // 3.8: report the vector index's actual state, not a single boolean. The old
+  // `vectorSearchEnabled` answered only "is the pipeline loaded?" — it stayed
+  // true after a model change while every stored vector was now the wrong dim,
+  // and gave no way to see WHICH model/dim the stored rows belong to. Surface
+  // a structured block: `enabled` (pipeline loaded), `depsPresent` (same, kept
+  // for callers that keyed off the old boolean), `model`/`dim` — the live config
+  // model (what NEW embeds use) vs the stored fingerprint (what EXISTING rows
+  // are, from vec_meta 3.7). A model/dim mismatch between `model` and the stored
+  // fingerprint is the dim-correctness bug class 3.1/3.2 guard against — making
+  // it visible turns a silent degrade into a diagnosable state.
+  const depsPresent = isVectorAvailable();
+  const configuredModel = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+  let stored: { model: string; dim: number | null } | null = null;
+  try { stored = await getVecMeta(VECTORS_DB); } catch { stored = null; }
   return {
     total: Object.keys(memIndex).length,
     byCategory,
     cache: contentCache.stats(),
     performance: { samples: perf.length, p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
     recentErrors: errors.slice(-10),
-    vectorSearchEnabled: isVectorAvailable(),
+    vector: {
+      enabled: depsPresent,
+      depsPresent,
+      model: configuredModel,
+      storedModel: stored?.model ?? null,
+      dim: stored?.dim ?? null,
+    },
+    // Back-compat alias: callers/tests that read the old boolean still get it.
+    vectorSearchEnabled: depsPresent,
   };
 }
 
