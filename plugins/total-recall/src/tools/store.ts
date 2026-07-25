@@ -11,6 +11,7 @@ import { contentCache } from '../lru-cache.js';
 import { appendJournal } from '../journal.js';
 import { scheduleSave, deriveFilePathFromKey } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
+import { SECRET_TOKEN_RE } from '../privacy-filter.js';
 import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
@@ -266,6 +267,24 @@ export function storeMemory(args: any): any {
   const body = withExecutiveSummary(content !== undefined ? String(content) : '');
   const fileContent = stringifyFrontmatter(body, fm);
   fs.writeFileSync(filePath, fileContent);
+
+  // 7.4 (REVIEW 7.2): non-blocking stderr warning when the stored content looks
+  // like a secret token. The personal vault stores content verbatim and is local
+  // (post-Ollama the embedder runs in-process, so nothing leaves the machine), so
+  // this is NOT a block — only a one-line stderr hint so a user who pasted a real
+  // key into a memory is told it's sitting on disk in the clear. The org-sync path
+  // (privacyCheck in sync-org-memory) still hard-blocks a secret from reaching the
+  // shared repo; this is the personal-vault belt. SECRET_TOKEN_RE is the known-
+  // prefix detector only — the broader labeled-generic/high-entropy detectors
+  // are intentionally NOT used here to keep the personal-vault FP rate near zero
+  // (a noisy warning the user ignores is worse than no warning).
+  try {
+    if (SECRET_TOKEN_RE.test(body)) {
+      process.stderr.write(
+        `total-recall: warning — memory "${title}" looks like it contains a secret token; the personal vault stores content in the clear.\n`,
+      );
+    }
+  } catch { /* best-effort warning; never block a store on it */ }
 
   const existing = memIndex[key];
   // #19: capture the just-written file's stat so the next reconcileIndex can

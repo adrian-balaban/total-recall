@@ -5,7 +5,7 @@ import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable } from '../embeddings.js';
 import { getVecMeta } from '../vectorStore.js';
 import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
-import { NO_PRUNE_TAG, VECTORS_DB, loadConfig } from '../paths.js';
+import { NO_PRUNE_TAG, VECTORS_DB, loadConfig, redactPaths } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
 
 // Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
@@ -118,7 +118,12 @@ export async function getStats(): Promise<any> {
     byCategory,
     cache: contentCache.stats(),
     performance: { samples: perf.length, p50: pct(0.5), p95: pct(0.95), p99: pct(0.99) },
-    recentErrors: errors.slice(-10),
+    // 7.1 (REVIEW 7.3): redact absolute vault/HOME paths before surfacing to an
+    // MCP client — a teammate calling get_stats must not read another user's
+    // $HOME or vault root out of an error message. The in-memory `errors` array
+    // (and any stderr log) keeps the full path; only this MCP-exposed view is
+    // redacted via redactPaths (paths.ts).
+    recentErrors: errors.slice(-10).map(e => ({ time: e.time, msg: redactPaths(e.msg) })),
     vector: {
       enabled: depsPresent,
       depsPresent,

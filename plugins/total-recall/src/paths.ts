@@ -73,6 +73,27 @@ export const RECONCILE_REQUEST_FLAG = path.join(TOTAL_RECALL_DIR, '.reconcile-re
 export const EXCLUDED_DIRS = new Set([
   'projects', 'templates', '.obsidian', 'reference-docs', 'in-progress', 'completed',
 ]);
+
+// 7.1 (REVIEW 7.3): redact absolute vault/HOME paths from strings surfaced to MCP
+// clients (get_stats.recentErrors). recordError keeps the FULL path in the
+// in-memory `errors` array for stderr diagnostics; only the MCP-exposed view is
+// redacted, so a teammate calling get_stats can't read another user's $HOME or
+// vault root out of an error message. Order matters: replace the longest/most-
+// specific path first (PERSONAL_VAULT, then ORG_VAULT, then HOME) so a vault
+// nested under HOME collapses to `<personal-vault>/...` before HOME is touched,
+// instead of leaving a partial `~/.total-recall/personal-vault` fragment. A
+// missing/empty path is skipped (split on '' would shred the string). The
+// basename is used as the label so a redacted message still names which vault
+// the path was in (personal-vault vs org-vault) — useful context, not PII.
+const REDACT_PAIRS: Array<[string, string]> = [];
+for (const p of [PERSONAL_VAULT, ORG_VAULT, HOME]) {
+  if (p) REDACT_PAIRS.push([p, p === HOME ? '~' : `<${path.basename(p)}>`]);
+}
+export function redactPaths(msg: string): string {
+  let out = String(msg);
+  for (const [p, label] of REDACT_PAIRS) out = out.split(p).join(label);
+  return out;
+}
 export const DEFAULT_CATEGORIES = [
   'architecture', 'decisions', 'troubleshooting', 'meetings', 'knowledge', 'journal',
 ];

@@ -340,6 +340,45 @@ describe('store_memory', () => {
     const raw = fs.readFileSync(res.filePath, 'utf8');
     expect(raw).toContain('author: testuser');
   });
+
+  // 7.4 (REVIEW 7.2): store_memory writes a non-blocking stderr warning when the
+  // stored content looks like a known-prefix secret token (sk-/ghp_/AKIA…), so a
+  // user who pasted a real key into a memory is told it's sitting on disk in the
+  // clear. It is a HINT, not a block — the personal vault stores content verbatim
+  // and is local; the org-sync privacy filter is the hard block for shared repo
+  // pushes. Pin both: (a) the warning fires for a secret-looking body AND the
+  // store still succeeds (returns a key + writes the file), (b) a benign body
+  // does NOT trigger the warning.
+  it('warns on stderr for a secret-looking body but still stores the memory (7.4)', async () => {
+    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      const res = result(await callTool('store_memory', {
+        // sk- + 20+ base64url chars → SECRET_TOKEN_RE match (OpenAI-style key).
+        title: 'Leaked Key Note', content: 'my openai key is sk-' + 'A'.repeat(28), tags: [], category: 'knowledge',
+      }));
+      // Store succeeded — key + filePath returned, file on disk.
+      expect(res.key).toMatch(/^knowledge\/leaked-key-note/);
+      expect(fs.existsSync(res.filePath)).toBe(true);
+      // The warning landed on stderr and names the memory title.
+      const warned = writeSpy.mock.calls.some((c) => String(c[0]).includes('looks like it contains a secret token'));
+      expect(warned).toBe(true);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
+
+  it('does NOT warn for a benign body (7.4 FP guard)', async () => {
+    const writeSpy = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      await callTool('store_memory', {
+        title: 'Benign Note', content: 'just a normal memory about kafka and flink', tags: [], category: 'knowledge',
+      });
+      const warned = writeSpy.mock.calls.some((c) => String(c[0]).includes('secret token'));
+      expect(warned).toBe(false);
+    } finally {
+      writeSpy.mockRestore();
+    }
+  });
 });
 
 // ─── vault-boundary hardening (symlink traversal + poisoned filePath) ─────────

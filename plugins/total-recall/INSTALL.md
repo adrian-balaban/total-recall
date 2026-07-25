@@ -94,6 +94,14 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 
 Requirements: `gh auth status` green, and the `org-vault` branch must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
+## Privacy model — what is blocked, what is only warned
+
+Two layers, with different threat models:
+
+- **Org vault (shared repo) — hard block.** The org-sync hook runs a fail-closed privacy filter *before* `git add`: it refuses to push any memory containing a secret token / API key (known-prefix `sk-`, `ghp_`, `AKIA`…, PEM headers; labeled-generic `api_key:` / `Authorization: Bearer` / `password =` forms; high-entropy mixed-class blobs), a credit card (Luhn-validated), an IBAN (ISO 13616 mod-97-validated), a formatted phone number, or a personal email outside your `--allowed-email-domain`. Nothing in those categories ever reaches the shared repo.
+- **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process; nothing leaves the host), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
+
+
 ## Enabling vector search later
 
 ```bash
