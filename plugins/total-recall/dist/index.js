@@ -16391,6 +16391,27 @@ var INDEX_VERSION = 1;
 function serializeIndex() {
   return JSON.stringify({ v: INDEX_VERSION, entries: memIndex }, null, 2);
 }
+function mergeRuntimeFieldsFromDisk() {
+  let parsed;
+  try {
+    parsed = JSON.parse(fs3.readFileSync(INDEX_PATH, "utf8"));
+  } catch {
+    return;
+  }
+  const entries = unwrapIndexEntries(parsed);
+  if (!entries) return;
+  for (const [k, v] of Object.entries(entries)) {
+    const mem = memIndex[k];
+    if (!mem || typeof v !== "object" || v === null || Array.isArray(v)) continue;
+    const disk = v;
+    if (typeof disk.accessCount === "number" && Number.isFinite(disk.accessCount)) {
+      mem.accessCount = Math.max(typeof mem.accessCount === "number" ? mem.accessCount : 0, disk.accessCount);
+    }
+    if (typeof disk.lastAccessed === "string" && disk.lastAccessed) {
+      if (!mem.lastAccessed || disk.lastAccessed > mem.lastAccessed) mem.lastAccessed = disk.lastAccessed;
+    }
+  }
+}
 function unwrapIndexEntries(parsed) {
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const obj = parsed;
@@ -16403,6 +16424,17 @@ function unwrapIndexEntries(parsed) {
     return null;
   }
   return obj;
+}
+function fsyncDir(dir) {
+  try {
+    const fd = fs3.openSync(dir, "r");
+    try {
+      fs3.fsyncSync(fd);
+    } finally {
+      fs3.closeSync(fd);
+    }
+  } catch {
+  }
 }
 function atomicWrite(p, data) {
   ensureDir(path4.dirname(p));
@@ -16418,6 +16450,15 @@ function atomicWrite(p, data) {
     return;
   }
   try {
+    const fd = fs3.openSync(tmp, "r");
+    try {
+      fs3.fsyncSync(fd);
+    } finally {
+      fs3.closeSync(fd);
+    }
+  } catch {
+  }
+  try {
     fs3.renameSync(tmp, p);
   } catch {
     fs3.writeFileSync(p, data);
@@ -16425,7 +16466,9 @@ function atomicWrite(p, data) {
       fs3.unlinkSync(tmp);
     } catch {
     }
+    return;
   }
+  fsyncDir(path4.dirname(p));
 }
 function deriveFilePathFromKey(key) {
   if (typeof key !== "string" || !key) return null;
@@ -16511,6 +16554,7 @@ function scheduleIndexSave() {
   if (indexSaveTimer) clearTimeout(indexSaveTimer);
   indexSaveTimer = setTimeout(() => {
     try {
+      mergeRuntimeFieldsFromDisk();
       atomicWrite(INDEX_PATH, serializeIndex());
       if (dirtyTokens) {
         dirtyTokens = false;
@@ -16541,6 +16585,7 @@ function scheduleIdfRecalc() {
   }, 2e3);
 }
 function saveNow() {
+  mergeRuntimeFieldsFromDisk();
   atomicWrite(INDEX_PATH, serializeIndex());
 }
 function recalcIdfNow() {
@@ -17381,7 +17426,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.112" : null.version;
+var PLUGIN_VERSION = true ? "1.0.113" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
