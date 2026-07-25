@@ -80,6 +80,36 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(ctx).not.toContain('vunknown');
   });
 
+  // 8.4 (REVIEW 9.4): load-memory-index.sh must dedupe when the SessionStart
+  // context already carries our "## Total Recall v" marker. In a multi-client /
+  // two-instance setup the hook runtime forwards the accumulated additionalContext
+  // from prior hooks on stdin; without the guard, the index is injected TWICE —
+  // a doubled "Active Memory Index" block in the session context. Pipe a synthetic
+  // already-injected context on stdin and assert the script emits the bare
+  // {"continue":true} fallback (no additionalContext, no second injection). The
+  // marker string the script greps for is "## Total Recall v", which the real
+  // INSTRUCTIONS banner always starts with.
+  it('load-memory-index.sh: dedupes when stdin already carries the Total Recall marker', () => {
+    const pluginRoot = path.join(tmpHome, 'dedup-plugin');
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(path.join(pluginRoot, 'package.json'), '{"version":"9.9.9"}');
+    fs.mkdirSync(path.join(tmpHome, '.total-recall'), { recursive: true });
+    fs.writeFileSync(path.join(tmpHome, '.total-recall', '.index-cache.txt'), '0\n');
+    // Synthetic context mimicking what a prior total-recall injection would leave.
+    const alreadyInjected = '## Total Recall v9.9.9 — Active Memory Index\n...';
+    const r = spawnSync('bash', [LOAD_SCRIPT], {
+      encoding: 'utf8',
+      stdio: 'pipe',
+      input: alreadyInjected,
+      env: { ...process.env, HOME: tmpHome, CLAUDE_PLUGIN_ROOT: pluginRoot },
+    });
+    expect(r.status).toBe(0);
+    const out = JSON.parse(r.stdout);
+    // Bare fallback — no hookSpecificOutput, no additionalContext, no second injection.
+    expect(out).toEqual({ continue: true });
+    expect(out.hookSpecificOutput).toBeUndefined();
+  });
+
   // Pass 2 fix #6: build-memory-index.sh must use `find -type f` so symlinked .md
   // entries (type l) are excluded. Without -type f: (a) a symlinked .md pointing at
   // an outside file is followed and its frontmatter is injected into the cache — the

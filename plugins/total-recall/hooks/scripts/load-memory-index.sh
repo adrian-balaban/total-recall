@@ -5,6 +5,24 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -
 . "$SCRIPT_DIR/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe; see statusline.sh)
 CACHE="$HOME/.total-recall/.index-cache.txt"
 
+# 8.4 (REVIEW 9.4): hook-level dedup. If two total-recall servers are running
+# in the same session (two CLI clients, or a multi-instance setup), SessionStart
+# fires once per hook registration and would inject the memory index TWICE —
+# a doubled "Active Memory Index" block in the session context. When the hook
+# runtime forwards the accumulated additionalContext from prior hooks on
+# stdin, an already-injected index carries our "## Total Recall v" marker.
+# Detect it and emit a bare {"continue":true} (no additionalContext) so only
+# the first injection wins. Stdin is otherwise unused by this hook, so
+# consuming it here is safe; if stdin carries no marker we fall through to
+# normal injection (no regression for runtimes that don't forward context).
+if [ ! -t 0 ]; then
+  HOOK_STDIN=$(cat 2>/dev/null || true)
+  if printf '%s' "$HOOK_STDIN" | grep -q '## Total Recall v'; then
+    echo '{"continue":true}'
+    exit 0
+  fi
+fi
+
 # Plugin version — single-sourced from package.json (same source the MCP server
 # reports in its initialize handshake). node is this plugin's hard dependency;
 # falls back to "unknown" if package.json can't be read.

@@ -10,7 +10,7 @@
 
 import * as fs from 'fs';
 import { RECONCILE_REQUEST_FLAG } from './paths.js';
-import { recalcIdfNow, scheduleSave } from './persistence.js';
+import { recalcIdfNow, scheduleSave, markIndexFresh } from './persistence.js';
 import { recordError } from './state.js';
 import { reconcileIndex } from './vault-scan.js';
 
@@ -38,6 +38,12 @@ export function checkReconcileRequest(): boolean {
     reconcileIndex();
     recalcIdfNow();
     scheduleSave();
+    // 8.3 (REVIEW C-11): mirror main()'s boot sequence. recalcIdfNow() already
+    // rebuilt the inverted index synchronously; scheduleSave() set dirtyTokens
+    // so the 1s timer would chain scheduleIdfRecalc (+2s) and rebuild it AGAIN
+    // — the same redundant second rebuild #18 eliminated from the boot path.
+    // markIndexFresh clears dirtyTokens so the timer writes index.json only.
+    markIndexFresh();
   } catch (e) {
     recordError(`auto-reconcile: ${e instanceof Error ? e.message : String(e)}`);
   }

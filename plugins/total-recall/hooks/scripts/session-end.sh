@@ -63,9 +63,8 @@ fi
 # Emit the SessionEnd envelope. additionalContext is what Claude Code
 # surfaces to the user; the hookEventName is mandatory (see #24) — without
 # it Claude Code drops the entire additionalContext silently.
-EXIT_STATUS="unknown"
-if [ -n "$MCP_PID" ]; then
-  EXIT_STATUS="signaled"
-fi
+# 8.6 (REVIEW C-20): the prior EXIT_STATUS var ("unknown"/"signaled") was
+# computed and never referenced — mcp_child=%s already conveys the same
+# information (none vs a pid). Removed the dead block.
 printf '{"hookSpecificOutput":{"hookEventName":"SessionEnd","additionalContext":"total-recall session end: mcp_child=%s, log=%s"}}\n' \
   "${MCP_PID:-none}" "$LOG"
