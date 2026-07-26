@@ -7,3 +7,9 @@ REVIEW-*.txt
 
 # 3rd-party reference PDFs (Technology Radar etc.) — not source, kept local
 tr_technology_radar_*.pdf
+
+# A stray `npm install` at the repo root (there is no root package.json — the
+# real project is the plugin under plugins/total-recall/) creates a root
+# node_modules/ + package-lock.json. Ignore both so they never get tracked.
+node_modules/
+package-lock.json
