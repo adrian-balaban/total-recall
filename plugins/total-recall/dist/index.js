@@ -16769,6 +16769,17 @@ function appendJournal(action, key, title) {
 // src/privacy-filter.ts
 var SECRET_TOKEN_RE = /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP |ENCRYPTED )?PRIVATE KEY-----|\b(?:sk-[A-Za-z0-9_-]{20,}|sk_live_[A-Za-z0-9]{24,}|rk_live_[A-Za-z0-9]{24,}|(?:AKIA|ASIA)[0-9A-Z]{16}|gh[oprsu]_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{10,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20}|xapp-[A-Za-z0-9_-]{36,}|eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})\b|aws_secret_access_key["'\s:=]+[A-Za-z0-9\/+=]{40}(?![A-Za-z0-9\/+=])/i;
 
+// src/errors.ts
+var MemoryExistsError = class _MemoryExistsError extends Error {
+  key;
+  constructor(key, message) {
+    super(message);
+    this.name = "MemoryExistsError";
+    Object.setPrototypeOf(this, _MemoryExistsError.prototype);
+    this.key = key;
+  }
+};
+
 // src/tools/store.ts
 function orgVaultConfigured() {
   try {
@@ -16860,7 +16871,8 @@ function storeMemory(args) {
       );
     }
     if (!force) {
-      throw new Error(
+      throw new MemoryExistsError(
+        key,
         `Memory "${key}" already exists (created ${existingFm.created ?? "unknown"}). Use update_memory to modify it, or pass force=true to overwrite.`
       );
     }
@@ -17520,9 +17532,9 @@ function importMemories(args) {
       imported++;
       results.push({ key: res.key, status: "imported" });
     } catch (e) {
-      if (/already exists/.test(e.message)) {
+      if (e instanceof MemoryExistsError) {
         skipped++;
-        results.push({ status: "skipped", error: e.message });
+        results.push({ key: e.key, status: "skipped", error: e.message });
       } else {
         errors2++;
         results.push({ status: "error", error: e.message });
@@ -17595,7 +17607,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.120" : null.version;
+var PLUGIN_VERSION = true ? "1.0.121" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

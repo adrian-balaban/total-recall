@@ -96,6 +96,30 @@ describe('bulk tools', () => {
     expect(re.memories[0].content).toContain('Updated.');
   });
 
+  it('import_memories classifies already-exists via typed error and carries the colliding key (6.4)', () => {
+    // 6.4: the skip must be classified by `instanceof MemoryExistsError`, NOT by
+    // `/already exists/.test(e.message)`. The typed path also carries the key
+    // in the result — the old regex path emitted only {status,error} with no
+    // key, so asserting the key is present pins both the type check and the
+    // richer result. A non-exists error (missing title) must still classify as
+    // 'error', proving the branch isn't collapsing both into 'skipped'.
+    storeMemory({ title: 'Alpha', content: 'Original.', category: 'knowledge', tags: ['x'], importanceScore: 0.5 });
+    const res = importMemories({
+      memories: [
+        { title: 'Alpha', content: 'dup.', category: 'knowledge', tags: ['x'] }, // exists → skipped
+        { content: 'no title' }, // missing title → error
+      ],
+    });
+    expect(res.skipped).toBe(1);
+    expect(res.errors).toBe(1);
+    const skip = res.results.find((r: any) => r.status === 'skipped');
+    expect(skip).toBeDefined();
+    expect(skip!.key).toBe('knowledge/alpha'); // typed error carries the key
+    const err = res.results.find((r: any) => r.status === 'error');
+    expect(err).toBeDefined();
+    expect(err!.key).toBeUndefined(); // non-exists error has no key
+  });
+
   it('import_memories normalizes non-string tag elements', () => {
     const res = importMemories({
       memories: [{ title: 'Tags', content: 'body', category: 'knowledge', tags: ['x', 123, null] }],
