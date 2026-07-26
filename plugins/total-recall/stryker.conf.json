@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "vitest",
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts"
+  },
+  "coverageAnalysis": "perTest",
+  "ignoreStatic": true,
+  "reporters": ["clear-text", "html", "progress"],
+  "concurrency": 2,
+  "timeoutMS": 60000,
+  "disableTypeChecks": true,
+  "mutate": [
+    "src/ebbinghaus.ts",
+    "src/tfidf.ts",
+    "src/rrf.ts",
+    "src/persistence.ts",
+    "src/vectorStore.ts"
+  ]
+}

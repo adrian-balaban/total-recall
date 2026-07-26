@@ -1,0 +1,169 @@
+================================================================================
+ total-recall — WHAT REMAINS TO DO  (synthesized 2026-07-25)
+ Cross-checks: review-synthetized-24072026.txt (phase plan) +
+               review-synthetized-24072026-2nd-step.txt (multi-team re-prio) +
+               actual code at HEAD (v1.0.120, 80924a3)
+================================================================================
+
+ HOW TO READ THIS FILE
+   Every line below was verified against source at HEAD @ v1.0.120, not just
+   the review text. "DONE" cites the commit that landed it; "REMAINS" cites the
+   file:line that still has the gap. Phases 0-5, 7-11 + the 2nd-step Tier A.5/B/C
+   are all shipped. What's left is one whole phase (6) plus two deferred perf
+   items and one test gap. The headline: Phase 6 splits into a BIG branch
+   effort (6.1-6.3, the McpServer migration) and SEVEN small independent fixes
+   (6.4-6.10) that can land on main right now without the migration.
+
+ HEAD at write time: 80924a3 (v1.0.120). 2940 tests pass, typecheck clean.
+================================================================================
+
+
+================================================================================
+ SHIPPED — DO NOT RE-DO  (verified vs code, not just review claims)
+================================================================================
+ Phase 0  remove Ollama                     — 946cf6d (providers.ts deleted,
+           embeddings.ts HF-only, config keys pruned, install.sh/docs purged)
+ Phase 1  semantic default + build         — a3682a9 (--default flag drift fixed,
+           native-binding verify + node-gyp fallback, package.json desc aligned)
+ Phase 2  high-sev persistence              — 09e1a73 (2.1 per-event SessionEnd
+           backfill, 2.2 index.json merge-on-read max(disk,mem), 2.3 fsync+parent)
+ Phase 3  vector/rerank dim correctness     — d485282 (3.1 recordError before
+           DROP, 3.2 getVectors expectedDim, 3.3 embedTextFor canonical helper,
+           3.4 empty-embed = failure, 3.5 searchVector empty guard, 3.6 RRF
+           short-circuit on empty vecResults, 3.7 vec_meta fingerprint, 3.8
+           structured get_stats vector block, 3.10 rerank cap+persist, 3.11
+           mutate re-embed content-only)
+ Phase 3.9 HF load-retry                   — folded into Phase 0 (loadPromise=null
+           on catch, per plan V6)
+ Phase 4  org-sync durability              — 5504dfa (4.1 atomicWrite leaves
+           last-good on tmp-write fail, 4.2 drain_queue keeps job on fail, 4.3
+           mktemp same-fs, 4.4 check-sync-errors.sh SessionStart surface)
+ Phase 5  TF-IDF quality                   — ef14b5f (5.1 token-Set boost not
+           substring, 5.2 sublinear-TF + length norm, 5.3 confirmations/flags
+           passed to computeRetentionStrength)
+ Phase 7  privacy                          — 242b37f (7.1 redactPaths collapses
+           $HOME/vault prefixes in get_stats.recentErrors, 7.2 labeled-generic
+           + Shannon-entropy secret detectors fail-closed, 7.3 validated
+           phone/CC-Luhn/IBAN-mod97, 7.4 personal-vault secret stderr warning)
+ Phase 8  hooks/observability              — ef14b5f (8.1 store-learning touches
+           .reconcile-requested, 8.2 withExecutiveSummary, 8.3 auto-reconcile
+           markIndexFresh, 8.4 SessionStart hook-level dedup, 8.5 copilot
+           timeoutSec note, 8.6 session-end EXIT_STATUS removed)
+ Phase 9.2 realpath fast-path              — 242b37f (mtime/size check above
+           realpathSync, guarded by existing lstat)
+ Phase 10 docs/cleanups                    — 3da0518 (^~(?=\/|$) across 11 sites,
+           BOM return bomless, sync-org .trim(), loadConfig comment, doc parity)
+ Phase 11.1/11.3 test gaps                 — 3da0518 + d485282 (ebbinghaus NaN
+           per-axis, vectorStore dim-mismatch, recall RRF-empty-vector)
+
+ 2nd-step Tier A.5 (multi-team gate)       — DONE: privacy (242b37f) + org-sync
+           durability (5504dfa) + get_stats redaction (242b37f)
+ 2nd-step org index refuse-to-write-when-  — 80924a3 (ORG_INDEX_VERSION + {v,
+           newer (write-side version guard)                    entries} wrapper,
+           loadOrgIndex throws on forward-incompatible v, file left untouched)
+ 2nd-step Tier B (Stryker + DeepEval)     — DONE: mutation audit on
+           ebbinghaus/tfidf/rrf/persistence/vectorStore + scripts/eval/
+           recall_harness.py proving TF-IDF 5.1/5.2 (NDCG@5 1.000 vs 0.815)
+ 2nd-step Tier C (Graphiti supersede)      — c82c4b6 (store_memory force=true
+           archives prior body to .superseded/ + supersededAt[] chain)
+
+
+================================================================================
+ REMAINS — PHASE 6: SERVER / TOOLS API SURFACE
+================================================================================
+ Split: 6.1-6.3 = the BIG McpServer migration (dedicated branch, both plans
+ agree: branch → migrate → schema-parity tests → green → merge, NOT on main
+ incrementally). 6.4-6.10 = SEVEN small independent fixes that do NOT depend
+ on the migration and can land on main now. Do 6.4-6.10 first (quick wins,
+ each one pre-commit cycle), then attempt 6.1-6.3 on a branch.
+
+ ── 6.1-6.3  McpServer migration (DEDICATED BRANCH, large) ──
+ 6.1  Migrate deprecated low-level Server class → McpServer + registerTool.
+      src/server.ts still uses the deprecated setRequestHandler form (verified:
+      server.ts:281+ wires tools via a `tools: { name: handler }` map passed to
+      the low-level Server, not registerTool). Enables Zod boundary validation.
+      Branch-only; add before/after tools/list schema-parity integration tests
+      (Zod→JSON-Schema can subtly shift default/minimum/maximum rendering).
+ 6.2  No schema enforcement at the dispatch boundary — handlers are
+      (args: any) => any with ad-hoc coercion (root cause of the T3 scalar-tags
+      class). Lands with 6.1 (Zod shapes reject malformed calls uniformly).
+ 6.3  Co-locate the 17 tool schemas with their handlers — monolithic server.ts
+      holds all schemas; export register(server) per tools/*.ts. Lands with 6.1.
+
+ ── 6.4-6.10  Small independent fixes (land on main, no migration needed) ──
+ 6.4  import_memories classifies skips by regex-matching error text.
+      REMAINS: src/tools/bulk.ts:83 `/already exists/.test(e.message)`.
+      FIX: throw a typed MemoryExistsError (or structured {status:'exists'}) and
+      branch on type, not on English error-string match.
+ 6.5  store_memory schema omits key/created/updated/sessions the handler accepts.
+      REMAINS: handler accepts them (store.ts:46 explicitKey, :282 explicitCreated,
+      :283 explicitUpdated) but server.ts store_memory schema (server.ts:57-69)
+      does NOT declare key/created/updated/sessions → undocumented params override
+      key derivation and timestamps. FIX: declare them in the schema (noting
+      import round-trip use) OR split an internal restore path store_memory
+      doesn't expose.
+ 6.6  rerank_memories silently truncates keys to MAX_KEYS=200; schema unbounded.
+      REMAINS: cap is handler-only (rerank.ts:35,64 `MAX_KEYS=200`); server.ts
+      rerank_memories schema has no maxItems. FIX: add maxItems:200 + note the
+      cap in the description.
+ 6.7  delete_memories confirm is required AND default:false (contradictory).
+      REMAINS: server.ts:138 `confirm: { type:'boolean', default:false }` while
+      handler requires `args.confirm === true` (bulk.ts:109). FIX: drop the dead
+      default:false (the field is effectively required).
+ 6.8  export_memories silently exports '' for unreadable bodies → import(force)
+      can overwrite real content with ''.
+      REMAINS: src/tools/bulk.ts:32 `content: content ?? ''` — a null readMemoryContent
+      becomes empty string with no error signal, no errors count. FIX: on null
+      read emit {key, error:'unreadable body'} (skip the content field), add an
+      `errors` count to the export result, and make import skip entries carrying
+      an error field.
+ 6.9  delete_memories rejects the whole batch on one reserved key.
+      REMAINS: src/tools/bulk.ts:105 `if (keys.some(isReservedKey)) throw` aborts
+      the entire batch. FIX: drop the up-front throw; let the per-key path record
+      that key as an error like every other per-key failure (partial success).
+ 6.10 shutdown() can run twice concurrently (stdin 'end' + 'close' both fire).
+      REMAINS: src/index.ts:24-42 — shutdown() has no latch; process.stdin
+      'end' and 'close' can both call it. FIX: a `let shuttingDown = false` guard
+      at the top of shutdown() (early-return if already set).
+
+
+================================================================================
+ REMAINS — DEFERRED PERF / TEST (low severity, explicitly deferred in the plan)
+================================================================================
+ 9.1  Full vault walk on every boot, no per-directory mtime cache.
+      REMAINS: src/vault-scan.ts reconcileIndex walks the whole vault each boot;
+      no dirMtime snapshot in index.json (verified: no dirMtime in vault-scan.ts
+      or auto-reconcile.ts). Plan marked MED but deferred. FIX: persist per-dir
+      mtime snapshot; recurse only into changed subtrees; full walk on cache miss
+      / RECONCILE_REQUEST_FLAG. Revisit when boot time becomes a complaint.
+ 9.3  Org-vault reconcile 10s marker polling (teammate memories lag ≤10s).
+      REMAINS: auto-reconcile.ts:26 polls RECONCILE_REQUEST_FLAG; no fs.watch
+      fast path (verified: no fs.watch). Plan marked LOW/optional, defer.
+ 11.2 SIGTERM integration test asserting flushEmbeddings/flushPending complete
+      before exit. PARTIAL: an integration suite exists
+      (src/__tests__/integration/server.integration.test.ts + vitest.integration.
+      config.ts) and src/__tests__/index-stdin-end.test.ts covers the stdin-'end'
+      shutdown path. The SIGTERM-specific "flush completed before exit" assertion
+      is NOT confirmed. FIX: add a test that spawns dist/index.js, sends SIGTERM,
+      and asserts the flush path ran before the process exited (covers 6.10's
+      latch once it lands too).
+
+
+================================================================================
+ RECOMMENDED ORDER
+================================================================================
+ 1. Phase 6.4-6.10 (seven small main-branch fixes, each its own pre-commit
+    cycle; ~1 line to a few lines + a test each). These are the only
+    unshipped LOW/MED findings that don't need the big migration.
+ 2. Phase 11.2 SIGTERM test (pair it with 6.10's shutdown latch — the test
+    pins the latch's correctness).
+ 3. Phase 6.1-6.3 McpServer migration on a DEDICATED BRANCH (large; schema-
+    parity integration tests; merge only when fully green). Per both plans,
+    do NOT land incrementally on main — dist/ ships with no CI gate.
+ 4. Phase 9.1 / 9.3 (defer until boot time / org-vault lag is a real complaint;
+    both were explicitly deferred in the original plan).
+
+ Net: at v1.0.120 the plugin has shipped every high/medium-severity finding
+ except the Phase 6 API-surface cluster. 6.4-6.10 are quick wins; 6.1-6.3 is
+ the one remaining large effort and it is correctly scoped to a branch.
+================================================================================

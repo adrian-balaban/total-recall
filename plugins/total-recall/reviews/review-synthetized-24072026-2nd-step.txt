@@ -1,0 +1,122 @@
+================================================================================
+ total-recall — SYNTHESIZED ACTION PLAN, 2ND STEP (multi-team re-prioritization)
+ Compiled: 2026-07-26
+ Supplements: review-synthetized-24072026.txt (the phase plan referenced below)
+================================================================================
+
+ CONTEXT CHANGE THAT DROVE THIS FILE
+ -----------------------------------
+ The original synthesis assumed a SINGLE-USER local plugin. New directive: this
+ plugin is meant to be used by MANY TEAMS. That changes the security calculus
+ materially — not the LangGraph call (that's an agent-orchestration framework,
+ genuinely unrelated to team scale, still held), but everything touching the
+ SHARED ORG VAULT. At team scale the org vault is a multi-writer, git-synced blob
+ that fans a mistake out to every teammate, so the findings de-prioritized for a
+ solo user become first-class.
+
+ TRUST MODEL (confirmed): TRUSTED TEAMMATES, ONE REPO.
+   Single company; all org-vault contributors are trusted colleagues. The privacy
+   filter's job is to guard ACCIDENTAL secret/PII leaks (someone pastes a
+   credential or a colleague's phone number into an `org`-tagged memory), NOT to
+   defend against a malicious teammate crafting hostile pushed memories. Design to
+   the accidental-leak threat model — scoped, fail-closed, well-tested — not the
+   hostile-input one. (If the trust model later widens to cross-org / public,
+   revisit toward hostile-input hardening + the McpServer/Zod boundary as a
+   security control, not just cleanup.)
+
+
+================================================================================
+ WHAT GETS PROMOTED NOW THAT IT'S MULTI-TEAM  (new "Tier A.5" gate:
+ "safe to hand to another team")
+================================================================================
+
+ 1. PRIVACY FILTER IS NOW A HEADLINE FEATURE, NOT A FOOTNOTE
+    (synthesis 7.2 / 7.3 / 7.5)
+    The org vault reaches every teammate with repo access, so a filter that only
+    catches known-prefix secrets and emails is a real leak channel:
+
+    - Secret detection beyond prefixes (7.2): add a labeled-generic pattern
+      (api_key|token|secret|password …) plus a high-entropy fallback, FAIL-CLOSED.
+      Today a `Bearer …` / Cloudflare / generic key sails through.
+
+    - PII beyond email (7.5): at team scale you WILL get a teammate's phone,
+      salary, or address pasted into an org-tagged memory. Re-add a scoped phone
+      detector and a CC/IBAN Luhn check — or, at minimum, make the threat-model
+      limitation LOUD in the org-sync setup and error path. (The false-positive
+      history is why these were removed; the answer is SCOPED patterns +
+      a documented boundary, not nothing.)
+
+    These need to be fail-closed and well-tested — which is exactly where Stryker
+    (mutation testing) earns its place: a privacy filter that silently stops
+    matching is the worst kind of hollow test.
+
+ 2. ORG-SYNC DURABILITY + VISIBILITY  (synthesis 4.2 / 4.3 / 4.4)
+    Multi-writer means these stop being edge cases:
+
+    - Queue job deleted BEFORE sync → a failed push PERMANENTLY DROPS a
+      teammate's memory (4.2).
+    - Cross-filesystem `mv` isn't atomic → a drain can read a half-written
+      job (4.3).
+    - Push failures exit 0 and are invisible → a user thinks they shared
+      knowledge that never left their machine (4.4). Surface it on SessionStart.
+
+ 3. CONCURRENCY + FORMAT COMPATIBILITY
+
+    - index.json merge-on-read (2.2) moves from "nice" to "needed" — multiple
+      windows/machines are now the norm, and last-write-wins silently resets
+      retention signals.
+    - Schema/version guarding on the git-synced org index: a teammate on a newer
+      version writes a format an older client then normalizes/drops. The
+      indexVersion marker already landed (c649bb7); extend the discipline to
+      REFUSE-TO-WRITE WHEN NEWER rather than silently downgrade.
+
+ 4. get_stats PATH LEAK (7.1)
+    More MCP clients/subagents at team scale = more surfaces reading $HOME/vault
+    paths out of recentErrors. Redact.
+
+
+================================================================================
+ REVISED SEQUENCE
+================================================================================
+ Tier A   (unchanged): Phase 0 remove Ollama → Phase 1 semantic default + build
+          → Phase 2 high-sev durability (incl. index.json merge-on-read, promoted).
+ Tier A.5 (NEW, promoted for team scale): privacy-filter hardening + org-sync
+          durability/visibility + get_stats redaction. The "safe to hand to
+          another team" gate.
+ Tier B   Stryker mutation-testing audit → TF-IDF quality with a DeepEval harness.
+          Stryker now specifically covers the privacy filter and org-sync logic,
+          not just the decay/RRF math.
+ Tier C   Graphiti-style supersede-don't-overwrite (more valuable across a team —
+          "who changed this and when" becomes an audit question).
+
+
+================================================================================
+ STEP 6 — SERVER → McpServer MIGRATION: WORK IN A GIT BRANCH UNTIL ALL FIXED
+================================================================================
+ Do the deprecated-Server → McpServer + registerTool migration (original
+ synthesis Phase 6: items 6.1–6.3, and it closes 6.2/6.4 boundary-validation) on
+ a DEDICATED GIT BRANCH, and keep it there until it is COMPLETELY fixed and green
+ before merging to main. Rationale:
+
+   - It is a large, cross-cutting refactor (17 tool schemas + dispatch + both
+     setRequestHandler handlers) with real schema-parity risk: Zod→JSON-Schema can
+     subtly change how default/minimum/maximum render in tools/list.
+   - The plugin ships via git-subdir with dist/ committed and NO CI gate between
+     commit and consumer `claude plugin update` — a half-migrated main branch
+     would ship a broken tool surface to every team on their next update.
+   - Therefore: branch → migrate → add before/after schema-parity integration
+     tests → full pre-commit checklist green (bump, build, test, typecheck) →
+     only then merge. Do NOT land it incrementally on main.
+
+ Value note at team scale: uniform boundary validation (Zod) rises in value with
+ many clients — malformed/inconsistent tool calls from diverse callers are exactly
+ what a validated dispatch boundary protects against. Sequence it AFTER Tier A.5,
+ BEFORE any broad rollout.
+
+
+================================================================================
+ STILL HELD (unchanged by the multi-team directive)
+================================================================================
+ - LangGraph / agent-orchestration frameworks: about orchestrating multi-agent
+   systems, not about total-recall serving many teams. No adoption.
+================================================================================
