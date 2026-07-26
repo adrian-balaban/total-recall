@@ -79,4 +79,30 @@ describe('session-end flush wiring (regression for the silent-drop bug)', () => 
     expect(body).toMatch(/await flushEmbeddings\(\)/);
     expect(body).toMatch(/process\.exit\(0\)/);
   });
+
+  it('shutdown() is guarded by a shuttingDown latch — pins the stdin end+close / SIGTERM-during-shutdown double-fire (6.10)', () => {
+    // REVIEW 6.10 (LOW, C-14): `process.stdin` fires BOTH 'end' AND 'close'
+    // in sequence on session teardown, and both are wired to `shutdown`.
+    // A SIGTERM can also arrive mid-shutdown (during the stdin-end-driven
+    // flush). Without a latch, `shutdown` runs 2-3 times concurrently:
+    // flushPending rewrites index.json twice (last-rename-wins), the
+    // flushEmbeddings await races itself, and process.exit(0) is called
+    // multiple times. The latch (`if (shuttingDown) return; shuttingDown = true;`
+    // at the top of `shutdown`) makes only the FIRST trigger run the
+    // flush→exit sequence; subsequent triggers are no-ops. This test pins
+    // the latch statically at the source level — a refactor that drops it
+    // (e.g. "simplify shutdown") reopens the concurrent-double-fire race.
+    // A dynamic subprocess test that drives stdin end+close and observes a
+    // single flush is a SEPARATE later task (11.2) and is NOT added here.
+    const src = fs.readFileSync(SRC, 'utf8');
+    // The latch variable is declared at module scope.
+    expect(src).toMatch(/let shuttingDown\b/);
+    // The shutdown() body begins with the guard: early-return if already
+    // shutting down, then flip the latch before doing any flush work.
+    const shutdownMatch = src.match(/async function shutdown\([\s\S]*?\n\}/);
+    expect(shutdownMatch).toBeDefined();
+    const body = shutdownMatch![0];
+    expect(body).toMatch(/if\s*\(\s*shuttingDown\s*\)\s*return/);
+    expect(body).toMatch(/shuttingDown\s*=\s*true/);
+  });
 });
