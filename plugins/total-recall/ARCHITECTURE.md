@@ -109,7 +109,7 @@ main()
  └─ server.connect(StdioServerTransport)
 ```
 
-On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced changes synchronously before the process exits.
+On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs `flushPending()` (synchronous index write) → `await flushEmbeddings()` (drain in-flight embed→upsert) → `process.exit(0)`. `shutdown()` is **idempotent via a module-level `shuttingDown` latch** — the four triggers can fire concurrently (SIGTERM-while-stdin-closing, a double signal), and the latch makes the second-and-later call a no-op so the flush completes exactly once. `beforeExit` only calls `flushPending()` (no embedding drain, no exit). Pinned structurally by `index-stdin-end.test.ts` and dynamically by `src/__tests__/integration/shutdown-sigterm.integration.test.ts` (spawns real `dist/index.js`, SIGTERMs mid-session before the 1s debounce, asserts the stored key lands in `index.json` on disk before exit).
 
 ---
 
@@ -126,9 +126,9 @@ On `SIGTERM` / `SIGINT` / `beforeExit`: `flushPending()` writes any debounced ch
 ### Bulk
 | Tool | Description |
 |---|---|
-| `export_memories` | Dump selected memories (with full content) for backup/transfer |
-| `import_memories` | Restore memories from an export archive; preserves key/timestamps/sessions |
-| `delete_memories` | Batch delete with explicit confirmation and no-prune awareness |
+| `export_memories` | Dump selected memories (with full content) for backup/transfer. Returns `{count, memories, errors}`; an unreadable body becomes an `{key, error}` entry in `errors` (never a silent `content: ''`, which a `force` import would clobber real content with) |
+| `import_memories` | Restore memories from an export archive; preserves key/timestamps/sessions. Skips any entry carrying an `error` field so a failed export read can't overwrite a live memory |
+| `delete_memories` | Batch delete; `confirm=true` required (no default — required + `true`). A reserved (`no-prune` without `force`) key is recorded as a per-key error, not a batch reject — the rest of the batch proceeds |
 
 ### Search / Read
 | Tool | Description |
@@ -372,3 +372,7 @@ Configuration in `~/.total-recall/config.json`:
 | `hookSpecificOutput.additionalContext` requires `hookEventName` | `load-memory-index.sh`, `load-open-questions.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
 | PreCompact reads `transcript_path` from stdin JSON, not an env var | `extract-and-store-memories.sh` — parses the hook's stdin JSON payload (Claude Code common hook input) |
 | Frontmatter keys escaped before RegExp interpolation | `frontmatter.ts` — `escapeRegExp(k)`/`escapeRegExp(key)` at both `new RegExp` sites; a key is a literal string (any `[^:\s]+`, incl. metacharacters from a crafted/teammate-pushed org-vault memory), so it must match literally — without escaping a key like `(a+)+` is mis-matched and an explicit `(a+)+: []` array is wrongly dropped |
+| `shutdown()` runs exactly once across concurrent exit triggers | `index.ts` — module-level `shuttingDown` latch; SIGTERM/SIGINT/stdin-end/stdin-close all route to one `shutdown()` whose first line short-circuits a second call. `flushPending` → `flushEmbeddings` → `process.exit(0)` completes once |
+| `export_memories` never emits a silent `''` for an unreadable body | `bulk.ts` — null read → `{key, error}` entry + `errors` count; `import_memories` skips `error` entries, so a failed read can't clobber real content on a `force` import |
+| `delete_memories` records a reserved key per-key, not batch-reject | `bulk.ts` — no up-front reserved-key throw; the per-key `deleteMemory` catch records it in `errors` and the batch continues |
+| `rerank_memories` keys capped at 200 | `rerank.ts` — `MAX_KEYS=200` + schema `maxItems: 200`; extras sliced off the front (order preserved) before embed/score |

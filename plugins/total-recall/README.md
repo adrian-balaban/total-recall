@@ -101,10 +101,10 @@ All tool calls operate against an in-memory index (`index.json`), making read/se
 | `get_timeline` | Chronological view | Memories grouped and sorted by modification dates. |
 | `get_related_memories` | Find relations | Jaccard similarity of tags with a category boost. |
 | `prune_memories` | Clean stale entries | Lists Ebbinghaus decay candidates (does not auto-delete). Excludes `no-prune`. |
-| `rerank_memories` | Semantic rerank | Reorders candidate keys by cosine similarity to a query using embeddings. |
-| `export_memories` | Bulk export | Portable JSON archive; filter by keys, category, or tag. Closes the "new laptop" scenario. |
-| `import_memories` | Bulk import | Restores from an `export_memories` archive; skips existing keys unless `force=true`. |
-| `delete_memories` | Bulk delete | Deletes a list of keys; requires `confirm=true`; respects `no-prune`. Closes the `prune_memories` loop. |
+| `rerank_memories` | Semantic rerank | Reorders candidate keys by cosine similarity to a query using embeddings. `keys` capped at 200 (extras dropped, order preserved). |
+| `export_memories` | Bulk export | Portable JSON archive; filter by keys, category, or tag. Unreadable bodies become `{key, error}` entries (counted in `errors`), never silent empty content. Closes the "new laptop" scenario. |
+| `import_memories` | Bulk import | Restores from an `export_memories` archive; skips existing keys unless `force=true`; skips entries carrying an `error` field so a failed export read can't clobber a live memory. |
+| `delete_memories` | Bulk delete | Deletes a list of keys; `confirm=true` required (no default). A reserved `no-prune` key (without `force`) is recorded as a per-key error and the batch continues — not a batch reject. Closes the `prune_memories` loop. |
 | `confirm_memory` | Feedback signal | `useful=true` increments confirmations; `useful=false` increments flags — both feed retention scoring. |
 
 ---
