@@ -16,6 +16,22 @@
     "src/tfidf.ts",
     "src/rrf.ts",
     "src/persistence.ts",
-    "src/vectorStore.ts"
-  ]
+    "src/vectorStore.ts",
+    "src/dates.ts",
+    "src/frontmatter.ts",
+    "src/lru-cache.ts",
+    "src/paths.ts",
+    "src/auto-reconcile.ts",
+    "src/journal.ts",
+    "src/vault-scan.ts",
+    "src/state.ts",
+    "src/embeddings.ts",
+    "src/errors.ts",
+    "src/types.ts"
+  ],
+  "thresholds": {
+    "high": 80,
+    "low": 65,
+    "break": 65
+  }
 }
