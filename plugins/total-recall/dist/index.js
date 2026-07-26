@@ -17558,9 +17558,6 @@ function importMemories(args) {
 function deleteMemories(args) {
   const rawKeys = Array.isArray(args.keys) ? args.keys : typeof args.keys === "string" ? [args.keys] : [];
   const keys = rawKeys.map((k) => typeof k === "string" ? k : String(k));
-  if (keys.some(isReservedKey)) {
-    throw new Error("One or more keys contain a reserved key segment.");
-  }
   const force = args.force === true;
   const confirm = args.confirm === true;
   if (keys.length === 0) throw new Error("No keys provided.");
@@ -17619,7 +17616,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.125" : null.version;
+var PLUGIN_VERSION = true ? "1.0.126" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

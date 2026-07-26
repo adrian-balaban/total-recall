@@ -159,6 +159,38 @@ describe('bulk tools', () => {
     expect(fs.existsSync(path.join(PERSONAL, 'knowledge', 'alpha.md'))).toBe(false);
   });
 
+  it('(6.9) delete_memories records a reserved key as a per-key error and still deletes the valid keys in the batch', () => {
+    // 6.9: a single reserved key (e.g. __proto__) in a multi-key batch must
+    // NOT abort the whole batch. The valid keys are deleted; the reserved
+    // key is recorded as a per-key error by the existing catch arm, because
+    // deleteMemory (mutate.ts:140-142) throws on isReservedKey. The old
+    // up-front `keys.some(isReservedKey)` throw was batch-hostile.
+    seed();
+    const alphaPath = path.join(PERSONAL, 'knowledge', 'alpha.md');
+    expect(fs.existsSync(alphaPath)).toBe(true);
+
+    const res = deleteMemories({ keys: ['knowledge/alpha', '__proto__'], confirm: true });
+
+    // No throw — the batch did not abort.
+    expect(res.deleted).toBe(1);
+    expect(res.errors).toBe(1);
+    expect(res.count).toBe(2);
+
+    // The valid key was deleted (index + file gone).
+    expect(memIndex['knowledge/alpha']).toBeUndefined();
+    expect(fs.existsSync(alphaPath)).toBe(false);
+
+    // The reserved key was recorded as a per-key error.
+    const errEntry = res.results.find((r: any) => r.key === '__proto__');
+    expect(errEntry).toBeDefined();
+    expect(errEntry!.status).toBe('error');
+    expect(errEntry!.error).toMatch(/reserved key segment/i);
+
+    // Beta (the other seeded memory) is untouched — the batch stopped only
+    // at the reserved key, not at the rest of the index.
+    expect(memIndex['journal/beta']).toBeDefined();
+  });
+
   it('delete_memories refuses no-prune memories unless force=true', () => {
     storeMemory({ title: 'ADR', content: 'Important.', category: 'decisions', tags: ['no-prune'], importanceScore: 0.9 });
     const noForce = deleteMemories({ keys: ['decisions/adr'], confirm: true });
