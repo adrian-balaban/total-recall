@@ -1689,6 +1689,23 @@ describe('ListToolsRequestSchema', () => {
     expect(keysProp.maxItems).toBe(200);
     expect(keysProp.description).toContain('Capped at 200 keys');
   });
+
+  // 6.7: delete_memories' `confirm` is declared `required` AND (previously) had
+  // `default: false` in its property schema — a contradiction, since a required
+  // field is always supplied by the caller and the default is dead. Worse, the
+  // default was misleading: it suggested omitting `confirm` would default to
+  // false-but-allowed, when actually the handler (src/tools/bulk.ts deleteMemories)
+  // throws unless `args.confirm === true`. The handler is unchanged — this is a
+  // schema-honesty fix only. Pin that `confirm` stays required AND has no `default`
+  // so a future "restore the default" is caught.
+  it('delete_memories schema has confirm required with no default (6.7)', async () => {
+    const handler = registeredHandlers.get('ListToolsRequestSchema')!;
+    const { tools } = await handler({ params: {} });
+    const dm = tools.find((t: any) => t.name === 'delete_memories');
+    expect(dm).toBeDefined();
+    expect(dm.inputSchema.required ?? []).toContain('confirm');
+    expect(dm.inputSchema.properties.confirm.default).toBeUndefined();
+  });
 });
 
 // ─── error handling ───────────────────────────────────────────────────────────

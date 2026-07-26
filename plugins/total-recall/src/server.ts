@@ -145,7 +145,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           keys: { type: 'array', items: { type: 'string' } },
           force: { type: 'boolean', default: false, description: 'Override the no-prune tag guard for the batch.' },
-          confirm: { type: 'boolean', default: false, description: 'Must be true to confirm the bulk deletion.' },
+          confirm: { type: 'boolean', description: 'Must be true to confirm the bulk deletion.' },
         },
         required: ['keys', 'confirm'],
       },
