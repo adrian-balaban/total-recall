@@ -12,6 +12,7 @@ import { appendJournal } from '../journal.js';
 import { scheduleSave, deriveFilePathFromKey } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
 import { SECRET_TOKEN_RE } from '../privacy-filter.js';
+import { MemoryExistsError } from '../errors.js';
 import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
@@ -219,7 +220,13 @@ export function storeMemory(args: any): any {
       );
     }
     if (!force) {
-      throw new Error(
+      // Typed error (6.4): import_memories branches on `instanceof
+      // MemoryExistsError` to classify this as "skipped" instead of regex-
+      // matching the English message text — which would silently misclassify
+      // any future error whose message happened to contain "already exists"
+      // and break the moment this message is reworded.
+      throw new MemoryExistsError(
+        key,
         `Memory "${key}" already exists (created ${existingFm.created ?? 'unknown'}). ` +
         `Use update_memory to modify it, or pass force=true to overwrite.`
       );

@@ -2,6 +2,7 @@ import { memIndex } from '../state.js';
 import { readMemoryContent, isReservedKey } from '../vault-scan.js';
 import { storeMemory } from './store.js';
 import { deleteMemory } from './mutate.js';
+import { MemoryExistsError } from '../errors.js';
 import type { MemoryMetadata } from '../types.js';
 
 // ─── export_memories ─────────────────────────────────────────────────────────
@@ -80,9 +81,12 @@ export function importMemories(args: any): any {
       imported++;
       results.push({ key: res.key, status: 'imported' });
     } catch (e: any) {
-      if (/already exists/.test(e.message)) {
+      // 6.4: branch on the typed error, not on `/already exists/.test(message)`.
+      // The typed path also carries the colliding key so the caller can see
+      // WHICH memory skipped, not just that one did.
+      if (e instanceof MemoryExistsError) {
         skipped++;
-        results.push({ status: 'skipped', error: e.message });
+        results.push({ key: e.key, status: 'skipped', error: e.message });
       } else {
         errors++;
         results.push({ status: 'error', error: e.message });
