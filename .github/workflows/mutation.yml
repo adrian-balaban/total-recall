@@ -1,0 +1,37 @@
+# Mutation-testing CI gate.
+# Stryker re-runs the unit suite against all source modules and exits non-zero
+# when the "of total" mutation score drops below `thresholds.break` (65) in
+# stryker.conf.json. Server-boot, e2e, and integration tests are excluded from
+# the Stryker runner (see vitest.stryker.config.ts) — they rely on import-order
+# and HOME-isolation that Stryker's instrumented runner perturbs.
+name: mutation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  stryker:
+    name: Stryker mutation score ≥ 65% (all modules)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: plugins/total-recall
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: plugins/total-recall/package-lock.json
+      # Install optional native deps too — Stryker runs the real vitest suite,
+      # which exercises better-sqlite3 + sqlite-vec + @huggingface/transformers.
+      - run: npm ci
+      - run: npm run typecheck
+      # Stryker runs the unit suite (all modules) under instrumentation (~5–8 min).
+      # The `break: 65` threshold in stryker.conf.json makes stryker exit 1
+      # when the "of total" score is below 65, failing this job.
+      - run: npx stryker run

@@ -1,7 +1,7 @@
 {
   "name": "total-recall",
-  "version": "1.0.130",
-  "description": "Persistent memory MCP server for Claude Code, Gemini CLI, and GitHub Copilot CLI",
+  "version": "1.0.131",
+  "description": "Persistent memory MCP server for Claude Code and Gemini CLI",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {
@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
-    "test:integration": "npm run build && vitest run --config vitest.integration.config.ts"
+    "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
+    "mutation": "stryker run"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
