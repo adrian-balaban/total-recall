@@ -21,7 +21,23 @@ import { flushEmbeddings } from './embeddings.js';
 // TF-IDF but invisible to hybrid search. The remaining holes (an embed that
 // exceeds the 2s timeout, or pre-existed this boot) are closed by
 // reconcileIndex's backfill on the next start.
+//
+// Idempotent shutdown latch (REVIEW 6.10): `process.stdin` fires BOTH 'end'
+// AND 'close' in sequence on session teardown (end = no more data coming,
+// close = the underlying stream is fully closed), and both call `shutdown`.
+// A SIGTERM can also arrive during a stdin-end-driven shutdown. Without a
+// latch, `shutdown` runs 2-3 times concurrently: `flushPending()` rewrites
+// index.json twice (last-rename-wins, mostly harmless but wasteful),
+// `flushEmbeddings()` runs concurrent awaits, and `process.exit(0)` is
+// called multiple times. The latch makes only the FIRST trigger run the
+// flush→exit sequence; subsequent triggers (stdin 'close' after 'end', or
+// a SIGTERM during stdin-end) return immediately. `process.once` already
+// de-dupes SIGTERM/SIGINT between themselves; the latch covers the stdin
+// end+close pair AND the cross-source (SIGTERM-during-stdin-end) race.
+let shuttingDown = false;
 async function shutdown(): Promise<void> {
+  if (shuttingDown) return;
+  shuttingDown = true;
   flushPending();
   try { await flushEmbeddings(); } catch {}
   process.exit(0);
@@ -41,5 +57,14 @@ process.once('SIGINT', shutdown);
 process.stdin.on('end', shutdown);
 process.stdin.on('close', shutdown);
 process.on('beforeExit', flushPending);
+
+// Test seam (mirrors __testsSetRebuildImpl in vectorStore.ts / __testsSetEmbedder
+// in embeddings.ts). The shutdown latch is module-level state that persists across
+// tests in the same process (maxWorkers=1): the SIGTERM test sets it, then the
+// SIGINT test in the same run would see it already true and skip flushPending.
+// Reset it so each signal-handler test can independently trigger shutdown.
+export function __testsResetShutdownLatch(): void {
+  if (process.env.NODE_ENV === 'test') shuttingDown = false;
+}
 
 main().catch(e => { console.error(e); process.exit(1); });

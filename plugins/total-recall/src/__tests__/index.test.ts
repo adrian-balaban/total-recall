@@ -104,9 +104,17 @@ function result(res: any) {
 
 // ─── Boot server once; reset vault + index between tests ─────────────────────
 
+// Captured from the dynamic import in beforeAll; used by the signal-handler
+// tests to reset the shutdown latch (REVIEW 6.10) between emissions. A static
+// top-level import would pull index.js (and server.ts) in before the vi.mock
+// factories' `registeredHandlers` const is initialized (TDZ), so we capture it
+// here after the mocks are installed.
+let __testsResetShutdownLatch: () => void = () => {};
+
 beforeAll(async () => {
   mkVaultDirs();
-  await import('../index.js');
+  const indexMod = await import('../index.js');
+  __testsResetShutdownLatch = (indexMod as any).__testsResetShutdownLatch;
   await new Promise(r => setTimeout(r, 20)); // wait for main() to complete
 });
 
@@ -2202,6 +2210,7 @@ describe('flushPending — drains pending timers synchronously', () => {
     // that the synchronous flushPending() in the handler lands the index files.
     const emb = await import('../embeddings.js');
     vi.mocked(emb.flushEmbeddings).mockImplementation(() => new Promise(() => {}));
+    __testsResetShutdownLatch();
     process.emit('SIGTERM', 'SIGTERM');
     // INDEX_PATH = ~/.total-recall/index.json = VAULT/index.json
     expect(fs.existsSync(path.join(VAULT, 'index.json'))).toBe(true);
@@ -2508,6 +2517,7 @@ describe('process signal handlers — SIGINT and beforeExit', () => {
   it('SIGINT calls flushPending and exits', async () => {
     await callTool('store_memory', { title: 'SIGINT Test', content: 'X', tags: [], category: 'knowledge' });
     const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => undefined as never);
+    __testsResetShutdownLatch();
     process.emit('SIGINT', 'SIGINT');
     exitSpy.mockRestore();
     expect(fs.existsSync(path.join(VAULT, 'index.json'))).toBe(true);

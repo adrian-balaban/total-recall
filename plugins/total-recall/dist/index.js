@@ -17616,7 +17616,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.126" : null.version;
+var PLUGIN_VERSION = true ? "1.0.127" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -17905,7 +17905,10 @@ async function main() {
 }
 
 // src/index.ts
+var shuttingDown = false;
 async function shutdown() {
+  if (shuttingDown) return;
+  shuttingDown = true;
   flushPending();
   try {
     await flushEmbeddings();
@@ -17918,7 +17921,13 @@ process.once("SIGINT", shutdown);
 process.stdin.on("end", shutdown);
 process.stdin.on("close", shutdown);
 process.on("beforeExit", flushPending);
+function __testsResetShutdownLatch() {
+  if (process.env.NODE_ENV === "test") shuttingDown = false;
+}
 main().catch((e) => {
   console.error(e);
   process.exit(1);
 });
+export {
+  __testsResetShutdownLatch
+};
