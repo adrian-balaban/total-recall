@@ -17480,12 +17480,19 @@ function exportMemories(args) {
     if (tag !== void 0 && !m.tags.includes(tag)) return false;
     return true;
   });
-  const memories = metas.map((m) => {
+  let errors2 = 0;
+  const memories = [];
+  for (const m of metas) {
     const content = readMemoryContent(m.filePath, m.key);
-    return {
+    if (content === null) {
+      errors2++;
+      memories.push({ key: m.key, error: "unreadable or missing memory file" });
+      continue;
+    }
+    memories.push({
       key: m.key,
       title: m.title,
-      content: content ?? "",
+      content,
       category: m.category,
       tags: m.tags,
       importanceScore: m.importanceScore,
@@ -17494,9 +17501,9 @@ function exportMemories(args) {
       created: m.created,
       updated: m.updated,
       isOrg: m.isOrg
-    };
-  });
-  return { count: memories.length, memories };
+    });
+  }
+  return { count: memories.length - errors2, memories, errors: errors2 };
 }
 function importMemories(args) {
   const raw = Array.isArray(args.memories) ? args.memories : [];
@@ -17507,6 +17514,11 @@ function importMemories(args) {
   let errors2 = 0;
   for (const item of raw) {
     const m = item || {};
+    if (m.error) {
+      skipped++;
+      results.push({ key: m.key, status: "skipped", error: "export carried an error: " + m.error });
+      continue;
+    }
     try {
       const title = String(m.title ?? "");
       const content = m.content !== void 0 ? String(m.content) : void 0;
@@ -17607,7 +17619,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.124" : null.version;
+var PLUGIN_VERSION = true ? "1.0.125" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
