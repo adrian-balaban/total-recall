@@ -169,4 +169,57 @@ describe('bulk tools', () => {
     expect(forced.deleted).toBe(1);
     expect(memIndex['decisions/adr']).toBeUndefined();
   });
+
+  it('(6.8) export_memories emits an error entry and increments errors when the memory file is unreadable/missing', () => {
+    seed();
+    // Make Alpha's file disappear from disk while its memIndex entry persists,
+    // so readMemoryContent returns null (ENOENT). Race-free and root-safe,
+    // unlike chmod 000 which a root test process would bypass.
+    const alphaPath = path.join(PERSONAL, 'knowledge', 'alpha.md');
+    expect(fs.existsSync(alphaPath)).toBe(true);
+    fs.rmSync(alphaPath);
+
+    const res = exportMemories({});
+    expect(res.errors).toBeGreaterThanOrEqual(1);
+    expect(res.count).toBe(1); // only Beta was successfully exported
+    const errEntry = res.memories.find((m: any) => m.key === 'knowledge/alpha');
+    expect(errEntry).toBeDefined();
+    expect(errEntry!.error).toMatch(/unreadable|missing/i);
+    expect(errEntry!.content).toBeUndefined();
+    // Successful entry is unchanged.
+    const beta = res.memories.find((m: any) => m.key === 'journal/beta');
+    expect(beta).toBeDefined();
+    expect(beta!.content).toContain('Beta body.');
+    expect(beta!.error).toBeUndefined();
+  });
+
+  it('(6.8) import_memories skips an archive entry carrying an error field and does NOT overwrite real content with force=true', () => {
+    const original = storeMemory({
+      title: 'Alpha', content: 'Real on-disk content.', category: 'knowledge', tags: ['x'],
+      importanceScore: 0.5,
+    });
+    const alphaPath = path.join(PERSONAL, 'knowledge', 'alpha.md');
+    const onDiskBefore = fs.readFileSync(alphaPath, 'utf8');
+    expect(onDiskBefore).toContain('Real on-disk content.');
+
+    // An archive entry carrying an error (as produced by 6.8 export_memories
+    // when the source file was unreadable). It has no content.
+    const errorEntry = { key: original.key, error: 'unreadable or missing memory file' };
+    const res = importMemories({ memories: [errorEntry], force: true });
+
+    // The entry was skipped, not imported.
+    const skip = res.results.find((r: any) => r.key === original.key);
+    expect(skip).toBeDefined();
+    expect(skip!.status).toBe('skipped');
+    expect(skip!.error).toMatch(/export carried an error/);
+    expect(res.imported).toBe(0);
+    expect(res.skipped).toBe(1);
+
+    // The real on-disk memory is unchanged — the force=true import did NOT
+    // overwrite it with empty content derived from the failed export read.
+    const after = memIndex[original.key];
+    expect(after).toBeDefined();
+    const onDiskAfter = fs.readFileSync(alphaPath, 'utf8');
+    expect(onDiskAfter).toContain('Real on-disk content.');
+  });
 });

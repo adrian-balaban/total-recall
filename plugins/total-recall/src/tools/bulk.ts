@@ -25,12 +25,28 @@ export function exportMemories(args: any): any {
     return true;
   });
 
-  const memories = metas.map((m) => {
+  // 6.8: readMemoryContent returns null when the file is missing/unreadable
+  // or its frontmatter is unparseable. The pre-fix code coerced that null to
+  // `content: ''`, so a later `import_memories(force=true)` on the archive
+  // would OVERWRITE real on-disk content with an empty string — silent data
+  // loss. Now an unreadable memory is emitted as an error entry
+  // `{ key, error }` (no content) and counted in `errors`; `count` stays the
+  // number of successfully-exported memories. import_memories skips any entry
+  // carrying an `error` field, so a force=true re-import can never clobber
+  // real content with '' derived from a failed export read.
+  let errors = 0;
+  const memories: any[] = [];
+  for (const m of metas) {
     const content = readMemoryContent(m.filePath, m.key);
-    return {
+    if (content === null) {
+      errors++;
+      memories.push({ key: m.key, error: 'unreadable or missing memory file' });
+      continue;
+    }
+    memories.push({
       key: m.key,
       title: m.title,
-      content: content ?? '',
+      content,
       category: m.category,
       tags: m.tags,
       importanceScore: m.importanceScore,
@@ -39,10 +55,10 @@ export function exportMemories(args: any): any {
       created: m.created,
       updated: m.updated,
       isOrg: m.isOrg,
-    };
-  });
+    });
+  }
 
-  return { count: memories.length, memories };
+  return { count: memories.length - errors, memories, errors };
 }
 
 // ─── import_memories ─────────────────────────────────────────────────────────
@@ -58,6 +74,18 @@ export function importMemories(args: any): any {
 
   for (const item of raw) {
     const m = item || {};
+    // 6.8: skip entries that carry an `error` field (produced by export_memories
+    // when the source file was unreadable/missing). Without this guard, a
+    // force=true re-import of such an archive would call storeMemory with
+    // content derived from the error entry (undefined → 'Missing content'
+    // throw, or worse, an empty-string content slipping through) and could
+    // clobber the real on-disk memory. Skipping keeps the on-disk content
+    // untouched and surfaces the skip in the result.
+    if (m.error) {
+      skipped++;
+      results.push({ key: m.key, status: 'skipped', error: 'export carried an error: ' + m.error });
+      continue;
+    }
     try {
       const title = String(m.title ?? '');
       const content = m.content !== undefined ? String(m.content) : undefined;
