@@ -1,6 +1,6 @@
 {
   "name": "total-recall",
-  "version": "1.0.123",
+  "version": "1.0.124",
   "description": "Persistent memory MCP server for Claude Code, Gemini CLI, and GitHub Copilot CLI",
   "type": "module",
   "main": "dist/index.js",

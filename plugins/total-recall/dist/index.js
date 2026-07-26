@@ -17607,7 +17607,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.123" : null.version;
+var PLUGIN_VERSION = true ? "1.0.124" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -17709,7 +17709,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         properties: {
           keys: { type: "array", items: { type: "string" } },
           force: { type: "boolean", default: false, description: "Override the no-prune tag guard for the batch." },
-          confirm: { type: "boolean", default: false, description: "Must be true to confirm the bulk deletion." }
+          confirm: { type: "boolean", description: "Must be true to confirm the bulk deletion." }
         },
         required: ["keys", "confirm"]
       }
