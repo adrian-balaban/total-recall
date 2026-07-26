@@ -1673,6 +1673,22 @@ describe('ListToolsRequestSchema', () => {
     expect(sm.inputSchema.required ?? []).not.toContain('updated');
     expect(sm.inputSchema.required ?? []).not.toContain('sessions');
   });
+
+  // 6.6: rerank_memories' runtime truncates the candidate keys array to MAX_KEYS=200
+  // (src/tools/rerank.ts: `keys.slice(0, MAX_KEYS)`). The MCP schema must declare
+  // maxItems:200 on `keys` so a caller knows their >200-key array is being
+  // truncated — otherwise the silent cap is an honest contract violation. Pin
+  // the schema-side fix so a future refactor that drops maxItems is caught.
+  it('rerank_memories schema declares keys.maxItems === 200 (6.6)', async () => {
+    const handler = registeredHandlers.get('ListToolsRequestSchema')!;
+    const { tools } = await handler({ params: {} });
+    const rm = tools.find((t: any) => t.name === 'rerank_memories');
+    expect(rm).toBeDefined();
+    const keysProp = rm.inputSchema.properties.keys;
+    expect(keysProp.type).toBe('array');
+    expect(keysProp.maxItems).toBe(200);
+    expect(keysProp.description).toContain('Capped at 200 keys');
+  });
 });
 
 // ─── error handling ───────────────────────────────────────────────────────────
