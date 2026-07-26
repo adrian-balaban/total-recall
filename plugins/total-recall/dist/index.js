@@ -17607,7 +17607,7 @@ function startAutoReconcile(pollMs = DEFAULT_POLL_MS) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.121" : null.version;
+var PLUGIN_VERSION = true ? "1.0.122" : null.version;
 var server = new Server(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
@@ -17630,7 +17630,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
           importanceScore: { type: "number", minimum: 0, maximum: 1, default: 0.5 },
           sessionId: { type: "string" },
           author: { type: "string" },
-          force: { type: "boolean", default: false, description: "Overwrite an existing memory with the same key (preserves created/accessCount)." }
+          force: { type: "boolean", default: false, description: "Overwrite an existing memory with the same key (preserves created/accessCount)." },
+          // 6.5: the handler accepts these for the import_memories round-trip
+          // (store.ts:46-49 reads args.key/created/updated/sessions). Declaring
+          // them here documents the restore path and lets a client pass them
+          // explicitly instead of relying on an undocumented override. They are
+          // NOT required — a normal store derives the key from title/category
+          // and stamps created/updated from now.
+          key: { type: "string", description: "Explicit memory key (overrides the title/category-derived key). Used by import_memories to preserve the original location on a round-trip; rarely set by hand." },
+          created: { type: "string", description: "ISO timestamp to record as the creation time (import_memories round-trip). Omit to stamp now." },
+          updated: { type: "string", description: "ISO timestamp to record as the last-updated time (import_memories round-trip). Omit to stamp now." },
+          sessions: { type: "array", items: { type: "string" }, description: "Pre-existing session history to carry over (import_memories round-trip). The current sessionId is appended (deduped, capped at 50)." }
         },
         required: ["title", "content"]
       }
