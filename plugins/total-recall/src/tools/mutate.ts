@@ -11,6 +11,9 @@ import { scheduleSave } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
 import { deleteVector } from '../vectorStore.js';
 import type { MemoryFrontmatter } from '../types.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 function normalizeTags(tags: unknown): string[] {
   if (!Array.isArray(tags)) return [];
@@ -246,4 +249,59 @@ export function rebuildIndex(): any {
   rebuildInvertedIndex();
   scheduleSave();
   return { message: `Index rebuilt. ${Object.keys(memIndex).length} memories indexed.` };
+}
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+const updateMemorySchema = {
+  key: z.string(),
+  content: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  importanceScore: z.number().min(0).max(1).optional(),
+  sessionId: z.string().optional(),
+};
+
+const deleteMemorySchema = {
+  key: z.string(),
+  force: z.boolean().default(false).describe('Override the no-prune tag guard (use to delete an immortal memory).'),
+};
+
+const confirmMemorySchema = {
+  key: z.string(),
+  useful: z.boolean().default(true).describe('true = confirmation, false = flag.'),
+};
+
+const rebuildIndexSchema = {};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'update_memory',
+    {
+      description: 'Update content, tags, or importanceScore of an existing memory.',
+      inputSchema: updateMemorySchema,
+    },
+    wrapHandler('update_memory', updateMemory),
+  );
+  server.registerTool(
+    'delete_memory',
+    {
+      description: 'Delete a memory from the vault and index. Refuses memories tagged "no-prune" unless force=true is passed.',
+      inputSchema: deleteMemorySchema,
+    },
+    wrapHandler('delete_memory', deleteMemory),
+  );
+  server.registerTool(
+    'confirm_memory',
+    {
+      description: 'Confirm or flag a memory. useful=true increments confirmations (reinforces retention); useful=false increments flags (accelerates decay).',
+      inputSchema: confirmMemorySchema,
+    },
+    wrapHandler('confirm_memory', confirmMemory),
+  );
+  server.registerTool(
+    'rebuild_index',
+    {
+      description: 'Full re-scan of both vaults. Rebuilds inverted index.',
+      inputSchema: rebuildIndexSchema,
+    },
+    wrapHandler('rebuild_index', rebuildIndex),
+  );
 }

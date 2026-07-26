@@ -7,6 +7,9 @@ import { getVecMeta } from '../vectorStore.js';
 import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
 import { NO_PRUNE_TAG, VECTORS_DB, loadConfig, redactPaths } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 // Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
 // buggy/malicious caller can pass values that are huge, negative, or NaN.
@@ -243,4 +246,88 @@ export function pruneMemories(args: any): any {
     .filter(m => m.retentionStrength < threshold)
     .sort((a, b) => a.retentionStrength - b.retentionStrength)
     .slice(0, limit);
+}
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+const listMemoriesSchema = {
+  category: z.string().optional(),
+  tag: z.string().optional(),
+  limit: z.number().default(50),
+  offset: z.number().default(0).describe('Skip the first N results (for pagination; combine with limit).'),
+};
+
+const getMemoriesByKeysSchema = {
+  keys: z.array(z.string()),
+  summary: z.boolean().default(false),
+};
+
+const getStatsSchema = {};
+
+const getTimelineSchema = {
+  since: z.string().optional().describe('Relative or ISO date. Lower bound on updated.'),
+  before: z.string().optional().describe('Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range.'),
+  limit: z.number().default(50),
+  offset: z.number().default(0).describe('Skip the first N results (for pagination; combine with limit).'),
+  category: z.string().optional(),
+};
+
+const getRelatedMemoriesSchema = {
+  key: z.string(),
+  limit: z.number().default(10),
+  includeContent: z.boolean().default(false),
+};
+
+const pruneMemoriesSchema = {
+  threshold: z.number().default(0.1),
+  limit: z.number().default(20),
+};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'list_memories',
+    {
+      description: 'Metadata-only listing with optional category/tag filter.',
+      inputSchema: listMemoriesSchema,
+    },
+    wrapHandler('list_memories', listMemories),
+  );
+  server.registerTool(
+    'get_memories_by_keys',
+    {
+      description: 'Batch fetch by keys. Use summary=true for executive summary only (~500 chars).',
+      inputSchema: getMemoriesByKeysSchema,
+    },
+    wrapHandler('get_memories_by_keys', getMemoriesByKeys),
+  );
+  server.registerTool(
+    'get_stats',
+    {
+      description: 'Total memories, by-category breakdown, cache stats, performance percentiles.',
+      inputSchema: getStatsSchema,
+    },
+    wrapHandler('get_stats', getStats),
+  );
+  server.registerTool(
+    'get_timeline',
+    {
+      description: 'Chronological view with date grouping and optional filtering.',
+      inputSchema: getTimelineSchema,
+    },
+    wrapHandler('get_timeline', getTimeline),
+  );
+  server.registerTool(
+    'get_related_memories',
+    {
+      description: 'Jaccard similarity on tags with same-category boost.',
+      inputSchema: getRelatedMemoriesSchema,
+    },
+    wrapHandler('get_related_memories', getRelatedMemories),
+  );
+  server.registerTool(
+    'prune_memories',
+    {
+      description: 'List low-retention candidates using Ebbinghaus model. Does NOT auto-delete. Excludes memories tagged "no-prune" (immortal, e.g. ADRs).',
+      inputSchema: pruneMemoriesSchema,
+    },
+    wrapHandler('prune_memories', pruneMemories),
+  );
 }

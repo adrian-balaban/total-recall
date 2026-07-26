@@ -14,6 +14,9 @@ import { embedAndUpsert } from '../embeddings.js';
 import { SECRET_TOKEN_RE } from '../privacy-filter.js';
 import { MemoryExistsError } from '../errors.js';
 import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 // ─── MCP Tools implementation ─────────────────────────────────────────────────
 
@@ -353,4 +356,34 @@ export function storeMemory(args: any): any {
   embedAndUpsert(key, body);
 
   return { key, filePath, message: `Memory stored: ${key}` };
+}
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+// Raw Zod shape (not z.object()) — McpServer.registerTool wraps it. The shape
+// is transcribed verbatim from the pre-migration hand-written JSON schema; the
+// SDK's Zod→JSON-Schema converter reproduces it (verified against the golden
+// tools/list snapshot in __fixtures__/tools-list-golden.json).
+const storeMemorySchema = {
+  title: z.string(),
+  content: z.string().describe('Full markdown content including executive summary.'),
+  tags: z.array(z.string()).optional(),
+  category: z.string().default('knowledge'),
+  importanceScore: z.number().min(0).max(1).default(0.5),
+  sessionId: z.string().optional(),
+  author: z.string().optional(),
+  force: z.boolean().default(false).describe('Overwrite an existing memory with the same key (preserves created/accessCount).'),
+  key: z.string().optional().describe('Explicit memory key (overrides the title/category-derived key). Used by import_memories to preserve the original location on a round-trip; rarely set by hand.'),
+  created: z.string().optional().describe('ISO timestamp to record as the creation time (import_memories round-trip). Omit to stamp now.'),
+  updated: z.string().optional().describe('ISO timestamp to record as the last-updated time (import_memories round-trip). Omit to stamp now.'),
+  sessions: z.array(z.string()).optional().describe('Pre-existing session history to carry over (import_memories round-trip). The current sessionId is appended (deduped, capped at 50).'),
+};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'store_memory',
+    {
+      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists — use update_memory, or pass force=true to overwrite (preserves created/accessCount). force=true is refused if the existing memory is tagged "no-prune" (immortal) — use update_memory to amend or delete_memory(force=true) then re-store.',
+      inputSchema: storeMemorySchema,
+    },
+    wrapHandler('store_memory', storeMemory),
+  );
 }

@@ -46,25 +46,88 @@ const CAN_SYMLINK = (() => {
   } catch { return false; }
 })();
 
-// ─── MCP SDK mock — must use regular function (not arrow) for `new Server()` ─
+// ─── MCP SDK mock — must use regular function (not arrow) for `new McpServer()` ─
+//
+// Phase 6.1-6.3: server.ts migrated from the deprecated low-level Server
+// (setRequestHandler(ListTools/CallTool)) to the high-level McpServer
+// (registerTool(name, { description, inputSchema: <Zod raw shape> }, cb)). The
+// mock below mirrors that: registerTool captures each tool's cb + config into
+// `registeredTools`, and synthesizes the two request handlers the old mock
+// exposed, keyed under the same 'CallToolRequestSchema' / 'ListToolsRequestSchema'
+// strings so the existing test call sites (registeredHandlers.get(...)) keep
+// working unchanged.
+//
+// The ListTools handler renders each tool's inputSchema via the SDK's REAL
+// Zod→JSON-Schema converter (normalizeObjectSchema + toJsonSchemaCompat) so the
+// schema-pinning tests (6.5 key/created/updated/sessions, 6.6 rerank
+// keys.maxItems=200, 6.7 delete_memories confirm required + no default, #11
+// list_memories has no since/before) assert the actual rendered output — not a
+// hand-rolled approximation that could drift from the SDK.
+//
+// The CallTool handler passes `args` straight to the wrapped callback WITHOUT
+// running safeParse. The unit tests deliberately bypass the Zod boundary so
+// they can exercise each handler's own defensive coercion (String(args.title),
+// scalar-tags leniency, malformed-limit clamping, arguments:undefined → {}).
+// The 6.2 boundary-enforcement contract (safeParse rejects a scalar tags /
+// malformed caller before the handler runs) is pinned by the integration parity
+// test, which spawns the real dist and sends malformed args over stdio.
 
 type Handler = (req: any) => Promise<any>;
+type ToolCb = (args: any, extra: any) => Promise<any> | any;
+const registeredTools = new Map<string, { description?: string; inputSchema?: any; cb: ToolCb }>();
 const registeredHandlers = new Map<string, Handler>();
 
-vi.mock('@modelcontextprotocol/sdk/server/index.js', () => ({
-  Server: vi.fn(function (this: any) {
-    this.setRequestHandler = vi.fn((schema: string, handler: Handler) => {
-      registeredHandlers.set(schema, handler);
+vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
+  // Real converter pair (the mock factory runs lazily on first import of mcp.js,
+  // so these require()s resolve against the installed SDK at that point).
+  const { normalizeObjectSchema } = require('@modelcontextprotocol/sdk/server/zod-compat.js');
+  const { toJsonSchemaCompat } = require('@modelcontextprotocol/sdk/server/zod-json-schema-compat.js');
+
+  function renderTools() {
+    return Array.from(registeredTools.entries()).map(([name, tool]) => {
+      // Mirrors McpServer.setToolRequestHandlers: normalizeObjectSchema wraps a
+      // raw Zod shape (Record<string, ZodType>) into z.object(); undefined →
+      // EMPTY_OBJECT_JSON_SCHEMA ({ type: 'object' }). toJsonSchemaCompat then
+      // renders the draft-07 JSON Schema the tools/list tests assert against.
+      const obj = normalizeObjectSchema(tool.inputSchema);
+      const inputSchema = obj
+        ? toJsonSchemaCompat(obj, { strictUnions: true, pipeStrategy: 'input' })
+        : { type: 'object' };
+      return { name, description: tool.description, inputSchema };
     });
-    this.connect = vi.fn().mockResolvedValue(undefined);
-  }),
-}));
+  }
+
+  return {
+    McpServer: vi.fn(function (this: any) {
+      this.registerTool = vi.fn((name: string, config: any, cb: ToolCb) => {
+        registeredTools.set(name, {
+          description: config?.description,
+          inputSchema: config?.inputSchema,
+          cb,
+        });
+      });
+      this.connect = vi.fn().mockResolvedValue(undefined);
+      // Synthesize the two request handlers the old low-level Server exposed via
+      // setRequestHandler, so existing registeredHandlers.get(...) call sites
+      // keep working. The CallTool handler delegates to the registered callback
+      // WITHOUT safeParse (see the bypass note above); wrapHandler owns the
+      // `args ?? {}` default + the isError/perf envelope.
+      registeredHandlers.set('CallToolRequestSchema', async (req: any) => {
+        const { name, arguments: args } = req.params;
+        const tool = registeredTools.get(name);
+        if (!tool) {
+          return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
+        }
+        return tool.cb(args, {});
+      });
+      registeredHandlers.set('ListToolsRequestSchema', async () => ({
+        tools: renderTools(),
+      }));
+    }),
+  };
+});
 vi.mock('@modelcontextprotocol/sdk/server/stdio.js', () => ({
   StdioServerTransport: vi.fn(function (this: any) {}),
-}));
-vi.mock('@modelcontextprotocol/sdk/types.js', () => ({
-  CallToolRequestSchema: 'CallToolRequestSchema',
-  ListToolsRequestSchema: 'ListToolsRequestSchema',
 }));
 vi.mock('../embeddings.js', () => ({
   embed: vi.fn().mockResolvedValue(null),

@@ -4,6 +4,9 @@ import { storeMemory } from './store.js';
 import { deleteMemory } from './mutate.js';
 import { MemoryExistsError } from '../errors.js';
 import type { MemoryMetadata } from '../types.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 // ─── export_memories ─────────────────────────────────────────────────────────
 
@@ -167,4 +170,54 @@ export function deleteMemories(args: any): any {
   }
 
   return { deleted, errors, count: keys.length, results };
+}
+
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+const exportMemoriesSchema = {
+  keys: z.array(z.string()).optional().describe('Optional subset of memory keys to export.'),
+  category: z.string().optional().describe('Filter by category.'),
+  tag: z.string().optional().describe('Filter by tag (any memory that includes this tag).'),
+};
+
+const importMemoriesSchema = {
+  // z.any() per element: import_memories is the round-trip counterpart to
+  // export_memories and accepts whatever the archive carries (the golden
+  // tools/list snapshot has no `items` on this array — the SDK renders
+  // z.array(z.any()) as `items: {}`, an accepted additive delta the parity
+  // test normalizes out).
+  memories: z.array(z.any()).describe('Array of memory objects (key, title, content, category, tags, importanceScore, ...).'),
+  force: z.boolean().default(false).describe('Overwrite existing memories with the same derived key.'),
+};
+
+const deleteMemoriesSchema = {
+  keys: z.array(z.string()),
+  force: z.boolean().default(false).describe('Override the no-prune tag guard for the batch.'),
+  confirm: z.boolean().describe('Must be true to confirm the bulk deletion.'),
+};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'export_memories',
+    {
+      description: 'Export memories as a portable JSON archive. Optionally filter by keys, category, or tag. Each entry includes the full body content and metadata needed for import_memories.',
+      inputSchema: exportMemoriesSchema,
+    },
+    wrapHandler('export_memories', exportMemories),
+  );
+  server.registerTool(
+    'import_memories',
+    {
+      description: 'Import memories from a JSON archive produced by export_memories. Skips existing keys unless force=true.',
+      inputSchema: importMemoriesSchema,
+    },
+    wrapHandler('import_memories', importMemories),
+  );
+  server.registerTool(
+    'delete_memories',
+    {
+      description: 'Bulk delete memories by key. Requires confirm=true. Refuses no-prune memories in the batch unless force=true is passed.',
+      inputSchema: deleteMemoriesSchema,
+    },
+    wrapHandler('delete_memories', deleteMemories),
+  );
 }

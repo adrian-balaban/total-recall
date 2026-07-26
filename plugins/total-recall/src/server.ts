@@ -1,32 +1,24 @@
 import * as path from 'path';
-import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import {
-  CallToolRequestSchema,
-  ListToolsRequestSchema,
-} from '@modelcontextprotocol/sdk/types.js';
 import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './paths.js';
 import { loadIndexes, scheduleSave, recalcIdfNow, markIndexFresh } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
-import { recordError, recordPerfSample } from './state.js';
-import { storeMemory } from './tools/store.js';
-import { recallMemory, searchIndex } from './tools/recall.js';
-import {
-  listMemories,
-  getMemoriesByKeys,
-  getStats,
-  getTimeline,
-  getRelatedMemories,
-  pruneMemories,
-} from './tools/query.js';
-import { updateMemory, deleteMemory, confirmMemory, rebuildIndex } from './tools/mutate.js';
-import { rerankMemories } from './tools/rerank.js';
-import {
-  exportMemories,
-  importMemories,
-  deleteMemories,
-} from './tools/bulk.js';
 import { startAutoReconcile } from './auto-reconcile.js';
+// Phase 6.1-6.3: each tools/*.ts module owns its Zod schema + handler + a
+// `register(server)` that wires them onto the McpServer via registerTool.
+// server.ts no longer holds a monolithic hand-written schema block (6.3) nor a
+// CallTool dispatch table (6.1) — the schema is co-located with the handler it
+// validates, and registerTool's Zod safeParse closes the T3 scalar-tags class
+// at the dispatch boundary (6.2). The CallToolResult envelope + the
+// perf/error instrumentation that the old setRequestHandler(CallTool) owned
+// live in tools/registry.ts wrapHandler.
+import { register as registerStore } from './tools/store.js';
+import { register as registerRecall } from './tools/recall.js';
+import { register as registerQuery } from './tools/query.js';
+import { register as registerMutate } from './tools/mutate.js';
+import { register as registerRerank } from './tools/rerank.js';
+import { register as registerBulk } from './tools/bulk.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
 
@@ -40,10 +32,17 @@ const PLUGIN_VERSION: string =
 
 // ─── Server setup ─────────────────────────────────────────────────────────────
 
-const server = new Server(
+// 6.1: McpServer (the high-level API) replaces the deprecated low-level Server
+// + setRequestHandler(ListTools/CallTool). registerTool validates the caller's
+// arguments against the Zod inputSchema BEFORE invoking the callback
+// (McpServer.validateToolInput → safeParseAsync), so malformed calls are
+// rejected uniformly at the dispatch boundary (6.2) with a parse-error
+// CallToolResult — a scalar `tags` no longer reaches the handler via MCP.
+// `capabilities.tools` is advertised automatically by McpServer; only the
+// `instructions` banner is passed here.
+const server = new McpServer(
   { name: 'total-recall', version: PLUGIN_VERSION },
   {
-    capabilities: { tools: {} },
     instructions:
       `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (17 tools). ` +
       `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories. ` +
@@ -51,288 +50,15 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools: [
-    {
-      name: 'store_memory',
-      description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists — use update_memory, or pass force=true to overwrite (preserves created/accessCount). force=true is refused if the existing memory is tagged "no-prune" (immortal) — use update_memory to amend or delete_memory(force=true) then re-store.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          content: { type: 'string', description: 'Full markdown content including executive summary.' },
-          tags: { type: 'array', items: { type: 'string' } },
-          category: { type: 'string', default: 'knowledge' },
-          importanceScore: { type: 'number', minimum: 0, maximum: 1, default: 0.5 },
-          sessionId: { type: 'string' },
-          author: { type: 'string' },
-          force: { type: 'boolean', default: false, description: 'Overwrite an existing memory with the same key (preserves created/accessCount).' },
-          // 6.5: the handler accepts these for the import_memories round-trip
-          // (store.ts:46-49 reads args.key/created/updated/sessions). Declaring
-          // them here documents the restore path and lets a client pass them
-          // explicitly instead of relying on an undocumented override. They are
-          // NOT required — a normal store derives the key from title/category
-          // and stamps created/updated from now.
-          key: { type: 'string', description: 'Explicit memory key (overrides the title/category-derived key). Used by import_memories to preserve the original location on a round-trip; rarely set by hand.' },
-          created: { type: 'string', description: 'ISO timestamp to record as the creation time (import_memories round-trip). Omit to stamp now.' },
-          updated: { type: 'string', description: 'ISO timestamp to record as the last-updated time (import_memories round-trip). Omit to stamp now.' },
-          sessions: { type: 'array', items: { type: 'string' }, description: 'Pre-existing session history to carry over (import_memories round-trip). The current sessionId is appended (deduped, capped at 50).' },
-        },
-        required: ['title', 'content'],
-      },
-    },
-    {
-      name: 'recall_memory',
-      description: 'Full-text TF-IDF search with Ebbinghaus decay. Fuses with vector search via Reciprocal Rank Fusion when the optional embedding deps are installed (set hybrid=false to force TF-IDF only).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string' },
-          full: { type: 'boolean', default: false },
-          since: { type: 'string', description: 'Relative (7d, 2w, 1m) or ISO date. Lower bound on updated.' },
-          before: { type: 'string', description: 'Relative (7d, 2w, 1m) or ISO date. Upper bound on updated (exclusive); combine with since for a date range.' },
-          minScore: { type: 'number', default: 0, description: 'Minimum score; drop results below this. Default 0 = no filtering. Scores are NOT comparable across hybrid modes (RRF-fused scores are tiny; use hybrid=false for predictable TF-IDF thresholds).' },
-          limit: { type: 'number', default: 10 },
-          excludeJournal: { type: 'boolean', default: true },
-          hybrid: { type: 'boolean', default: true, description: 'Fuse TF-IDF with vector search (RRF) when available.' },
-        },
-        required: ['query'],
-      },
-    },
-    {
-      name: 'rerank_memories',
-      description: 'Reorder a candidate list of memory keys by semantic similarity to a query using embeddings. Returns the same keys sorted by cosine score; pass full=true to include the memory body.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string', description: 'The query to compare each candidate memory against.' },
-          keys: { type: 'array', items: { type: 'string' }, maxItems: 200, description: 'Candidate memory keys (e.g. the top-N results from recall_memory or search_index). Capped at 200 keys; extras are dropped (preserving original order).' },
-          limit: { type: 'number', default: 0, description: 'Maximum number of keys to return. Default 0 returns all provided keys.' },
-          full: { type: 'boolean', default: false, description: 'Include the full memory content in the result.' },
-        },
-        required: ['query', 'keys'],
-      },
-    },
-    {
-      name: 'export_memories',
-      description: 'Export memories as a portable JSON archive. Optionally filter by keys, category, or tag. Each entry includes the full body content and metadata needed for import_memories.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          keys: { type: 'array', items: { type: 'string' }, description: 'Optional subset of memory keys to export.' },
-          category: { type: 'string', description: 'Filter by category.' },
-          tag: { type: 'string', description: 'Filter by tag (any memory that includes this tag).' },
-        },
-      },
-    },
-    {
-      name: 'import_memories',
-      description: 'Import memories from a JSON archive produced by export_memories. Skips existing keys unless force=true.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          memories: { type: 'array', description: 'Array of memory objects (key, title, content, category, tags, importanceScore, ...).' },
-          force: { type: 'boolean', default: false, description: 'Overwrite existing memories with the same derived key.' },
-        },
-        required: ['memories'],
-      },
-    },
-    {
-      name: 'delete_memories',
-      description: 'Bulk delete memories by key. Requires confirm=true. Refuses no-prune memories in the batch unless force=true is passed.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          keys: { type: 'array', items: { type: 'string' } },
-          force: { type: 'boolean', default: false, description: 'Override the no-prune tag guard for the batch.' },
-          confirm: { type: 'boolean', description: 'Must be true to confirm the bulk deletion.' },
-        },
-        required: ['keys', 'confirm'],
-      },
-    },
-    {
-      name: 'confirm_memory',
-      description: 'Confirm or flag a memory. useful=true increments confirmations (reinforces retention); useful=false increments flags (accelerates decay).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          key: { type: 'string' },
-          useful: { type: 'boolean', default: true, description: 'true = confirmation, false = flag.' },
-        },
-        required: ['key'],
-      },
-    },
-    {
-      name: 'list_memories',
-      description: 'Metadata-only listing with optional category/tag filter.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          category: { type: 'string' },
-          tag: { type: 'string' },
-          limit: { type: 'number', default: 50 },
-          offset: { type: 'number', default: 0, description: 'Skip the first N results (for pagination; combine with limit).' },
-        },
-      },
-    },
-    {
-      name: 'update_memory',
-      description: 'Update content, tags, or importanceScore of an existing memory.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          key: { type: 'string' },
-          content: { type: 'string' },
-          tags: { type: 'array', items: { type: 'string' } },
-          importanceScore: { type: 'number', minimum: 0, maximum: 1 },
-          sessionId: { type: 'string' },
-        },
-        required: ['key'],
-      },
-    },
-    {
-      name: 'delete_memory',
-      description: 'Delete a memory from the vault and index. Refuses memories tagged "no-prune" unless force=true is passed.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          key: { type: 'string' },
-          force: { type: 'boolean', default: false, description: 'Override the no-prune tag guard (use to delete an immortal memory).' },
-        },
-        required: ['key'],
-      },
-    },
-    {
-      name: 'rebuild_index',
-      description: 'Full re-scan of both vaults. Rebuilds inverted index.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
-      name: 'search_index',
-      description: 'Lightweight metadata-only search (no file reads). Returns key, title, preview, score.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: { type: 'string' },
-          limit: { type: 'number', default: 20 },
-          since: { type: 'string', description: 'Relative or ISO date. Lower bound on updated.' },
-          before: { type: 'string', description: 'Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range.' },
-          minScore: { type: 'number', default: 0, description: 'Minimum TF-IDF score; drop results below this. Default 0 = no filtering.' },
-          excludeJournal: { type: 'boolean', default: true, description: 'Drop journal entries (auto-appended daily logs). Default true.' },
-          category: { type: 'string' },
-          tags: { type: 'array', items: { type: 'string' } },
-        },
-        required: ['query'],
-      },
-    },
-    {
-      name: 'get_memories_by_keys',
-      description: 'Batch fetch by keys. Use summary=true for executive summary only (~500 chars).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          keys: { type: 'array', items: { type: 'string' } },
-          summary: { type: 'boolean', default: false },
-        },
-        required: ['keys'],
-      },
-    },
-    {
-      name: 'get_stats',
-      description: 'Total memories, by-category breakdown, cache stats, performance percentiles.',
-      inputSchema: { type: 'object', properties: {} },
-    },
-    {
-      name: 'get_timeline',
-      description: 'Chronological view with date grouping and optional filtering.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          since: { type: 'string', description: 'Relative or ISO date. Lower bound on updated.' },
-          before: { type: 'string', description: 'Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range.' },
-          limit: { type: 'number', default: 50 },
-          offset: { type: 'number', default: 0, description: 'Skip the first N results (for pagination; combine with limit).' },
-          category: { type: 'string' },
-        },
-      },
-    },
-    {
-      name: 'get_related_memories',
-      description: 'Jaccard similarity on tags with same-category boost.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          key: { type: 'string' },
-          limit: { type: 'number', default: 10 },
-          includeContent: { type: 'boolean', default: false },
-        },
-        required: ['key'],
-      },
-    },
-    {
-      name: 'prune_memories',
-      description: 'List low-retention candidates using Ebbinghaus model. Does NOT auto-delete. Excludes memories tagged "no-prune" (immortal, e.g. ADRs).',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          threshold: { type: 'number', default: 0.1 },
-          limit: { type: 'number', default: 20 },
-        },
-      },
-    },
-  ],
-}));
-
-// Tool dispatch table — replaces the large tool-case switch with a lookup so adding a
-// tool is a one-line import + one entry below. All handlers return `any`; the
-// async/sync mix (recall_memory returns a Promise, the rest are synchronous)
-// is folded into a uniform await on the caller side below.
-const TOOL_HANDLERS: Record<string, (args: any) => any> = {
-  store_memory: storeMemory,
-  recall_memory: recallMemory,
-  rerank_memories: rerankMemories,
-  export_memories: exportMemories,
-  import_memories: importMemories,
-  delete_memories: deleteMemories,
-  confirm_memory: confirmMemory,
-  list_memories: listMemories,
-  update_memory: updateMemory,
-  delete_memory: deleteMemory,
-  rebuild_index: rebuildIndex,
-  search_index: searchIndex,
-  get_memories_by_keys: getMemoriesByKeys,
-  get_stats: getStats,
-  get_timeline: getTimeline,
-  get_related_memories: getRelatedMemories,
-  prune_memories: pruneMemories,
-};
-
-server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const start = Date.now();
-  const { name, arguments: args } = request.params;
-  try {
-    const handler = TOOL_HANDLERS[name];
-    if (!handler) throw new Error(`Unknown tool: ${name}`);
-    // `args` is request.params.arguments, which the MCP SDK types as
-    // ZodOptional and a client is permitted to omit entirely (e.g. a bare
-    // `list_memories` call with no params object). The tool handlers are typed
-    // `(args: ParsedArgs) => …` and several (listMemories, getStats, prune) read
-    // optional fields via `args?.field` but the function parameter itself is
-    // non-optional, so passing `undefined` through throws a TypeError at the
-    // first `args.x` access — caught here and returned as isError, surfacing as
-    // a spurious tool failure on a valid no-arg call. Default to `{}`.
-    const result = await handler(args ?? {});
-    // #21: route through the shared bounded-append helper (amortized-O(1) trim)
-    // instead of the inline `push; if (>1000) shift` that re-indexed the whole
-    // array on every call past the cap. perfSamples itself is read only by
-    // getStats (query.ts) for the percentile calc.
-    recordPerfSample(Date.now() - start);
-    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
-  } catch (e: any) {
-    recordError(`${name}: ${e.message}`);
-    return { content: [{ type: 'text', text: `Error: ${e.message}` }], isError: true };
-  }
-});
+// Wire the 17 tools. The order is stable (store → recall → query → mutate →
+// rerank → bulk) but does not affect tools/list ordering — the SDK returns
+// tools in registration order, matching the prior hand-written list.
+registerStore(server);
+registerRecall(server);
+registerQuery(server);
+registerMutate(server);
+registerRerank(server);
+registerBulk(server);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 

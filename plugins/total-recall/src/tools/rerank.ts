@@ -3,6 +3,9 @@ import { embed, embedTextFor } from '../embeddings.js';
 import { getVectors, upsertVector } from '../vectorStore.js';
 import { VECTORS_DB } from '../paths.js';
 import { readCachedOrFresh, isReservedKey } from '../vault-scan.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 // ─── Cosine similarity for normalized embeddings ───────────────────────────────
 
@@ -163,4 +166,23 @@ export async function rerankMemories(args: any): Promise<any> {
       preview: m.contentPreview,
     };
   });
+}
+
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+const rerankMemoriesSchema = {
+  query: z.string().describe('The query to compare each candidate memory against.'),
+  keys: z.array(z.string()).max(200).describe('Candidate memory keys (e.g. the top-N results from recall_memory or search_index). Capped at 200 keys; extras are dropped (preserving original order).'),
+  limit: z.number().default(0).describe('Maximum number of keys to return. Default 0 returns all provided keys.'),
+  full: z.boolean().default(false).describe('Include the full memory content in the result.'),
+};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'rerank_memories',
+    {
+      description: 'Reorder a candidate list of memory keys by semantic similarity to a query using embeddings. Returns the same keys sorted by cosine score; pass full=true to include the memory body.',
+      inputSchema: rerankMemoriesSchema,
+    },
+    wrapHandler('rerank_memories', rerankMemories),
+  );
 }

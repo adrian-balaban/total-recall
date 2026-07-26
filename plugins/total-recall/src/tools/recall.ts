@@ -6,6 +6,9 @@ import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';
 import { readCachedOrFresh } from '../vault-scan.js';
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { wrapHandler } from './registry.js';
 
 // Pagination bounds (mirrors query.ts): MCP does not enforce the tool's
 // inputSchema, so a buggy/malicious caller can pass a huge/negative/NaN limit.
@@ -172,4 +175,45 @@ export function searchIndex(args: any): any {
       ? { key: r.key, title: m.title, category: m.category, tags: m.tags, updated: m.updated, score: r.score, preview: m.contentPreview, estimatedTokens: m.tokenEstimate }
       : null;
   }).filter(Boolean);
+}
+// ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
+const recallMemorySchema = {
+  query: z.string(),
+  full: z.boolean().default(false),
+  since: z.string().optional().describe('Relative (7d, 2w, 1m) or ISO date. Lower bound on updated.'),
+  before: z.string().optional().describe('Relative (7d, 2w, 1m) or ISO date. Upper bound on updated (exclusive); combine with since for a date range.'),
+  minScore: z.number().default(0).describe('Minimum score; drop results below this. Default 0 = no filtering. Scores are NOT comparable across hybrid modes (RRF-fused scores are tiny; use hybrid=false for predictable TF-IDF thresholds).'),
+  limit: z.number().default(10),
+  excludeJournal: z.boolean().default(true),
+  hybrid: z.boolean().default(true).describe('Fuse TF-IDF with vector search (RRF) when available.'),
+};
+
+const searchIndexSchema = {
+  query: z.string(),
+  limit: z.number().default(20),
+  since: z.string().optional().describe('Relative or ISO date. Lower bound on updated.'),
+  before: z.string().optional().describe('Relative or ISO date. Upper bound on updated (exclusive); combine with since for a date range.'),
+  minScore: z.number().default(0).describe('Minimum TF-IDF score; drop results below this. Default 0 = no filtering.'),
+  excludeJournal: z.boolean().default(true).describe('Drop journal entries (auto-appended daily logs). Default true.'),
+  category: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+};
+
+export function register(server: McpServer) {
+  server.registerTool(
+    'recall_memory',
+    {
+      description: 'Full-text TF-IDF search with Ebbinghaus decay. Fuses with vector search via Reciprocal Rank Fusion when the optional embedding deps are installed (set hybrid=false to force TF-IDF only).',
+      inputSchema: recallMemorySchema,
+    },
+    wrapHandler('recall_memory', recallMemory),
+  );
+  server.registerTool(
+    'search_index',
+    {
+      description: 'Lightweight metadata-only search (no file reads). Returns key, title, preview, score.',
+      inputSchema: searchIndexSchema,
+    },
+    wrapHandler('search_index', searchIndex),
+  );
 }
