@@ -1,5 +1,5 @@
 import { memIndex } from '../state.js';
-import { readMemoryContent, isReservedKey } from '../vault-scan.js';
+import { readMemoryContent } from '../vault-scan.js';
 import { storeMemory } from './store.js';
 import { deleteMemory } from './mutate.js';
 import { MemoryExistsError } from '../errors.js';
@@ -134,9 +134,13 @@ export function deleteMemories(args: any): any {
       ? [args.keys]
       : [];
   const keys = rawKeys.map((k: unknown) => (typeof k === 'string' ? k : String(k)));
-  if (keys.some(isReservedKey)) {
-    throw new Error('One or more keys contain a reserved key segment.');
-  }
+  // 6.9: no up-front batch reject on reserved keys. The per-key loop below
+  // calls deleteMemory, which throws on a reserved key (mutate.ts:140-142),
+  // and the existing catch records it as {key, status:'error', error}. A
+  // batch with one reserved key plus valid keys deletes the valid ones and
+  // records the reserved key as a per-key error, instead of aborting the
+  // whole batch (the old up-front `keys.some(isReservedKey)` throw was
+  // batch-hostile and redundant with deleteMemory's own guard).
   const force = args.force === true;
   const confirm = args.confirm === true;
 

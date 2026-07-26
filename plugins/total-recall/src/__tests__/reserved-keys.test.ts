@@ -123,8 +123,20 @@ describe('reserved key guard', () => {
     expect(res).toEqual([]);
   });
 
-  it('deleteMemories rejects a batch containing a reserved key', () => {
-    expect(() => deleteMemories({ keys: ['__proto__'], confirm: true })).toThrow(/reserved/);
+  it('deleteMemories records a reserved key as a per-key error, not a batch reject (6.9)', () => {
+    // 6.9: the up-front `keys.some(isReservedKey)` batch throw was removed.
+    // A reserved key in a batch is now recorded as a per-key error by the
+    // existing catch arm (deleteMemory throws on isReservedKey), so the
+    // valid keys in the same batch are still deleted.
+    const stored = storeMemory({ title: 'T', content: 'body', category: 'knowledge', tags: [], importanceScore: 0.5 });
+    const res = deleteMemories({ keys: [stored.key, '__proto__'], confirm: true });
+    expect(res.deleted).toBe(1);
+    expect(res.errors).toBe(1);
+    expect(memIndex[stored.key]).toBeUndefined();
+    const errEntry = res.results.find((r: any) => r.key === '__proto__');
+    expect(errEntry).toBeDefined();
+    expect(errEntry!.status).toBe('error');
+    expect(errEntry!.error).toMatch(/reserved|Invalid key/);
   });
 
   it('indexFile coerces non-string author, created, and updated to strings', () => {
