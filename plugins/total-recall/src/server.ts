@@ -106,7 +106,7 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
         type: 'object',
         properties: {
           query: { type: 'string', description: 'The query to compare each candidate memory against.' },
-          keys: { type: 'array', items: { type: 'string' }, description: 'Candidate memory keys (e.g. the top-N results from recall_memory or search_index).' },
+          keys: { type: 'array', items: { type: 'string' }, maxItems: 200, description: 'Candidate memory keys (e.g. the top-N results from recall_memory or search_index). Capped at 200 keys; extras are dropped (preserving original order).' },
           limit: { type: 'number', default: 0, description: 'Maximum number of keys to return. Default 0 returns all provided keys.' },
           full: { type: 'boolean', default: false, description: 'Include the full memory content in the result.' },
         },
