@@ -1646,6 +1646,33 @@ describe('ListToolsRequestSchema', () => {
     const props = Object.keys(lm.inputSchema.properties ?? {}).sort();
     expect(props).toEqual(['category', 'limit', 'offset', 'tag']);
   });
+
+  // 6.5: store_memory's inputSchema must declare key/created/updated/sessions
+  // (the import_memories round-trip restore path that src/tools/store.ts:46-50
+  // already accepts). The handler reads these args and restores the original
+  // key/timestamps/session history instead of deriving them from title/now.
+  // Pin the declaration so a future refactor that drops the schema properties
+  // (silently breaking the import_memories round-trip) is caught at test time.
+  it('store_memory schema declares key/created/updated/sessions for import_memories round-trip (6.5)', async () => {
+    const handler = registeredHandlers.get('ListToolsRequestSchema')!;
+    const { tools } = await handler({ params: {} });
+    const sm = tools.find((t: any) => t.name === 'store_memory');
+    const props = sm.inputSchema.properties ?? {};
+    expect(props.key).toBeDefined();
+    expect(props.key.type).toBe('string');
+    expect(props.created).toBeDefined();
+    expect(props.created.type).toBe('string');
+    expect(props.updated).toBeDefined();
+    expect(props.updated.type).toBe('string');
+    expect(props.sessions).toBeDefined();
+    expect(props.sessions.type).toBe('array');
+    expect(props.sessions.items).toEqual({ type: 'string' });
+    // The four are documentation-only — must NOT be required.
+    expect(sm.inputSchema.required ?? []).not.toContain('key');
+    expect(sm.inputSchema.required ?? []).not.toContain('created');
+    expect(sm.inputSchema.required ?? []).not.toContain('updated');
+    expect(sm.inputSchema.required ?? []).not.toContain('sessions');
+  });
 });
 
 // ─── error handling ───────────────────────────────────────────────────────────
