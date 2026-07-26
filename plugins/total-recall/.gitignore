@@ -5,3 +5,4 @@ coverage/
 
 # Stryker mutation testing scratch dir (never commit)
 .stryker-tmp/
+reports/
