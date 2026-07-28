@@ -8,7 +8,7 @@ Total Recall este o extensie (versiunea 1.0.135) care se conectează la Claude C
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
-Când cauți o memorie, sistemul o găsește folosind o metodă rapidă de căutare și o rangează după importanță și frecvență de utilizare.
+Când cauți o memorie, sistemul o găsește folosind o metodă rapidă de căutare și o 'rangează' după importanță și frecvență de utilizare.
 
 ## Ce face
 - **Salvează** memoriile ca fișiere Markdown cu informații structurate (titlu, etichete, categorie, importanță).
@@ -17,7 +17,7 @@ Când cauți o memorie, sistemul o găsește folosind o metodă rapidă de căut
 - **Separă** memoriile personale (doar pentru tine) de cele de echipă (partajate cu alții).
 - **Protejează** datele sensibile (carduri de credit, email-uri personale, parole) înainte de a le sincroniza cu echipa.
 - **Arhivează** versiunile vechi ale memoriilor, nu le șterge pur și simplu.
-- **Injectează** automaticamente index-ul memoriilor în contextul Claude la fiecare sesiune nouă — aștea e cea mai importantă caracteristică.
+- **Injectează** automat index-ul memoriilor în contextul Claude la fiecare sesiune nouă — e cea mai importantă caracteristică.
 - **Extrage** automat 0-3 lecții din conversație la sfârșitul sesiunii și le salvează.
 - **Sincronizează** memoriile de echipă în git, deci toți colegii au acces.
 
@@ -35,18 +35,22 @@ Fiecare memorie e un fișier Markdown obișnuit cu informații structurate în c
 1. **Căutare text** — caută cuvintele din memoria ta
 2. **Căutare vectorială** (opțional) — înțelege sensul, nu doar cuvintele
 
-Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă în mod automat. Memoriile se salvează pe disk automat, iar dacă cineva din echipă adaugă o memorie nouă în git, aceasta apare automat în sesiunea ta fără să trebuie să restarezi.
+Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă în mod automat. Memoriile se salvează pe disk automat, iar dacă cineva din echipă adaugă o memorie nouă în git, aceasta apare automat în sesiunea ta fără să trebuie să restartezi.
 
 ## Cum se instalează și unde se folosește
 - **Pentru Claude Code:** se instalează ca plugin din meniu
 - **Pentru Gemini CLI:** se instalează ca extensie
-- **Pentru comenzi manuale:** scriptul `install.sh` setează totul — alegi între o versiune simplă (doar căutare text) sau una completă (cu căutare inteligentă)
+- **Pentru comenzi manuale:** scriptul `install.sh` setează totul — alegi între o versiune simplă (doar căutare text) sau una completă (cu căutare dupa sens/semantica)
 - **Compatibilitate:** funcționează pe orice Linux/Mac + Git Bash pe Windows; necesită Node.js 18+
 
 ## Calitatea și fiabilitate
 - **Teste:** peste 12,000 linii de cod de test în 41 fișiere
 - **Acoperire:** 95% din cod e testat
-- **Versiune:** 1.0.135 — stabil și în producție
+- **Mutation testing:** o metodă ca să verific dacă testele-mi sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
+  - Scor curent: 68% (testele capturează 68% din erorile introduse deliberat; ținta e minim 65%)
+  - Modulele critice (salvare pe disk, căutare text) au scor mai mare (70%+)
+  - Modulele opționale (căutare semantică) au scor acceptabil
+- **Versiune:** 1.1.1 — stabil
 - **Fără CI:** întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat local înainte de a fi trimis
 - **Backup:** `install.sh` poate genera o copie de siguranță a tuturor memoriilor
 
@@ -55,11 +59,11 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Opționale:** 3 pachete pentru căutarea inteligentă (descărcate doar dacă le ceri)
   - Modelul de AI pentru înteles semantic (~200MB)
   - Bază de date locală pentru vectori
-- **Dimensiune totală:** ~1-2MB pentru plugin; ~200MB opțional dacă vrei căutare inteligentă
+- **Dimensiune totală:** ~1-2MB pentru plugin; ~200MB opțional dacă vrei căutare semantica
 
 ## Principii de design
 - **Local-first:** toate memoriile sunt pe computerul tău, nu în cloud
 - **Citibil:** fiecare memorie e un fișier Markdown pe care îl poți edita cu orice editor
 - **Versionabil:** fișierele se pot pune în git și se pot urmări modificările
-- **Imparțial:** nu folosește o bază de date magic; totul e clar și transparent
-- **Rezistent la eșecuri:** dacă ceva se întâmplă, datele nu se pierd
+- **Imparțial:** nu folosește o bază de date; totul e in git
+- **Rezistent la erori:** dacă ceva se întâmplă, datele nu se pierd
