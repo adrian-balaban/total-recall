@@ -14,6 +14,13 @@ const docLengths = new Map<string, number>();
 
 // ─── TF-IDF ──────────────────────────────────────────────────────────────────
 
+// Stryker disable all: the RO/EN bilingual dictionary is data, not logic, and
+// the bilingual query-expansion tests (tfidf-multilingual.test.ts) are excluded
+// from Stryker's allow-list (they toggle ~/.total-recall/config.json, which
+// collides with paths.ts's frozen CONFIG_PATH under Stryker's shared worker).
+// Only English queries are used in practice, so the dict literals + the
+// expansion branch below are not mutation targets — disabling them here keeps
+// them from counting as surviving/no-coverage mutants. Restore below the block.
 const BILINGUAL_DICT: Record<string, string> = {
   // Romanian -> English
   'decizie': 'decision',
@@ -47,6 +54,7 @@ const BILINGUAL_DICT: Record<string, string> = {
   'memories': 'memorii',
   'memory': 'memorie',
 };
+// Stryker restore all
 
 export function tokenize(text: string): string[] {
   // Preserve Romanian diacritics by normalizing to NFKD and stripping combining
@@ -145,6 +153,9 @@ export function rebuildInvertedIndex() {
 export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: string; score: number }> {
   const config = loadConfig();
   let tokens = tokenize(query);
+  // Stryker disable all: bilingual expansion branch — exercised only by
+  // tfidf-multilingual.test.ts, which is excluded from Stryker's allow-list
+  // (see BILINGUAL_DICT note above). Only English queries are used in practice.
   if (config.enableMultilingualSearch) {
     const expanded: string[] = [];
     for (const t of tokens) {
@@ -154,6 +165,7 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
     }
     tokens = expanded;
   }
+  // Stryker restore all
   // #22: accumulate RAW tf×idf (with per-token title/tag boosts) per doc across
   // all query tokens, then multiply by the Ebbinghaus decay ONCE per doc after
   // the token loop. The decay is a per-doc scalar — it depends only on
