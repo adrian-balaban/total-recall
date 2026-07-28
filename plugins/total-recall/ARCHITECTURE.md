@@ -11,7 +11,7 @@ Is compatible with Claude Code and Gemini CLI.
 ```
 src/
 ├── index.ts          boot stub — signal handlers + calls main()
-├── server.ts         MCP Server construction, 17 tool schemas, CallTool dispatch
+├── server.ts         McpServer construction; six register() calls wire the 17 tools (schemas co-located in tools/*.ts); main()
 ├── state.ts          shared in-memory singletons (memIndex, invertedIndex, errors, perfSamples)
 ├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
 ├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex

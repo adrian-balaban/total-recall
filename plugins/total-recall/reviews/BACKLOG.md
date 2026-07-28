@@ -65,6 +65,59 @@ syntheses in `reviews/archive/`).
   `src/tools/registry.ts` (one span per tool call). See the review file for the
   full plan.
 
+### index.json has no lock (single-writer assumption)
+- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 1 (file pruned 2026-07-28).
+- **What:** `index.json` is written under a single-writer assumption. Concurrent
+  Claude Code windows can clobber runtime-only fields (`accessCount`,
+  `lastAccessed`).
+- **Trigger:** multi-window concurrent use becomes routine (today the process is
+  single-instance per user session).
+- **Shape when picked up:** advisory lock or merge-on-read for the runtime-only
+  fields, so a stale writer can't overwrite a fresher access record.
+
+### Embedding provider is a hardcoded if/else
+- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 2 (file pruned 2026-07-28).
+- **What:** `src/embeddings.ts` selects the provider via a hardcoded if/else,
+  blocking the addition of OpenAI/Voyage/Cohere/Ollama embedders without
+  touching core logic.
+- **Trigger:** a second embedding backend is needed (e.g. the Ollama/local path
+  above, or a hosted provider).
+- **Shape when picked up:** extract an `EmbeddingProvider` interface + registry
+  map behind the existing `embed()` seam. Pin vectorStore 3.1/3.2 dim-mismatch
+  guards against the new provider's dim.
+
+### Org-sync freshness relies on marker-file polling
+- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 5 (file pruned 2026-07-28).
+- **What:** teammate memories can lag until the next poll/hook fires — there is
+  no push path.
+- **Trigger:** team-shared org-vault usage where staleness is felt (banking
+  deployment target). Pairs with the banking-readiness org-sync hardening.
+- **Shape when picked up:** optional `fs.watch`-based fast path, falling back to
+  polling on network filesystems where inotify isn't reliable.
+
+### No schema-version marker in index.json/frontmatter
+- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 6 (file pruned 2026-07-28).
+- **What:** `index.json` and the frontmatter format carry no `indexVersion` /
+  schema marker, so a future breaking format change has no clean migration hook.
+- **Trigger:** an `index.json` or frontmatter format change that would break old
+  vaults silently.
+- **Shape when picked up:** add `indexVersion`, checked at `loadIndexes()` to
+  trigger a rebuild rather than reading a stale-shape index.
+
+### state.ts global singletons couple tools/* to one process
+- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 7 (file pruned 2026-07-28).
+- **What:** `state.ts` global singletons couple the whole `tools/*` layer to one
+  process, blocking any future multi-tenant/worker-pool design.
+- **Trigger:** scope grows beyond single-user (multi-tenant SaaS, worker pool).
+- **Decision shape:** acceptable now for a personal-use tool; flagged here so a
+  future scope change triages it deliberately instead of rediscovering it.
+
+> Items 4 (server.ts monolith) and 8 (deprecated `Server` class) from the
+> pruned `ARCHITECTURE-REVIEW-TODO.md` are **DONE** — the McpServer migration
+> (CLAUDE.md 6.1-6.3) co-located schemas with implementation in `tools/*.ts`
+> and replaced `new Server(...)` with `McpServer` + `registerTool()`. Item 3
+> (vault-scan dir-mtime) is the first DEFERRED entry above.
+
 ---
 
 ## DECIDED — documented as by-design, no change intended

@@ -31,6 +31,8 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 `dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.
 
+**Release build gate.** `npm run release:build` (= `scripts/release-build.sh`: `typecheck && test && build`) is the one-command publish-time gate — it refuses to emit `dist/` unless typecheck and the full test suite are green. The hygiene fix for the committed-bundle distribution model is **not** "gitignore `dist/`" (that would break `claude plugin update` installs, since `install.sh` does not build on a normal install) — it is "never commit a `dist/` that wasn't produced by this gate". Run `npm run release:build` instead of bare `npm run build` whenever you ship a version; then commit the rebuilt `dist/` together with the source change.
+
 ## Before committing — mandatory pre-commit checklist
 
 Run all three, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
