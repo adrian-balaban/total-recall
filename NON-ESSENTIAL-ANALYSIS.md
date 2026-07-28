@@ -1,5 +1,13 @@
 # Total Recall — Non-Essential Analysis
 
+> **Status (2026-07-29):** Several items below have since been actioned: the
+> `scripts/eval/` audit harness, the `reviews/` folder (transcripts pruned
+> earlier; `BACKLOG.md` moved to the repo root as the sole deferred-items
+> registry), `hooks/scripts/load-open-questions.sh`, the `review-fix-ship` skill,
+> and `ARCHITECTURE-REVIEW-TODO.md` are all removed. The tables and recommended
+> actions below are retained as the analysis record; treat the done items as
+> historical.
+
 ## Method
 
 Essential was defined as: **what must exist for a consumer to install and run the MCP memory server with its 17 tools and the SessionStart index-injection headline feature.** This boundary is drawn at "what ships and runs", not "what is in the source tree". Three categories result:
@@ -89,7 +97,7 @@ These are the real repo-bloat problem — both non-essential to runtime AND curr
 - **`src/optional-deps.d.ts`** — Single-line ambient type shim used only by `tsc --noEmit`. Behaviorally non-load-bearing (`vectorStore.ts` lazy-imports better-sqlite3 as `any` regardless). **no** for ship+run; needed only for the typecheck dev gate.
 - **Test suite (~12,346 lines, 41 files)** — Essential to the shipping process (no CI gate; pre-commit checklist mandates `npm test`). Keep in repo. They are devDependencies and NOT in the shipped `dist/` bundle, so consumers do not receive them. Keep but ensure they stay out of any shipped subtree.
 - **`vitest.config.ts`, `vitest.integration.config.ts`** — Essential to the pre-commit + integration gates. Keep in repo, exclude from shipped plugin.
-- **`reviews/BACKLOG.md`** — Borderline-essential; ongoing reference as the deferred-items registry. If anything in `reviews/` is kept tracked, keep only this one.
+- **`BACKLOG.md` (repo root)** — Borderline-essential; ongoing reference as the deferred-items registry. Moved out of the now-removed `reviews/` folder (2026-07-29).
 - **`hooks/scripts/load-open-questions.sh`** — Optional ambient-curiosity feature, not core recall. Maybe/experimental; safe to drop without affecting recall/store/sync.
 - **`hooks/scripts/check-sync-errors.sh`** — Pure org-sync health observability; only relevant for org users. Maybe; non-essential to the memory loop.
 - **`hooks/scripts/session-end.sh`** — Observability + backup SIGTERM flush; the primary flush is the MCP server's stdin-end handler. Maybe/defensive; cheap and harmless.
