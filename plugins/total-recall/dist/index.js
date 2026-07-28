@@ -31565,7 +31565,7 @@ function ensureVecTable(d, dim) {
     const hasCosine = /distance_metric\s*=\s*cosine/i.test(existing.sql);
     if (existingDim === dim && hasCosine) return;
     recordError(
-      `vector index rebuilt: stored vec_memories dim ${existingDim} != new dim ${dim} (embedding model changed?) \u2014 re-embedding all memories with the new model`
+      `vector index rebuilt: stored vec_memories dim ${existingDim} != new dim ${dim} (embedding model changed?) \u2014 old table dropped; memories are re-embedded lazily on their next write/rerank, not all at once`
     );
     d.exec("DROP TABLE vec_memories");
   }
@@ -31628,7 +31628,7 @@ async function searchVector(dbPath, queryEmbedding, limit = 20) {
   if (!d) return [];
   if (!ensureVecTableForRead(d, queryEmbedding.length)) {
     recordError(
-      `vector search skipped: query embedding dim ${queryEmbedding.length} != stored vec_memories dim (embedding model changed? run rebuild_index to re-embed with the new model)`
+      `vector search skipped: query embedding dim ${queryEmbedding.length} != stored vec_memories dim (embedding model changed?) \u2014 recall degrades to TF-IDF. NOTE: rebuild_index backfills MISSING vectors only; it does NOT re-embed existing vectors stored at the old dim. To re-embed at the new dim, store/update each memory (or drop vec_memories so they backfill)`
     );
     return [];
   }
@@ -33387,7 +33387,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.132" : null.version;
+var PLUGIN_VERSION = true ? "1.0.133" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

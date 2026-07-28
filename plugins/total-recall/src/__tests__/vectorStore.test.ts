@@ -238,7 +238,15 @@ describe('vectorStore — dynamic dimension migration', () => {
     expect(res).toEqual([]);
     expect(execMock).not.toHaveBeenCalledWith('DROP TABLE vec_memories');
     expect(errors.length).toBeGreaterThan(before);
-    expect(errors[errors.length - 1]!.msg).toMatch(/query embedding dim 3 != stored/);
+    const msg = errors[errors.length - 1]!.msg;
+    expect(msg).toMatch(/query embedding dim 3 != stored/);
+    // C-1 (review-claude): the message must NOT tell the user rebuild_index
+    // re-embeds with the new model — it doesn't. rebuild_index backfills MISSING
+    // vectors only; existing vectors stored at the old dim are left in place.
+    // Pin both the absence of the false promise and the truthful caveat so a
+    // regression to the over-promising wording fails the suite.
+    expect(msg).not.toMatch(/run rebuild_index to re-embed with the new model/);
+    expect(msg).toMatch(/backfills MISSING vectors only/);
   });
 
   it('upsertVector ignores an empty embedding array', async () => {

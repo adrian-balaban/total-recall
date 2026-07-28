@@ -1,6 +1,6 @@
 # 🧠 Total Recall
 
-Persistent knowledge and memory management for Claude Code, GitHub Copilot CLI, and Gemini CLI.
+Persistent knowledge and memory management for Claude Code and Gemini CLI.
 
 Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject relevant context automatically at session start.
 
@@ -246,7 +246,6 @@ cd plugins/total-recall && npm install && npm run build
 claude plugin install "$(pwd)"       # Claude Code
 ./install.sh --gemini                # Gemini CLI
 ./install.sh --standalone            # Standalone (~/.claude/settings.json)
-./install.sh --copilot               # GitHub Copilot CLI
 ```
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
@@ -259,14 +258,12 @@ claude plugin install "$(pwd)"       # Claude Code
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
 | **Gemini CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
-| **Copilot CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Copilot) | ❌ No |
 | **Codex CLI** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 
 ### Client-Specific Integration Details
 
 *   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject memories at session start.
 *   **Gemini CLI**: registers through `gemini-extension.json`. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
-*   **Copilot CLI**: configured via `hooks/hooks.copilot.json`. Tool namespace is `mcp__total-recall__<tool>` (double underscores). `additionalContext` is dropped by the client, but the background side effects (git sync, index builds) run normally — a documented graceful degradation.
 *   **Codex CLI**: MCP server only (no hooks) — see [INSTALL.md](INSTALL.md#codex-cli-mcp-only-no-hooks).
 *   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local model.
 *   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).

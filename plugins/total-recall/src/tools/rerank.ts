@@ -68,8 +68,12 @@ export async function rerankMemories(args: any): Promise<any> {
 
   const qvec = await embed(query);
   if (!qvec) {
-    // Graceful degradation: keep the caller's original order when no embedder is
-    // available, matching the "always answer" policy used by recall_memory.
+    // CONTRACT (by-design, "always answer" policy, shared with recall_memory):
+    // when no embedder is available (vector deps absent, model load failed, or
+    // embed() returned null), do NOT drop the candidate set or throw — return
+    // every key at score 0 in the caller's original order so the result is still
+    // a usable, complete ranking. Silent degradation is intentional: a missing
+    // embedder must never make memory recall return nothing.
     return candidateKeys.map((key) => ({ key, score: 0 }));
   }
 

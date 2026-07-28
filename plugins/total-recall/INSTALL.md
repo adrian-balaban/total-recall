@@ -1,13 +1,13 @@
 # 📦 Installing Total Recall
 
-One plugin, four clients — Claude Code, GitHub Copilot CLI, Gemini CLI, and standalone — all set up by a single state-aware `install.sh`.
+One plugin, three clients — Claude Code, Gemini CLI, and standalone — all set up by a single state-aware `install.sh`.
 
 ## Prerequisites
 
 - **Node.js v18+** on PATH
 - `claude` CLI (for MCP registration; skipped with a warning if absent)
 - `gh` CLI authenticated — **only** if you enable the shared org vault
-- `gemini` / `copilot` CLI — **only** for `--gemini` / `--copilot`
+- `gemini` CLI — **only** for `--gemini`
 - **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))
 
 ## Windows
@@ -39,9 +39,6 @@ npm install && npm run build
 
 # Claude Code (native — hooks auto-load from hooks/hooks.json)
 claude plugin install "$(pwd)"
-
-# GitHub Copilot CLI (MCP + hooks/hooks.copilot.json)
-./install.sh --copilot
 
 # Gemini CLI (MCP + hooks/hooks.gemini.json)
 ./install.sh --gemini
@@ -78,7 +75,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 2. Create vault directories under `~/.total-recall/`
 3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed and `--standalone` wasn't requested
 4. Build the initial index
-5. Wire hooks (`--standalone` only), optional statusline (`--statusline`), Gemini (`--gemini`), Copilot (`--copilot`)
+5. Wire hooks (`--standalone` only), optional statusline (`--statusline`), Gemini (`--gemini`)
 6. Org vault (optional — `--org-repo URL`, `--allowed-email-domain D`)
 7. Vector search (per the chosen profile)
 8. Verify + summary
