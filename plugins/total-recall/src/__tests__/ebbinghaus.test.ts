@@ -72,6 +72,54 @@ describe('computeRetentionStrength', () => {
     // importance=NaN falls back to 0.5 at daysSince=0/accessCount=0 → strength ≈ 0.5
     expect(computeRetentionStrength(NaN, 0, 0)).toBeCloseTo(0.5, 1);
   });
+
+  it('exact magnitude for a non-trivial (i,d,a,c,f) tuple — pins every constant', () => {
+    // (importance=0.5, daysSince=10, accessCount=3, confirmations=2, flags=1)
+    //   i = 0.5
+    //   λ = 0.16 * (1 - 0.5 * 0.8) = 0.16 * 0.6 = 0.096
+    //   boost = 1 + 3*0.2 + 2*0.1 - 1*0.1 = 1 + 0.6 + 0.2 - 0.1 = 1.7
+    //   strength = 0.5 * exp(-0.096 * 10) * 1.7 = 0.5 * exp(-0.96) * 1.7
+    //            ≈ 0.5 * 0.3828927078 * 1.7 ≈ 0.32545880
+    // Every constant is non-zero in this tuple, so a mutant that swaps * for /,
+    // flips a sign, or shifts a coefficient changes the result by ≫ 1e-4.
+    expect(computeRetentionStrength(0.5, 10, 3, 2, 1)).toBeCloseTo(0.325459, 4);
+  });
+
+  it('accessCount multiplier is exactly +0.2 per access at zero decay', () => {
+    // daysSince=0 collapses exp(0)=1, so strength = i * boost. With i=1:
+    //   boost = 1 + a*0.2  (c=0, f=0)
+    // a=0 → 1.0; a=1 → 1.2; a=5 → 2.0 (clamped to 1.0 by the final [0,1] clamp)
+    expect(computeRetentionStrength(1, 0, 0, 0, 0)).toBeCloseTo(1.0);
+    // a=1: 1 + 0.2 = 1.2 → clamped to 1.0, so use i=0.5 to stay unclamped:
+    expect(computeRetentionStrength(0.5, 0, 1, 0, 0)).toBeCloseTo(0.5 * 1.2, 6);
+    expect(computeRetentionStrength(0.5, 0, 3, 0, 0)).toBeCloseTo(0.5 * 1.6, 6);
+  });
+
+  it('confirmations multiplier is exactly +0.1 per confirmation at zero decay', () => {
+    expect(computeRetentionStrength(0.5, 0, 0, 2, 0)).toBeCloseTo(0.5 * 1.2, 6);
+    expect(computeRetentionStrength(0.5, 0, 0, 5, 0)).toBeCloseTo(0.5 * 1.5, 6);
+  });
+
+  it('flags multiplier is exactly -0.1 per flag at zero decay', () => {
+    expect(computeRetentionStrength(0.5, 0, 0, 0, 1)).toBeCloseTo(0.5 * 0.9, 6);
+    expect(computeRetentionStrength(0.5, 0, 0, 0, 3)).toBeCloseTo(0.5 * 0.7, 6);
+  });
+
+  it('λ scales with importance: higher importance decays slower', () => {
+    // Same daysSince, same boost: a higher-importance memory retains more.
+    // i=1.0 → λ=0.16*(1-0.8)=0.032; i=0.0 → λ=0.16*(1-0)=0.16
+    const hi = computeRetentionStrength(1.0, 30, 0, 0, 0);
+    const lo = computeRetentionStrength(0.0, 30, 0, 0, 0);
+    // lo has importance 0 → strength 0 regardless of decay; use 0.5 vs 1.0
+    // to keep both non-zero and isolate the λ effect:
+    const mid = computeRetentionStrength(0.5, 30, 0, 0, 0);
+    expect(hi).toBeGreaterThan(mid);
+    expect(mid).toBeGreaterThan(lo);
+    // Exact: i=1.0, d=30, λ=0.032 → 1.0 * exp(-0.96) * 1.0
+    expect(hi).toBeCloseTo(Math.exp(-0.032 * 30), 6);
+    // i=0.5, d=30, λ=0.096 → 0.5 * exp(-2.88) * 1.0
+    expect(mid).toBeCloseTo(0.5 * Math.exp(-0.096 * 30), 6);
+  });
 });
 
 describe('clampImportanceScore', () => {
@@ -146,5 +194,16 @@ describe('daysSince', () => {
 
   it('returns 0 for an invalid date string', () => {
     expect(daysSince('not-a-date')).toBe(0);
+  });
+
+  it('returns 0 for an invalid Date object, not the elapsed-since-epoch value', () => {
+    // Pins the isNaN guard: a Date whose getTime() is NaN must short-circuit to
+    // 0 BEFORE the subtraction runs. Date.now() is set to 2026-01-10 (non-zero),
+    // so the only path to exactly 0 for an invalid date is the isNaN branch —
+    // a mutant that drops the guard would compute (Date.now() - NaN)/86400000
+    // = NaN, which is not === 0.
+    expect(daysSince(new Date('not-a-date'))).toBe(0);
+    // String form of the same invalid date — same guard, same path.
+    expect(daysSince('invalid')).toBe(0);
   });
 });
