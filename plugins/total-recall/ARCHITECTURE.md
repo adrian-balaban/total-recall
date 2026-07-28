@@ -292,7 +292,7 @@ The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
 
 Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness.
 
-### `SessionStart` (4 steps, sequential)
+### `SessionStart` (3 steps, sequential)
 
 ```
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)

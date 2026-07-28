@@ -179,7 +179,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 
 > Before context compaction (`PreCompact`), the plugin **automatically saves the session's learnings** — knowledge survives even when the context is wiped.
 
-### `SessionStart` (4 sequential steps)
+### `SessionStart` (3 sequential steps)
 
 ```
 1. pull-org-vault.sh       — git pull on the org-vault branch (if configured)
