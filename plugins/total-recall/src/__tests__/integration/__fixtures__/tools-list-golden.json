@@ -317,10 +317,16 @@
     },
     {
       "name": "rebuild_index",
-      "description": "Full re-scan of both vaults. Rebuilds inverted index.",
+      "description": "Full re-scan of both vaults. Rebuilds inverted index. Pass forceReembed=true to additionally drop and re-embed every memory's vector at the current embedding model (one-shot bulk re-embed after a model switch).",
       "inputSchema": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "forceReembed": {
+            "type": "boolean",
+            "default": false,
+            "description": "Drop every stored vector and re-embed all memories at the current embedding model's dimension (one-shot bulk re-embed, e.g. after switching embedding model). Default false keeps rebuild_index cheap (reconcile + inverted rebuild only). Refuses without dropping if the embedder is unavailable."
+          }
+        }
       }
     },
     {

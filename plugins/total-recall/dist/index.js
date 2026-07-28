@@ -31688,6 +31688,16 @@ async function deleteVector(dbPath, key) {
     throw e;
   }
 }
+async function dropVectorTable(dbPath) {
+  const d = await getDb(dbPath);
+  if (!d) return;
+  try {
+    d.exec("DROP TABLE IF EXISTS vec_memories");
+    d.exec("DROP TABLE IF EXISTS vec_meta");
+  } catch (e) {
+    recordError(`dropVectorTable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
 async function listVectorKeys(dbPath) {
   const d = await getDb(dbPath);
   if (!d) return null;
@@ -33057,11 +33067,73 @@ function confirmMemory(args) {
     message: `Memory ${useful === false ? "flagged" : "confirmed"}.`
   };
 }
-function rebuildIndex() {
+var REEMBED_CONCURRENCY = 8;
+async function reembedAll() {
+  const keys = Object.keys(memIndex);
+  if (keys.length === 0) {
+    return { dropped: false, reembedded: 0, skipped: 0 };
+  }
+  const firstKey = keys[0];
+  const firstMeta = memIndex[firstKey];
+  const firstBody = readCachedOrFresh(firstKey, firstMeta.filePath, "reread").content || firstMeta.contentPreview || "";
+  const probe = await embed(embedTextFor(firstMeta.title, firstBody));
+  if (!probe) {
+    recordError(
+      "reembedAll: embedder unavailable (vector deps absent or model load failed) \u2014 vec_memories left untouched, no re-embed performed"
+    );
+    return { dropped: false, reembedded: 0, skipped: keys.length };
+  }
+  await dropVectorTable(VECTORS_DB);
+  let reembedded = 0;
+  try {
+    await upsertVector(VECTORS_DB, firstKey, probe);
+    reembedded++;
+  } catch (e) {
+    recordError(`reembedAll(${firstKey}): ${e instanceof Error ? e.message : String(e)}`);
+  }
+  let cursor = 1;
+  const workerCount = Math.min(REEMBED_CONCURRENCY, keys.length);
+  await Promise.all(
+    new Array(workerCount).fill(0).map(async () => {
+      while (cursor < keys.length) {
+        const i = cursor++;
+        const key = keys[i];
+        const meta3 = memIndex[key];
+        if (!meta3) continue;
+        try {
+          const body = readCachedOrFresh(key, meta3.filePath, "reread").content || meta3.contentPreview || "";
+          const vec = await embed(embedTextFor(meta3.title, body));
+          if (vec) {
+            await upsertVector(VECTORS_DB, key, vec);
+            reembedded++;
+          }
+        } catch (e) {
+          recordError(`reembedAll(${key}): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    })
+  );
+  await flushEmbeddings();
+  return { dropped: true, reembedded, skipped: keys.length - reembedded };
+}
+async function rebuildIndex(args = {}) {
+  const forceReembed = args?.forceReembed === true;
   reconcileIndex();
   rebuildInvertedIndex();
   scheduleSave();
-  return { message: `Index rebuilt. ${Object.keys(memIndex).length} memories indexed.` };
+  const count = Object.keys(memIndex).length;
+  if (!forceReembed) {
+    return { message: `Index rebuilt. ${count} memories indexed.` };
+  }
+  const r = await reembedAll();
+  const total = r.reembedded + r.skipped;
+  const tail = r.dropped ? ` Re-embedded ${r.reembedded}/${total} memories at the current embedding model (${r.skipped} skipped).` : ` Embedder unavailable \u2014 vec_memories left untouched, 0/${total} re-embedded.`;
+  return {
+    message: `Index rebuilt. ${count} memories indexed.${tail}`,
+    dropped: r.dropped,
+    reembedded: r.reembedded,
+    skipped: r.skipped
+  };
 }
 var updateMemorySchema = {
   key: external_exports.string(),
@@ -33078,7 +33150,11 @@ var confirmMemorySchema = {
   key: external_exports.string(),
   useful: external_exports.boolean().default(true).describe("true = confirmation, false = flag.")
 };
-var rebuildIndexSchema = {};
+var rebuildIndexSchema = {
+  forceReembed: external_exports.boolean().default(false).describe(
+    "Drop every stored vector and re-embed all memories at the current embedding model's dimension (one-shot bulk re-embed, e.g. after switching embedding model). Default false keeps rebuild_index cheap (reconcile + inverted rebuild only). Refuses without dropping if the embedder is unavailable."
+  )
+};
 function register4(server2) {
   server2.registerTool(
     "update_memory",
@@ -33107,7 +33183,7 @@ function register4(server2) {
   server2.registerTool(
     "rebuild_index",
     {
-      description: "Full re-scan of both vaults. Rebuilds inverted index.",
+      description: "Full re-scan of both vaults. Rebuilds inverted index. Pass forceReembed=true to additionally drop and re-embed every memory's vector at the current embedding model (one-shot bulk re-embed after a model switch).",
       inputSchema: rebuildIndexSchema
     },
     wrapHandler("rebuild_index", rebuildIndex)
@@ -33387,7 +33463,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.134" : null.version;
+var PLUGIN_VERSION = true ? "1.0.135" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
