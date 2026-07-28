@@ -35,6 +35,7 @@ export default defineConfig({
       'src/__tests__/auto-reconcile.test.ts',
       'src/__tests__/journal.test.ts',
       'src/__tests__/vault-scan.test.ts',
+      'src/__tests__/vault-scan-reconcile.test.ts',
       'src/__tests__/state.test.ts',
       'src/__tests__/embeddings.test.ts',
     ],

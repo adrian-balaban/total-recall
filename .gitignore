@@ -13,3 +13,4 @@ tr_technology_radar_*.pdf
 # node_modules/ + package-lock.json. Ignore both so they never get tracked.
 node_modules/
 package-lock.json
+banking-environment-requirements.md
