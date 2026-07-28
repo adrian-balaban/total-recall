@@ -4,7 +4,7 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## Ce este
-Total Recall este o extensie (versiunea 1.0.135) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie (versiunea 1.1.1) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
@@ -46,7 +46,7 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 ## Calitatea și fiabilitate
 - **Teste:** peste 12,000 linii de cod de test în 41 fișiere
 - **Acoperire:** 95% din cod e testat
-- **Mutation testing:** o metodă ca să verific dacă testele-mi sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
+- **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
   - Scor curent: 68% (testele capturează 68% din erorile introduse deliberat; ținta e minim 65%)
   - Modulele critice (salvare pe disk, căutare text) au scor mai mare (70%+)
   - Modulele opționale (căutare semantică) au scor acceptabil
