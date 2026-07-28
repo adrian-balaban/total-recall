@@ -2,7 +2,7 @@
 
 Execution plan derived from [banking-environment-requirements.md](banking-environment-requirements.md). That document says *what's missing*; this one says *what to build, in what order, and what can run in parallel*.
 
-Baseline: total-recall **v1.0.135**, 643 unit tests + 20 integration tests green, **real mutation score 68.28%** (above the 65% break gate — see `plugins/total-recall/reviews/BACKLOG.md`: up from 59.51% via `vault-scan-reconcile.test.ts`, commit `7d978a7`; the ~24.6% figure in earlier drafts predates the mutation-hardening pass). The pre-commit gate is now `npm run release:build` (`typecheck && test && build`).
+Baseline: total-recall **v1.0.135**, 643 unit tests + 20 integration tests green, **real mutation score 68.28%** (above the 65% break gate — see the repo-root `BACKLOG.md`: up from 59.51% via `vault-scan-reconcile.test.ts`, commit `7d978a7`; the ~24.6% figure in earlier drafts predates the mutation-hardening pass). The pre-commit gate is now `npm run release:build` (`typecheck && test && build`).
 
 Sizing is relative (S = hours, M = days, L = weeks) and deliberately coarse — treat it as ordering information, not a schedule.
 
@@ -16,7 +16,7 @@ One row per code change implied by the phases below. Governance/paperwork items 
 |---------|-------|-------|------|
 | `hooks/scripts/extract-and-store-memories.sh`, `src/paths.ts` | Gate the PreCompact transcript hook behind `enableTranscriptExtraction` (default `false`); exit `{"continue":true}` when unset | 1.1 | S |
 | `install.sh`, `INSTALL.md` | Add a `--banking` install profile: transcript off, `orgRepo` unset, TF-IDF-only (no HF download, no `better-sqlite3` native build) | 1.2 | M |
-| `hooks/scripts/build-memory-index.sh`, `load-memory-index.sh`, `load-open-questions.sh` | Injection-fence injected context: untrusted-data delimiters, strip instruction-shaped text, cap per-entry length | 1.7 | M |
+| `hooks/scripts/build-memory-index.sh`, `load-memory-index.sh` | Injection-fence injected context: untrusted-data delimiters, strip instruction-shaped text, cap per-entry length | 1.7 | M |
 | `.github/workflows/`, `package-lock.json` | `npm audit` CI gate on high/critical (`--omit=dev`); `npm audit fix` for `tar`/`protobufjs`; register `sharp` as accepted risk | 1.3 | S |
 | `.github/workflows/`, `hooks/scripts/*.sh`, `scripts/*.mjs` | `shellcheck` + Semgrep CI on the shell surface; fix or justify each finding (incl. `node -e` interpolations) | 1.4 | M |
 | Repo settings | Commit signing + branch protection on `main` (this *is* the release gate under git-subdir distribution) | 1.5 | S |
@@ -80,7 +80,7 @@ The goal of this phase is that an unmodified install stops doing the things a re
 |---|---|---|---|
 | 1.1 | **Disable the PreCompact transcript hook by default.** Gate `extract-and-store-memories.sh` behind a config flag (`enableTranscriptExtraction`, default `false`); exit cleanly with `{"continue":true}` when unset. Fixes blocker #1. | `hooks/scripts/extract-and-store-memories.sh`, `src/paths.ts` (config schema) | S |
 | 1.2 | **Add a `--banking` install profile.** Sets `enableTranscriptExtraction: false`, **`orgRepo` unset (org vault off until Phase 4 lands)**, TF-IDF-only search (no HF download, no `better-sqlite3` native build). Sidesteps blockers #1 and #4 and the native-compile endpoint issue in one switch. | `install.sh`, `INSTALL.md` | M |
-| 1.7 | **Injection-fence the injected context** (pulled forward from 4.1). Wrap `.index-cache.txt` and `open-questions.md` content in explicit untrusted-data delimiters, strip instruction-shaped text, cap per-entry length. Small change, and it must exist *before* any org vault is ever switched on. Fixes blocker #6. | `hooks/scripts/build-memory-index.sh`, `load-memory-index.sh`, `load-open-questions.sh` | M |
+| 1.7 | **Injection-fence the injected context** (pulled forward from 4.1). Wrap `.index-cache.txt` content in explicit untrusted-data delimiters, strip instruction-shaped text, cap per-entry length. Small change, and it must exist *before* any org vault is ever switched on. Fixes blocker #6. | `hooks/scripts/build-memory-index.sh`, `load-memory-index.sh` | M |
 | 1.3 | **`npm audit` CI gate.** Fail the build on high/critical in `--omit=dev`. Run `npm audit fix` for `tar`/`protobufjs` now; register `sharp` as an accepted risk with a review date. Partially fixes blocker #5. | `.github/workflows/`, `package-lock.json` | S |
 | 1.4 | **Static analysis on the shell surface.** `shellcheck` + Semgrep over `hooks/scripts/*.sh` and `scripts/*.mjs` in CI. Fix or justify each finding — including the `node -e` interpolations in `build-memory-index.sh`. | `.github/workflows/`, hook scripts | M |
 | 1.5 | **Commit signing + branch protection on `main`.** Required reviews, no force-push, signed commits. Since distribution is git-subdir, this *is* the release gate. Completes blocker #5. | Repo settings | S |
@@ -138,7 +138,7 @@ Produced alongside the engineering, submitted at the end. Several depend on the 
 
 | # | Task | Depends on | Size |
 |---|---|---|---|
-| 5.1 | **Raise the mutation score to a defensible CI gate.** Real figure is now **68.28%** (above the 65% break gate; see `plugins/total-recall/reviews/BACKLOG.md`). The lowest modules are `embeddings.ts` (44.0%), `lru-cache.ts` (48.1%), `journal.ts` (37.5%), `vectorStore.ts` (55.1% — partly structural native-boundary NoCoverage), and `persistence.ts` (58.9% — the weakest *pure-logic* module and the one Phase 2.2 touches; prioritize it first). Target: keep the gate in CI and push persistence toward the pack. | Phase 2 | L |
+| 5.1 | **Raise the mutation score to a defensible CI gate.** Real figure is now **68.28%** (above the 65% break gate; see the repo-root `BACKLOG.md`). The lowest modules are `embeddings.ts` (44.0%), `lru-cache.ts` (48.1%), `journal.ts` (37.5%), `vectorStore.ts` (55.1% — partly structural native-boundary NoCoverage), and `persistence.ts` (58.9% — the weakest *pure-logic* module and the one Phase 2.2 touches; prioritize it first). Target: keep the gate in CI and push persistence toward the pack. | Phase 2 | L |
 | 5.2 | **Test the shell surface.** The hook scripts have essentially no automated tests and hold the highest-privilege code. Add integration coverage as part of 1.4. | Phase 1.4 | M |
 | 5.3 | **Formal threat model** (STRIDE or LINDDUN), as a standalone versioned document with a named owner. The `privacy-filter.ts` header comments are a usable first draft of the content. | Phases 1–4 | M |
 | 5.4 | **DPIA** (GDPR Art. 35): data inventory, lawful basis, storage, recipients, retention, erasure. Writing it will surface gaps — that is the point. | Phase 2 | M |

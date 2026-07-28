@@ -7,8 +7,8 @@ unambiguous and lets a future pass triage in one place.
 
 Status legend: **DEFERRED** (real work, waiting for a trigger) · **DECIDED**
 (documented as by-design, no change intended) · **DONE** (landed, kept for
-reference). Source review files live alongside this one in `reviews/` (older
-syntheses in `reviews/archive/`).
+reference). Source review files were removed when the `reviews/` folder was
+pruned (2026-07-29); this backlog is now the sole record.
 
 ---
 
@@ -150,8 +150,7 @@ syntheses in `reviews/archive/`).
   (47 tests); break gate at 65 in `stryker.conf.json`; CI mutation workflow.
   `7d978a7`.
 - **Copilot CLI removal completed** — code removed earlier; docs + install.sh
-  cleaned in `ee0cde5` (1.0.133). No Copilot references remain outside
-  `reviews/` (historical).
+  cleaned in `ee0cde5` (1.0.133). No Copilot references remain.
 - **C-1 message honesty** — `vectorStore.ts` error messages corrected to match
   actual `rebuild_index` behavior; pinned in `vectorStore.test.ts`. `ee0cde5`.
 - **C-1 behavior fix — bulk re-embed after a model switch** — `rebuild_index`
