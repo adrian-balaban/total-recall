@@ -6,6 +6,15 @@
  * polls for the marker and, when present, re-runs the same reconcile path used
  * at boot. reconcileIndex is mtime-cached, so the poll is cheap when nothing has
  * changed.
+ *
+ * CONTRACT (by-design, not a bug): a fixed 10s poll interval is used instead of
+ * fs.watch. The marker is written by a SEPARATE hook process (not this server),
+ * and fs.watch only delivers in-process file events for files/parents that
+ * already exist when the watcher is attached — it would miss a marker created by
+ * another process on some platforms and offers no cross-process guarantee. The
+ * mtime cache makes the no-op poll O(1), so the 10s cadence costs negligible CPU;
+ * the only trade-off is up to 10s of latency between a hook dropping the marker
+ * and the server acting on it, which is acceptable for a background reconcile.
  */
 
 import * as fs from 'fs';

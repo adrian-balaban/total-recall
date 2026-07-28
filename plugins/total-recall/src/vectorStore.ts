@@ -209,7 +209,7 @@ function ensureVecTable(d: any, dim: number): void {
     // get_stats.recentErrors instead of a silent disappearance.
     recordError(
       `vector index rebuilt: stored vec_memories dim ${existingDim} != new dim ${dim} ` +
-      `(embedding model changed?) — re-embedding all memories with the new model`
+      `(embedding model changed?) — old table dropped; memories are re-embedded lazily on their next write/rerank, not all at once`
     );
     d.exec("DROP TABLE vec_memories");
   }
@@ -321,7 +321,8 @@ export async function searchVector(
   if (!ensureVecTableForRead(d, queryEmbedding.length)) {
     recordError(
       `vector search skipped: query embedding dim ${queryEmbedding.length} != stored vec_memories dim ` +
-      `(embedding model changed? run rebuild_index to re-embed with the new model)`
+      `(embedding model changed?) — recall degrades to TF-IDF. NOTE: rebuild_index backfills MISSING vectors only; ` +
+      `it does NOT re-embed existing vectors stored at the old dim. To re-embed at the new dim, store/update each memory (or drop vec_memories so they backfill)`
     );
     return [];
   }
