@@ -4,7 +4,7 @@ set -euo pipefail
 . "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/_resolve-node.sh"   # sets NODE_BIN (nvm/stripped-PATH safe)
 
 ORG_VAULT="$HOME/.total-recall/org"
-BRANCH="org-vault"
+BRANCH="knowledge"
 CONFIG_FILE="$HOME/.total-recall/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
