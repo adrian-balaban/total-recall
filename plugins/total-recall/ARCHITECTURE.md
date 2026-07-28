@@ -298,10 +298,9 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)
 2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
 3. load-memory-index.sh    — cat .index-cache.txt → injected into context
-4. load-open-questions.sh  — cat open-questions.md → injected into context
 ```
 
-> **`hookEventName` is required.** Steps 1/3/4 that inject context emit
+> **`hookEventName` is required.** Steps 1/3 that inject context emit
 > `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":…}}`.
 > Claude Code **drops** `additionalContext` whose `hookSpecificOutput` lacks
 > `hookEventName`, so omitting it silently breaks context injection. JSON-encoding
@@ -368,7 +367,7 @@ Configuration in `~/.total-recall/config.json`:
 | Org-author guard ignores any caller-supplied `author` | `store.ts` — `effectiveAuthor = os.userInfo().username` for org; the `author` arg is ignored for org memories, so `force=true` cannot impersonate another author |
 | Index files written atomically (write-`.tmp` + rename) | `persistence.ts` — `atomicWrite()` for `index.json`, `invertedIndex.json`, `.index-cache.txt`; no partial/truncated index on crash |
 | Frontmatter scalars reject embedded newlines | `frontmatter.ts` — `serializeArrayItem`/`serializeString` throw on `/[\r\n]/`; prevents a newline in `title`/`tags` from injecting a new frontmatter key |
-| `hookSpecificOutput.additionalContext` requires `hookEventName` | `load-memory-index.sh`, `load-open-questions.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
+| `hookSpecificOutput.additionalContext` requires `hookEventName` | `load-memory-index.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
 | PreCompact reads `transcript_path` from stdin JSON, not an env var | `extract-and-store-memories.sh` — parses the hook's stdin JSON payload (Claude Code common hook input) |
 | Frontmatter keys escaped before RegExp interpolation | `frontmatter.ts` — `escapeRegExp(k)`/`escapeRegExp(key)` at both `new RegExp` sites; a key is a literal string (any `[^:\s]+`, incl. metacharacters from a crafted/teammate-pushed org-vault memory), so it must match literally — without escaping a key like `(a+)+` is mis-matched and an explicit `(a+)+: []` array is wrongly dropped |
 | `shutdown()` runs exactly once across concurrent exit triggers | `index.ts` — module-level `shuttingDown` latch; SIGTERM/SIGINT/stdin-end/stdin-close all route to one `shutdown()` whose first line short-circuits a second call. `flushPending` → `flushEmbeddings` → `process.exit(0)` completes once |

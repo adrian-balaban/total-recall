@@ -85,7 +85,7 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)
 
 **Hooks** (`hooks/hooks.json`):
-- `SessionStart`: pull org vault → rebuild index cache → inject memory index → inject open questions
+- `SessionStart`: pull org vault → rebuild index cache → inject memory index
 - `PostToolUse` (store/update/delete): sync to org vault if tagged `org`
 - `PreCompact`: extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.mjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)
 
@@ -100,10 +100,6 @@ When using total-recall tools, follow the retrieval order in `skills/memory-work
 6. `recall_memory(query=..., full=true)` — with full content
 
 Every stored memory must include a `## Executive Summary` section (answers WHY it matters, not just WHAT). Call `store_memory` from the main agent, never a subagent. Check for duplicates with `search_index` before storing. Set `importanceScore` (0.3=low, 0.7=high, 1.0=critical).
-
-## Review-Fix-Ship Loop
-
-For iterative hardening of a git repository ("review and fix", "harden and ship", "iterate until clean"), follow `skills/review-fix-ship/SKILL.md`. One pass = review with `file:line` citations -> apply all fixes -> run the pre-commit checklist above (bump version -> build -> test -> typecheck) -> commit -> push; repeat the pass until a full pass produces no changes (`git diff --stat` empty). Stop after the review step if the user only asked for a review (no fixes/shipping authorized) — do NOT enter the loop.
 
 ## Key Gotchas
 

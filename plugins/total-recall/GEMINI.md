@@ -19,11 +19,10 @@ Claude Code.
 - **Event renames:** Gemini's `AfterTool` / `PreCompress` map to Claude Code's
   `PostToolUse` / `PreCompact`. Both hook manifests (`hooks/hooks.json` and
   `hooks/hooks.gemini.json`) must stay in sync — see `CLAUDE.md` gotcha 8.5.
-- **No `Skill` tool in Gemini.** The two Claude-specific skills
-  (`memory-workflow`, `review-fix-ship`) ship in `skills/` but are **not
-  loadable** in Gemini — Gemini silently drops them. If a task needs the
-  retrieval tree, the "memorize more proactively" loop, or the multi-pass
-  review-fix-ship discipline, ask the user to paste the relevant `SKILL.md`
+- **No `Skill` tool in Gemini.** The one Claude-specific skill
+  (`memory-workflow`) ships in `skills/` but is **not loadable** in Gemini —
+  Gemini silently drops it. If a task needs the retrieval tree or the
+  "memorize more proactively" loop, ask the user to paste the `SKILL.md`
   body and proceed as a one-shot knowledge injection.
 - **MCP-only registration (no hooks):** `gemini extensions install --consent
   "$(pwd)"` registers the server from `gemini-extension.json` without wiring

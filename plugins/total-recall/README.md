@@ -185,7 +185,6 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 1. pull-org-vault.sh       — git pull on the org-vault branch (if configured)
 2. build-memory-index.sh   — frontmatter scan → .index-cache.txt
 3. load-memory-index.sh    — inject the memory index into context (Claude Code only)
-4. load-open-questions.sh  — inject open-questions.md into context (Claude Code only)
 ```
 
 Effect: every new Claude session automatically receives a summary of all your memories — without asking.
