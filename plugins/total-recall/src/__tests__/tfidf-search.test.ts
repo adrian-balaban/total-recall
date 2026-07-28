@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeAll, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -17,9 +17,10 @@ vi.hoisted(() => {
   process.env.HOME = '/tmp/tr-tfidf-search-' + process.pid;
 });
 
-import { tfidfSearch, rebuildInvertedIndex, tokenize } from '../tfidf.js';
-import { memIndex } from '../state.js';
+import { tfidfSearch, rebuildInvertedIndex, tokenize, registerDocument, deregisterDocument } from '../tfidf.js';
+import { memIndex, invertedIndex } from '../state.js';
 import { searchIndex } from '../tools/recall.js';
+import { loadConfig } from '../paths.js';
 
 const KEY = 'knowledge/boost-probe';
 
@@ -262,5 +263,272 @@ describe('5.3: confirmations/flags affect search ranking, not just pruning', () 
     expect(flag).toBeDefined();
     expect(conf!.score).toBeGreaterThan(flag!.score);
     cleanKeys([CONF, FLAG]);
+  });
+});
+
+// ─── Mutation-hardening: pin BILINGUAL_DICT literals, registerDocument, exact boosts ─
+
+describe('tokenize whitespace + diacritic edge cases', () => {
+  it('collapses runs of whitespace into single token boundaries', () => {
+    expect(tokenize('a  b')).toEqual(['a', 'b']);
+    expect(tokenize('a\tb\nc')).toEqual(['a', 'b', 'c']);
+    expect(tokenize('   ')).toEqual([]);
+  });
+
+  it('strips diacritics from Romanian tokens to base letters', () => {
+    expect(tokenize('întâlnire')).toEqual(['intalnire']);
+    expect(tokenize('șță')).toEqual(['sta']);
+    expect(tokenize('Café')).toEqual(['cafe']);
+  });
+
+  it('splits on non-alphanumeric (punctuation becomes a boundary)', () => {
+    expect(tokenize('cat,dog')).toEqual(['cat', 'dog']);
+    expect(tokenize('foo.bar')).toEqual(['foo', 'bar']);
+  });
+});
+
+describe('multilingual BILINGUAL_DICT — every entry direction is exercised', () => {
+  // One test per dict direction kills the 28 string-literal mutants (a mutant
+  // that blanks a dict value would silently drop that translation).
+  const HOME = process.env.HOME!;
+
+  beforeEach(() => {
+    const cfgDir = path.join(HOME, '.total-recall');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'config.json'),
+      JSON.stringify({ enableMultilingualSearch: true }),
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(path.join(HOME, '.total-recall'), { recursive: true, force: true });
+  });
+
+  function roQueryFindsEnglishDoc(roQuery: string, enToken: string) {
+    const key = `knowledge/ro-${enToken}-${Math.random().toString(36).slice(2, 8)}`;
+    seedDoc(key, `title ${enToken}`, [], `body ${enToken}`);
+    rebuildInvertedIndex();
+    const results = tfidfSearch(roQuery, false);
+    const hit = results.some((r) => r.key === key);
+    cleanKeys([key]);
+    return hit;
+  }
+
+  it('RO→EN: sedinta expands to meeting', () => {
+    expect(roQueryFindsEnglishDoc('sedinta', 'meeting')).toBe(true);
+  });
+  it('RO→EN: decizie expands to decision', () => {
+    expect(roQueryFindsEnglishDoc('decizie', 'decision')).toBe(true);
+  });
+  it('RO→EN: problema expands to troubleshooting', () => {
+    expect(roQueryFindsEnglishDoc('problema', 'troubleshooting')).toBe(true);
+  });
+  it('RO→EN: jurnal expands to journal', () => {
+    expect(roQueryFindsEnglishDoc('jurnal', 'journal')).toBe(true);
+  });
+  it('RO→EN: memorie expands to memory', () => {
+    expect(roQueryFindsEnglishDoc('memorie', 'memory')).toBe(true);
+  });
+  it('RO→EN: salvare expands to store', () => {
+    expect(roQueryFindsEnglishDoc('salvare', 'store')).toBe(true);
+  });
+  it('RO→EN: actualizare expands to update', () => {
+    expect(roQueryFindsEnglishDoc('actualizare', 'update')).toBe(true);
+  });
+  it('RO→EN: stergere expands to delete', () => {
+    expect(roQueryFindsEnglishDoc('stergere', 'delete')).toBe(true);
+  });
+  it('RO→EN: concepte expands to concepts', () => {
+    expect(roQueryFindsEnglishDoc('concepte', 'concepts')).toBe(true);
+  });
+  it('RO→EN: intalnire expands to meeting', () => {
+    expect(roQueryFindsEnglishDoc('intalnire', 'meeting')).toBe(true);
+  });
+
+  function enQueryFindsRomanianDoc(enQuery: string, roToken: string) {
+    // The RO doc's title contains the RO form; querying the EN form must still
+    // match via EN→RO expansion.
+    const key = `knowledge/en-${roToken}-${Math.random().toString(36).slice(2, 8)}`;
+    seedDoc(key, `${roToken} titlu`, [], `${roToken} continut`);
+    rebuildInvertedIndex();
+    const results = tfidfSearch(enQuery, false);
+    const hit = results.some((r) => r.key === key);
+    cleanKeys([key]);
+    return hit;
+  }
+
+  it('EN→RO: decision expands to decizie', () => {
+    expect(enQueryFindsRomanianDoc('decision', 'decizie')).toBe(true);
+  });
+  it('EN→RO: meeting expands to sedinta', () => {
+    expect(enQueryFindsRomanianDoc('meeting', 'sedinta')).toBe(true);
+  });
+  it('EN→RO: architecture expands to arhitectura', () => {
+    expect(enQueryFindsRomanianDoc('architecture', 'arhitectura')).toBe(true);
+  });
+  it('EN→RO: troubleshooting expands to problema', () => {
+    expect(enQueryFindsRomanianDoc('troubleshooting', 'problema')).toBe(true);
+  });
+  it('EN→RO: journal expands to jurnal', () => {
+    expect(enQueryFindsRomanianDoc('journal', 'jurnal')).toBe(true);
+  });
+  it('EN→RO: memories expands to memorii', () => {
+    expect(enQueryFindsRomanianDoc('memories', 'memorii')).toBe(true);
+  });
+  it('EN→RO: concepts expands to concepte', () => {
+    expect(enQueryFindsRomanianDoc('concepts', 'concepte')).toBe(true);
+  });
+});
+
+describe('multilingual OFF vs ON produces different results for a RO query', () => {
+  const HOME = process.env.HOME!;
+  const cfgDir = path.join(HOME, '.total-recall');
+
+  afterEach(() => {
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+  });
+
+  // loadConfig caches by mtimeMs (paths.ts). Under Stryker's dry-run the 9
+  // allow-listed files share one vitest worker, so paths.ts's module-level
+  // cachedConfig/cachedMtime persists across files AND across describes in
+  // this file. The BILINGUAL_DICT describe above caches
+  // {enableMultilingualSearch:true} at mtime T_last; if this describe writes
+  // the OFF config in the same millisecond, loadConfig's mtime === cachedMtime
+  // check returns the stale true. Removing the file then calling loadConfig
+  // forces the statSync-ENOENT branch, which clears the cache (cachedConfig =
+  // null), so the subsequent write is always read fresh regardless of mtime.
+  function writeMultilingualConfig(value: boolean) {
+    fs.rmSync(cfgDir, { recursive: true, force: true });
+    loadConfig(); // file absent → statSync ENOENT → cache cleared
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'config.json'),
+      JSON.stringify({ enableMultilingualSearch: value }),
+    );
+  }
+
+  it('with multilingual OFF, a RO query does not match an EN-only doc', () => {
+    writeMultilingualConfig(false);
+    const key = 'knowledge/ro-off-probe';
+    seedDoc(key, 'meeting notes', [], 'meeting body');
+    rebuildInvertedIndex();
+    const results = tfidfSearch('sedinta', false);
+    expect(results.some((r) => r.key === key)).toBe(false);
+    cleanKeys([key]);
+  });
+
+  it('with multilingual ON, the same RO query matches the EN doc', () => {
+    writeMultilingualConfig(true);
+    const key = 'knowledge/ro-on-probe';
+    seedDoc(key, 'meeting notes', [], 'meeting body');
+    rebuildInvertedIndex();
+    const results = tfidfSearch('sedinta', false);
+    expect(results.some((r) => r.key === key)).toBe(true);
+    cleanKeys([key]);
+  });
+});
+
+describe('registerDocument / deregisterDocument (incremental index update)', () => {
+  // registerDocument populates invertedIndex + docLengths but NOT memIndex —
+  // tfidfSearch reads memIndex[doc.key] for decay/title/tags, so the meta must
+  // be seeded via seedDoc first. The intended pattern is seedDoc (memIndex) →
+  // registerDocument (incremental inverted-index update, avoids full rebuild).
+  it('registerDocument populates the inverted index and docLengths (ranked by tfidfSearch)', () => {
+    const key = 'knowledge/reg-probe';
+    seedDoc(key, 'cat tales', ['feline'], 'cat content cat');
+    registerDocument(key, 'cat tales', ['feline'], 'cat content cat');
+    // 'cat' now in the inverted index with this doc.
+    expect(invertedIndex['cat']).toBeDefined();
+    expect(invertedIndex['cat']!.docs.some((d) => d.key === key)).toBe(true);
+    // tfidfSearch ranks the doc (memIndex has the meta for decay + boosts).
+    const results = tfidfSearch('cat', false);
+    expect(results.some((r) => r.key === key)).toBe(true);
+    cleanKeys([key]);
+  });
+
+  it('deregisterDocument removes all of the doc postings', () => {
+    const key = 'knowledge/dereg-probe';
+    seedDoc(key, 'uniquewordinthiscase', [], 'uniquewordbody');
+    registerDocument(key, 'uniquewordinthiscase', [], 'uniquewordbody');
+    expect(invertedIndex['uniquewordinthiscase']).toBeDefined();
+    deregisterDocument(key);
+    // The token had only this one doc → the entry is deleted entirely.
+    expect(invertedIndex['uniquewordinthiscase']).toBeUndefined();
+    const results = tfidfSearch('uniquewordinthiscase', false);
+    expect(results.some((r) => r.key === key)).toBe(false);
+    cleanKeys([key]);
+  });
+
+  it('deregisterDocument keeps other docs sharing a token', () => {
+    const a = 'knowledge/shared-a';
+    const b = 'knowledge/shared-b';
+    seedDoc(a, 'commonword', [], 'body a');
+    seedDoc(b, 'commonword', [], 'body b');
+    registerDocument(a, 'commonword', [], 'body a');
+    registerDocument(b, 'commonword', [], 'body b');
+    expect(invertedIndex['commonword']!.docs.length).toBe(2);
+    deregisterDocument(a);
+    expect(invertedIndex['commonword']!.docs.length).toBe(1);
+    expect(invertedIndex['commonword']!.docs.some((d) => d.key === b)).toBe(true);
+    cleanKeys([a, b]);
+  });
+
+  it('registerDocument replaces (not duplicates) when re-registering the same key', () => {
+    const key = 'knowledge/re-reg-probe';
+    seedDoc(key, 'oldtitle oldtoken', [], 'oldbody');
+    registerDocument(key, 'oldtitle oldtoken', [], 'oldbody');
+    expect(invertedIndex['oldtoken']!.docs.filter((d) => d.key === key).length).toBe(1);
+    // Re-register with a different title — old token should be dropped.
+    registerDocument(key, 'newtitle newtoken', [], 'newbody');
+    expect(invertedIndex['oldtoken']).toBeUndefined();
+    expect(invertedIndex['newtoken']!.docs.filter((d) => d.key === key).length).toBe(1);
+    cleanKeys([key]);
+  });
+});
+
+describe('exact title/tag boost scores (×2 / ×1.5)', () => {
+  // All three docs engineered to totalTokens=3 so the sqrt(totalTokens) length
+  // norm is identical across docs — leaving the boost multiplier as the ONLY
+  // score difference. tf[kangaroo]=1 in each, same idf, same decay (baseMeta).
+  it('a title-token doc outscores a tag-token doc outscores a content-only doc', () => {
+    const T = 'knowledge/boost-title';
+    const G = 'knowledge/boost-tag';
+    const C = 'knowledge/boost-content';
+    // T: tokens [kangaroo, aa, bb] → tf=1, norm=sqrt(3); title has 'kangaroo' → ×2.
+    seedDoc(T, 'kangaroo', [], 'aa bb');
+    // G: tokens [tagged, kangaroo, aa] → tf=1, norm=sqrt(3); tag has 'kangaroo' → ×1.5.
+    seedDoc(G, 'tagged', ['kangaroo'], 'aa');
+    // C: tokens [content, kangaroo, aa] → tf=1, norm=sqrt(3); no boost → ×1.
+    seedDoc(C, 'content', [], 'kangaroo aa');
+    rebuildInvertedIndex();
+    const r = tfidfSearch('kangaroo', false);
+    const t = r.find((x) => x.key === T)!;
+    const g = r.find((x) => x.key === G)!;
+    const c = r.find((x) => x.key === C)!;
+    expect(t.score).toBeGreaterThan(g.score);
+    expect(g.score).toBeGreaterThan(c.score);
+    // With identical idf + norm + decay, the ratio IS the boost ratio.
+    expect(g.score / t.score).toBeCloseTo(1.5 / 2, 5);
+    expect(c.score / t.score).toBeCloseTo(1 / 2, 5);
+    cleanKeys([T, G, C]);
+  });
+
+  it('a doc matching the token in BOTH title and tag gets ×2 ×1.5 = ×3', () => {
+    const BOTH = 'knowledge/boost-both';
+    const TITLE = 'knowledge/boost-just-title';
+    // Both docs tf[kangaroo]=2, totalTokens=3 → identical (1+log2) factor and
+    // norm=sqrt(3). The ONLY score difference is ×3 (title+tag) vs ×2 (title).
+    // BOTH: tokens [kangaroo, kangaroo, zzz] (title + tag both 'kangaroo').
+    seedDoc(BOTH, 'kangaroo', ['kangaroo'], 'zzz');
+    // TITLE: tokens [kangaroo, other, kangaroo] (title 'kangaroo' + content 'kangaroo').
+    // 'other' tag does NOT match query → only the ×2 title boost fires.
+    seedDoc(TITLE, 'kangaroo', ['other'], 'kangaroo');
+    rebuildInvertedIndex();
+    const r = tfidfSearch('kangaroo', false);
+    const both = r.find((x) => x.key === BOTH)!;
+    const title = r.find((x) => x.key === TITLE)!;
+    expect(both.score / title.score).toBeCloseTo(3 / 2, 5);
+    cleanKeys([BOTH, TITLE]);
   });
 });

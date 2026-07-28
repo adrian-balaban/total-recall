@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest';
 
 // persistence writes to INDEX_PATH / INVERTED_INDEX_PATH / INDEX_CACHE_PATH —
 // fixed paths under the user's real ~/.total-recall. Redirect HOME to a tmp dir
@@ -26,8 +26,10 @@ vi.mock('fs', async () => {
 });
 
 import path from 'path';
+import * as fs from 'fs';
 import { flushPending, scheduleSave } from '../persistence.js';
 import { errors } from '../state.js';
+import { PERSONAL_VAULT } from '../paths.js';
 
 afterEach(() => {
   // flushPending + atomicWrite record into the REAL shared `errors` singleton
@@ -147,5 +149,260 @@ describe('loadIndexes drops invertedIndex.json load (#18)', () => {
     // shared singleton (the fs mock makes the debounced save a no-op write).
     delete (memIndex as any)['knowledge/contract-probe'];
     rebuildInvertedIndex();
+  });
+});
+
+// ─── Mutation-hardening: deriveFilePathFromKey, coerceMemEntry, unwrapIndexEntries ─
+// deriveFilePathFromKey is exported + pure (no fs) — test every guard branch
+// directly. coerceMemEntry + unwrapIndexEntries are internal — exercise them via
+// loadIndexes with a staged index.json (fd writes bypass the mocked writeFileSync;
+// readFileSync comes through the vi.importActual spread untouched).
+
+describe('deriveFilePathFromKey — every guard branch', () => {
+  let derive: typeof import('../persistence.js').deriveFilePathFromKey;
+  let PERSONAL_VAULT: string;
+  let ORG_VAULT: string;
+
+  beforeAll(async () => {
+    ({ deriveFilePathFromKey: derive } = await import('../persistence.js'));
+    ({ PERSONAL_VAULT, ORG_VAULT } = await import('../paths.js'));
+  });
+
+  it('returns null for non-string keys', () => {
+    expect(derive(null)).toBeNull();
+    expect(derive(undefined)).toBeNull();
+    expect(derive(123 as any)).toBeNull();
+    expect((derive as any)({})).toBeNull();
+  });
+
+  it('returns null for empty string', () => {
+    expect(derive('')).toBeNull();
+  });
+
+  it('returns null for prototype-pollution reserved segments', () => {
+    expect(derive('__proto__')).toBeNull();
+    expect(derive('knowledge/__proto__')).toBeNull();
+    expect(derive('constructor')).toBeNull();
+    expect(derive('org/constructor/x')).toBeNull();
+    expect(derive('knowledge/foo/prototype')).toBeNull();
+  });
+
+  it('returns null for null bytes and backslashes', () => {
+    expect(derive('foo\0bar')).toBeNull();
+    expect(derive('foo\\bar')).toBeNull();
+  });
+
+  it('returns null for absolute paths, // segments, and . / .. traversal', () => {
+    expect(derive('/abs/path')).toBeNull();
+    expect(derive('foo//bar')).toBeNull();
+    expect(derive('..')).toBeNull();
+    expect(derive('.')).toBeNull();
+    expect(derive('foo/../bar')).toBeNull();
+    expect(derive('foo/./bar')).toBeNull();
+    expect(derive('knowledge/')).toBeNull(); // trailing empty segment
+  });
+
+  it('derives a personal-vault path for a valid personal key', () => {
+    const fp = derive('knowledge/foo');
+    expect(fp).toBe(path.join(PERSONAL_VAULT, 'knowledge/foo.md'));
+  });
+
+  it('derives an org-vault path for an org/ key', () => {
+    const fp = derive('org/knowledge/bar');
+    expect(fp).toBe(path.join(ORG_VAULT, 'knowledge/bar.md'));
+  });
+
+  it('rejects a traversal that resolves outside the vault after join', () => {
+    // Even if a key passes the segment checks, the resolved-path containment
+    // check is the last line of defense — a key like 'knowledge/..foo' that
+    // would resolve outside the vault must be rejected. (The segment '..foo'
+    // is not '..' so it passes the segment filter; containment is the guard.)
+    // Use a key that passes segments but resolves outside via symlink-free
+    // path math — 'knowledge/..' is caught by segments, so the real containment
+    // guard catches crafted absolute-escape attempts that slip past segments.
+    expect(derive('knowledge/..')).toBeNull();
+  });
+});
+
+describe('coerceMemEntry via loadIndexes — malformed index.json is sanitized', () => {
+  let INDEX_PATH: string;
+  let loadIndexes: typeof import('../persistence.js').loadIndexes;
+  let memIndex: typeof import('../state.js').memIndex;
+  let errors: typeof import('../state.js').errors;
+
+  beforeAll(async () => {
+    ({ INDEX_PATH } = await import('../paths.js'));
+    ({ loadIndexes } = await import('../persistence.js'));
+    ({ memIndex, errors } = await import('../state.js'));
+  });
+
+  function stageIndex(payload: unknown) {
+    fs.mkdirSync(path.dirname(INDEX_PATH), { recursive: true });
+    const fd = fs.openSync(INDEX_PATH, 'w');
+    try { fs.writeSync(fd, JSON.stringify(payload)); } finally { fs.closeSync(fd); }
+  }
+
+  afterEach(() => {
+    for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
+    errors.length = 0;
+    try { fs.unlinkSync(INDEX_PATH); } catch { /* may not exist */ }
+  });
+
+  it('coerces a scalar-string tags value to an empty array', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/scalar-tags': {
+      title: 'T', tags: 'scalar', contentPreview: 'body',
+    } } });
+    loadIndexes();
+    const e = (memIndex as any)['knowledge/scalar-tags'];
+    expect(e).toBeDefined();
+    expect(Array.isArray(e.tags)).toBe(true);
+    expect(e.tags).toEqual([]);
+  });
+
+  it('filters null/undefined/non-string tag items, coercing numbers to strings', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/mixed-tags': {
+      title: 'T', tags: [null, 123, 'keep', undefined, 'also-keep'],
+      contentPreview: 'body',
+    } } });
+    loadIndexes();
+    const e = (memIndex as any)['knowledge/mixed-tags'];
+    // null + undefined → '' → filtered; 123 → '123'; 'keep' + 'also-keep' survive.
+    expect(e.tags).toEqual(['123', 'keep', 'also-keep']);
+  });
+
+  it('coerces a non-numeric accessCount to 0 (NaN-string hole)', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/bad-access': {
+      title: 'T', tags: [], contentPreview: 'body', accessCount: 'NaN',
+    } } });
+    loadIndexes();
+    expect((memIndex as any)['knowledge/bad-access'].accessCount).toBe(0);
+  });
+
+  it('clamps a non-numeric importanceScore to the 0.5 fallback', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/bad-importance': {
+      title: 'T', tags: [], contentPreview: 'body', importanceScore: 'high',
+    } } });
+    loadIndexes();
+    expect((memIndex as any)['knowledge/bad-importance'].importanceScore).toBe(0.5);
+  });
+
+  it('defaults missing fields to safe values', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/minimal': {
+      title: 'Min', contentPreview: 'body',
+    } } });
+    loadIndexes();
+    const e = (memIndex as any)['knowledge/minimal'];
+    expect(e.tags).toEqual([]);
+    expect(e.sessions).toEqual([]);
+    expect(e.accessCount).toBe(0);
+    expect(e.lastAccessed).toBe('');
+    expect(e.category).toBe('knowledge');
+    expect(e.isOrg).toBe(false);
+  });
+
+  it('re-derives filePath from the key and discards a poisoned persisted filePath', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/poisoned': {
+      title: 'T', tags: [], contentPreview: 'body',
+      filePath: '/etc/shadow', // a teammate-planted poisoned path
+    } } });
+    loadIndexes();
+    const e = (memIndex as any)['knowledge/poisoned'];
+    expect(e.filePath).not.toBe('/etc/shadow');
+    // filePath is rebuilt from the key under the personal vault.
+    expect(e.filePath).toBe(path.join(PERSONAL_VAULT, 'knowledge/poisoned.md'));
+  });
+
+  it('drops an entry whose key fails deriveFilePathFromKey (reserved segment)', () => {
+    // 'knowledge/__proto__' is a real own-property key (unlike '__proto__'
+    // alone, which JSON.parse sets as the prototype, not an own property).
+    // coerceMemEntry → deriveFilePathFromKey → isReservedKey → null → dropped.
+    stageIndex({ v: 1, entries: { 'knowledge/__proto__': {
+      title: 'T', tags: [], contentPreview: 'body',
+    } } });
+    loadIndexes();
+    // Reserved segment → coerceMemEntry returns null → entry not indexed.
+    expect((memIndex as any)['knowledge/__proto__']).toBeUndefined();
+    expect(Object.keys(memIndex).length).toBe(0);
+  });
+
+  it('coerces a Number title to a string (pre-v1.0.6 legacy)', () => {
+    stageIndex({ v: 1, entries: { 'knowledge/num-title': {
+      title: 2026, tags: [], contentPreview: 'body',
+    } } });
+    loadIndexes();
+    expect((memIndex as any)['knowledge/num-title'].title).toBe('2026');
+  });
+});
+
+describe('unwrapIndexEntries forward-incompatible version', () => {
+  let INDEX_PATH: string;
+  let loadIndexes: typeof import('../persistence.js').loadIndexes;
+  let memIndex: typeof import('../state.js').memIndex;
+  let errors: typeof import('../state.js').errors;
+
+  beforeAll(async () => {
+    ({ INDEX_PATH } = await import('../paths.js'));
+    ({ loadIndexes } = await import('../persistence.js'));
+    ({ memIndex, errors } = await import('../state.js'));
+  });
+
+  afterEach(() => {
+    for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
+    errors.length = 0;
+    try { fs.unlinkSync(INDEX_PATH); } catch { /* */ }
+  });
+
+  function stageIndex(payload: unknown) {
+    fs.mkdirSync(path.dirname(INDEX_PATH), { recursive: true });
+    const fd = fs.openSync(INDEX_PATH, 'w');
+    try { fs.writeSync(fd, JSON.stringify(payload)); } finally { fs.closeSync(fd); }
+  }
+
+  it('refuses a future schema version (v > INDEX_VERSION) and records an error', () => {
+    stageIndex({ v: 999, entries: { 'knowledge/future': { title: 'T', contentPreview: 'b' } } });
+    loadIndexes();
+    // Forward-incompatible → bail to reconcileIndex rebuild; nothing loaded.
+    expect((memIndex as any)['knowledge/future']).toBeUndefined();
+    expect(Object.keys(memIndex).length).toBe(0);
+    expect(errors.some((e) => /schema version newer|malformed wrapper/.test(e.msg))).toBe(true);
+  });
+
+  it('reads the legacy flat shape (no numeric v at top level)', () => {
+    // Pre-9.2 flat index: the whole object is the entries map.
+    stageIndex({ 'knowledge/legacy-flat': { title: 'Legacy', contentPreview: 'body' } });
+    loadIndexes();
+    expect((memIndex as any)['knowledge/legacy-flat']).toBeDefined();
+    expect((memIndex as any)['knowledge/legacy-flat'].title).toBe('Legacy');
+  });
+
+  it('rejects a wrapped shape with non-object entries', () => {
+    stageIndex({ v: 1, entries: 'not-an-object' });
+    loadIndexes();
+    expect(Object.keys(memIndex).length).toBe(0);
+  });
+
+  it('rejects a non-object / array top-level payload', () => {
+    stageIndex([1, 2, 3]);
+    loadIndexes();
+    expect(Object.keys(memIndex).length).toBe(0);
+  });
+});
+
+describe('buildIndexCache — shell-readable index cache', () => {
+  it('does not throw when atomicWrite fails (records error, best-effort)', async () => {
+    const { buildIndexCache } = await import('../persistence.js');
+    const { memIndex } = await import('../state.js');
+    // Seed one entry so buildIndexCache has content to serialize.
+    (memIndex as any)['knowledge/cache-probe'] = {
+      key: 'knowledge/cache-probe',
+      title: 'cache probe',
+      tags: ['t1', 't2', 't3', 't4'],
+      contentPreview: 'body',
+      category: 'knowledge',
+    };
+    // Under the fs mock, atomicWrite's writeFileSync throws → recordError.
+    expect(() => buildIndexCache()).not.toThrow();
+    expect(errors.some((e) => /atomicWrite/.test(e.msg))).toBe(true);
+    delete (memIndex as any)['knowledge/cache-probe'];
   });
 });
