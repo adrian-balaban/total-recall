@@ -6,7 +6,6 @@
           { "type": "command", "command": "${extensionPath}/hooks/scripts/pull-org-vault.sh", "timeout": 30 },
           { "type": "command", "command": "${extensionPath}/hooks/scripts/build-memory-index.sh", "timeout": 15 },
           { "type": "command", "command": "${extensionPath}/hooks/scripts/load-memory-index.sh", "timeout": 5 },
-          { "type": "command", "command": "${extensionPath}/hooks/scripts/load-open-questions.sh", "timeout": 5 },
           { "type": "command", "command": "${extensionPath}/hooks/scripts/check-sync-errors.sh", "timeout": 5 }
         ]
       }

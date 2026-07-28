@@ -494,7 +494,6 @@ if (!has(s.hooks.SessionStart, 'build-memory-index.sh')) {
     cmd('pull-org-vault.sh', 30),
     cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh
     cmd('load-memory-index.sh', 5),
-    cmd('load-open-questions.sh', 5),
     cmd('check-sync-errors.sh', 5),     // 4.4: warn if org-sync push failed since last success
   ] });
   added.push('SessionStart');
