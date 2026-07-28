@@ -31786,14 +31786,15 @@ function isVectorAvailable() {
 // src/vault-scan.ts
 var realBaseCache = /* @__PURE__ */ new Map();
 function realBaseFor(base) {
-  if (realBaseCache.has(base)) return realBaseCache.get(base) ?? null;
+  const cached2 = realBaseCache.get(base);
+  if (cached2 !== void 0) return cached2;
   let resolved;
   try {
     resolved = fs2.realpathSync(base);
   } catch {
     resolved = null;
   }
-  realBaseCache.set(base, resolved);
+  if (resolved !== null) realBaseCache.set(base, resolved);
   return resolved;
 }
 function slugify2(title) {
@@ -33463,7 +33464,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.0.135" : null.version;
+var PLUGIN_VERSION = true ? "1.0.136" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

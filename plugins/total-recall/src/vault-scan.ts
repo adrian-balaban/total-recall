@@ -25,17 +25,41 @@ import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
 // FS that can't resolve it); indexFile treats null as "bail". The cache lives
 // for the process — vault roots don't move — but is rebuilt if a root is seen
 // null then later exists (e.g. ensureDir created it between scans).
-const realBaseCache = new Map<string, string | null>();
+const realBaseCache = new Map<string, string>();
 function realBaseFor(base: string): string | null {
-  if (realBaseCache.has(base)) return realBaseCache.get(base) ?? null;
+  // Cache ONLY a successful resolution. The prior form cached null permanently
+  // (realBaseCache.set(base, null) on a realpath throw), so a vault root whose
+  // FIRST realpathSync threw — a transient EACCES on a parent dir, the root
+  // vanishing mid-scan, or an FS that can't resolve it — was cached null for
+  // the entire process lifetime, and indexFile's `if (realBase === null) return`
+  // bailed on EVERY file in that vault forever. The header comment already
+  // promised "rebuilt if a root is seen null then later exists (e.g. ensureDir
+  // created it between scans)" — but the old code never rebuilt it (the `has`
+  // check returned the cached null without re-resolving). Re-resolve on every
+  // call while the value is null so a transient failure self-heals on the next
+  // scan; the common non-null success case still hits the cache (one realpath
+  // per root per process — `base` is one of two constants).
+  const cached = realBaseCache.get(base);
+  if (cached !== undefined) return cached;
   let resolved: string | null;
   try {
     resolved = fs.realpathSync(base);
   } catch {
     resolved = null;
   }
-  realBaseCache.set(base, resolved);
+  if (resolved !== null) realBaseCache.set(base, resolved);
   return resolved;
+}
+
+// Test seam: the realpath cache is module-level and persists across tests in a
+// file, so a test that needs to observe the FIRST resolution of a root (e.g.
+// the null-caching self-heal test, which spies on fs.realpathSync to throw on
+// the first base call) would otherwise see a cache hit from an earlier test's
+// resolve and never trigger the spy. Reset the cache between tests; production
+// never calls this. Mirrors the __testSetEmbedder / __testsResetShutdownLatch
+// seam pattern in embeddings.ts / index.ts.
+export function __testClearRealBaseCache() {
+  realBaseCache.clear();
 }
 
 export function slugify(title: string): string {
