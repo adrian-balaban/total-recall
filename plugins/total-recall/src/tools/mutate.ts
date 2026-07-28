@@ -3,13 +3,13 @@ import * as os from 'os';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
 import { VECTORS_DB, NO_PRUNE_TAG } from '../paths.js';
-import { reconcileIndex, assertRegularFile, tokenEstimate, isReservedKey } from '../vault-scan.js';
+import { reconcileIndex, assertRegularFile, tokenEstimate, isReservedKey, readCachedOrFresh } from '../vault-scan.js';
 import { rebuildInvertedIndex, registerDocument, deregisterDocument } from '../tfidf.js';
-import { memIndex } from '../state.js';
+import { memIndex, recordError } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
-import { embedAndUpsert } from '../embeddings.js';
-import { deleteVector } from '../vectorStore.js';
+import { embedAndUpsert, embed, embedTextFor, flushEmbeddings } from '../embeddings.js';
+import { deleteVector, dropVectorTable, upsertVector } from '../vectorStore.js';
 import type { MemoryFrontmatter } from '../types.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -242,13 +242,134 @@ export function confirmMemory(args: any): any {
   };
 }
 
-export function rebuildIndex(): any {
+// Opt-in bulk re-embed of every memory in the index at the CURRENT embedding
+// model's dimension. `rebuild_index` defaults to cheap (reconcile + inverted
+// rebuild only); `forceReembed: true` invokes this. The motivating gap (C-1):
+// after an embedding-model switch (e.g. MiniLM 384-d → bge-m3 1024-d) every key
+// still HAS a stored vector — at the OLD dim — so `rebuild_index`'s
+// `reconcileVectors` backfill (which only fills MISSING keys) is a no-op for
+// them, and `searchVector` refuses the mismatched-dim rows (returns [] → recall
+// degrades to TF-IDF). Today the only workaround is store/update each memory (or
+// manually drop vec_memories). This makes that one-shot bulk re-embed a tool
+// flag instead.
+//
+// Design notes (deliberately NOT a bare "drop → reconcileVectors"):
+//   • Bounded queue — cap concurrent embed() calls (REEMBED_CONCURRENCY) so a
+//     large vault doesn't fan out unbounded inference at once, mirroring
+//     rerank's MAX_FRESH_EMBEDS_PER_CALL rationale. reconcileVectors is
+//     fire-and-forget with no cap; a dedicated helper owns the bound.
+//   • Full content — embed embedTextFor(title, FULL body) via readCachedOrFresh
+//     (like rerank), not reconcileVectors' contentPreview. MiniLM truncates past
+//     256 tokens so the difference is usually immaterial, but full content is the
+//     honest "rebuild at the new model" shape and matches store/update.
+//   • Awaited — each upsert is awaited and flushEmbeddings drains at the end, so
+//     the tool response's count is truthful (not "scheduled N, landed M").
+//   • Refuse-early guard — probe the embedder with the first memory BEFORE
+//     dropping the table; if embed() is returning null (deps absent, model load
+//     failed), dropping vec_memories would only backfill nothing and leave the
+//     index emptied. Record + return without dropping.
+const REEMBED_CONCURRENCY = 8;
+export async function reembedAll(): Promise<{
+  dropped: boolean;
+  reembedded: number;
+  skipped: number;
+}> {
+  const keys = Object.keys(memIndex);
+  if (keys.length === 0) {
+    return { dropped: false, reembedded: 0, skipped: 0 };
+  }
+
+  // Probe with the first memory before any destructive drop. embed() returning
+  // null means the embedder is unavailable — dropping the table would only
+  // backfill nothing. isVectorAvailable() alone is insufficient: it's false until
+  // the pipeline first loads, so a fresh-but-healthy process would be wrongly
+  // refused. The probe actually exercises the load path.
+  const firstKey = keys[0]!;
+  const firstMeta = memIndex[firstKey]!;
+  const firstBody = readCachedOrFresh(firstKey, firstMeta.filePath, 'reread').content
+    || firstMeta.contentPreview || '';
+  const probe = await embed(embedTextFor(firstMeta.title, firstBody));
+  if (!probe) {
+    recordError(
+      'reembedAll: embedder unavailable (vector deps absent or model load failed) — ' +
+      'vec_memories left untouched, no re-embed performed'
+    );
+    return { dropped: false, reembedded: 0, skipped: keys.length };
+  }
+
+  // Old-dim rows are already unusable after a model switch (searchVector returns
+  // [] on a dim mismatch), so dropping them costs zero recall quality. The next
+  // upsert recreates the table at the new dim and re-fingerprints vec_meta.
+  await dropVectorTable(VECTORS_DB);
+
+  let reembedded = 0;
+  // Re-use the probe vector for the first memory so it isn't embedded twice.
+  try {
+    await upsertVector(VECTORS_DB, firstKey, probe);
+    reembedded++;
+  } catch (e) {
+    recordError(`reembedAll(${firstKey}): ${e instanceof Error ? e.message : String(e)}`);
+  }
+
+  // Bounded worker pool over the remaining keys. Each worker pulls the next index
+  // off the shared cursor, embeds the full (title + body) text, and awaits the
+  // upsert — so the count we return reflects vectors that actually landed.
+  let cursor = 1;
+  const workerCount = Math.min(REEMBED_CONCURRENCY, keys.length);
+  await Promise.all(
+    new Array(workerCount).fill(0).map(async () => {
+      while (cursor < keys.length) {
+        const i = cursor++;
+        const key = keys[i]!;
+        const meta = memIndex[key];
+        if (!meta) continue;
+        try {
+          const body = readCachedOrFresh(key, meta.filePath, 'reread').content
+            || meta.contentPreview || '';
+          const vec = await embed(embedTextFor(meta.title, body));
+          if (vec) {
+            await upsertVector(VECTORS_DB, key, vec);
+            reembedded++;
+          }
+        } catch (e) {
+          recordError(`reembedAll(${key}): ${e instanceof Error ? e.message : String(e)}`);
+        }
+      }
+    })
+  );
+
+  // Drain any fire-and-forget embeds still in flight from store/update paths so
+  // the response count is truthful (reembedAll's own upserts are already awaited;
+  // this is belt-and-suspenders for concurrent writers).
+  await flushEmbeddings();
+
+  return { dropped: true, reembedded, skipped: keys.length - reembedded };
+}
+
+export async function rebuildIndex(args: any = {}): Promise<any> {
+  const forceReembed = args?.forceReembed === true;
   // Reconcile against disk: add new/updated files, drop deleted ones, and preserve
   // runtime accessCount/lastAccessed for memories that still exist.
   reconcileIndex();
   rebuildInvertedIndex();
   scheduleSave();
-  return { message: `Index rebuilt. ${Object.keys(memIndex).length} memories indexed.` };
+
+  const count = Object.keys(memIndex).length;
+  if (!forceReembed) {
+    return { message: `Index rebuilt. ${count} memories indexed.` };
+  }
+
+  const r = await reembedAll();
+  const total = r.reembedded + r.skipped;
+  const tail = r.dropped
+    ? ` Re-embedded ${r.reembedded}/${total} memories at the current embedding model (${r.skipped} skipped).`
+    : ` Embedder unavailable — vec_memories left untouched, 0/${total} re-embedded.`;
+  return {
+    message: `Index rebuilt. ${count} memories indexed.${tail}`,
+    dropped: r.dropped,
+    reembedded: r.reembedded,
+    skipped: r.skipped,
+  };
 }
 // ─── Registration (Phase 6.1-6.3: schema co-located with handler) ──────────────
 const updateMemorySchema = {
@@ -269,7 +390,14 @@ const confirmMemorySchema = {
   useful: z.boolean().default(true).describe('true = confirmation, false = flag.'),
 };
 
-const rebuildIndexSchema = {};
+const rebuildIndexSchema = {
+  forceReembed: z
+    .boolean()
+    .default(false)
+    .describe(
+      'Drop every stored vector and re-embed all memories at the current embedding model\'s dimension (one-shot bulk re-embed, e.g. after switching embedding model). Default false keeps rebuild_index cheap (reconcile + inverted rebuild only). Refuses without dropping if the embedder is unavailable.'
+    ),
+};
 
 export function register(server: McpServer) {
   server.registerTool(
@@ -299,7 +427,7 @@ export function register(server: McpServer) {
   server.registerTool(
     'rebuild_index',
     {
-      description: 'Full re-scan of both vaults. Rebuilds inverted index.',
+      description: 'Full re-scan of both vaults. Rebuilds inverted index. Pass forceReembed=true to additionally drop and re-embed every memory\'s vector at the current embedding model (one-shot bulk re-embed after a model switch).',
       inputSchema: rebuildIndexSchema,
     },
     wrapHandler('rebuild_index', rebuildIndex),

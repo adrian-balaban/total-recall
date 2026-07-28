@@ -14,21 +14,6 @@ syntheses in `reviews/archive/`).
 
 ## DEFERRED — waiting for a trigger
 
-### C-1 behavior fix: bulk re-embed after an embedding-model change
-- **Source:** `review-claude.txt` C-1; message honesty fixed in `ee0cde5` (1.0.133).
-- **What's left:** `rebuild_index` still only backfills *missing* vectors
-  (`reconcileVectors`). After a model switch (e.g. MiniLM 384-d → bge-m3 1024-d)
-  every key still *has* a (wrong-dim) vector, so `rebuild_index` is a no-op for
-  them. Today the user must store/update each memory (or drop `vec_memories`) to
-  re-embed at the new dim.
-- **Trigger:** a real model switch that needs a one-shot bulk re-embed without
-  per-memory writes.
-- **Shape when picked up:** add an opt-in `forceReembed` path to `rebuildIndex()`
-  (`src/tools/mutate.ts`) that drops every key from `vec_memories` then lets
-  `reconcileVectors` backfill — gated behind a flag so the default
-  `rebuild_index` stays cheap. Touches the embedding budget; deserves its own
-  design note before coding. Pin with a vitest.
-
 ### vault-scan dir-mtime cache (review item 9.1)
 - **Source:** `review-synthetized-25072026.txt` §9.1.
 - **What:** `reconcileIndex` re-walks every directory on each poll even when only
@@ -116,4 +101,13 @@ syntheses in `reviews/archive/`).
   `reviews/` (historical).
 - **C-1 message honesty** — `vectorStore.ts` error messages corrected to match
   actual `rebuild_index` behavior; pinned in `vectorStore.test.ts`. `ee0cde5`.
-  (The *behavior* fix is still DEFERRED above.)
+- **C-1 behavior fix — bulk re-embed after a model switch** — `rebuild_index`
+  gained an opt-in `forceReembed` flag (default false) backed by a dedicated
+  `reembedAll()` in `src/tools/mutate.ts`: drops `vec_memories`, re-embeds every
+  memory at the current model's dim via a bounded queue
+  (`REEMBED_CONCURRENCY=8`, full content through `readCachedOrFresh`, awaited
+  upserts + `flushEmbeddings` for a truthful count), and refuses without dropping
+  when `embed()` returns null. Not a bare drop→`reconcileVectors` (that path is
+  fire-and-forget, unbounded, and embeds `contentPreview` not full content).
+  Pinned by `src/__tests__/rebuild-index-reembed.test.ts` (5 tests).
+  `1.0.135`.

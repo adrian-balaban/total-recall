@@ -421,6 +421,27 @@ export async function deleteVector(dbPath: string, key: string): Promise<void> {
   }
 }
 
+// Drop the vec_memories (and vec_meta fingerprint) tables, used by the opt-in
+// `rebuild_index { forceReembed: true }` path (mutate.ts reembedAll) to clear
+// every stored vector so each memory re-embeds at the CURRENT model's dim on
+// the backfill. After a model switch the old-dim rows are already unusable —
+// searchVector returns [] on a dim mismatch (ensureVecTableForRead) and recall
+// degrades to TF-IDF — so dropping them costs zero recall quality; the next
+// upsert recreates the table at the new dim (ensureVecTable) and re-fingerprints
+// vec_meta (writeVecMeta). No-op when the optional sqlite-vec deps are absent
+// (getDb resolves to null) — there's nothing to drop. Best-effort: a DROP failure
+// is recorded, not thrown, so a re-embed run isn't aborted by a sqlite I/O error.
+export async function dropVectorTable(dbPath: string): Promise<void> {
+  const d = await getDb(dbPath);
+  if (!d) return;
+  try {
+    d.exec('DROP TABLE IF EXISTS vec_memories');
+    d.exec('DROP TABLE IF EXISTS vec_meta');
+  } catch (e) {
+    recordError(`dropVectorTable: ${e instanceof Error ? e.message : String(e)}`);
+  }
+}
+
 // All keys currently present in the vector store. Returns null when the optional
 // sqlite-vec deps are absent (getDb resolves to null) — callers treat null as
 // "no vector store, skip vector work" rather than "empty store". Used by
