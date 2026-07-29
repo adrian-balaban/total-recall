@@ -112,6 +112,66 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Decision shape:** acceptable now for a personal-use tool; flagged here so a
   future scope change triages it deliberately instead of rediscovering it.
 
+### Context graph / temporal relations over memories (Technology Radar Vol 34)
+- **Source:** Thoughtworks Technology Radar Vol 34 (2026) — *Context graph*
+  (Assess technique) and *Graphiti* (Trial platform, Zep's open-source
+  bi-temporal knowledge-graph engine). See org memory
+  `org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
+- **What:** the plugin has a *supersede* primitive (`store_memory force=true`
+  archives the prior body + appends a `supersededAt[]` chain — CLAUDE.md, and
+  `supersededAt` in `store.ts`/`frontmatter.ts`) but no queryable relation/graph
+  layer: `get_related_memories` is Jaccard tag-overlap only, not typed edges or a
+  validity-window/relation graph. A context-graph layer would let recall answer
+  "what did I believe about X and when / what superseded what" as structured,
+  queryable data rather than tag co-occurrence.
+- **Trigger:** a concrete need to traverse memory relations (decision → revised-by,
+  fact → invalidated-by) beyond tag similarity — e.g. an ADR-history view. The
+  existing `supersededAt` chain already stores the raw temporal edges, so the
+  data is half-present.
+- **Shape when picked up:** a full bi-temporal validity-window + relation/graph
+  layer is explicitly an *assess-level experiment*, not a committed change (per
+  the CLAUDE.md supersede gotcha). Start read-only: a tool that walks the
+  `supersededAt` chain for a key; only then consider typed edges. Keep it
+  optional/local — do NOT pull in a graph DB (would violate the one-hard-dependency
+  design philosophy).
+
+### LLM-driven source-grounded extraction for the PreCompact hook (Technology Radar Vol 34)
+- **Source:** Thoughtworks Technology Radar Vol 34 (2026) — *LangExtract* and
+  *Docling* (both Trial, Languages & Frameworks); *Structured output from LLMs*
+  (Adopt technique). See the Radar org memory above.
+- **What:** `hooks/scripts/extract-and-store-memories.sh` already asks the model
+  for structured JSON lines (0–3 learnings) and `store-learning.mjs` writes them
+  as `.md` files — this is already the *structured output* pattern. What's missing
+  is **source grounding**: each auto-captured learning is stored with no link back
+  to the transcript span it came from, so a later reader can't verify or trace it.
+- **Trigger:** auto-captured PreCompact memories are found to be unverifiable /
+  hallucinated and provenance is wanted; or the extraction quality needs an
+  objective harness (pairs with the eval entry below).
+- **Shape when picked up:** have the extraction prompt emit, per learning, a short
+  verbatim source quote or transcript offset (LangExtract's source-traceability
+  idea), stored in frontmatter (e.g. `sourceSpan`). Keep it a plain prompt+JSON
+  contract — do NOT add the LangExtract/Docling Python deps; the value is the
+  *technique* (grounded structured output), not the library, in a Node/no-heavy-dep
+  plugin.
+
+### Evaluation harness for MCP tool / recall quality (Technology Radar Vol 34)
+- **Source:** Thoughtworks Technology Radar Vol 34 (2026) — *DeepEval* (Trial,
+  Languages & Frameworks), which now evaluates agentic/multi-turn workflows
+  including **MCP-server interactions** (tool correctness, step efficiency, task
+  completion). Pairs with the existing **Langfuse observability** DEFERRED entry
+  above. See the Radar org memory above.
+- **What:** there is no automated eval of retrieval quality (does `recall_memory`
+  return the right memory for a query?) or tool correctness. An earlier eval
+  harness was removed as non-essential; this reopens the *idea* at a scoped,
+  Radar-endorsed altitude rather than the old harness.
+- **Trigger:** a scoring change (Ebbinghaus λ, TF-IDF boosts, RRF k, multilingual
+  expansion) needs a regression guard, or recall quality is questioned and there's
+  no objective signal. Explicitly premature for a single-user local plugin today.
+- **Shape when picked up:** a small offline eval set (query → expected-memory-key)
+  scored against `recall_memory`/`search_index` as a golden test; only reach for
+  DeepEval if agentic/multi-turn MCP-interaction metrics are actually needed. Keep
+  it a dev-only harness (not shipped in `dist/`), same as the mutation tooling.
+
 > Items 4 (server.ts monolith) and 8 (deprecated `Server` class) from the
 > pruned `ARCHITECTURE-REVIEW-TODO.md` are **DONE** — the McpServer migration
 > (CLAUDE.md 6.1-6.3) co-located schemas with implementation in `tools/*.ts`

@@ -67,3 +67,17 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Versionabil:** fișierele se pot pune în git și se pot urmări modificările
 - **Imparțial:** nu folosește o bază de date; totul e in git
 - **Rezistent la erori:** dacă ceva se întâmplă, datele nu se pierd
+
+## Raportare la Thoughtworks Technology Radar Vol. 34 (2026)
+
+Radarul Thoughtworks grupează tehnici și unelte pe patru inele (Adopt = folosește acum, Trial = merită încercat, Assess = urmărește, Caution = atenție). Vol. 34 e dominat de maturizarea ingineriei de agenți AI. Mai multe tehnici recomandate sunt **deja implementate** în Total Recall, ca decizii de design luate independent:
+
+- **Progressive context disclosure** (Trial) + **Context engineering** (Adopt): nu arunci tot contextul deodată (duce la „context rot"), ci pornești cu un index ușor și încarci detaliul la cerere. Exact ce face pluginul — la SessionStart injectează doar indexul memoriilor, iar conținutul complet se citește prin `get_memories_by_keys` doar când e nevoie.
+- **Mutation testing** (Trial): „cel mai onest semnal" pentru calitatea testelor în era codului generat de AI. Pluginul folosește deja Stryker (vezi *Calitate și fiabilitate*).
+- **Claude Code plugin marketplace** (Trial): distribuție bazată pe git, fără „drift de versiune" — exact modelul pluginului (git-subdir, nu npm).
+- **Structured output from LLMs** (Adopt): hook-ul de captură cere modelului linii JSON, nu text liber.
+- **MCP by default** (Caution): radarul avertizează să nu folosești reflex MCP — pluginul ține operațiile de sistem (git, indexare) în scripturi simple, nu în unelte MCP.
+
+**Trei direcții viitoare** reținute din radar (în BACKLOG.md, cu declanșator clar): (1) **graf de context / relații temporale** (*Context graph* + *Graphiti*) — lanțul `supersededAt` stochează deja muchii temporale, dar lipsește un strat de interogare a relațiilor; (2) **extracție ancorată în sursă** (*LangExtract*) — captura produce JSON, dar fără trasabilitate la conversație; (3) **set de evaluare** (*DeepEval*) — nicio măsură obiectivă azi că `recall_memory` întoarce memoria potrivită.
+
+> Sinteza completă (toate elementele Adopt/Trial din cele patru cadrane) e în memoria de echipă `org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
