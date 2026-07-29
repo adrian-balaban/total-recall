@@ -9,6 +9,14 @@ CONFIG_FILE="$HOME/.total-recall/config.json"
 
 if [ -f "$CONFIG_FILE" ]; then
   ORG_VAULT=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); let p=c.orgVault; if(p){ p=p.replace(/^~(?=\/|$)/, require('os').homedir()); p=require('path').dirname(require('path').resolve(p)); } console.log(p || '$ORG_VAULT'); } catch { console.log('$ORG_VAULT'); }")
+  # Honor an explicit orgBranch in config.json (same key sync-org-memory.mjs reads).
+  # Falls back to the hardcoded `knowledge` default below on any error/absence. This
+  # keeps the pull hook and the PostToolUse sync hook on the SAME branch — the two
+  # previously disagreed (pull defaulted to `knowledge`, sync hardcoded `org-vault`),
+  # so a store pushed to a branch the pull never cloned. env-pass is injection-safe
+  # (mirrors the orgRepo read below): a quote/backtick in $HOME can't break the read.
+  ORG_BRANCH=$(CONFIG_FILE="$CONFIG_FILE" "$NODE_BIN" -e "try{process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')).orgBranch||''))}catch{}" 2>/dev/null || echo "")
+  [ -n "$ORG_BRANCH" ] && BRANCH="$ORG_BRANCH"
 fi
 # Read orgRepo from config.json via node (node is a hard dependency of this
 # plugin; python3 is not guaranteed). Falls back to '' on any error.
