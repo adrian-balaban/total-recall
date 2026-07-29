@@ -4,7 +4,7 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## Ce este
-Total Recall este o extensie (versiunea 1.1.1) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie (versiunea 1.1.5) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
@@ -50,7 +50,7 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
   - Scor curent: 68% (testele capturează 68% din erorile introduse deliberat; ținta e minim 65%)
   - Modulele critice (salvare pe disk, căutare text) au scor mai mare (70%+)
   - Modulele opționale (căutare semantică) au scor acceptabil
-- **Versiune:** 1.1.1 — stabil
+- **Versiune:** 1.1.5 — stabil
 - **Fără CI:** întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat local înainte de a fi trimis
 - **Backup:** `install.sh` poate genera o copie de siguranță a tuturor memoriilor
 

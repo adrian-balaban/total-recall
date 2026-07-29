@@ -33464,7 +33464,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.1.4" : null.version;
+var PLUGIN_VERSION = true ? "1.1.5" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

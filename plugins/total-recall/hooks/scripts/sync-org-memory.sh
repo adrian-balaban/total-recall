@@ -13,11 +13,19 @@ HOOK_INPUT=$(cat)
 # tool_name is "mcp__plugin_<plugin>_<server>__<tool>" for plugin-bundled MCP
 # tools (here mcp__plugin_total-recall_total-recall__<tool>); the PostToolUse
 # matcher in hooks.json targets the "(store_memory|update_memory|delete_memory)"
-# suffix as a regex. tool_response for an MCP
-# tool is the MCP envelope {content:[{type:"text", text:"<json>"}]} whose text
-# is the tool's own JSON return (e.g. {"key":"org/architecture/foo",...}); some
-# transports send the object unwrapped. Handle both, then fall back to
-# tool_input.key (present on the request side) if the response carried no key.
+# suffix as a regex. tool_response for an MCP tool arrives in THREE shapes, all
+# of which must yield the tool's own JSON return (e.g. {"key":"org/architecture/foo",...}):
+#   1. RAW CONTENT ARRAY (what Claude Code's PostToolUse actually delivers):
+#        [{"type":"text","text":"<json>"}]   — the content array WITHOUT an envelope.
+#   2. MCP envelope: {"content":[{"type":"text","text":"<json>"}]}
+#   3. unwrapped object: {"key":"..."}        (some transports).
+# Handle ALL THREE, then fall back to tool_input.key (present on the request side)
+# if the response carried no key. Shape 1 is the production path — the original
+# parser only handled shapes 2 and 3 (it gated on `!Array.isArray(resp)`), so the
+# raw array Claude Code sends skipped extraction entirely, KEY stayed empty, the
+# -z guard fired, and org sync was a SILENT NO-OP on every real store/update/delete.
+# The unit tests used shape 2, so the gap was invisible. Pinned by
+# sync-org-memory-hook.test.ts "raw content array" (shape 1) regression case.
 # Emit "<key>\x1f<delete-flag>\x1f<force-flag>" (\x1f = ASCII unit separator) so
 # bash can split it without a second parse call — see the comment at the `read`
 # below for why \x1f (not a tab) is the delimiter.
@@ -32,18 +40,25 @@ process.stdin.on("data", d => s += d).on("end", () => {
   const tn = d.tool_name || "";
   let key = "";
   const resp = d.tool_response;
-  if (resp && typeof resp === "object" && !Array.isArray(resp)) {
-    const content = resp.content;
-    if (Array.isArray(content)) {
-      for (const it of content) {
-        if (it && it.type === "text") {
-          let p = null;
-          try { p = JSON.parse(it.text || ""); } catch {}
-          if (p && p.key) { key = p.key; break; }
-        }
+  // Three tool_response shapes (see the comment above): raw content array
+  // (the actual Claude Code PostToolUse shape), the {content:[...]} MCP envelope,
+  // and an unwrapped {key:...} object. Extract the text items from whichever
+  // array form is present and parse each for a key.
+  let content = null;
+  if (Array.isArray(resp)) {
+    content = resp;                              // shape 1: raw content array
+  } else if (resp && typeof resp === "object") {
+    if (Array.isArray(resp.content)) content = resp.content;  // shape 2: envelope
+    else if (resp.key) key = resp.key;           // shape 3: unwrapped object
+  }
+  if (Array.isArray(content)) {
+    for (const it of content) {
+      if (it && it.type === "text") {
+        let p = null;
+        try { p = JSON.parse(it.text || ""); } catch {}
+        if (p && p.key) { key = p.key; break; }
       }
     }
-    if (!key && resp.key) key = resp.key;
   }
   if (!key && d.tool_input && d.tool_input.key) key = d.tool_input.key;
   const flag = tn.endsWith("delete_memory") ? 1 : 0;
