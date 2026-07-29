@@ -386,4 +386,20 @@ describe('git command safety', () => {
     // The env object inside spawnSync must set GIT_TERMINAL_PROMPT to '0'.
     expect(src).toContain("GIT_TERMINAL_PROMPT: '0'");
   });
+
+  // v1.1.4: a redundant re-sync of an already-removed key (delete mode, file gone
+  // from both working tree and index) makes `git add -- <gone-path>` exit 128 with
+  // "fatal: pathspec did not match any files". That is a graceful no-op (nothing to
+  // stage), not an error — the `git diff --cached` check is the source of truth for
+  // whether to commit. Without allowFail on the add, the redundant case threw a noisy
+  // fatal caught by main() and logged to .sync-errors.log. Pin the option so a future
+  // "tidy up the options" edit cannot regress to the throwing behavior.
+  it('commitAndPush tolerates a redundant git add (allowFail on the add, v1.1.4)', () => {
+    const scriptPath = path.resolve(__dirname, '..', '..', 'scripts', 'sync-org-memory.mjs');
+    const src = fs.readFileSync(scriptPath, 'utf8');
+    // The add line in commitAndPush must pass allowFail: true alongside quiet.
+    expect(src).toContain(
+      "git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true, allowFail: true });",
+    );
+  });
 });
