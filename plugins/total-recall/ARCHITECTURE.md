@@ -306,7 +306,7 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 > `hookEventName`, so omitting it silently breaks context injection. JSON-encoding
 > uses `node` (the plugin's hard dependency), not `python3`.
 
-### `PostToolUse` (matcher: `store_memory|update_memory|delete_memory`)
+### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
 
 ```
 sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers it
@@ -314,6 +314,13 @@ sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers
                        apply privacy filter → git add/commit/push org-vault branch
                      — also re-runs build-memory-index.sh to refresh .index-cache.txt
 ```
+
+> **Matcher must stay a regex.** Claude Code evaluates a matcher with only
+> `[a-zA-Z0-9_- ,|]` as an exact-string list compared against the full tool name
+> (`mcp__plugin_total-recall_total-recall__<tool>`); a bare
+> `store_memory|update_memory|delete_memory` never matches and the hook silently
+> never fires. The parens force the unanchored-regex path. Pinned by
+> `src/__tests__/hooks-matcher.test.ts`.
 
 ### `PreCompact`
 

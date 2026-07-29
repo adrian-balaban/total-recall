@@ -500,7 +500,13 @@ if (!has(s.hooks.SessionStart, 'build-memory-index.sh')) {
 }
 if (!has(s.hooks.PostToolUse, 'sync-org-memory.sh')) {
   (s.hooks.PostToolUse = s.hooks.PostToolUse || []).push({
-    matcher: 'store_memory|update_memory|delete_memory',
+    // Full MCP tool name is mcp__plugin_total-recall_total-recall__<tool>.
+    // A bare "store_memory|update_memory|delete_memory" matcher contains only
+    // exact-match chars (letters/digits/_/-/spaces/,/|), so Claude Code treats
+    // it as an exact-string list and compares it against the full tool name →
+    // never matches → the org-sync hook silently never fires. The parens below
+    // force the regex path (unanchored), so it matches the __<tool> suffix.
+    matcher: 'mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)',
     hooks: [ cmd('sync-org-memory.sh', 30) ],
   });
   added.push('PostToolUse');
