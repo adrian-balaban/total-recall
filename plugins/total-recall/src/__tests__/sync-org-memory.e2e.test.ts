@@ -336,3 +336,101 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
     git(['checkout', '--', path.relative(orgDir, indexPath)], { cwd: orgDir });
   });
 }, 60000);
+
+// Regression for the branch-resolution bug. The org vault's git branch is NOT
+// always `org-vault`: a user whose shared org repo uses a different default
+// branch (here `knowledge`) hit a silent no-op. sync-org-memory.mjs hardcoded
+// `BRANCH = 'org-vault'`, so `git checkout org-vault` was a PATHSPEC checkout
+// (org-vault/ is a subdir of the repo toplevel), the working tree stayed on
+// `knowledge`, and `git push origin org-vault` failed ("src refspec org-vault
+// does not match any") → reset --soft undid the commit → nothing synced. The
+// fix resolves BRANCH from config.orgBranch, else auto-detects the current
+// branch (git rev-parse --abbrev-ref HEAD), else falls back to `org-vault`; and
+// uses `git switch` (branch-only) instead of `git checkout` to avoid the
+// pathspec-ambiguity trap. This fixture mirrors the user's setup exactly: a
+// bare remote on `knowledge`, a local repo on `knowledge`, org-vault/ as a
+// subdir of the repo toplevel — and asserts a store pushes to origin/knowledge.
+// Self-contained (own HOME/remote/vault + helpers) so it cannot disturb the
+// shared org-vault fixture above.
+const branchSuite = OK ? describe : describe.skip;
+branchSuite('sync-org-memory.mjs branch resolution (non-org-vault branch: knowledge)', () => {
+  let bHome: string;
+  let bRemote: string;
+  let bOrgDir: string;
+  let bVault: string;
+
+  function bGit(args: string[], opts: { cwd?: string } = {}): string {
+    const r = spawnSync('git', args, { encoding: 'utf8', stdio: 'pipe', env: GIT_ENV, ...opts });
+    if (r.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${(r.stderr ?? '').trim()}`);
+    return (r.stdout ?? '').trim();
+  }
+  function bRunMjs(key: string, extra: string[] = []): { stdout: string; stderr: string } {
+    const env: NodeJS.ProcessEnv = { ...GIT_ENV, HOME: bHome };
+    delete env.GH_TOKEN;
+    delete env.GITHUB_TOKEN;
+    const r = spawnSync('node', [SCRIPT, key, ...extra], { encoding: 'utf8', stdio: 'pipe', env });
+    return { stdout: r.stdout ?? '', stderr: r.stderr ?? '' };
+  }
+  function bTree(): string[] {
+    return bGit(['ls-tree', '-r', '--name-only', 'knowledge'], { cwd: bRemote }).split('\n').filter(Boolean);
+  }
+  function bWriteConfig(cfg: Record<string, unknown>) {
+    const p = path.join(bHome, '.total-recall', 'config.json');
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, JSON.stringify(cfg));
+  }
+  function bWriteMemory(relKey: string, fm: Record<string, unknown>, body: string) {
+    const fmLines = Object.entries(fm)
+      .map(([k, v]) => (Array.isArray(v) ? `${k}: [${(v as unknown[]).join(', ')}]` : `${k}: ${JSON.stringify(v)}`))
+      .join('\n');
+    const p = path.join(bVault, `${relKey}.md`);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, `---\n${fmLines}\n---\n${body}`);
+  }
+
+  beforeAll(() => {
+    bHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-br-'));
+    bRemote = path.join(bHome, 'remote.git');
+    bOrgDir = path.join(bHome, '.total-recall', 'org');
+    bVault = path.join(bOrgDir, 'org-vault');
+
+    // Bare remote whose default branch is `knowledge` (the user's setup).
+    bGit(['init', '--bare', bRemote]);
+    bGit(['symbolic-ref', 'HEAD', 'refs/heads/knowledge'], { cwd: bRemote });
+
+    // Local org repo on `knowledge`, with org-vault/ as a SUBDIR of the repo
+    // toplevel (bOrgDir) — the exact layout that made `git checkout org-vault`
+    // a pathspec checkout. Initial commit + push so pull/push have a remote.
+    fs.mkdirSync(bOrgDir, { recursive: true });
+    bGit(['init', bOrgDir]);
+    bGit(['symbolic-ref', 'HEAD', 'refs/heads/knowledge'], { cwd: bOrgDir });
+    bGit(['remote', 'add', 'origin', bRemote], { cwd: bOrgDir });
+    bGit(['commit', '--allow-empty', '-m', 'init'], { cwd: bOrgDir });
+    bGit(['push', '-u', 'origin', 'knowledge'], { cwd: bOrgDir });
+  }, 30000);
+
+  afterAll(() => {
+    if (bHome) fs.rmSync(bHome, { recursive: true, force: true });
+  });
+
+  it('auto-detects the current branch (knowledge) and pushes there — no orgBranch config', () => {
+    // config has only orgRepo (no orgBranch) → detectOrgBranch() must return the
+    // current branch `knowledge`. With the old hardcoded BRANCH='org-vault' the
+    // push would fail ("src refspec org-vault does not match any") and reset
+    // --soft would undo the commit, so bTree() would NOT contain the file.
+    bWriteConfig({ orgRepo: bRemote });
+    bWriteMemory('architecture/knowledge-mem', { title: 'Knowledge Mem', tags: ['org', 'architecture'], author: ME, importanceScore: 0.7 }, '## Executive Summary\n\nOn the knowledge branch.\n');
+    const res = bRunMjs('org/architecture/knowledge-mem');
+    expect(res.stdout).toContain('Synced');
+    expect(bTree()).toContain('org-vault/architecture/knowledge-mem.md');
+    expect(bTree()).toContain('org-vault/index.json');
+  });
+
+  it('honors an explicit orgBranch in config.json and pushes to that branch', () => {
+    bWriteConfig({ orgRepo: bRemote, orgBranch: 'knowledge' });
+    bWriteMemory('decisions/pinned-branch', { title: 'Pinned', tags: ['org'], author: ME }, '## Executive Summary\n\nBranch pinned via config.\n');
+    const res = bRunMjs('org/decisions/pinned-branch');
+    expect(res.stdout).toContain('Synced');
+    expect(bTree()).toContain('org-vault/decisions/pinned-branch.md');
+  });
+}, 60000);

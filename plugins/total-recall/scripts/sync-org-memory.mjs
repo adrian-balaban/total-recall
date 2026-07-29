@@ -26,7 +26,32 @@ const ORG_VAULT = config.orgVault
   : path.join(TOTAL_RECALL_DIR, 'org', 'org-vault');
 
 const ORG_VAULT_DIR = path.dirname(ORG_VAULT);
-const BRANCH = 'org-vault';
+
+// Org-vault branch. Configurable via `orgBranch` in ~/.total-recall/config.json;
+// auto-detected from the existing checkout when unset, so a repo cloned on a
+// non-default branch (e.g. `knowledge`) syncs to the right ref without config.
+// Falls back to `org-vault` (the e2e fixture's branch). We switch to it with
+// `git switch` (not `git checkout`): `git checkout <name>` is ambiguous when
+// `<name>` also matches a path at the repo root — here `org-vault/` is a subdir
+// of the repo toplevel (ORG_VAULT_DIR), so `git checkout org-vault` is silently
+// interpreted as a PATHSPEC checkout (restoring the dir to the index), NOT a
+// branch switch. The working tree stays on the real branch and the later
+// `git push origin <name>` then fails ("src refspec <name> does not match any")
+// because <name> is not a branch — the sync silently no-ops. `git switch` is
+// branch-only and rejects that ambiguity. detectOrgBranch() returns the CURRENT
+// local branch (which always exists locally), so `git switch <detected>` is a
+// no-op success in steady state.
+function detectOrgBranch() {
+  try {
+    const r = spawnSync('git', ['-C', ORG_VAULT_DIR, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8', stdio: 'pipe' });
+    if (r.status === 0) {
+      const b = (r.stdout ?? '').trim();
+      if (b && b !== 'HEAD') return b; // 'HEAD' = detached; not a branch name
+    }
+  } catch {}
+  return '';
+}
+const BRANCH = config.orgBranch || detectOrgBranch() || 'org-vault';
 
 const ORG_REPO = config.orgRepo;
 if (!ORG_REPO) {
@@ -303,16 +328,19 @@ async function main() {
     }
   }
 
-  // Keep the org-vault on the org-vault branch (its steady state). We deliberately do
-  // NOT stash or restore the original branch: store_memory writes into this working
-  // tree, so staying on org-vault means the next store lands in the right place and
-  // the next sync commits it directly. Stashing would remove the very file we commit.
+  // Keep the org vault on BRANCH (its steady state). We deliberately do NOT stash
+  // or restore the original branch: store_memory writes into this working tree, so
+  // staying on BRANCH means the next store lands in the right place and the next
+  // sync commits it directly. Stashing would remove the very file we commit.
+  // `git switch` (not `git checkout`): see the BRANCH comment above — `git checkout
+  // <name>` is pathspec-ambiguous when <name> matches a root path (org-vault/ is a
+  // subdir of the repo toplevel), silently staying on the wrong branch.
   try {
-    git(ORG_VAULT_DIR, ['checkout', BRANCH], { quiet: true });
+    git(ORG_VAULT_DIR, ['switch', BRANCH], { quiet: true });
   } catch (e) {
-    // checkout can refuse if an untracked org file clashes with a tracked one on
-    // org-vault (rare, only if the working tree drifted off org-vault). Skip rather
-    // than risk pushing from the wrong branch.
+    // switch can refuse if an untracked org file clashes with a tracked one on
+    // BRANCH (rare, only if the working tree drifted off it), or if BRANCH doesn't
+    // exist locally. Skip rather than risk pushing from the wrong branch.
     console.error(`Cannot switch org vault to '${BRANCH}': ${e.message}`);
     return;
   }
