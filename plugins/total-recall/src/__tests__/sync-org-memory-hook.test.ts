@@ -6,10 +6,12 @@ import { spawnSync } from 'child_process';
 
 // Tests the REAL hooks/scripts/sync-org-memory.sh plumbing (#2 fix): it must read the
 // PostToolUse JSON from STDIN (not argv), extract `key` from tool_response (handling the
-// MCP envelope shape {content:[{type:"text",text:"<json>"}]} AND the unwrapped shape),
-// fall back to tool_input.key when the response carries none, and pass --delete when the
-// tool is delete_memory. We run the real .sh against a fake plugin tree with a stub .mjs
-// that records its argv, isolating the hook's parsing logic from the real git sync.
+// raw content array shape [{"type":"text",text:"<json>"}] that Claude Code actually
+// delivers, the MCP envelope shape {content:[{type:"text",text:"<json>"}]}, AND the
+// unwrapped {key:...} shape), fall back to tool_input.key when the response carries
+// none, and pass --delete when the tool is delete_memory. We run the real .sh against a
+// fake plugin tree with a stub .mjs that records its argv, isolating the hook's parsing
+// logic from the real git sync.
 
 const REAL_SH = path.resolve(__dirname, '..', '..', 'hooks', 'scripts', 'sync-org-memory.sh');
 // sync-org-memory.sh now sources _resolve-node.sh (nvm/stripped-PATH-safe node resolver,
@@ -113,6 +115,29 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     const args = await waitForArgs();
     expect(args).not.toBeNull();
     expect(args!.key).toBe('org/architecture/foo');
+    expect(args!.delete).toBe(false);
+  });
+
+  it('extracts key from a RAW-ARRAY tool_response (the shape Claude Code PostToolUse actually delivers)', async () => {
+    // Production shape: Claude Code delivers tool_response as a bare content array
+    // [{type:"text",text:"<json>"}] with NO {content:[...]} envelope. The original
+    // parser gated extraction on `!Array.isArray(resp)`, so this shape skipped the
+    // loop, KEY stayed empty, the -z guard fired, and org sync was a silent no-op
+    // on EVERY real store/update/delete. The envelope-shaped tests above passed, so
+    // the gap was invisible. Also exercise pretty-printed (multi-line) JSON text,
+    // which is what the real CC payload uses.
+    const json = JSON.stringify({
+      hook_event_name: 'PostToolUse',
+      tool_name: 'mcp__plugin_total-recall_total-recall__store_memory',
+      tool_input: { title: 'Y', content: '...', tags: ['org'] },
+      tool_response: [{ type: 'text', text: JSON.stringify({ key: 'org/architecture/raw-array', message: 'stored' }, null, 2) }],
+    });
+    const r = runHook(json);
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+    const args = await waitForArgs();
+    expect(args).not.toBeNull();
+    expect(args!.key).toBe('org/architecture/raw-array');
     expect(args!.delete).toBe(false);
   });
 
