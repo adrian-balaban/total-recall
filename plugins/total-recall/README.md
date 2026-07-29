@@ -189,9 +189,11 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 
 Effect: every new Claude session automatically receives a summary of all your memories — without asking.
 
-### `PostToolUse` (matcher: `store_memory|update_memory|delete_memory`)
+### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
 
 `sync-org-memory.sh` — checks the `org` tag, applies the privacy filter, commits/pushes to the team's `org-vault` branch, and rebuilds `.index-cache.txt`. Bursts of org writes are **coalesced**: an atomic job queue + `flock`ed background worker means one git sync process per session, not one per key. Pulled teammate memories are reconciled into the live index **without a restart** (marker-file poller).
+
+> **Why the matcher is a regex, not a bare tool list.** Claude Code treats a matcher containing only letters/digits/`_`/`-`/spaces/`,`/`|` as an **exact string list** compared verbatim against the full tool name. Plugin MCP tools are named `mcp__plugin_total-recall_total-recall__<tool>`, so a bare `store_memory|update_memory|delete_memory` never matched and the org-sync hook silently never fired. The parens force the **regex** path so it matches the `__<tool>` suffix.
 
 ### `PreCompact`
 

@@ -28,7 +28,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "store_memory|update_memory|delete_memory",
+        "matcher": "mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)",
         "hooks": [
           {
             "type": "command",

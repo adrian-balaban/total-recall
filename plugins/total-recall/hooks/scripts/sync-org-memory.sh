@@ -10,8 +10,10 @@ set -euo pipefail
 # real.
 HOOK_INPUT=$(cat)
 
-# tool_name is "mcp__<server>__<tool>" for MCP tools; the matcher is on the
-# "store_memory|update_memory|delete_memory" suffix. tool_response for an MCP
+# tool_name is "mcp__plugin_<plugin>_<server>__<tool>" for plugin-bundled MCP
+# tools (here mcp__plugin_total-recall_total-recall__<tool>); the PostToolUse
+# matcher in hooks.json targets the "(store_memory|update_memory|delete_memory)"
+# suffix as a regex. tool_response for an MCP
 # tool is the MCP envelope {content:[{type:"text", text:"<json>"}]} whose text
 # is the tool's own JSON return (e.g. {"key":"org/architecture/foo",...}); some
 # transports send the object unwrapped. Handle both, then fall back to
