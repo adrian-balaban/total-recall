@@ -27,7 +27,7 @@ src/
 ├── dates.ts          parseRelativeDate
 ├── journal.ts        appendJournal
 ├── auto-reconcile.ts polls the .reconcile-requested marker (dropped by pull-org-vault.sh) → reconcileIndex
-├── privacy-filter.ts SECRET_TOKEN_RE + email checks — fail-closed gate for org sync
+├── privacy-filter.ts SECRET_TOKEN_RE + email + validated CC (Luhn) / IBAN (mod-97) / formatted-phone checks — fail-closed gate for org sync
 └── tools/
     ├── store.ts      store_memory
     ├── recall.ts     recall_memory, search_index
@@ -292,12 +292,13 @@ The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
 
 Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness.
 
-### `SessionStart` (3 steps, sequential)
+### `SessionStart` (4 steps, sequential)
 
 ```
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)
 2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
 3. load-memory-index.sh    — cat .index-cache.txt → injected into context
+4. check-sync-errors.sh    — warn if org-sync pushes failed since the last success marker
 ```
 
 > **`hookEventName` is required.** Steps 1/3 that inject context emit
@@ -336,6 +337,12 @@ extract-and-store-memories.sh
 
 > **Note:** `transcript_path` comes from Claude Code's stdin JSON payload — it is **not** a `CLAUDE_TRANSCRIPT_PATH` env var. An earlier version read that (never-set) env var, making PreCompact a silent no-op.
 
+### `SessionEnd`
+
+```
+session-end.sh  — logs the session and flushes pending embedding writes before exit
+```
+
 ---
 
 ## Org Vault Sync & Privacy Filter
@@ -344,8 +351,9 @@ extract-and-store-memories.sh
 
 - Secret-looking tokens (high-entropy strings, `key=value` patterns)
 - All email addresses (unless the domain is in `allowedEmailDomains` in `~/.total-recall/config.json`)
+- Credit cards (13–19 digit runs passing the Luhn checksum), IBANs (ISO 13616 mod-97), and formatted phone numbers — re-added in 7.3 in validated, low-FP form after the naive regexes were removed
 
-Personal pronouns and phone numbers were intentionally removed from the filter: both had false-positive rates high enough to block legitimate org memories (pronoun titles like "We are migrating…"; any 10-digit run such as unix timestamps, AWS account ids, or git SHA fragments tripped the phone regex). The real "this is personal, don't sync" guard is the mutual-exclusion of the `personal` and `org` tags enforced in the sync script.
+Personal pronouns were intentionally removed from the filter: they had a false-positive rate high enough to block legitimate org memories (pronoun titles like "We are migrating…"). Phone numbers, credit cards, and IBANs were also removed initially — a bare 10-digit phone regex tripped on unix timestamps, AWS account ids, and git SHA fragments — but were RE-ADDED in 7.3 with validated detectors (Luhn for CC, mod-97 for IBAN, formatted-only shape for phone) that reject ~90% of random digit runs. The real "this is personal, don't sync" guard remains the mutual-exclusion of the `personal` and `org` tags enforced in the sync script.
 
 Configuration in `~/.total-recall/config.json`:
 
