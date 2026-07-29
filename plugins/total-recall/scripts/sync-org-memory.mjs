@@ -255,7 +255,13 @@ function orgFileIsSafe(p) {
 // .sync-errors.log, exit 0 — non-blocking for the hook). Dedup of the store/delete
 // commit-and-push dance.
 function commitAndPush(relFile, relIndex, message) {
-  git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true });
+  // `allowFail`: a redundant re-sync of an already-removed key (delete mode, file already
+  // gone from both working tree and index) makes `git add -- <gone-path>` exit 128 with
+  // "fatal: pathspec did not match any files". That is not an error — nothing needs
+  // staging — so swallow it and let the `git diff --cached` check below be the source of
+  // truth for whether to commit. Without allowFail this redundant case threw a noisy fatal
+  // (caught by main(), logged to .sync-errors.log) instead of being a graceful no-op.
+  git(ORG_VAULT_DIR, ['add', '--', relFile, relIndex], { quiet: true, allowFail: true });
   // Only commit if something actually staged (the file change and/or the index change).
   // Idempotent: a repeat on an unchanged key (or an already-removed key in delete mode)
   // is a no-op.
