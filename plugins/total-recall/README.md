@@ -76,10 +76,10 @@ Only ONNX (`@huggingface/transformers`) and `sqlite-vec` remain external — and
 
 ### Privacy Filter & Org Sync
 
-*   **Fail-closed by default**: blocks high-entropy secret tokens/keys, labeled secrets (e.g. a pasted `aws_secret_access_key = …`), and all email addresses before any git push. If the filter cannot analyze the content, it does **not** push.
+*   **Fail-closed by default**: blocks high-entropy secret tokens/keys, labeled secrets (e.g. a pasted `aws_secret_access_key = …`), all email addresses, and validated credit cards (Luhn), IBANs (ISO 13616 mod-97), and formatted phone numbers before any git push. If the filter cannot analyze the content, it does **not** push.
 *   **Email whitelist**: allow specific domains via `allowedEmailDomains: ["yourcompany.com"]` in `config.json`.
 *   **Author protection**: org memories can only be overwritten/updated by their author (OS username).
-*   *Note: pronouns and phone numbers are deliberately allowed (false-positive rate blocked legitimate work notes); the `personal` and `org` tags are mutually exclusive to prevent accidental sync.*
+*   *Note: pronouns are deliberately allowed (their false-positive rate blocked legitimate work notes); the `personal` and `org` tags are mutually exclusive to prevent accidental sync.*
 
 ---
 
@@ -179,12 +179,13 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 
 > Before context compaction (`PreCompact`), the plugin **automatically saves the session's learnings** — knowledge survives even when the context is wiped.
 
-### `SessionStart` (3 sequential steps)
+### `SessionStart` (4 sequential steps)
 
 ```
 1. pull-org-vault.sh       — git pull on the org-vault branch (if configured)
 2. build-memory-index.sh   — frontmatter scan → .index-cache.txt
 3. load-memory-index.sh    — inject the memory index into context (Claude Code only)
+4. check-sync-errors.sh    — warn if org-sync pushes failed since last success
 ```
 
 Effect: every new Claude session automatically receives a summary of all your memories — without asking.

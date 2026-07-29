@@ -85,9 +85,10 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)
 
 **Hooks** (`hooks/hooks.json`):
-- `SessionStart`: pull org vault → rebuild index cache → inject memory index
+- `SessionStart`: pull org vault → rebuild index cache → inject memory index → check org-sync errors (`check-sync-errors.sh` warns if pushes failed since the last success)
 - `PostToolUse` (store/update/delete): sync to org vault if tagged `org`
 - `PreCompact`: extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.mjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)
+- `SessionEnd`: `session-end.sh` logs the session and flushes pending embedding writes before exit
 
 ## Memory Workflow
 
