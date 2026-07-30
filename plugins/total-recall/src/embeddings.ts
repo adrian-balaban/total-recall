@@ -2,17 +2,26 @@
  * HuggingFace embedding model — the single embedding provider. Lazy-loaded
  * from vector/node_modules; if @huggingface/transformers is not installed, all
  * methods are no-ops and search degrades to TF-IDF. The only failure mode is
- * load-time (optional dep missing or model download hiccup), handled here by
- * NOT caching a failed load (3.9): the next embed() retries instead of being
- * latched to null for the process lifetime.
+ * load-time (optional dep missing, a bad embeddingModel id, or a model download
+ * hiccup), handled here by NOT caching a failed load (3.9): the next embed()
+ * retries instead of being latched to null for the process lifetime. A failed
+ * load is also surfaced — once per process — via a stderr warning + recordError
+ * (see getEmbedder's catch), so the degradation is observable rather than
+ * silent: vector search silently off was the exact footgun a bad embeddingModel
+ * (e.g. a bare "bge-m3" with no org/ prefix) produced before this.
  */
-import { VECTORS_DB, loadConfig } from './paths.js';
+import { VECTORS_DB, CONFIG_PATH, loadConfig } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError, memIndex } from './state.js';
 
 let pipeline: ((text: string) => Promise<number[]>) | null = null;
 let loadPromise: Promise<((text: string) => Promise<number[] | null>) | null> | null = null;
 let testEmbedder: ((text: string) => Promise<number[] | null>) | null | undefined = undefined;
+// Once-per-process latch for the embedder-load-failure warning. A persistent
+// bad embeddingModel re-runs the (uncached) load on every embed() — without this
+// latch, a 523-memory backfill would emit 523 identical warnings. The load still
+// retries (the no-cache contract below); only the warning is deduped.
+let embedderLoadWarned = false;
 
 /**
  * Test-only seam: inject a fake embedder (or `null` to force the unavailable
@@ -37,6 +46,24 @@ export function __testSetEmbedder(
   }
 }
 
+/**
+ * Test-only seam: drop the injected/test embedder back to the pristine
+ * module-load state (testEmbedder = undefined, no cached loadPromise, no
+ * pipeline, warning latch cleared) so a test can exercise the REAL
+ * getEmbedder() load path (the dynamic `import('@huggingface/transformers')`
+ * + `hfPipeline(...)` + catch) instead of the `__testSetEmbedder` short-circuit.
+ * The env guard mirrors `__testSetEmbedder`.
+ */
+export function __testResetEmbedder(): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('__testResetEmbedder is test-only');
+  }
+  testEmbedder = undefined;
+  loadPromise = null;
+  pipeline = null;
+  embedderLoadWarned = false;
+}
+
 // getEmbedder resolves to the in-process HuggingFace embed function:
 //   - lazy-load the model once, cache the promise (loadPromise) so concurrent
 //     callers during the first load share one pipeline;
@@ -48,22 +75,53 @@ export function __testSetEmbedder(
 async function getEmbedder(): Promise<((text: string) => Promise<number[] | null>) | null> {
   if (testEmbedder !== undefined) return testEmbedder;
   if (loadPromise) return loadPromise;
+  // Hoisted out of the try so the catch can name the configured model in its
+  // warning. loadConfig() never throws (paths.ts wraps stat+read+parse in
+  // catch, returning defaults on any failure), so this can't escape getEmbedder.
+  const model = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
   loadPromise = (async () => {
     try {
       const { pipeline: hfPipeline } = await import('@huggingface/transformers');
-      const model = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
       const extractor = await hfPipeline('feature-extraction', model);
       pipeline = async (text: string) => {
         const output = await extractor(text, { pooling: 'mean', normalize: true });
         return Array.from(output.data as Float32Array);
       };
       return pipeline;
-    } catch {
+    } catch (err) {
       // Don't cache the failure: clear loadPromise so the next call retries
       // (mirrors vectorStore.getDb "only cache successful loads"). A transient
       // model-download error shouldn't latch vectors off for the whole session.
       pipeline = null;
       loadPromise = null;
+      // Make the failure LOUD once per process. Before this, a bad embeddingModel
+      // (e.g. a bare "bge-m3" with no org/ prefix, or any id the HF hub 404s on)
+      // failed this load, returned null, and recall_memory(hybrid=true) SILENTLY
+      // degraded to TF-IDF — vector search advertised but never functional, with
+      // no signal anywhere except a buried get_stats.recentErrors entry. recordError
+      // keeps it in the bounded sink; the one-shot stderr warning surfaces it on
+      // the channel a developer actually reads, naming the model and the config
+      // key to fix. Once-per-process (embedderLoadWarned) so a persistent bad id
+      // doesn't spam a warning per embed during a multi-thousand-memory backfill —
+      // the load itself still retries (the no-cache contract above), only the
+      // warning is deduped. A transient failure that later succeeds leaves one
+      // stale line; that's acceptable noise next to the value of surfacing the
+      // persistent footgun this was added to catch.
+      if (!embedderLoadWarned) {
+        embedderLoadWarned = true;
+        const reason = err instanceof Error ? err.message : String(err);
+        recordError(
+          `embedding model failed to load: "${model}" — ${reason}. ` +
+          `Vector search is OFF; recall_memory(hybrid) falls back to TF-IDF. ` +
+          `Fix embeddingModel in ${CONFIG_PATH} (use a full "org/model" HuggingFace id, ` +
+          `e.g. "Xenova/paraphrase-multilingual-MiniLM-L12-v2").`
+        );
+        process.stderr.write(
+          `[total-recall] WARNING: embedding model "${model}" failed to load — ${reason}\n` +
+          `[total-recall] Vector search is OFF; recall_memory(hybrid) silently falls back to TF-IDF.\n` +
+          `[total-recall] Set embeddingModel in ${CONFIG_PATH} to a valid "org/model" HuggingFace id and restart.\n`
+        );
+      }
       return null;
     }
   })();

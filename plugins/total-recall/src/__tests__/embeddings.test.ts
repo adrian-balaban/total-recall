@@ -1,10 +1,11 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   embed,
   embedAndUpsert,
   flushEmbeddings,
   isVectorAvailable,
   __testSetEmbedder,
+  __testResetEmbedder,
 } from '../embeddings.js';
 import { errors } from '../state.js';
 
@@ -31,6 +32,15 @@ vi.mock('../vectorStore.js', () => ({
   searchVector: (...args: any[]) => getVectorStoreMocks().searchVector(...args),
   deleteVector: (...args: any[]) => getVectorStoreMocks().deleteVector(...args),
   listVectorKeys: (...args: any[]) => getVectorStoreMocks().listVectorKeys(...args),
+}));
+
+// Force the REAL getEmbedder() load path (the dynamic `import('@huggingface/
+// transformers')` + `hfPipeline(...)`) to fail, so the "loud failure" test
+// below can exercise the catch block. Existing tests never reach this path —
+// they inject via __testSetEmbedder, which short-circuits getEmbedder before
+// the import — so mocking the module is inert for them.
+vi.mock('@huggingface/transformers', () => ({
+  pipeline: async () => { throw new Error('model id rejected by hub: 404'); },
 }));
 
 function resetVectorStoreMocks() {
@@ -248,5 +258,70 @@ describe('embeddings — transient upsert failure is recorded (#14)', () => {
     const newErrors = errors.slice(before);
     expect(newErrors.length).toBe(1);
     expect(newErrors[0]!.msg).toContain('embedAndUpsert(knowledge/embed-fail)');
+  });
+});
+
+// ─── Loud embedder-load failure (silent-degradation fix) ───────────────────────
+// Before this fix, getEmbedder's catch swallowed the load error: a bad
+// embeddingModel (e.g. a bare "bge-m3" with no org/ prefix, or any id the HF
+// hub 404s) failed the load, returned null, and recall_memory(hybrid=true)
+// SILENTLY degraded to TF-IDF — vector search advertised but never functional,
+// with no signal anywhere except a buried get_stats.recentErrors entry. The
+// catch now records the error AND emits a one-shot stderr warning naming the
+// model + the config key to fix. These tests exercise the REAL load path
+// (__testResetEmbedder drops the __testSetEmbedder short-circuit) with the
+// @huggingface/transformers mock above forcing the load to throw.
+
+describe('embeddings — loud embedder-load failure', () => {
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    resetVectorStoreMocks();
+    __testResetEmbedder();
+    stderrWrite = vi.spyOn(process.stderr, 'write');
+  });
+
+  afterEach(() => {
+    stderrWrite.mockRestore();
+    // Restore the test embedder so later describes aren't left on the real
+    // (failing) load path.
+    __testSetEmbedder(async () => makeVector(384, 0.1));
+  });
+
+  it('returns null, records the failure, and writes a stderr warning naming the model + config', async () => {
+    const before = errors.length;
+    const res = await embed('probe');
+    expect(res).toBeNull();
+    const newErrors = errors.slice(before);
+    expect(newErrors.length).toBe(1);
+    expect(newErrors[0]!.msg).toContain('failed to load');
+    expect(newErrors[0]!.msg).toContain('TF-IDF');
+    expect(newErrors[0]!.msg).toContain('embeddingModel');
+    // The stderr warning names the model and points at the config file.
+    const warned = stderrWrite.mock.calls.filter((c: any[]) =>
+      String(c[0]).includes('embedding model')
+    );
+    expect(warned.length).toBe(1);
+    expect(String(warned[0]![0])).toContain('failed to load');
+    expect(String(warned[0]![0])).toContain('config.json');
+  });
+
+  it('dedupes the warning across calls (once-per-process latch)', async () => {
+    const before = errors.length;
+    await embed('first');
+    await embed('second');
+    await embed('third');
+    // One recordError, one stderr warning — not three, even though the
+    // uncached load retries on every embed().
+    expect(errors.length - before).toBe(1);
+    const warned = stderrWrite.mock.calls.filter((c: any[]) =>
+      String(c[0]).includes('embedding model')
+    );
+    expect(warned.length).toBe(1);
+  });
+
+  it('isVectorAvailable reports false while the load keeps failing', async () => {
+    await embed('probe');
+    expect(isVectorAvailable()).toBe(false);
   });
 });

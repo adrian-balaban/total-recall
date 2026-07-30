@@ -31714,22 +31714,36 @@ async function listVectorKeys(dbPath) {
 var pipeline = null;
 var loadPromise = null;
 var testEmbedder = void 0;
+var embedderLoadWarned = false;
 async function getEmbedder() {
   if (testEmbedder !== void 0) return testEmbedder;
   if (loadPromise) return loadPromise;
+  const model = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
   loadPromise = (async () => {
     try {
       const { pipeline: hfPipeline } = await import("@huggingface/transformers");
-      const model = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
       const extractor = await hfPipeline("feature-extraction", model);
       pipeline = async (text) => {
         const output = await extractor(text, { pooling: "mean", normalize: true });
         return Array.from(output.data);
       };
       return pipeline;
-    } catch {
+    } catch (err) {
       pipeline = null;
       loadPromise = null;
+      if (!embedderLoadWarned) {
+        embedderLoadWarned = true;
+        const reason = err instanceof Error ? err.message : String(err);
+        recordError(
+          `embedding model failed to load: "${model}" \u2014 ${reason}. Vector search is OFF; recall_memory(hybrid) falls back to TF-IDF. Fix embeddingModel in ${CONFIG_PATH} (use a full "org/model" HuggingFace id, e.g. "Xenova/paraphrase-multilingual-MiniLM-L12-v2").`
+        );
+        process.stderr.write(
+          `[total-recall] WARNING: embedding model "${model}" failed to load \u2014 ${reason}
+[total-recall] Vector search is OFF; recall_memory(hybrid) silently falls back to TF-IDF.
+[total-recall] Set embeddingModel in ${CONFIG_PATH} to a valid "org/model" HuggingFace id and restart.
+`
+        );
+      }
       return null;
     }
   })();
@@ -33464,7 +33478,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.1.6" : null.version;
+var PLUGIN_VERSION = true ? "1.1.7" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {
