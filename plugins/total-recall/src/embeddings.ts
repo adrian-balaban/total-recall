@@ -236,6 +236,66 @@ export function isVectorAvailable(): boolean {
   return pipeline !== null;
 }
 
+// Honest "are the optional deps installed AND loadable" probe — distinct from
+// isVectorAvailable(), which only answers "has the HF pipeline LAZY-loaded yet".
+// On a fresh session with no embed()/rerank/hybrid call yet, the pipeline has
+// never loaded, so isVectorAvailable() returns false even when every dep is
+// fully functional — get_stats then reported `depsPresent: false` /
+// `vectorSearchEnabled: false`, making vector search look disabled when it was
+// merely idle. That drove users to "fix" a non-problem (and to miss the REAL
+// footgun — a missing better-sqlite3 native binding, which `claude plugin
+// update` leaves source-only because it doesn't re-run install.sh).
+//
+// depsInstalled() probes what actually matters: can @huggingface/transformers
+// be imported, can sqlite-vec be imported, and can better-sqlite3 instantiate a
+// Database (the binding test — `new Database(':memory:')` throws "Could not
+// locate binding file" when build/Release/better_sqlite3.node is absent, which
+// is exactly the post-update failure mode). It does NOT load the HF model
+// (no network, no multi-hundred-ms cost) and does NOT touch the vectors DB
+// file — a pure capability probe with no side effects.
+//
+// A `true` result is latched per-process (deps don't appear mid-session); a
+// `false` result is re-probed each call so a self-heal rebuild (vectorStore's
+// getDb catch) that lands the binding mid-session is reflected on the next
+// get_stats without needing a restart.
+let depsCachedTrue = false;
+let testDepsInstalled: boolean | null = null;
+
+async function probeDeps(): Promise<boolean> {
+  try {
+    const hf = await import('@huggingface/transformers');
+    if (typeof (hf as any).pipeline !== 'function') return false;
+    const sv = await import('sqlite-vec');
+    if (typeof (sv as any).getLoadablePath !== 'function' && typeof (sv as any).load !== 'function') return false;
+    const Database = (await import('better-sqlite3')).default;
+    // The binding test: this throws when build/Release/better_sqlite3.node is
+    // absent (the post-`claude plugin update` source-only state). :memory:
+    // avoids creating/touching the on-disk vectors DB.
+    const d = new Database(':memory:');
+    d.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function depsInstalled(): Promise<boolean> {
+  if (testDepsInstalled !== null) return testDepsInstalled;
+  if (depsCachedTrue) return true;
+  const ok = await probeDeps();
+  if (ok) depsCachedTrue = true;
+  return ok;
+}
+
+/** Test-only seam: inject a depsInstalled result (or `null` to use the real probe). */
+export function __testSetDepsInstalled(v: boolean | null): void {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('__testSetDepsInstalled is test-only');
+  }
+  testDepsInstalled = v;
+  depsCachedTrue = v === true;
+}
+
 /** Test-only seam: reset the embedder state so each test starts clean. */
 export function __testResetVectorAvailability(): void {
   if (process.env.NODE_ENV !== 'test') {

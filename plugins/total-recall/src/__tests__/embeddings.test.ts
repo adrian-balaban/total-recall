@@ -4,8 +4,10 @@ import {
   embedAndUpsert,
   flushEmbeddings,
   isVectorAvailable,
+  depsInstalled,
   __testSetEmbedder,
   __testResetEmbedder,
+  __testSetDepsInstalled,
 } from '../embeddings.js';
 import { errors } from '../state.js';
 
@@ -323,5 +325,35 @@ describe('embeddings — loud embedder-load failure', () => {
   it('isVectorAvailable reports false while the load keeps failing', async () => {
     await embed('probe');
     expect(isVectorAvailable()).toBe(false);
+  });
+});
+
+// ─── depsInstalled: honest "are the optional deps loadable" probe ────────────
+//
+// Distinct from isVectorAvailable() ("has the HF pipeline LAZY-loaded yet"),
+// depsInstalled() answers "are @huggingface/transformers, sqlite-vec, and the
+// better-sqlite3 native binding all loadable" — the question get_stats needs so
+// vector search defaults to enabled on a fresh session (before any embed()
+// triggers the lazy load) instead of looking disabled-while-idle.
+describe('embeddings — depsInstalled probe', () => {
+  beforeEach(() => {
+    __testResetEmbedder();
+    __testSetDepsInstalled(null); // use the real probe
+  });
+
+  it('respects the test seam when set to true', async () => {
+    __testSetDepsInstalled(true);
+    expect(await depsInstalled()).toBe(true);
+  });
+
+  it('respects the test seam when set to false', async () => {
+    __testSetDepsInstalled(false);
+    expect(await depsInstalled()).toBe(false);
+  });
+
+  it('defaults to the real probe (returns a boolean, no throw) when seam is null', async () => {
+    __testSetDepsInstalled(null);
+    const res = await depsInstalled();
+    expect(typeof res).toBe('boolean');
   });
 });
