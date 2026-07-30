@@ -42,8 +42,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   audit file with the new per-module table.
 
 ### Ollama + local embedding-model path (minimax family)
-- **Source:** `ollama-minimax-proposals.md`, `review-ollama.txt`,
-  `REVIEW-ollama-glm-5.2.txt`.
 - **What:** proposals for an Ollama-backed local embedder / local-first inference
   path. Currently the embedder is a local in-process HuggingFace MiniLM; Ollama
   is supported as a *client* (the vault works regardless of backend) but not as

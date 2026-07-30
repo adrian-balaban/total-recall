@@ -377,7 +377,7 @@ export function indexFile(filePath: string, isOrg: boolean) {
     // entries are now refreshed too (previously skipped via the !memIndex[key] guard,
     // which left org contentPreview/tags stale after a git pull).
     const existing = memIndex[key];
-    // #19 + 9.2 (review-ollama 5.2): skip the readFileSync + parseFrontmatter when
+    // #19 + 9.2: skip the readFileSync + parseFrontmatter when
     // the file is unchanged since the last scan, AND skip the per-file realpathSync
     // too. mtimeMs+size identify the file body cheaply from the lstat above; an
     // unchanged file has the same contentPreview/tokenEstimate/tags/title/updated

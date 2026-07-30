@@ -314,18 +314,6 @@ const [, , cfgPath] = process.argv;
 let c = {};
 try { c = JSON.parse(fs.readFileSync(cfgPath, 'utf8')); } catch (_) {}
 let modified = false;
-// Migrate any pre-Phase-0 Ollama config keys out, so an existing install.sh
-// re-run cleans up an old config.json instead of leaving stale Ollama knobs
-// that no longer exist in TotalRecallConfig.
-for (const k of ['embeddingProvider', 'embeddingUrl', 'embeddingTimeoutMs']) {
-  if (c[k] !== undefined) { delete c[k]; modified = true; }
-}
-// bge-m3 / nomic-embed-text were Ollama-only model names; clear a stale
-// embeddingModel so the local HuggingFace default (Xenova/all-MiniLM-L6-v2)
-// applies. An explicit non-Ollama model value is preserved.
-if (c.embeddingModel === 'bge-m3' || c.embeddingModel === 'nomic-embed-text') {
-  delete c.embeddingModel; modified = true;
-}
 if (c.enableMultilingualSearch === undefined) { c.enableMultilingualSearch = true; modified = true; }
 if (modified) {
   const tmp = cfgPath + '.tmp.' + Math.random().toString(36).slice(2);

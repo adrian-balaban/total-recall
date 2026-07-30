@@ -245,7 +245,7 @@ export function confirmMemory(args: any): any {
 // Opt-in bulk re-embed of every memory in the index at the CURRENT embedding
 // model's dimension. `rebuild_index` defaults to cheap (reconcile + inverted
 // rebuild only); `forceReembed: true` invokes this. The motivating gap (C-1):
-// after an embedding-model switch (e.g. MiniLM 384-d → bge-m3 1024-d) every key
+// after an embedding-model switch (e.g. MiniLM 384-d → a 1024-d model) every key
 // still HAS a stored vector — at the OLD dim — so `rebuild_index`'s
 // `reconcileVectors` backfill (which only fills MISSING keys) is a no-op for
 // them, and `searchVector` refuses the mismatched-dim rows (returns [] → recall

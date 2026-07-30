@@ -57,16 +57,13 @@ The entire `src/` tree is **dev input to the bundle** — essential to the ship-
 | `statusline.sh` | Cosmetic | small | Installed only via `install.sh --statusline`; recall works without it. | Loses the bottom-bar version display. |
 | `ARCHITECTURE-REVIEW-TODO.md` | Internal backlog | ~5 KB | INTERNAL-ONLY and PARTLY STALE: Item 8 (McpServer migration) and Item 4 (server.ts monolith) are both completed per CLAUDE.md 6.1-6.3. Last commit 2026-07-20, older than the 2026-07-28 doc pass. | Remaining 6 items should move to a real backlog or be pruned. |
 | `reviews/review-claude.txt` | Review transcript | — | One-time AI review pass; actionable items already landed in BACKLOG.md/code. Git-tracked — bloat. | None — historical. |
-| `reviews/review-ollama.txt` | Review transcript | ~63 KB | One-time; git-tracked. Bloat. | None. |
 | `reviews/review-synthetized-25072026.txt` | Review transcript | — | One-time; git-tracked. Bloat. | None. |
 | `reviews/review-implement-langfuse-25072026.txt` | Review transcript | — | One-time; git-tracked. Bloat. | None. |
 | `reviews/stryker-mutation-audit-26072026.md` | Audit notes | — | One-time; live data regenerates under `reports/`. Git-tracked. Bloat. | None. |
 | `reviews/tech-radar-vol34-applicability.md` | Analysis doc | — | One-time; git-tracked. Bloat. | None. |
 | `reviews/archive/` | Superseded reviews | ~40 KB | Both files git-tracked. Bloat. | None. |
 | `reviews/REVIEW-claude-sonnet.txt` | Review transcript | — | Already gitignored (`REVIEW-*.txt`). Local-only. | None. |
-| `reviews/REVIEW-ollama-glm-5.2.txt` | Review transcript | — | Already gitignored. Local-only. | None. |
 | `reviews/fable-proposals.md` | Proposals | — | Already gitignored. Local-only. | None. |
-| `reviews/ollama-minimax-proposals.md` | Proposals | ~27 KB | Already gitignored. Local-only. | None. |
 
 ### package-lock.json debate
 
@@ -77,7 +74,7 @@ The entire `src/` tree is **dev input to the bundle** — essential to the ship-
 These are the real repo-bloat problem — both non-essential to runtime AND currently committed. Reasoning from the maps (no execution needed):
 
 1. **`dist/` (3 files, ~1.2 MB)** — `dist/index.js`, `dist/frontmatter.mjs`, `dist/privacy-filter.mjs` are git-tracked and NOT in `.gitignore`. This is the largest tracked artifact surface. **Nuance:** these ARE essential to ship+run (consumers receive them as-is, no publish-time build exists), so they cannot simply be `git rm`'d. The correct action is to introduce a publish-time build step and THEN gitignore `dist/`; until that step exists, they must stay tracked. This is a hygiene-vs-runtime tension, not a pure bloat fix.
-2. **`reviews/` tracked transcripts (9 files, ~250 KB)** — `BACKLOG.md`, `review-claude.txt`, `review-ollama.txt`, `review-synthetized-25072026.txt`, `review-implement-langfuse-25072026.txt`, `stryker-mutation-audit-26072026.md`, `tech-radar-vol34-applicability.md`, `archive/review-synthetized-24072026*.txt` (2 files). One-time AI review passes whose actionable items already landed in BACKLOG.md/code. Only `BACKLOG.md` has ongoing reference value.
+2. **`reviews/` tracked transcripts (8 files, ~190 KB)** — `BACKLOG.md`, `review-claude.txt`, `review-synthetized-25072026.txt`, `review-implement-langfuse-25072026.txt`, `stryker-mutation-audit-26072026.md`, `tech-radar-vol34-applicability.md`, `archive/review-synthetized-24072026*.txt` (2 files). One-time AI review passes whose actionable items already landed in BACKLOG.md/code. Only `BACKLOG.md` has ongoing reference value.
 3. **`package-lock.json` (~193 KB)** — tracked, runtime-non-load-bearing for a bundled plugin; keep for reproducibility but acknowledge the weight.
 
 **Total tracked non-runtime weight:** ~1.2 MB compiled JS + ~250 KB review transcripts + ~193 KB lockfile ≈ ~1.6 MB of tracked files that are either pure build output or historical docs.
