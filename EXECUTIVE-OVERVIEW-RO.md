@@ -52,7 +52,6 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
   - Modulele opționale (căutare semantică) au scor acceptabil
 - **Versiune:** 1.1.5 — stabil
 - **Fără CI:** întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat local înainte de a fi trimis
-- **Backup:** `install.sh` poate genera o copie de siguranță a tuturor memoriilor
 
 ## Dependințe
 - **Esențiale:** 2 pachete mici (MCP SDK și Zod pentru validare)
