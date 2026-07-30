@@ -172,6 +172,95 @@ pruned (2026-07-29); this backlog is now the sole record.
   DeepEval if agentic/multi-turn MCP-interaction metrics are actually needed. Keep
   it a dev-only harness (not shipped in `dist/`), same as the mutation tooling.
 
+### Multilingual query expansion double-counts duplicate tokens
+- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 1 (proposal file deleted
+  after triage; this entry is the record).
+- **What:** `src/tfidf.ts:159-167` — `tfidfSearch`'s bilingual expansion pushes
+  each query token plus its translation, but the dict is bidirectional (RO→EN
+  *and* EN→RO), so a query containing a word **and** its translation produces
+  collisions: `"decizie decision"` →
+  `['decizie','decision','decision','decizie']`. The scoring loop
+  (`tfidf.ts:189-216`) adds each doc's score once per token, so a doc matching
+  `decizie` gets its `(1+log tf)·idf ·boost` added twice → ~2× inflation vs. the
+  monolingual baseline. An artifact of the translation step, not genuine
+  query-term frequency.
+- **Trigger:** any user enabling `config.enableMultilingualSearch` and issuing a
+  mixed-language query. Low severity today (gated, default off, Stryker-excluded
+  so lightly tested), but a trivial fix worth pinning.
+- **Shape when picked up:** dedupe `tokens` after expansion (preserve first-seen
+  order so the title/tag boost path sees each token once). Pin in
+  `tfidf-multilingual.test.ts`: query `"decizie decision"` against a
+  single-`decizie` doc must score equal to the monolingual `"decizie"` query.
+
+### `get_memories_by_keys(summary=true)` exec-summary capture bleeds past the section boundary
+- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 2 (proposal file deleted
+  after triage; this entry is the record).
+- **What:** `src/tools/query.ts:82` — the regex
+  `/^## Executive Summary\n+([\s\S]{0,500})/m` captures up to 500 chars after the
+  header with **no stop at the next `## ` heading**. `withExecutiveSummary`
+  (frontmatter.ts) lays the body out as `## Executive Summary\n\n<summary>\n\n## <next>…`,
+  so a short summary (the common case) swallows the following section's heading
+  line + body up to the 500-char cap, leaking the next section into the
+  `summary` field of the injected index / any rendering UI.
+- **Trigger:** surfaced as a quality issue in summaries; low severity, no
+  correctness impact on search.
+- **Shape when picked up:** lazy capture with a `(?=\n##\s|\n*$)` lookahead, then
+  cap to 500: `body.match(/^## Executive Summary\n+([\s\S]*?)(?=\n##\s|\n*$)/m)`,
+  falling back to `body.slice(0,500)` for legacy bodies lacking the header. Pin
+  with a body `## Executive Summary\n\nshort.\n\n## Details\n\nlong…` asserting
+  `summary === "short."` and no `## Details`.
+
+### Org-sync branch-default divergence on detached HEAD (pull vs sync)
+- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 3 (proposal file deleted
+  after triage; this entry is the record).
+- **What:** `hooks/scripts/pull-org-vault.sh:7` defaults `BRANCH="knowledge"`
+  (overridden only by `config.orgBranch`); `scripts/sync-org-memory.mjs:54`
+  defaults `BRANCH = config.orgBranch || detectOrgBranch() || 'org-vault'`. In
+  steady state `detectOrgBranch()` reads the checked-out branch back so they
+  agree. When `config.orgBranch` is unset **and** the org checkout is on a
+  detached `HEAD`, `detectOrgBranch()` returns `''` (`sync-org-memory.mjs:49`,
+  `b !== 'HEAD'`), so sync falls back to the literal `'org-vault'` while pull
+  keeps refreshing `knowledge` → `git switch org-vault` fails (no local branch;
+  pull never created it) → sync returns early → **org writes silently stop
+  pushing**. The two literals differ on purpose (`knowledge` = production
+  default, `org-vault` = e2e fixture branch), so they can't simply be aligned.
+- **Trigger:** detached-HEAD org checkout with `config.orgBranch` unset.
+  Medium-low, latent — `detectOrgBranch()` masks it in the attached-HEAD steady
+  state. Independent of the DEFERRED *Org-sync freshness relies on marker-file
+  polling* entry (BACKLOG.md:89-96) — this is a correctness fix, that one is a
+  latency feature; do not merge them.
+- **Shape when picked up:** in `detectOrgBranch()`, on detached HEAD fall back to
+  the remote's default branch via `git symbolic-ref --short refs/remotes/origin/HEAD`
+  (pull's `git clone --branch` sets it up), stripping the `origin/` prefix, before
+  the `'org-vault'` last-resort literal. Preserves the `org-vault` e2e fallback
+  (where `origin/HEAD` → `org-vault` anyway). Pin in
+  `sync-org-memory-hook.test.ts`: detached HEAD + `origin/HEAD` →
+  `origin/knowledge` + unset `config.orgBranch` → sync targets `knowledge`.
+
+### `config.orgVault` change without restart silently stops org sync
+- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 4 (proposal file deleted
+  after triage; this entry is the record).
+- **What:** `src/paths.ts` resolves `ORG_VAULT` once at module load from
+  `loadConfig()` (the exported const is fixed for the process lifetime);
+  `src/tools/store.ts` writes org memories to that frozen value. The
+  short-lived `scripts/sync-org-memory.mjs:23-26` re-resolves its **own**
+  `ORG_VAULT` from `loadConfig()` on every invocation. After a user edits
+  `config.orgVault` without restarting the MCP server, `store_memory` keeps
+  writing to the **old** path while the next sync reads the **new** path, finds
+  no file (`fs.existsSync` false), and exits 0 → **org writes silently stop
+  syncing** until the server restarts. Config-restart hygiene gap, not a crash.
+- **Trigger:** `config.orgVault`/`personalVault` edited at runtime without an
+  MCP-server restart. Low, latent.
+- **Shape when picked up:** Option A (cheapest) — document in the config section
+  of `plugins/total-recall/README.md` / `CLAUDE.md` that changing
+  `orgVault`/`personalVault` needs an MCP-server restart for the write path to
+  pick it up (hooks already re-read config per invocation; only the long-lived
+  server is stale). Option B (robust) — resolve `ORG_VAULT`/`PERSONAL_VAULT`
+  dynamically at use time in `store.ts`/`mutate.ts` instead of importing the
+  module-load const. Adjacent to but **not** fixed by the DEFERRED *No
+  schema-version marker* entry (BACKLOG.md:98-105) — a schema marker triggers an
+  index rebuild, not a vault-path re-resolve; keep them separate.
+
 > Items 4 (server.ts monolith) and 8 (deprecated `Server` class) from the
 > pruned `ARCHITECTURE-REVIEW-TODO.md` are **DONE** — the McpServer migration
 > (CLAUDE.md 6.1-6.3) co-located schemas with implementation in `tools/*.ts`
