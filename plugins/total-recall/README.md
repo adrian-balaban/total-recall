@@ -97,7 +97,7 @@ All tool calls operate against an in-memory index (`index.json`), making read/se
 | `search_index` | Metadata search | Fast query scan of the in-memory index; does not read files, no accessCount bump. |
 | `list_memories` | Browse vault | Paginated listing of memory metadata (filter by tag/category/date). |
 | `get_memories_by_keys` | Fetch memory | Batch fetch by key; full content or summary; served through an LRU cache. |
-| `get_stats` | Audit plugin | Totals, cache stats, recent error log (last 10), latency percentiles. |
+| `get_stats` | Audit plugin | Totals, cache stats, recent error log (last 10), latency percentiles, and a `vector` block (`enabled`/`depsPresent` + live vs stored model/dim). `enabled` defaults to true when the optional deps are loadable, so vector search reads as on from a fresh session. |
 | `get_timeline` | Chronological view | Memories grouped and sorted by modification dates. |
 | `get_related_memories` | Find relations | Jaccard similarity of tags with a category boost. |
 | `prune_memories` | Clean stale entries | Lists Ebbinghaus decay candidates (does not auto-delete). Excludes `no-prune`. |
@@ -152,6 +152,8 @@ Each access adds +20% retention; each `confirm_memory(useful=true)` +10%; each f
 ### Embeddings & vector search (optional)
 
 Optional, lazy-loaded, fully local — the plugin degrades cleanly to TF-IDF without the native deps (offline machines, failed native builds). No cloud APIs, no API keys; vectors are computed once at write time (`vectors.db`), never re-embedded on read; heavy deps are esbuild-`external` so the base bundle stays tiny; `flushPending()` on SIGTERM/SIGINT guarantees vectors hit disk on exit.
+
+`get_stats` reports vector search as **enabled by default** when the optional deps are loadable — it probes `@huggingface/transformers` + `sqlite-vec` + the `better-sqlite3` native binding directly (not the lazy-loaded pipeline, which hasn't fired on a fresh session), so a brand-new session reads `vector.enabled: true` instead of looking disabled-while-idle. The one real "disabled" state is a missing `better-sqlite3` binding — the post-`claude plugin update` footgun, where the new version dir ships the dep source-only because `install.sh` doesn't re-run. If `get_stats` shows `depsPresent: false`, run `npm rebuild better-sqlite3` in the plugin cache dir (the in-process self-heal in `vectorStore.ts` tries this once automatically).
 
 ```bash
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or install.sh --complete

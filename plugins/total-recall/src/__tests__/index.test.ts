@@ -25,7 +25,7 @@ import { appendJournal } from '../journal.js';
 import { parseFrontmatter } from '../frontmatter.js';
 import { contentCache, LRUCache } from '../lru-cache.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
-import { embed, embedAndUpsert } from '../embeddings.js';
+import { embed, embedAndUpsert, isVectorAvailable, depsInstalled } from '../embeddings.js';
 import { searchVector, deleteVector, listVectorKeys } from '../vectorStore.js';
 
 // ─── Test vault — unique per process ─────────────────────────────────────────
@@ -134,6 +134,7 @@ vi.mock('../embeddings.js', () => ({
   embedAndUpsert: vi.fn(),
   flushEmbeddings: vi.fn().mockResolvedValue(undefined),
   isVectorAvailable: vi.fn().mockReturnValue(false),
+  depsInstalled: vi.fn().mockResolvedValue(false),
 }));
 vi.mock('../vectorStore.js', () => ({
   upsertVector: vi.fn().mockResolvedValue(undefined),
@@ -1440,6 +1441,30 @@ describe('get_stats', () => {
   it('returns recentErrors array', async () => {
     const stats = result(await callTool('get_stats'));
     expect(Array.isArray(stats.recentErrors)).toBe(true);
+  });
+
+  // Vector search should DEFAULT TO ENABLED when the optional deps are
+  // installed, even on a fresh session where the HF pipeline has not lazy-
+  // loaded yet. Pre-fix, get_stats reported `enabled: false` / `depsPresent:
+  // false` until something triggered embed() — vector search looked disabled
+  // when it was merely idle. `depsPresent` is the depsInstalled() probe; the
+  // mock defaults to false here (no deps), so enabled stays false. Flip the
+  // probe to true and `enabled`/`depsPresent`/`vectorSearchEnabled` follow.
+  it('reports vector enabled when deps are installed (defaults to on)', async () => {
+    vi.mocked(depsInstalled).mockResolvedValue(true);
+    const stats = result(await callTool('get_stats'));
+    expect(stats.vector.depsPresent).toBe(true);
+    expect(stats.vector.enabled).toBe(true);
+    expect(stats.vectorSearchEnabled).toBe(true);
+  });
+
+  it('reports vector disabled when deps are absent (honest degrade)', async () => {
+    vi.mocked(depsInstalled).mockResolvedValue(false);
+    vi.mocked(isVectorAvailable).mockReturnValue(false);
+    const stats = result(await callTool('get_stats'));
+    expect(stats.vector.depsPresent).toBe(false);
+    expect(stats.vector.enabled).toBe(false);
+    expect(stats.vectorSearchEnabled).toBe(false);
   });
 });
 

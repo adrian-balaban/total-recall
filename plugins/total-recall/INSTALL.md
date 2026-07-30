@@ -118,3 +118,14 @@ To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`
 ## Verify
 
 Start a new session; the memory index should be injected automatically (Claude Code). Or ask: *"what do you remember about …"* → the model calls `recall_memory`. `get_stats` shows totals, cache stats, and recent errors.
+
+### `get_stats` says vector search is off after `claude plugin update`
+
+A fresh `claude plugin update` creates a new version dir under `~/.claude/plugins/cache/.../<VERSION>/` and does **not** re-run `install.sh`, so the `better-sqlite3` native binding can be left source-only (no `build/Release/better_sqlite3.node`). When that happens `get_stats` reports `vector.depsPresent: false` / `vector.enabled: false` — the one honest "disabled" state. The in-process self-heal in `vectorStore.ts` tries `npm rebuild better-sqlite3` once on first load; if it still shows false, run it manually in that version dir:
+
+```bash
+cd ~/.claude/plugins/cache/anthropic.com/total-recall/<VERSION>/total-recall/plugins/total-recall
+npm rebuild better-sqlite3
+```
+
+(With deps properly installed, `get_stats` reports `vector.enabled: true` from a fresh session — vector search defaults to on.)

@@ -31817,6 +31817,29 @@ function isVectorAvailable() {
   if (testEmbedder === null) return false;
   return pipeline !== null;
 }
+var depsCachedTrue = false;
+var testDepsInstalled = null;
+async function probeDeps() {
+  try {
+    const hf = await import("@huggingface/transformers");
+    if (typeof hf.pipeline !== "function") return false;
+    const sv = await import("sqlite-vec");
+    if (typeof sv.getLoadablePath !== "function" && typeof sv.load !== "function") return false;
+    const Database = (await import("better-sqlite3")).default;
+    const d = new Database(":memory:");
+    d.close();
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function depsInstalled() {
+  if (testDepsInstalled !== null) return testDepsInstalled;
+  if (depsCachedTrue) return true;
+  const ok = await probeDeps();
+  if (ok) depsCachedTrue = true;
+  return ok;
+}
 
 // src/vault-scan.ts
 var realBaseCache = /* @__PURE__ */ new Map();
@@ -32785,7 +32808,8 @@ async function getStats() {
   }
   const perf = [...perfSamples].sort((a, b) => a - b);
   const pct = (p) => perf[Math.floor(perf.length * p)] ?? 0;
-  const depsPresent = isVectorAvailable();
+  const depsPresent = await depsInstalled();
+  const enabled = isVectorAvailable() || depsPresent;
   const configuredModel = loadConfig().embeddingModel || "Xenova/all-MiniLM-L6-v2";
   let stored = null;
   try {
@@ -32805,14 +32829,14 @@ async function getStats() {
     // redacted via redactPaths (paths.ts).
     recentErrors: errors.slice(-10).map((e) => ({ time: e.time, msg: redactPaths(e.msg) })),
     vector: {
-      enabled: depsPresent,
+      enabled,
       depsPresent,
       model: configuredModel,
       storedModel: stored?.model ?? null,
       dim: stored?.dim ?? null
     },
     // Back-compat alias: callers/tests that read the old boolean still get it.
-    vectorSearchEnabled: depsPresent
+    vectorSearchEnabled: enabled
   };
 }
 function getTimeline(args) {
@@ -33499,7 +33523,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.1.8" : null.version;
+var PLUGIN_VERSION = true ? "1.1.9" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

@@ -22,7 +22,7 @@ src/
 ├── tfidf.ts          tokenize, rebuildInvertedIndex, tfidfSearch
 ├── ebbinghaus.ts     computeRetentionStrength, daysSince
 ├── rrf.ts            reciprocalRankFusion (k=60)
-├── embeddings.ts     embeddings: in-process HuggingFace pipeline (all-MiniLM-L6-v2, 384-dim); lazy-loaded + no-op if deps absent; failed load is not cached (retried next call)
+├── embeddings.ts     embeddings: in-process HuggingFace pipeline (all-MiniLM-L6-v2, 384-dim); lazy-loaded + no-op if deps absent; failed load is not cached (retried next call); depsInstalled() capability probe (are @huggingface/transformers + sqlite-vec + the better-sqlite3 native binding all loadable) so get_stats reports vector search enabled on a fresh session before the lazy load fires
 ├── vectorStore.ts    sqlite-vec upsert/search/delete wrapper
 ├── dates.ts          parseRelativeDate
 ├── journal.ts        appendJournal
@@ -143,7 +143,7 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 | `list_memories` | Paginated metadata listing with category/tag filter |
 | `get_related_memories` | Jaccard tag similarity + same-category boost (0.2); requires ≥1 shared tag |
 | `get_timeline` | Memories in date range, ordered by `updated` |
-| `get_stats` | Total + by-category counts, cache stats, perf percentiles, recent errors, vectorSearchEnabled |
+| `get_stats` | Total + by-category counts, cache stats, perf percentiles, recent errors, and a `vector` block (`enabled` / `depsPresent` / live `model` / stored model+dim); `enabled` defaults to true when the optional deps are loadable (via `depsInstalled()`), so a fresh session reports vector search on before the lazy embedder load fires — back-compat `vectorSearchEnabled` alias mirrors `enabled` |
 
 ### Maintenance
 | Tool | Description |

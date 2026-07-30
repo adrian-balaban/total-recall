@@ -2,7 +2,7 @@ import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
 import { toCutoff, inDateWindow } from '../dates.js';
 import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
 import { contentCache } from '../lru-cache.js';
-import { isVectorAvailable } from '../embeddings.js';
+import { isVectorAvailable, depsInstalled } from '../embeddings.js';
 import { getVecMeta } from '../vectorStore.js';
 import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
 import { NO_PRUNE_TAG, VECTORS_DB, loadConfig, redactPaths } from '../paths.js';
@@ -106,13 +106,26 @@ export async function getStats(): Promise<any> {
   // `vectorSearchEnabled` answered only "is the pipeline loaded?" — it stayed
   // true after a model change while every stored vector was now the wrong dim,
   // and gave no way to see WHICH model/dim the stored rows belong to. Surface
-  // a structured block: `enabled` (pipeline loaded), `depsPresent` (same, kept
-  // for callers that keyed off the old boolean), `model`/`dim` — the live config
-  // model (what NEW embeds use) vs the stored fingerprint (what EXISTING rows
-  // are, from vec_meta 3.7). A model/dim mismatch between `model` and the stored
-  // fingerprint is the dim-correctness bug class 3.1/3.2 guard against — making
-  // it visible turns a silent degrade into a diagnosable state.
-  const depsPresent = isVectorAvailable();
+  // a structured block: `enabled` (vector search usable), `depsPresent` (the
+  // optional deps are installed AND loadable — incl. the better-sqlite3 native
+  // binding), `model`/`dim` — the live config model (what NEW embeds use) vs
+  // the stored fingerprint (what EXISTING rows are, from vec_meta 3.7). A
+  // model/dim mismatch between `model` and the stored fingerprint is the
+  // dim-correctness bug class 3.1/3.2 guard against — making it visible turns a
+  // silent degrade into a diagnosable state.
+  //
+  // `depsPresent` is the depsInstalled() probe (are @huggingface/transformers,
+  // sqlite-vec, and the better-sqlite3 native binding all loadable), NOT the old
+  // isVectorAvailable() ("has the HF pipeline lazy-loaded yet"). The old wiring
+  // reported `depsPresent: false` on every fresh session until something
+  // triggered embed() — vector search looked disabled when it was merely idle.
+  // `enabled` is "usable now": either the pipeline already loaded, OR the deps
+  // are present (the lazy load will succeed on first use). So a fresh session
+  // with deps installed reports `enabled: true` (vector search defaults to on),
+  // while a truly broken env (missing better-sqlite3 binding — the post-
+  // `claude plugin update` source-only footgun) honestly reports `false`.
+  const depsPresent = await depsInstalled();
+  const enabled = isVectorAvailable() || depsPresent;
   const configuredModel = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
   let stored: { model: string; dim: number | null } | null = null;
   try { stored = await getVecMeta(VECTORS_DB); } catch { stored = null; }
@@ -128,14 +141,14 @@ export async function getStats(): Promise<any> {
     // redacted via redactPaths (paths.ts).
     recentErrors: errors.slice(-10).map(e => ({ time: e.time, msg: redactPaths(e.msg) })),
     vector: {
-      enabled: depsPresent,
+      enabled,
       depsPresent,
       model: configuredModel,
       storedModel: stored?.model ?? null,
       dim: stored?.dim ?? null,
     },
     // Back-compat alias: callers/tests that read the old boolean still get it.
-    vectorSearchEnabled: depsPresent,
+    vectorSearchEnabled: enabled,
   };
 }
 
