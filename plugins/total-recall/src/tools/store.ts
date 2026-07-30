@@ -307,7 +307,7 @@ export function storeMemory(args: any): any {
 
   // 7.4 (REVIEW 7.2): non-blocking stderr warning when the stored content looks
   // like a secret token. The personal vault stores content verbatim and is local
-  // (post-Ollama the embedder runs in-process, so nothing leaves the machine), so
+  // (the embedder runs in-process, so nothing leaves the machine), so
   // this is NOT a block — only a one-line stderr hint so a user who pasted a real
   // key into a memory is told it's sitting on disk in the clear. The org-sync path
   // (privacyCheck in sync-org-memory) still hard-blocks a secret from reaching the

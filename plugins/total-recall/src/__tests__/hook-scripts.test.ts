@@ -369,8 +369,8 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
   // ever committed. Static-assert the --no-save guard is on the install line (a
   // real --vector run would pull ~200 MB and is too heavy for a unit test).
   // The dep list now lives in $VEC_DEPS (single variant post-Phase-0: the local
-  // HuggingFace MiniLM embedder always wants all three deps — there is no
-  // Ollama provider branch anymore). Assert the install line uses --no-save
+  // HuggingFace MiniLM embedder always wants all three deps). Assert the
+  // install line uses --no-save
   // with $VEC_DEPS, and that the one VEC_DEPS assignment carries all three deps.
   it('install.sh: --vector installs optional deps with --no-save (never mutates package.json)', () => {
     const src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');

@@ -1,14 +1,9 @@
 /**
  * HuggingFace embedding model — the single embedding provider. Lazy-loaded
  * from vector/node_modules; if @huggingface/transformers is not installed, all
- * methods are no-ops and search degrades to TF-IDF.
- *
- * Phase 0: the external-provider registry (Ollama HTTP daemon) was removed
- * entirely. Embedding is now always the in-process transformer pipeline —
- * there is no network endpoint, no circuit breaker, no timeout class, and no
- * "down/hung daemon" state to manage. The only failure mode is load-time
- * (optional dep missing or model download hiccup), handled here by NOT
- * caching a failed load (3.9): the next embed() retries instead of being
+ * methods are no-ops and search degrades to TF-IDF. The only failure mode is
+ * load-time (optional dep missing or model download hiccup), handled here by
+ * NOT caching a failed load (3.9): the next embed() retries instead of being
  * latched to null for the process lifetime.
  */
 import { VECTORS_DB, loadConfig } from './paths.js';

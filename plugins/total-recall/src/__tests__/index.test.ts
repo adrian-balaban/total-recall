@@ -465,24 +465,24 @@ describe("store_memory — supersede, don't overwrite (Graphiti #45)", () => {
 
     // v1: the original belief.
     const r1 = result(await callTool('store_memory', {
-      title: 'Supersede Trial', content: 'Original belief: use Ollama.', tags: ['test'], category: 'knowledge',
+      title: 'Supersede Trial', content: 'Original belief: use service X.', tags: ['test'], category: 'knowledge',
     }));
     expect(r1.key).toBe(key);
     expect(fs.existsSync(fileRel)).toBe(true);
     const v1Body = fs.readFileSync(fileRel, 'utf8');
-    expect(v1Body).toContain('Original belief: use Ollama.');
+    expect(v1Body).toContain('Original belief: use service X.');
 
     // v2: a force-overwrite supersedes v1.
     await new Promise(r => setTimeout(r, 15)); // ensure updated timestamp moves
     const r2 = result(await callTool('store_memory', {
-      title: 'Supersede Trial', content: 'Revised belief: use HuggingFace in-process.', tags: ['test'], category: 'knowledge', force: true,
+      title: 'Supersede Trial', content: 'Revised belief: use local embedder.', tags: ['test'], category: 'knowledge', force: true,
     }));
     expect(r2.key).toBe(key);
 
     // The live file now holds the NEW belief, not the old one.
     const v2Body = fs.readFileSync(fileRel, 'utf8');
-    expect(v2Body).toContain('Revised belief: use HuggingFace in-process.');
-    expect(v2Body).not.toContain('Original belief: use Ollama.');
+    expect(v2Body).toContain('Revised belief: use local embedder.');
+    expect(v2Body).not.toContain('Original belief: use service X.');
 
     // The OLD belief was archived, not dropped — recoverable "what did I believe".
     const archiveDir = path.join(VAULT, 'personal-vault', '.superseded', 'knowledge');
@@ -490,7 +490,7 @@ describe("store_memory — supersede, don't overwrite (Graphiti #45)", () => {
     const archives = fs.readdirSync(archiveDir).filter(f => f.startsWith('supersede-trial.'));
     expect(archives.length).toBe(1);
     const archived = fs.readFileSync(path.join(archiveDir, archives[0]!), 'utf8');
-    expect(archived).toContain('Original belief: use Ollama.');
+    expect(archived).toContain('Original belief: use service X.');
     expect(archived).not.toContain('Revised belief:');
 
     // The new frontmatter carries a one-entry supersededAt chain (the moment v1
