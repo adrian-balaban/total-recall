@@ -50,7 +50,7 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
   - Scor curent: 68% (testele capturează 68% din erorile introduse deliberat; ținta e minim 65%)
   - Modulele critice (salvare pe disk, căutare text) au scor mai mare (70%+)
   - Modulele opționale (căutare semantică) au scor acceptabil
-- **Versiune:** 1.1.5 — stabil
+- **Versiune:** 1.1.8 — stabil
 - **Fără CI:** întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat local înainte de a fi trimis
 
 ## Dependințe

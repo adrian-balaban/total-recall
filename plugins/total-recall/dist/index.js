@@ -31079,6 +31079,8 @@ function bumpAccess(meta3) {
 
 // src/tfidf.ts
 var docLengths = /* @__PURE__ */ new Map();
+var docTerms = /* @__PURE__ */ new Map();
+var indexedDocCount = 0;
 var BILINGUAL_DICT = {
   // Romanian -> English
   "decizie": "decision",
@@ -31115,35 +31117,49 @@ function tokenize(text) {
   return text.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9 ]/g, " ").split(/\s+/).filter(Boolean);
 }
 function deregisterDocument(key) {
-  for (const t of Object.keys(invertedIndex)) {
-    const entry = invertedIndex[t];
-    if (entry) {
-      entry.docs = entry.docs.filter((d) => d.key !== key);
-      if (entry.docs.length === 0) {
-        delete invertedIndex[t];
+  const terms = docTerms.get(key);
+  if (terms) {
+    for (const t of terms) {
+      const entry = invertedIndex[t];
+      if (entry) {
+        entry.docs = entry.docs.filter((d) => d.key !== key);
+        if (entry.docs.length === 0) {
+          delete invertedIndex[t];
+        }
+      }
+    }
+    docTerms.delete(key);
+    if (indexedDocCount > 0) indexedDocCount--;
+  } else {
+    for (const t of Object.keys(invertedIndex)) {
+      const entry = invertedIndex[t];
+      if (entry) {
+        entry.docs = entry.docs.filter((d) => d.key !== key);
+        if (entry.docs.length === 0) {
+          delete invertedIndex[t];
+        }
       }
     }
   }
   docLengths.delete(key);
 }
 function registerDocument(key, title, tags, contentPreview) {
-  deregisterDocument(key);
+  if (docTerms.has(key)) deregisterDocument(key);
   const tokens = tokenize(`${title} ${tags.join(" ")} ${contentPreview}`);
   const tf = {};
   for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
+  const N = indexedDocCount + 1;
   for (const [t, count] of Object.entries(tf)) {
-    if (!invertedIndex[t]) {
-      invertedIndex[t] = { docs: [], idf: 0 };
-    }
-    invertedIndex[t].docs.push({ key, tf: count });
+    const entry = invertedIndex[t] ?? { docs: [], idf: 0 };
+    entry.docs.push({ key, tf: count });
+    entry.idf = Math.log((N + 1) / (entry.docs.length + 1)) + 1;
+    invertedIndex[t] = entry;
   }
   let totalTokens = 0;
   for (const c of Object.values(tf)) totalTokens += c;
   docLengths.set(key, Math.sqrt(totalTokens));
-  const N = Object.keys(memIndex).length;
-  for (const t of Object.keys(invertedIndex)) {
-    invertedIndex[t].idf = Math.log((N + 1) / (invertedIndex[t].docs.length + 1)) + 1;
-  }
+  docTerms.set(key, new Set(Object.keys(tf)));
+  indexedDocCount++;
 }
 function rebuildInvertedIndex() {
   const docFreq = {};
@@ -31160,6 +31176,8 @@ function rebuildInvertedIndex() {
   }
   for (const t of Object.keys(invertedIndex)) delete invertedIndex[t];
   docLengths.clear();
+  docTerms.clear();
+  indexedDocCount = N;
   for (const [key, tf] of Object.entries(tfByDoc)) {
     let totalTokens = 0;
     for (const [t, count] of Object.entries(tf)) {
@@ -31168,6 +31186,7 @@ function rebuildInvertedIndex() {
       totalTokens += count;
     }
     docLengths.set(key, Math.sqrt(totalTokens));
+    docTerms.set(key, new Set(Object.keys(tf)));
   }
   for (const t of Object.keys(invertedIndex)) {
     invertedIndex[t].idf = Math.log((N + 1) / (docFreq[t] + 1)) + 1;
@@ -31187,14 +31206,16 @@ function tfidfSearch(query, excludeJournal = true) {
   }
   const rawScores = {};
   const tokenCache = /* @__PURE__ */ new Map();
+  const N = Object.keys(memIndex).length;
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
+    const idf = Math.log((N + 1) / (entry.docs.length + 1)) + 1;
     for (const doc of entry.docs) {
       const meta3 = memIndex[doc.key];
       if (!meta3) continue;
       if (excludeJournal && meta3.category === "journal") continue;
-      let score = (1 + Math.log(doc.tf)) * entry.idf;
+      let score = (1 + Math.log(doc.tf)) * idf;
       let cached2 = tokenCache.get(doc.key);
       if (!cached2) {
         cached2 = {
@@ -33478,7 +33499,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.1.7" : null.version;
+var PLUGIN_VERSION = true ? "1.1.8" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

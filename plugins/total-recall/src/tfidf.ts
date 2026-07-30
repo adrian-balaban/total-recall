@@ -12,6 +12,25 @@ import { loadConfig } from './paths.js';
 // repeats it. The Map is module-level (one per process), mirroring invertedIndex.
 const docLengths = new Map<string, number>();
 
+// Per-doc term set (the terms a doc contributed to the inverted index), maintained
+// alongside docLengths so deregisterDocument can remove a doc's postings by touching
+// ONLY its own terms (O(unique-terms-in-doc)) instead of scanning every term's
+// posting list (O(T), T≈all active terms). Without this, deregisterDocument — called
+// on every store (re-register), update, AND delete — is O(T)≈O(N) per mutation, making
+// a burst of writes O(N²): a 20k ADD collapsed 206/s→23/s as the index grew. Populated
+// in rebuildInvertedIndex and registerDocument, cleared in deregisterDocument. The
+// `has(key)` test is also the canonical "is this key currently registered" signal.
+const docTerms = new Map<string, Set<string>>();
+
+// O(1) running count of registered docs (mirrors Object.keys(memIndex).length).
+// The per-store hot path needs N for the best-effort cached idf; computing it via
+// Object.keys(memIndex).length is O(N) per store → O(N²) over a burst, the residual
+// degradation (1135→759/s over 10k) after the deregister/idf fixes. A counter kept
+// in lockstep with register/deregister/rebuild makes it O(1). tfidfSearch still uses
+// Object.keys(memIndex).length (ground truth, once per query — infrequent), so a
+// drifted counter only makes the UNUSED cached idf slightly off, never search.
+let indexedDocCount = 0;
+
 // ─── TF-IDF ──────────────────────────────────────────────────────────────────
 
 // Stryker disable all: the RO/EN bilingual dictionary is data, not logic, and
@@ -71,12 +90,36 @@ export function tokenize(text: string): string[] {
 }
 
 export function deregisterDocument(key: string) {
-  for (const t of Object.keys(invertedIndex)) {
-    const entry = invertedIndex[t];
-    if (entry) {
-      entry.docs = entry.docs.filter(d => d.key !== key);
-      if (entry.docs.length === 0) {
-        delete invertedIndex[t];
+  // Fast path: the doc's terms are tracked, so remove its postings from only
+  // those terms — O(unique-terms-in-doc). This is the dominant fix for the O(N²)
+  // write path: deregister is called on every store/update/delete, and the prior
+  // unconditional `for (const t of Object.keys(invertedIndex))` scanned EVERY
+  // term's posting list and rebuilt each via .filter even when the key was
+  // absent — O(T)≈O(N) per mutation.
+  const terms = docTerms.get(key);
+  if (terms) {
+    for (const t of terms) {
+      const entry = invertedIndex[t];
+      if (entry) {
+        entry.docs = entry.docs.filter(d => d.key !== key);
+        if (entry.docs.length === 0) {
+          delete invertedIndex[t];
+        }
+      }
+    }
+    docTerms.delete(key);
+    if (indexedDocCount > 0) indexedDocCount--;
+  } else {
+    // Fallback: the key isn't tracked (a deregister on a never-registered key,
+    // or an index built before this tracking existed). Fall back to the full
+    // scan for correctness. Rare and not on the burst hot path.
+    for (const t of Object.keys(invertedIndex)) {
+      const entry = invertedIndex[t];
+      if (entry) {
+        entry.docs = entry.docs.filter(d => d.key !== key);
+        if (entry.docs.length === 0) {
+          delete invertedIndex[t];
+        }
       }
     }
   }
@@ -86,17 +129,30 @@ export function deregisterDocument(key: string) {
 }
 
 export function registerDocument(key: string, title: string, tags: string[], contentPreview: string) {
-  deregisterDocument(key);
+  // Only deregister if this key is already registered (an update/re-register with
+  // changed text). A brand-new store's key is in no posting list, so the prior
+  // unconditional deregisterDocument scanned every term (O(T)) for nothing on the
+  // dominant burst-ADD path. docTerms tracks registration: set here on register,
+  // cleared on deregister, populated for all memIndex keys by rebuildInvertedIndex.
+  if (docTerms.has(key)) deregisterDocument(key);
 
   const tokens = tokenize(`${title} ${tags.join(' ')} ${contentPreview}`);
   const tf: Record<string, number> = {};
   for (const t of tokens) tf[t] = (tf[t] ?? 0) + 1;
 
+  // N includes the doc being added: after the conditional deregister above,
+  // indexedDocCount is (old-1) for a re-register or `old` for a new store, so
+  // +1 yields the correct live doc count either way. O(1), not Object.keys.
+  const N = indexedDocCount + 1;
   for (const [t, count] of Object.entries(tf)) {
-    if (!invertedIndex[t]) {
-      invertedIndex[t] = { docs: [], idf: 0 };
-    }
-    invertedIndex[t]!.docs.push({ key, tf: count });
+    const entry = invertedIndex[t] ?? { docs: [], idf: 0 };
+    entry.docs.push({ key, tf: count });
+    // Best-effort idf for THIS term only (O(doc-terms), not O(all-terms)). Search
+    // computes idf live per query token (see tfidfSearch), so this cached value is
+    // not relied on for correctness — kept valid only so the field is never
+    // stale-shaped and the persisted invertedIndex.json stays self-describing.
+    entry.idf = Math.log((N + 1) / (entry.docs.length + 1)) + 1;
+    invertedIndex[t] = entry;
   }
 
   // 5.2: cache sqrt(totalTokens) for this doc — the length norm used at score
@@ -105,12 +161,11 @@ export function registerDocument(key: string, title: string, tags: string[], con
   let totalTokens = 0;
   for (const c of Object.values(tf)) totalTokens += c;
   docLengths.set(key, Math.sqrt(totalTokens));
-
-  // Recalculate IDFs for all active terms
-  const N = Object.keys(memIndex).length;
-  for (const t of Object.keys(invertedIndex)) {
-    invertedIndex[t]!.idf = Math.log((N + 1) / (invertedIndex[t]!.docs.length + 1)) + 1;
-  }
+  // Track the doc's terms so a future deregister touches only these, not all T.
+  docTerms.set(key, new Set(Object.keys(tf)));
+  // A re-register already netted to zero (deregister decremented, this increments
+  // back); a new store adds one. Either way the count stays in lockstep with memIndex.
+  indexedDocCount++;
 }
 
 export function rebuildInvertedIndex() {
@@ -130,8 +185,12 @@ export function rebuildInvertedIndex() {
 
   // Clear-then-populate the shared singleton (formerly `invertedIndex = {}`).
   for (const t of Object.keys(invertedIndex)) delete invertedIndex[t];
-  // 5.2: rebuild the per-doc length-norm cache alongside the inverted index.
+  // 5.2: rebuild the per-doc length-norm cache alongside the inverted index, and
+  // the per-doc term set used by deregisterDocument's fast path.
   docLengths.clear();
+  docTerms.clear();
+  // Re-sync the O(1) doc counter to the freshly-rebuilt index's ground truth.
+  indexedDocCount = N;
   for (const [key, tf] of Object.entries(tfByDoc)) {
     let totalTokens = 0;
     for (const [t, count] of Object.entries(tf)) {
@@ -142,6 +201,7 @@ export function rebuildInvertedIndex() {
       totalTokens += count;
     }
     docLengths.set(key, Math.sqrt(totalTokens));
+    docTerms.set(key, new Set(Object.keys(tf)));
   }
   for (const t of Object.keys(invertedIndex)) {
     // invertedIndex[t] was just iterated from the same object above, so it
@@ -186,9 +246,19 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
   // query instead of one per (token, doc).
   const tokenCache = new Map<string, { titleTokens: Set<string>; tagTokens: Set<string> }>();
 
+  // Compute idf LIVE per query token from the current total doc count N and the
+  // term's live document frequency (entry.docs.length). The per-term idf cached in
+  // the inverted index is NOT maintained eagerly on every write — recomputing it
+  // for all active terms inside registerDocument was the O(T)≈O(N) hot spot that
+  // collapsed ADD throughput (rate∝1/N: 206/s→23/s over 20k). Computing it here is
+  // O(Q) (one per query token) and always correct regardless of cached-idf drift
+  // between full rebuilds, so search ranking never depends on a stale cache.
+  const N = Object.keys(memIndex).length;
+
   for (const token of tokens) {
     const entry = invertedIndex[token];
     if (!entry) continue;
+    const idf = Math.log((N + 1) / (entry.docs.length + 1)) + 1;
     for (const doc of entry.docs) {
       const meta = memIndex[doc.key];
       if (!meta) continue;
@@ -198,7 +268,7 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
       // 5.2: sublinear TF (1 + log tf) biases against verbose memories — a doc that
       // repeats a term 10× contributes 1+log(10)≈3.3, not 10. tf≥1 for every indexed
       // (term, doc) so log is ≥0; the +1 keeps a single-occurrence term at weight 1.
-      let score = (1 + Math.log(doc.tf)) * entry.idf;
+      let score = (1 + Math.log(doc.tf)) * idf;
       let cached = tokenCache.get(doc.key);
       if (!cached) {
         cached = {

@@ -14,6 +14,45 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ## DEFERRED — waiting for a trigger
 
+### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE**
+- **Source:** `plugins/total-recall/scripts/loadtest.ts` (throwaway-HOME driver,
+  TF-IDF-only); run 2026-07-30. Real vaults untouched — byte-identical `diff -r`
+  vs pre-flight snapshots; live `get_stats` 523 personal unchanged; org git log
+  clean (the driver imports `src/tools/*` directly via tsx in
+  `HOME=/tmp/tr-loadtest`, so the MCP server and the PostToolUse org-sync hook
+  never fire — no junk commits pushed).
+- **What (the bug):** burst-write throughput collapsed quadratically — ADD
+  206/s → 23/s as N grew 2k→20k (20k in 881s), DELETE ~34/s. The O(N²) lived in
+  `registerDocument` (`src/tfidf.ts`), called on EVERY store/update/delete:
+  (1) `deregisterDocument` scanned ALL active terms' posting lists and rebuilt
+  each via `.filter` even for a brand-new key whose postings don't exist — O(T),
+  T≈active terms; (2) a per-store global IDF recalc loop recomputed `idf` for
+  every active term — O(T). Both O(T)≈O(N) per mutation → O(N²) over a burst.
+  (The earlier hypothesis blaming the debounced `recalcIdfNow` was wrong: the
+  debounce *prevents* repeated rebuilds, and during a tight synchronous loop the
+  1s/2s timers can't even fire — the event loop is blocked.) DELETE's O(T)
+  `deregisterDocument` scan was the symmetric half.
+- **Fix (landed, `src/tfidf.ts`):** `deregisterDocument` now uses a per-doc term
+  set (`docTerms`) to touch ONLY the doc's own terms — O(unique-terms-in-doc) —
+  with a full-scan fallback for untracked keys; `registerDocument` skips deregister
+  for genuinely-new keys and drops the global IDF loop, computing `idf` **live
+  per query token** in `tfidfSearch` from live `df` + `N` (O(Q), always correct,
+  no stale cache); an O(1) `indexedDocCount` counter replaces the O(N)
+  `Object.keys(memIndex).length` in the per-store path.
+- **Result (re-run, same TF-IDF-only conditions):** ADD now **flat at ~2200/s**
+  (2192→2243, zero degradation; 10k in 6.2s at 1621/s avg — ~70× the old 23/s);
+  SEARCH p50 87ms / p95 93ms, persisted reload 20/20 hits; DELETE 79/s (was 34/s
+  at 20k) — now I/O-bound (per-delete org-author file read + `deleteVector` sqlite
+  open + unlink), a constant not algorithmic. Full suite 731/731 pass; typecheck
+  clean. Residual DELETE cost is per-delete file I/O, not a scan.
+- **Reuse:** `scripts/loadtest.ts` stays as the reusable harness —
+  `HOME=/tmp/tr-loadtest LT_N=… npx tsx scripts/loadtest.ts`; rename
+  `@huggingface/transformers` → `.disabled-loadtest` for an apples-to-apples
+  TF-IDF-only run and pass `hybrid:false` to `recall_memory` (restore the package
+  after). Its `VERIFY` line reports FAIL on the engine-auto-created
+  `journal/<date>.md` — a known false alarm (residual-by-tag is 0), not a real
+  failure.
+
 ### vault-scan dir-mtime cache (review item 9.1)
 - **Source:** `review-synthetized-25072026.txt` §9.1.
 - **What:** `reconcileIndex` re-walks every directory on each poll even when only
