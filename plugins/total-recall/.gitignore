@@ -5,16 +5,3 @@ coverage/
 
 # Stryker mutation testing scratch dir (never commit)
 .stryker-tmp/
-reports/
-banking-*.md
-review-secure-*.md
-
-# One-time review transcripts — actionable items live in reviews/BACKLOG.md.
-# Keep BACKLOG.md tracked; ignore the historical review passes + audit notes.
-reviews/*.txt
-reviews/archive/
-reviews/stryker-mutation-audit-*.md
-reviews/tech-radar-*.md
-reviews/fable-proposals.md
-reviews/ollama-minimax-proposals.md
-reviews/ollama-gdm-proposals.md
