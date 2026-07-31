@@ -616,13 +616,15 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     } finally { fs.rmSync(home, { recursive: true, force: true }); }
   });
 
-  // session-end.sh: SessionEnd hook. Must (a) emit a valid JSON envelope on
-  // stdout with hookEventName:"SessionEnd" (Claude Code DROPS envelopes that
-  // omit it — see #24), (b) append a session-end marker to .session-end.log,
-  // and (c) NOT crash if no MCP child is running. The MCP child discovery
-  // uses ps + ppid which is mocked by the synthetic spawn env, so the kill
-  // path is best-effort and may be a no-op in the test.
-  it('session-end.sh: emits SessionEnd envelope, writes log, exits 0 with no MCP child', () => {
+  // session-end.sh: SessionEnd hook. Must (a) emit a VALID SessionEnd stdout
+  // envelope — {"continue":true} — and specifically NOT the
+  // hookSpecificOutput.additionalContext shape, which the SessionEnd event
+  // rejects with "Invalid input" (unlike SessionStart; observed failing 92× in
+  // ~/.total-recall/.extract.log), (b) append a session-end marker to
+  // .session-end.log, and (c) NOT crash if no MCP child is running. The MCP
+  // child discovery uses ps + ppid which is mocked by the synthetic spawn env,
+  // so the kill path is best-effort and may be a no-op in the test.
+  it('session-end.sh: emits {continue:true} (no additionalContext), writes log, exits 0 with no MCP child', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sessend-'));
     fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
     const r = spawnSync('bash', [SESSION_END_SCRIPT], {
@@ -630,10 +632,11 @@ pullSuite('pull-org-vault.sh (#5)', () => {
       env: { ...process.env, HOME: home, PPID: '999999' /* no such process */ },
     });
     expect(r.status).toBe(0);
-    // (a) envelope
+    // (a) VALID SessionEnd envelope: {"continue":true}, and crucially NOT the
+    // additionalContext shape the SessionEnd event rejects as "Invalid input".
     const env = JSON.parse(r.stdout);
-    expect(env.hookSpecificOutput.hookEventName).toBe('SessionEnd');
-    expect(env.hookSpecificOutput.additionalContext).toContain('total-recall session end');
+    expect(env.continue).toBe(true);
+    expect(env.hookSpecificOutput).toBeUndefined();
     // (b) log written
     const log = path.join(home, '.total-recall', '.session-end.log');
     expect(fs.existsSync(log)).toBe(true);

@@ -15,10 +15,16 @@
 #      child has SIGTERM/SIGINT wired to shutdown() (src/index.ts:30-31), so
 #      flushPending → flushEmbeddings → process.exit(0) run either way.
 #
-#   3. Emit a SessionEnd JSON envelope on stdout so Claude Code records the
-#      hook ran. Like SessionStart, the additionalContext must carry
-#      hookEventName:"SessionEnd" — Claude Code DROPS envelopes missing it
-#      (silent drop, no UI surface). See hook-scripts.test.ts #24.
+#   3. Emit a valid SessionEnd stdout envelope. UNLIKE SessionStart, the
+#      SessionEnd event does NOT accept `hookSpecificOutput.additionalContext`
+#      (there is no ongoing conversation to inject context into at teardown) —
+#      emitting that shape makes Claude Code REJECT the output with
+#      "Hook JSON output validation failed — (root): Invalid input", which
+#      surfaced as a "hook failed" warning on every session end (observed 92×
+#      in ~/.total-recall/.extract.log) and could abort the hook before its
+#      SIGTERM-flush side effect. The universally-valid envelope for any hook
+#      event is `{"continue":true}`; the hook's real work is the side effects
+#      above (log + SIGTERM), not stdout. See hook-scripts.test.ts.
 #
 # Idempotent. No required tools beyond bash; uses ps + grep + kill which are
 # available on every Unix. Every action is best-effort: a miss (no MCP child
@@ -60,11 +66,8 @@ if [ -n "$MCP_PID" ]; then
   kill -TERM "$MCP_PID" 2>/dev/null || true
 fi
 
-# Emit the SessionEnd envelope. additionalContext is what Claude Code
-# surfaces to the user; the hookEventName is mandatory (see #24) — without
-# it Claude Code drops the entire additionalContext silently.
-# 8.6 (REVIEW C-20): the prior EXIT_STATUS var ("unknown"/"signaled") was
-# computed and never referenced — mcp_child=%s already conveys the same
-# information (none vs a pid). Removed the dead block.
-printf '{"hookSpecificOutput":{"hookEventName":"SessionEnd","additionalContext":"total-recall session end: mcp_child=%s, log=%s"}}\n' \
-  "${MCP_PID:-none}" "$LOG"
+# Emit a valid SessionEnd envelope. SessionEnd does NOT accept
+# additionalContext (see the header note) — the only universally-accepted
+# shape is {"continue":true}. The mcp_child / log detail lives in
+# .session-end.log (written above), not stdout, so no observability is lost.
+printf '{"continue":true}\n'
