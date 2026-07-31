@@ -16,6 +16,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 
 import { storeMemory } from '../src/tools/store.js';
@@ -24,6 +25,25 @@ import { searchIndex, recallMemory } from '../src/tools/recall.js';
 import { listMemories, getStats } from '../src/tools/query.js';
 import { loadIndexes, flushPending, recalcIdfNow } from '../src/persistence.js';
 import { memIndex, invertedIndex } from '../src/state.js';
+
+// ─── SAFETY GUARD ──────────────────────────────────────────────────────────────
+// paths.ts derives TOTAL_RECALL_DIR from os.homedir(), which on Linux reads
+// $HOME. This script's ADD/SEARCH/DELETE phases and its LT_CLEANUP `rm -rf
+// $HOME` MUST run against a throwaway HOME. If the caller forgot to set
+// HOME=/tmp/tr-loadtest, the script would mutate the real ~/.total-recall —
+// and LT_CLEANUP=1 would `rm -rf` the real home. Abort unless an explicit
+// override is set. The override exists only for unusual deliberate runs; do
+// NOT use it casually.
+const realHome = os.userInfo().homedir;
+if (process.env.HOME === realHome && process.env.LT_ALLOW_REAL_HOME !== '1') {
+  console.error(
+    `loadtest: refusing to run against the real HOME (${realHome}).\n` +
+      `Run with a throwaway HOME:\n` +
+      `  HOME=/tmp/tr-loadtest npx tsx scripts/loadtest.ts\n` +
+      `(set LT_ALLOW_REAL_HOME=1 ONLY for a deliberate real-HOME run).`,
+  );
+  process.exit(2);
+}
 
 const N = Math.max(1, Math.floor(Number(process.env.LT_N ?? 10000)));
 const TAG = 'loadtest';
