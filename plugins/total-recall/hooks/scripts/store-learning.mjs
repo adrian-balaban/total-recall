@@ -79,6 +79,15 @@ process.stdin.on('end', () => {
   for (const line of input.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
+    // The extract prompt asks `claude -p` for "JSON lines only, no prose", but a
+    // model can still emit a preamble line, a bare ``` / ```json code fence, or a
+    // trailing remark. Those are NOT extraction errors — they carry no learning —
+    // so a non-JSON-shaped line is skipped SILENTLY rather than counted as an
+    // error. Previously any such line incremented `errors`, producing the noisy
+    // "0 written, 0 skipped, 1 errors" that made every clean-but-chatty run look
+    // failed. Only a line that LOOKS like JSON (starts with `{`) but fails to
+    // parse or lacks title/content is a genuine error worth surfacing.
+    if (trimmed[0] !== '{') continue;
     let obj;
     try { obj = JSON.parse(trimmed); } catch { errors++; continue; }
     if (!obj || !obj.title || !obj.content) { errors++; continue; }
