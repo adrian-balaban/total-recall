@@ -44,10 +44,10 @@
 #                             (shows the plugin version in the bottom bar). Skipped
 #                             if a statusLine is already configured.
 #   --gemini                  Install the plugin as a Gemini CLI extension.
-#                             Equivalent to `gemini extensions install <plugin-root>`
+#                             Equivalent to `agy plugin install <plugin-root>`
 #                             — copies the dir into ~/.gemini/extensions/total-recall/
 #                             and registers the MCP server + hooks (hooks/hooks.gemini.json)
-#                             automatically. Requires the `gemini` CLI on PATH.
+#                             automatically. Requires the `agy` CLI on PATH.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -71,7 +71,7 @@
 # Prerequisites:
 #   - Node.js v18+
 #   - gh CLI authenticated (`gh auth status`) — only for the org vault
-#   - gemini CLI on PATH — only for --gemini
+#   - agy CLI on PATH — only for --gemini
 #
 # --------------------------------------------------------------------------
 # What the script does — each checking state first so
@@ -89,10 +89,10 @@
 #      ~/.claude/settings.json (shows the plugin version in the bottom bar).
 #      Skipped if a statusLine is already configured.
 #   5c. Gemini CLI extension (optional, --gemini) — runs
-#      `gemini extensions install <plugin-root>`, which copies the plugin
+#      `agy plugin install <plugin-root>`, which copies the plugin
 #      dir into ~/.gemini/extensions/total-recall/ and registers the MCP
 #      server (from gemini-extension.json) and the hooks (from
-#      hooks/hooks.gemini.json) automatically. Skipped if `gemini` is not
+#      hooks/hooks.gemini.json) automatically. Skipped if `agy` is not
 #      on PATH. The hooks file uses Gemini's event-name renames
 #      (PostToolUse→AfterTool, PreCompact→PreCompress) and a full
 #      mcp_total-recall_* matcher; the script bodies are the same as
@@ -227,9 +227,9 @@ if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
 else
   warn "gh CLI not authenticated — required only for the org vault (Step 6)."
 fi
-# `gemini` is optional — only required if --gemini is passed. Warn-but-don't-fail
+# `agy` is optional — only required if --gemini is passed. Warn-but-don't-fail
 # so non-Gemini users don't see a hard error.
-command -v gemini >/dev/null 2>&1 || warn "'gemini' CLI not found on PATH — required only for --gemini (Step 5c)."
+command -v agy >/dev/null 2>&1 || warn "'agy' CLI not found on PATH — required only for --gemini (Step 5c)."
 
 # --------------------------------------------------------------------------
 # Step 1 — Detect plugin path
@@ -492,10 +492,10 @@ fi
 step "Step 5c — Gemini CLI extension (optional)"
 if [ "$GEMINI" -ne 1 ]; then
   ok "Gemini extension skipped. (Pass --gemini to install as a Gemini CLI extension.)"
-elif ! command -v gemini >/dev/null 2>&1; then
-  warn "'gemini' CLI not found on PATH — cannot install as an extension."
-  warn "Install Gemini CLI first (https://github.com/google-gemini/gemini-cli), then re-run with --gemini."
-  note "Gemini extension skipped (gemini CLI not on PATH)."
+elif ! command -v agy >/dev/null 2>&1; then
+  warn "'agy' CLI not found on PATH — cannot install as an extension."
+  warn "Install agy CLI first, then re-run with --gemini."
+  note "Gemini extension skipped (agy CLI not on PATH)."
 elif [ ! -f "$PLUGIN_ROOT/gemini-extension.json" ]; then
   warn "gemini-extension.json not found at $PLUGIN_ROOT/gemini-extension.json — skipping."
   note "Gemini extension skipped (manifest missing)."
@@ -503,7 +503,7 @@ elif [ ! -f "$PLUGIN_ROOT/hooks/hooks.gemini.json" ]; then
   warn "hooks/hooks.gemini.json not found at $PLUGIN_ROOT/hooks/hooks.gemini.json — skipping."
   note "Gemini extension skipped (hooks/hooks.gemini.json missing)."
 else
-  # The actual `gemini extensions install` command is INTERACTIVE: it prompts
+  # The actual extension install command is INTERACTIVE: it prompts
   # "Do you trust the files in this folder?" even with --consent, and there
   # is no documented flag to bypass that prompt (the top-level `--skip-trust`
   # is a session flag, not an install subcommand flag). We can't pipe "y"
@@ -517,23 +517,23 @@ else
     note "Gemini extension already installed."
   else
     info "Run the following command to install (it will ask you to trust the folder once):"
-    info "  gemini extensions install --consent $PLUGIN_ROOT"
-    # Try anyway, in case a future Gemini CLI version adds a non-interactive
+    info "  agy plugin install $PLUGIN_ROOT"
+    # Try anyway, in case a future agy CLI version adds a non-interactive
     # flag. If it succeeds, great; if it hangs on the trust prompt, the user
     # will see the message above and can run the command themselves.
     if [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
       # Interactive: try with consent; if it hangs the user can Ctrl-C and
       # the script will fall through to the manual command.
-      if ( cd "$PLUGIN_ROOT" && gemini extensions install --consent "$PLUGIN_ROOT" 2>&1 ); then
+      if ( cd "$PLUGIN_ROOT" && agy plugin install "$PLUGIN_ROOT" 2>&1 ); then
         ok "Installed Gemini extension from $PLUGIN_ROOT"
-        note "Gemini extension installed (run 'gemini' to start a session with 12 tools + hooks)."
+        note "Gemini extension installed (run 'agy' to start a session with 12 tools + hooks)."
       else
-        warn "Install did not complete — run manually: gemini extensions install --consent $PLUGIN_ROOT"
+        warn "Install did not complete — run manually: agy plugin install $PLUGIN_ROOT"
         note "Gemini extension install did not complete (run manually)."
       fi
     else
       # Non-interactive: skip the attempt entirely. The user has the command.
-      note "Gemini extension not yet installed — run: gemini extensions install --consent $PLUGIN_ROOT"
+      note "Gemini extension not yet installed — run: agy plugin install $PLUGIN_ROOT"
     fi
   fi
 fi

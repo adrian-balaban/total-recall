@@ -24,7 +24,7 @@ Claude Code.
   Gemini silently drops it. If a task needs the retrieval tree or the
   "memorize more proactively" loop, ask the user to paste the `SKILL.md`
   body and proceed as a one-shot knowledge injection.
-- **MCP-only registration (no hooks):** `gemini extensions install --consent
-  "$(pwd)"` registers the server from `gemini-extension.json` without wiring
+- **MCP-only registration (no hooks):** `agy plugin install "$(pwd)"`
+  registers the server from `gemini-extension.json` without wiring
   the lifecycle hooks — see `README.md` → *Client Compatibility* for the
   trade-off (no SessionStart index injection, no PreCompact learning capture).
