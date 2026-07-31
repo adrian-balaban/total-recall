@@ -649,4 +649,58 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     expect(lines[0]).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z pid=\d+ ppid=\d+ claude_session_id=unknown$/);
     fs.rmSync(home, { recursive: true, force: true });
   });
+
+  // H1: session-end.sh auto-commits the personal vault IF it is a git repo, so a
+  // future out-of-band file loss is recoverable via `git restore`. It must (a)
+  // snapshot pending changes, (b) be a no-op when the repo is clean, (c) NOT
+  // git-init a non-repo vault (that's one-time setup), and (d) never touch a
+  // remote. exit 0 + valid envelope in every case.
+  it('session-end.sh: auto-commits the personal vault when it is a git repo', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-h1-'));
+    const vault = path.join(home, '.total-recall', 'personal-vault');
+    fs.mkdirSync(vault, { recursive: true });
+    const gitEnv = {
+      ...process.env, HOME: home, PPID: '999999',
+      GIT_CONFIG_COUNT: '2',
+      GIT_CONFIG_KEY_0: 'user.email', GIT_CONFIG_VALUE_0: 'l@local',
+      GIT_CONFIG_KEY_1: 'user.name', GIT_CONFIG_VALUE_1: 'local',
+    };
+    const git = (args: string[]) =>
+      spawnSync('git', ['-C', vault, ...args], { encoding: 'utf8', env: gitEnv });
+    git(['init', '-q']);
+    fs.writeFileSync(path.join(vault, 'seed.md'), '# seed\n');
+    git(['add', '-A']); git(['commit', '-qm', 'seed']);
+    const base = git(['rev-parse', 'HEAD']).stdout.trim();
+
+    // pending change → the hook must commit it
+    fs.writeFileSync(path.join(vault, 'new.md'), '# new\n');
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], { encoding: 'utf8', stdio: 'pipe', env: gitEnv });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).continue).toBe(true);
+    const head = git(['rev-parse', 'HEAD']).stdout.trim();
+    expect(head).not.toBe(base); // a new snapshot commit exists
+    expect(git(['log', '-1', '--pretty=%s']).stdout).toMatch(/session snapshot/);
+    // clean now → second run is a no-op (HEAD unchanged)
+    const r2 = spawnSync('bash', [SESSION_END_SCRIPT], { encoding: 'utf8', stdio: 'pipe', env: gitEnv });
+    expect(r2.status).toBe(0);
+    expect(git(['rev-parse', 'HEAD']).stdout.trim()).toBe(head);
+    // never created a remote
+    expect(git(['remote']).stdout.trim()).toBe('');
+    fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  it('session-end.sh: does NOT git-init a non-repo personal vault', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-h1n-'));
+    const vault = path.join(home, '.total-recall', 'personal-vault');
+    fs.mkdirSync(vault, { recursive: true });
+    fs.writeFileSync(path.join(vault, 'x.md'), '# x\n');
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe',
+      env: { ...process.env, HOME: home, PPID: '999999' },
+    });
+    expect(r.status).toBe(0);
+    // vault must remain a plain directory — no .git created by the hook
+    expect(fs.existsSync(path.join(vault, '.git'))).toBe(false);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 }, 60000);

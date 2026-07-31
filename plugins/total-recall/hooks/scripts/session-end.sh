@@ -66,6 +66,28 @@ if [ -n "$MCP_PID" ]; then
   kill -TERM "$MCP_PID" 2>/dev/null || true
 fi
 
+# H1: local-only durability snapshot of the personal vault. Root cause of the
+# 2026-07-31 personal-vault loss: it had NO git and NO backup, so when its .md
+# files were cleared out-of-band the self-healing index (which rebuilds FROM the
+# .md files) had nothing to heal from — recovery required mining session
+# transcripts. A local git repo turns any future loss into `git restore`.
+#
+# STRICTLY LOCAL: this repo must never gain a remote (it holds private memories).
+# We only auto-commit an EXISTING repo — we do NOT `git init` here (that's a
+# one-time setup step, so a user who deliberately un-inited stays un-inited), and
+# a pre-push hook in the repo hard-blocks pushes as belt-and-suspenders. Entirely
+# best-effort: any failure is swallowed so session end never breaks.
+PERSONAL_VAULT="$TOTAL_RECALL_DIR/personal-vault"
+if [ -d "$PERSONAL_VAULT/.git" ]; then
+  # Only commit if there is something to commit; --quiet keeps the log clean.
+  # `git -C` avoids a cd that could confuse later steps. No remote is ever touched.
+  if [ -n "$(git -C "$PERSONAL_VAULT" status --porcelain 2>/dev/null)" ]; then
+    git -C "$PERSONAL_VAULT" add -A 2>/dev/null || true
+    git -C "$PERSONAL_VAULT" commit -q \
+      -m "session snapshot $(date -u +%Y-%m-%dT%H:%M:%SZ)" 2>/dev/null || true
+  fi
+fi
+
 # Emit a valid SessionEnd envelope. SessionEnd does NOT accept
 # additionalContext (see the header note) — the only universally-accepted
 # shape is {"continue":true}. The mcp_child / log detail lives in
