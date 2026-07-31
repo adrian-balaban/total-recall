@@ -18,7 +18,7 @@
     "test:watch": "vitest",
     "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
     "mutation": "stryker run",
-    "release:build": "npm run typecheck && npm test && npm run build"
+    "release:build": "npm run typecheck && npm audit --audit-level=critical --omit=dev && npm test && npm run build"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",

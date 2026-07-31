@@ -30,6 +30,8 @@ jobs:
       # Install optional native deps too — Stryker runs the real vitest suite,
       # which exercises better-sqlite3 + sqlite-vec + @huggingface/transformers.
       - run: npm ci
+      # Security gate: audit production dependencies to prevent critical supply-chain vulnerabilities
+      - run: npm audit --audit-level=critical --omit=dev
       - run: npm run typecheck
       # Stryker runs the unit suite (all modules) under instrumentation (~5–8 min).
       # The `break: 65` threshold in stryker.conf.json makes stryker exit 1
