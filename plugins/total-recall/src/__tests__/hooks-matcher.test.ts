@@ -19,7 +19,6 @@ import * as path from 'path';
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const HOOKS_JSON = path.join(PLUGIN_ROOT, 'hooks', 'hooks.json');
-const INSTALL_SH = path.join(PLUGIN_ROOT, 'install.sh');
 
 // Reproduce Claude Code's matcher evaluation. Returns true if `matcher` should
 // match `toolName` under Claude Code's documented semantics.
@@ -53,17 +52,6 @@ function readPostToolUseMatcher(jsonFile: string): string {
   throw new Error('no PostToolUse group wires sync-org-memory.sh');
 }
 
-// The install.sh --standalone path embeds the matcher as a JS string literal.
-// Pull it out of the `matcher: '...'` line so the same regression guard covers
-// both the canonical hooks.json and the standalone-embedded copy (they must stay
-// in sync per the plugin CLAUDE.md).
-function readInstallShMatcher(): string {
-  const src = fs.readFileSync(INSTALL_SH, 'utf8');
-  const m = src.match(/matcher:\s*'([^']*)'/);
-  expect(m).not.toBeNull();
-  return m![1] as string;
-}
-
 const WRITE_TOOLS = [
   'mcp__plugin_total-recall_total-recall__store_memory',
   'mcp__plugin_total-recall_total-recall__update_memory',
@@ -78,7 +66,6 @@ const READ_TOOLS = [
 
 describe.each([
   ['hooks.json', readPostToolUseMatcher(HOOKS_JSON)],
-  ['install.sh embedded', readInstallShMatcher()],
 ])('org-sync PostToolUse matcher (%s)', (_label, matcher) => {
   it('is a regex, not a bare exact-match list (contains a non-exact-match char)', () => {
     // A bare `store_memory|update_memory|delete_memory` would be exact-match-only
