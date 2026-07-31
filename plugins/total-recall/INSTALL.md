@@ -89,7 +89,7 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
              --allowed-email-domain yourcompany.com
 ```
 
-Requirements: `gh auth status` green, and the `org-vault` branch must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
+Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `org-vault`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
 ## Privacy model — what is blocked, what is only warned
 
