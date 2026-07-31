@@ -79,6 +79,23 @@ suite('store-learning.mjs behavior (input validation, never-overwrite, batches)'
     expect(counts(r.stderr)).toEqual({ written: 1, skipped: 0, errors: 0 });
   });
 
+  it('B3b: non-JSON prose / code-fence lines are skipped silently, NOT counted as errors', () => {
+    // `claude -p` is asked for "JSON lines only" but can still emit a preamble,
+    // a ``` / ```json fence, or a trailing remark. Those carry no learning and
+    // must not inflate the error count (the old behavior produced the spurious
+    // "0 written, 0 skipped, 1 errors" on every clean-but-chatty extraction).
+    // Only lines that LOOK like JSON (start with `{`) are validated.
+    const r = runMjs([
+      'Here are the learnings I found:',
+      '```json',
+      line('Real Learning'),
+      '```',
+      'That is everything worth storing.',
+    ].join('\n'));
+    expect(counts(r.stderr)).toEqual({ written: 1, skipped: 0, errors: 0 });
+    expect(fs.existsSync(path.join(vault(), 'knowledge', 'real-learning.md'))).toBe(true);
+  });
+
   it('B4: never-overwrite — an existing memory file is left byte-identical', () => {
     runMjs(line('Precious Memory', { content: '## Executive Summary\n\nOriginal.\n' }));
     const file = path.join(vault(), 'knowledge', 'precious-memory.md');
@@ -123,7 +140,9 @@ suite('store-learning.mjs behavior (input validation, never-overwrite, batches)'
 
   it('B10: mixed batch accounting — 1 written, 1 skipped, 1 error; stdout stays empty', () => {
     runMjs(line('Already There'));
-    const r = runMjs([line('Fresh One'), line('Already There'), 'not-json'].join('\n'));
+    // A JSON-SHAPED malformed line (`{…`) is the genuine error; a bare prose line
+    // ('not-json') is skipped silently (see B3b), so it must NOT add to the count.
+    const r = runMjs([line('Fresh One'), line('Already There'), '{"title": "trunc', 'not-json'].join('\n'));
     expect(counts(r.stderr)).toEqual({ written: 1, skipped: 1, errors: 1 });
     // Hooks must not spam stdout — the summary goes to stderr only.
     expect(r.stdout).toBe('');

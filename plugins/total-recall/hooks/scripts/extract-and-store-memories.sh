@@ -55,7 +55,16 @@ Rules:
 # for the same discoverability. stdout stays clean (the hook only emits the
 # final {"continue":true}); only stderr is tee'd to the log.
 EXTRACT_LOG="$HOME/.total-recall/.extract.log"
-claude -p "$EXTRACT_PROMPT" < "$TRANSCRIPT" 2>>"$EXTRACT_LOG" \
+# Cap the transcript fed to `claude -p`. A long session's transcript.jsonl grows
+# past claude -p's stdin limit ("piped stdin input exceeds 10MB") — observed
+# failing every extraction on large sessions, with the error line then counted as
+# a bogus store-learning error. Feed only the most recent ~1MB (tail -c): the
+# recent turns are what a PreCompact extraction should summarize anyway, and 1MB
+# is comfortably under the limit while still spanning many turns. tail -c may slice
+# mid-line, but the transcript is JSONL and claude -p reads it as free-form context
+# (not strict JSON), so a truncated first line is harmless.
+MAX_BYTES=1048576
+claude -p "$EXTRACT_PROMPT" < <(tail -c "$MAX_BYTES" "$TRANSCRIPT") 2>>"$EXTRACT_LOG" \
   | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
 
 echo '{"continue":true}'
