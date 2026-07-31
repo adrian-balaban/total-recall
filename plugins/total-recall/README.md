@@ -248,7 +248,7 @@ See **[INSTALL.md](INSTALL.md)** for the full guide (profiles, Windows, org vaul
 cd plugins/total-recall && npm install && npm run build
 
 claude plugin install "$(pwd)"       # Claude Code (also the manual-clone path — auto-loads hooks/hooks.json)
-./install.sh --gemini                # Gemini CLI
+./install.sh --gemini                # Gemini CLI (agy)
 ```
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
@@ -260,13 +260,13 @@ claude plugin install "$(pwd)"       # Claude Code (also the manual-clone path �
 | Client | MCP Tools | Hook Side Effects (Sync/Index) | Context Injection (`additionalContext`) | Playbook Skills |
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
-| **Gemini CLI** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
+| **Gemini CLI (agy)** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
 | **Codex CLI** | ✅ Yes | ❌ No | ❌ No | ❌ No |
 
 ### Client-Specific Integration Details
 
 *   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject memories at session start.
-*   **Gemini CLI**: registers through `gemini-extension.json`. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
+*   **Gemini CLI (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
 *   **Codex CLI**: MCP server only (no hooks) — see [INSTALL.md](INSTALL.md#codex-cli-mcp-only-no-hooks).
 *   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local model.
 *   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).

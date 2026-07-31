@@ -7,7 +7,7 @@ One plugin, two clients — Claude Code and Gemini CLI — all set up by a singl
 - **Node.js v18+** on PATH
 - `claude` CLI (for MCP registration; skipped with a warning if absent)
 - `gh` CLI authenticated — **only** if you enable the shared org vault
-- `gemini` CLI — **only** for `--gemini`
+- `agy` CLI — **only** for `--gemini`
 - **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))
 
 ## Windows
