@@ -1,6 +1,6 @@
 # 📦 Installing Total Recall
 
-One plugin, three clients — Claude Code, Gemini CLI, and standalone — all set up by a single state-aware `install.sh`.
+One plugin, two clients — Claude Code and Gemini CLI — all set up by a single state-aware `install.sh`.
 
 ## Prerequisites
 
@@ -43,11 +43,9 @@ claude plugin install "$(pwd)"
 # Gemini CLI (MCP + hooks/hooks.gemini.json)
 ./install.sh --gemini
 
-# Standalone (writes absolute hook paths into ~/.claude/settings.json)
-# Refuses (with a confirm prompt) if total-recall is already installed via the
-# plugin manager — running both would start two MCP servers and inject the
-# memory index twice per session. Pick one mode.
-./install.sh --standalone
+# Manual clone (no marketplace): install the checkout itself as a local plugin,
+# which auto-loads hooks/hooks.json exactly like a marketplace install.
+claude plugin install "$(pwd)"
 ```
 
 ### From inside a Claude Code session
@@ -71,11 +69,11 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
-1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags the repo until `claude plugin update`) or when `--standalone` would duplicate an existing plugin-manager install
-2. Create vault directories under `~/.total-recall/`
-3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed and `--standalone` wasn't requested
+1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags the repo until `claude plugin update`)
+2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots)
+3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed
 4. Build the initial index
-5. Wire hooks (`--standalone` only), optional statusline (`--statusline`), Gemini (`--gemini`)
+5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini (`--gemini`)
 6. Org vault (optional — `--org-repo URL`, `--allowed-email-domain D`)
 7. Vector search (per the chosen profile)
 8. Verify + summary

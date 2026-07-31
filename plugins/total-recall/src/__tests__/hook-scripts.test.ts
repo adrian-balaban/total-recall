@@ -345,7 +345,7 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
       // root with no dist/index.js dies at Step 1 before reaching the Step 3
       // guard under test). Step 4 then runs the real build-memory-index.sh
       // against the tmp HOME vault (empty → fast, exit 0); Step 7 --no-vector
-      // skips the npm install. No --standalone/--statusline/--org-repo.
+      // skips the npm install. No --statusline/--org-repo.
       const r = spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector'], {
         encoding: 'utf8',
         stdio: 'pipe',
@@ -384,66 +384,6 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(l).toContain('sqlite-vec');
     expect(l).toContain('better-sqlite3');
     expect(l).toContain('@huggingface/transformers');
-  });
-
-  // Phase 2.1: install.sh --standalone re-run must backfill a MISSING SessionEnd
-  // hook without duplicating the events already wired. The old guard bailed on
-  // ANY total-recall hook (`includes('build-memory-index.sh')`), so a pre-5.1
-  // standalone install (SessionStart/PostToolUse/PreCompact present, SessionEnd
-  // absent) re-running install.sh hit SKIP and never got SessionEnd. The fix
-  // uses per-event presence checks. Pre-seed a "pre-5.1" settings.json (3 events
-  // wired, no SessionEnd), re-run --standalone, and verify SessionEnd is added
-  // while the other three are NOT duplicated.
-  it('install.sh --standalone re-run backfills missing SessionEnd without duplicating other events', () => {
-    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-sessionend-'));
-    const binDir = path.join(home, 'bin');
-    fs.mkdirSync(binDir, { recursive: true });
-    const claudeStub = path.join(binDir, 'claude');
-    fs.writeFileSync(claudeStub, [
-      '#!/usr/bin/env bash',
-      'if [ "$1" = "mcp" ] && [ "$2" = "get" ]; then exit 0; fi',
-      'if [ "$1" = "mcp" ] && [ "$2" = "add-json" ]; then exit 0; fi',
-      'exit 0',
-    ].join('\n'));
-    fs.chmodSync(claudeStub, 0o755);
-    const settingsDir = path.join(home, '.claude');
-    fs.mkdirSync(settingsDir, { recursive: true });
-    const settingsFile = path.join(settingsDir, 'settings.json');
-    // Pre-5.1 shape: SessionStart + PostToolUse + PreCompact wired with the
-    // total-recall scripts, SessionEnd ABSENT. Use the real REPO_ROOT so the
-    // command strings match what install.sh's `has()` check looks for
-    // (`/hooks/scripts/<script>`).
-    const tr = (script: string) => `'${REPO_ROOT}/hooks/scripts/${script}'`;
-    fs.writeFileSync(settingsFile, JSON.stringify({
-      hooks: {
-        SessionStart: [{ hooks: [{ type: 'command', command: tr('build-memory-index.sh'), timeout: 15 }] }],
-        PostToolUse: [{ matcher: 'store_memory|update_memory|delete_memory', hooks: [{ type: 'command', command: tr('sync-org-memory.sh'), timeout: 30 }] }],
-        PreCompact: [{ hooks: [{ type: 'command', command: tr('extract-and-store-memories.sh'), timeout: 60 }] }],
-      },
-    }, null, 2));
-    try {
-      const r = spawnSync('bash', [INSTALL_SCRIPT, '--standalone', '--plugin-root', REPO_ROOT, '-y', '--no-vector'], {
-        encoding: 'utf8',
-        stdio: 'pipe',
-        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
-      });
-      expect(r.status, r.stdout + r.stderr).toBe(0);
-      const written = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
-      // SessionEnd was ABSENT → must now be present with session-end.sh.
-      const sessionEnd = written.hooks.SessionEnd || [];
-      const seCmds = sessionEnd.flatMap((g: any) => g.hooks.map((h: any) => h.command));
-      expect(seCmds.some((c: string) => c.includes('/hooks/scripts/session-end.sh'))).toBe(true);
-      // The three pre-existing events must NOT be duplicated: each still has
-      // exactly one total-recall entry.
-      const ssCount = (written.hooks.SessionStart || []).flatMap((g: any) => g.hooks).filter((h: any) => typeof h.command === 'string' && h.command.includes('/hooks/scripts/build-memory-index.sh')).length;
-      const ptuCount = (written.hooks.PostToolUse || []).flatMap((g: any) => g.hooks).filter((h: any) => typeof h.command === 'string' && h.command.includes('/hooks/scripts/sync-org-memory.sh')).length;
-      const pcCount = (written.hooks.PreCompact || []).flatMap((g: any) => g.hooks).filter((h: any) => typeof h.command === 'string' && h.command.includes('/hooks/scripts/extract-and-store-memories.sh')).length;
-      expect(ssCount).toBe(1);
-      expect(ptuCount).toBe(1);
-      expect(pcCount).toBe(1);
-    } finally {
-      fs.rmSync(home, { recursive: true, force: true });
-    }
   });
 
   // Pass 6 fix: install.sh's org-config block used to delete allowedEmailDomains

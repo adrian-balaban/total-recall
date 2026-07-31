@@ -8,7 +8,6 @@
 #   2. Create vault directories
 #   3. Register the MCP server
 #   4. Build the initial index
-#   5. Wire hooks into ~/.claude/settings.json   (standalone installs only)
 #   5b. Statusline         (optional, --statusline)
 #   5c. Gemini extension   (optional, --gemini)
 #   6. Org vault            (optional)
@@ -39,9 +38,6 @@
 #                             bare "install the default" maps to semantic-on.
 #   --plugin-root PATH        Path to the total-recall plugin dir
 #                             (default: this script's own directory)
-#   --standalone              Wire hooks into ~/.claude/settings.json.
-#                             Skip this for plugin installs — `claude plugin
-#                             install` auto-loads hooks/hooks.json.
 #   --statusline              Install the total-recall status line: copies
 #                             statusline.sh to ~/.claude/total-recall-statusline.sh
 #                             and wires `statusLine` into ~/.claude/settings.json
@@ -88,10 +84,6 @@
 #   3. Register MCP server — skips if present; else
 #      claude mcp add-json … --scope user, then checks for "Failed to connect".
 #   4. Build initial index via hooks/scripts/build-memory-index.sh.
-#   5. Hook wiring — --standalone only; merges the SessionStart/PostToolUse/
-#      PreCompact entries (mirroring hooks/hooks.json) into
-#      ~/.claude/settings.json (preserves build → load ordering). Plugin
-#      installs skip it.
 #   5b. Statusline (optional, --statusline) — copies statusline.sh to
 #      ~/.claude/total-recall-statusline.sh and wires `statusLine` into
 #      ~/.claude/settings.json (shows the plugin version in the bottom bar).
@@ -127,7 +119,6 @@ SETTINGS_FILE="$HOME/.claude/settings.json"
 
 # Defaults / flag state
 PLUGIN_ROOT=""
-STANDALONE=0
 STATUSLINE=0
 ORG_REPO=""
 ORG_DOMAIN=""
@@ -181,7 +172,6 @@ ask_value() {
 while [ $# -gt 0 ]; do
   case "$1" in
     --plugin-root)         PLUGIN_ROOT="${2:?--plugin-root needs a path}"; shift 2;;
-    --standalone)          STANDALONE=1; shift;;
     --statusline)          STATUSLINE=1; shift;;
     --gemini)              GEMINI=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
@@ -265,8 +255,7 @@ ok "Plugin root: $PLUGIN_ROOT"
 
 # Surface which version is actually being installed. A resolved PLUGIN_ROOT
 # inside the Claude plugin cache is pinned to the git SHA of the last
-# `claude plugin update` and can silently lag a newer checkout — this has
-# happened (a --standalone run wired 1.0.101 while the repo was at 1.0.105).
+# `claude plugin update` and can silently lag a newer checkout.
 PLUGIN_VERSION=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1]+"/.claude-plugin/plugin.json","utf8")).version||"unknown")}catch{process.stdout.write("unknown")}' "$PLUGIN_ROOT" 2>/dev/null || echo unknown)
 info "Plugin version: $PLUGIN_VERSION"
 case "$PLUGIN_ROOT" in
@@ -276,23 +265,14 @@ case "$PLUGIN_ROOT" in
     ;;
 esac
 
-# Detect an active plugin-manager install of total-recall. Running install.sh's
-# MCP/hook wiring on top of it produces TWO servers and DOUBLE index injection
-# per session (the plugin's .mcp.json + the user-scope registration below).
+# Detect an active plugin-manager install of total-recall. When present, the
+# plugin's own .mcp.json already provides the MCP server, so Step 3 skips the
+# user-scope registration to avoid running TWO servers / double index injection.
 PLUGIN_MANAGED=0
 INSTALLED_PLUGINS_FILE="$HOME/.claude/plugins/installed_plugins.json"
 if [ -f "$INSTALLED_PLUGINS_FILE" ]; then
   if node -e 'const d=JSON.parse(require("fs").readFileSync(process.argv[1],"utf8"));process.exit(Object.keys(d.plugins||{}).some(k=>k.split("@")[0]==="total-recall")?0:1)' "$INSTALLED_PLUGINS_FILE" 2>/dev/null; then
     PLUGIN_MANAGED=1
-  fi
-fi
-if [ "$PLUGIN_MANAGED" -eq 1 ] && [ "$STANDALONE" -eq 1 ]; then
-  warn "total-recall is already installed via the Claude plugin manager."
-  warn "Continuing with --standalone would run TWO MCP servers and inject the memory index twice per session."
-  if ask_yes_no "Continue with --standalone anyway?" "n"; then
-    warn "Proceeding — consider 'claude plugin uninstall total-recall' to avoid duplicates."
-  else
-    die "Aborted. Either uninstall the plugin first ('claude plugin uninstall total-recall') or re-run without --standalone."
   fi
 fi
 
@@ -341,6 +321,29 @@ else
   note "Vault directories created."
 fi
 
+# H1 durability: make the personal vault a LOCAL-ONLY git repo so an out-of-band
+# file loss is recoverable (`git -C … restore`). The self-healing index rebuilds
+# FROM the .md files, so if the files vanish there is nothing to heal from — a
+# 2026-07-31 incident that required mining session transcripts to recover.
+# session-end.sh auto-commits this repo each session (it only commits an EXISTING
+# repo — this is the one-time init). STRICTLY LOCAL: no remote is ever added, and
+# a pre-push hook hard-blocks pushes (the vault holds private memories). Idempotent
+# and best-effort: skipped if git is unavailable or the repo already exists.
+if command -v git >/dev/null 2>&1 && [ -d "$PERSONAL_VAULT" ] && [ ! -d "$PERSONAL_VAULT/.git" ]; then
+  if git -C "$PERSONAL_VAULT" init -q 2>/dev/null; then
+    git -C "$PERSONAL_VAULT" config user.email "local@total-recall" 2>/dev/null || true
+    git -C "$PERSONAL_VAULT" config user.name "total-recall-local" 2>/dev/null || true
+    printf '.superseded/\n*.tmp.*\n' > "$PERSONAL_VAULT/.gitignore"
+    mkdir -p "$PERSONAL_VAULT/.git/hooks"
+    printf '#!/bin/sh\necho "total-recall: personal-vault is LOCAL-ONLY — push is blocked by design." >&2\nexit 1\n' \
+      > "$PERSONAL_VAULT/.git/hooks/pre-push"
+    chmod +x "$PERSONAL_VAULT/.git/hooks/pre-push" 2>/dev/null || true
+    git -C "$PERSONAL_VAULT" add -A 2>/dev/null || true
+    git -C "$PERSONAL_VAULT" commit -q -m "personal-vault baseline" 2>/dev/null || true
+    ok "Personal vault is now a local-only git repo (durability snapshots on session end)."
+  fi
+fi
+
 # --------------------------------------------------------------------------
 # Step 3 — Register MCP server
 # --------------------------------------------------------------------------
@@ -348,7 +351,7 @@ step "Step 3 — Register MCP server"
 if ! command -v claude >/dev/null 2>&1; then
   warn "'claude' CLI unavailable — skipping MCP registration."
   note "MCP registration skipped (no claude CLI)."
-elif [ "$PLUGIN_MANAGED" -eq 1 ] && [ "$STANDALONE" -ne 1 ]; then
+elif [ "$PLUGIN_MANAGED" -eq 1 ]; then
   # The plugin manager already provides the server via the plugin's .mcp.json —
   # a user-scope registration on top of it would start a second server and
   # inject the memory index twice per session. Clean up any stale one instead.
@@ -423,109 +426,16 @@ else
 fi
 
 # --------------------------------------------------------------------------
-# Step 5 — Hook wiring (standalone only)
+# Step 5 — Hooks
 # --------------------------------------------------------------------------
-step "Step 5 — Hook wiring (standalone only)"
-if [ "$STANDALONE" -ne 1 ]; then
-  ok "Plugin install — hooks auto-load from hooks/hooks.json. (Pass --standalone to wire manually.)"
-else
-  info "Merging total-recall hooks into $SETTINGS_FILE"
-  mkdir -p "$(dirname "$SETTINGS_FILE")"
-  node - "$SETTINGS_FILE" "$PLUGIN_ROOT" <<'NODE'
-const fs = require('fs');
-const path = require('path');
-const [, , settingsPath, plugin] = process.argv;
-let s = {};
-try { s = JSON.parse(fs.readFileSync(settingsPath, 'utf8')); } catch (_) {}
-s.hooks = s.hooks || {};
-// String concat, not a template literal: `plugin` is $PLUGIN_ROOT from argv,
-// and a backtick or `${` sequence in that path would break the template literal
-// and abort the hook-wiring heredoc (silent: hooks never get wired). Plain
-// concat is immune to path-content injection.
-//
-// #27: two corrections vs. the prior `'bash ' + plugin + ...` form:
-//   1. Drop the `bash ` prefix. The hook scripts ship with
-//      `#!/usr/bin/env bash` shebangs + exec bits, so direct invocation works
-//      and matches the canonical hooks/hooks.json form (which invokes the
-//      script path directly, no `bash ` wrapper).
-//   2. Shell-quote the absolute path. Claude Code runs a hook `command` via
-//      `sh -c "<command>"`, so an unquoted path containing spaces (e.g.
-//      "/Users/My Name/plugins/total-recall") word-splits — `bash /Users/My`
-//      was the command and `Name/plugins/.../x.sh` its (ignored) argument,
-//      silently breaking every hook. Wrapping in single quotes (with embedded
-//      single quotes escaped) makes the path one shell token regardless of
-//      spaces.
-//
-// We CANNOT use hooks.json's `${CLAUDE_PLUGIN_ROOT}` here: --standalone wires
-// into ~/.claude/settings.json OUTSIDE any plugin context, and that variable
-// is plugin-manifest-only (it does not resolve in user settings.json — only
-// ${CLAUDE_PROJECT_DIR} does, and we are not project-relative here). The
-// literal absolute $PLUGIN_ROOT is the correct standalone equivalent; the
-// only deliberate difference from hooks.json is variable-vs-literal, forced
-// by the scope difference.
-const quote = (s) => "'" + s.replace(/'/g, "'\\''") + "'";
-const cmd = (p, timeout) => ({ type: 'command', command: quote(plugin + '/hooks/scripts/' + p), timeout });
-// Per-event presence check (REVIEW 5.1 / Phase 2.1). The old guard bailed on
-// ANY total-recall hook via a single `includes('build-memory-index.sh')`,
-// so a pre-5.1 standalone install (SessionStart/PostToolUse/PreCompact
-// present, SessionEnd absent) re-running install.sh hit SKIP and never got
-// the SessionEnd hook. Now each event is added only if its canonical
-// total-recall script is absent — a re-run fills in the missing SessionEnd
-// without duplicating the events already wired.
-const has = (arr, script) => Array.isArray(arr) && arr.some(g =>
-  Array.isArray(g.hooks) && g.hooks.some(h =>
-    typeof h === 'object' && h !== null && typeof h.command === 'string' &&
-    h.command.includes('/hooks/scripts/' + script)));
-const added = [];
-if (!has(s.hooks.SessionStart, 'build-memory-index.sh')) {
-  (s.hooks.SessionStart = s.hooks.SessionStart || []).push({ hooks: [
-    cmd('pull-org-vault.sh', 30),
-    cmd('build-memory-index.sh', 15),   // must run BEFORE load-memory-index.sh
-    cmd('load-memory-index.sh', 5),
-    cmd('check-sync-errors.sh', 5),     // 4.4: warn if org-sync push failed since last success
-  ] });
-  added.push('SessionStart');
-}
-if (!has(s.hooks.PostToolUse, 'sync-org-memory.sh')) {
-  (s.hooks.PostToolUse = s.hooks.PostToolUse || []).push({
-    // Full MCP tool name is mcp__plugin_total-recall_total-recall__<tool>.
-    // A bare "store_memory|update_memory|delete_memory" matcher contains only
-    // exact-match chars (letters/digits/_/-/spaces/,/|), so Claude Code treats
-    // it as an exact-string list and compares it against the full tool name →
-    // never matches → the org-sync hook silently never fires. The parens below
-    // force the regex path (unanchored), so it matches the __<tool> suffix.
-    matcher: 'mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)',
-    hooks: [ cmd('sync-org-memory.sh', 30) ],
-  });
-  added.push('PostToolUse');
-}
-if (!has(s.hooks.PreCompact, 'extract-and-store-memories.sh')) {
-  (s.hooks.PreCompact = s.hooks.PreCompact || []).push({ hooks: [
-    cmd('extract-and-store-memories.sh', 60),
-  ] });
-  added.push('PreCompact');
-}
-if (!has(s.hooks.SessionEnd, 'session-end.sh')) {
-  (s.hooks.SessionEnd = s.hooks.SessionEnd || []).push({ hooks: [
-    cmd('session-end.sh', 5),
-  ] });
-  added.push('SessionEnd');
-}
-if (added.length === 0) {
-  console.log('SKIP: total-recall hooks already present.');
-  process.exit(0);
-}
-fs.mkdirSync(path.dirname(settingsPath), { recursive: true });
-fs.writeFileSync(settingsPath, JSON.stringify(s, null, 2) + '\n');
-console.log('WROTE: total-recall hooks added: ' + added.join(', ') + '.');
-NODE
-  if [ $? -eq 0 ]; then
-    ok "Hook wiring complete."
-    note "Hooks wired into settings.json (standalone)."
-  else
-    warn "Hook wiring failed — wire hooks manually to mirror hooks/hooks.json."
-  fi
-fi
+# Hooks (SessionStart/PostToolUse/PreCompact/SessionEnd) auto-load from the
+# plugin manifest's hooks/hooks.json — no wiring needed. A manual clone gets
+# the same by installing the checkout as a local plugin:
+#   claude plugin install "$(pwd)"
+# which loads hooks/hooks.json exactly like a marketplace install (see
+# INSTALL.md). There is no user-scope settings.json hook merge to maintain.
+step "Step 5 — Hooks"
+ok "Hooks auto-load from hooks/hooks.json (plugin install). Manual clone: run 'claude plugin install \"\$(pwd)\"'."
 
 # --------------------------------------------------------------------------
 # Step 5b — Statusline (optional, --statusline)

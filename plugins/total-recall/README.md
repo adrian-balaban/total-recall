@@ -247,9 +247,8 @@ See **[INSTALL.md](INSTALL.md)** for the full guide (profiles, Windows, org vaul
 ```bash
 cd plugins/total-recall && npm install && npm run build
 
-claude plugin install "$(pwd)"       # Claude Code
+claude plugin install "$(pwd)"       # Claude Code (also the manual-clone path — auto-loads hooks/hooks.json)
 ./install.sh --gemini                # Gemini CLI
-./install.sh --standalone            # Standalone (~/.claude/settings.json)
 ```
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
