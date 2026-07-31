@@ -35,13 +35,25 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## Before committing — mandatory pre-commit checklist
 
-Run all three, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
+Run all four, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
 
 1. **Increase the version.** Bump the version in **`package.json` only** — it is the single source of truth. Do **not** edit `.claude-plugin/plugin.json`'s version by hand: the `npm run build` step (below) runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into `plugin.json` automatically, so the two can never drift. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`), so the version must be set **before** step 2.
 2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.mjs` + `dist/privacy-filter.mjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
-3. **Test all.** `npm test` (the full unit/component suite, `maxWorkers=1` — see the run output for the current count) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
+3. **Audit dependencies.** `npm audit --audit-level=critical --omit=dev`. Ensure zero critical supply-chain vulnerabilities exist in production dependencies.
+4. **Test all.** `npm test` (the full unit/component suite, `maxWorkers=1` — see the run output for the current count) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
 
-Only after all three are green: `git add -A && git commit` from the plugin root, then push.
+Only after all four are green: `git add -A && git commit -S` from the plugin root (signed commit), then push.
+
+### Git Commit & Tag Signing Policy
+
+Because plugin distribution uses `git-subdir` (where `claude plugin install` and `claude plugin update` fetch directly from this repository's git commit history without an intermediary registry like npm), signed commits and tags are **strongly enforced**:
+
+- **Configure local GPG/SSH signing:**
+  ```bash
+  git config --global commit.gpgsign true
+  git config --global tag.gpgsign true
+  ```
+- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`).
 
 ## Architecture
 
