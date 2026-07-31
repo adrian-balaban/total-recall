@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execSync, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import { parseFrontmatter, stringifyFrontmatter } from '../dist/frontmatter.mjs';
 import { privacyCheck, sanitizeAllowedDomains } from '../dist/privacy-filter.mjs';
@@ -89,6 +90,56 @@ function git(cwd, args, opts = {}) {
     throw new Error(`git ${args.join(' ')} failed: ${result.stderr?.trim()}`);
   }
   return result.stdout ?? '';
+}
+
+// H2 tripwire against a working-tree wipe. Root cause (2026-07-31 incident): the
+// org-vault working tree was emptied of all 66 tracked .md files while git HEAD
+// still referenced them (they showed as `D` deleted-in-worktree) — the classic
+// signature of a tree restored against a stale/empty index (a pathspec-`checkout`,
+// an interrupted operation, or a `switch` when the local branch pointer was
+// transiently bad). No single line in this script provably causes it, so rather
+// than "fix" an unreproducible bug we make its EFFECT non-silent and recoverable:
+// before any tree-mutating git op, snapshot how many .md files HEAD has and how
+// many are on disk; after, if the disk went to zero while HEAD still has files,
+// abort loudly and restore the tree from HEAD. `git restore` (or checkout-- as a
+// fallback) is safe here precisely because HEAD is intact.
+function countHeadMd(cwd) {
+  const out = git(cwd, ['ls-tree', '-r', '--name-only', 'HEAD'], { quiet: true, allowFail: true });
+  return out.split('\n').filter((l) => l.trim().endsWith('.md')).length;
+}
+function countDiskMd(dir) {
+  if (!fs.existsSync(dir)) return 0;
+  let n = 0;
+  for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === '.git') continue;
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) n += countDiskMd(p);
+    else if (e.isFile() && e.name.endsWith('.md')) n++;
+  }
+  return n;
+}
+// Runs `fn` (a tree-mutating git op). If it collapses a non-empty working tree to
+// zero .md files while HEAD still has some, restore from HEAD and throw. Returns
+// fn's result otherwise. No-op guard when the tree was already empty (cold clone).
+function guardTreeWipe(cwd, label, fn) {
+  const headMd = countHeadMd(cwd);
+  const beforeDisk = countDiskMd(cwd);
+  const result = fn();
+  if (headMd > 0 && beforeDisk > 0) {
+    const afterDisk = countDiskMd(cwd);
+    if (afterDisk === 0) {
+      console.error(
+        `org-sync: ABORT — '${label}' emptied the org working tree ` +
+          `(${beforeDisk} → 0 .md files) while HEAD still has ${headMd}. ` +
+          `Restoring the tree from HEAD; not committing anything this run.`,
+      );
+      git(cwd, ['restore', '--source=HEAD', '--worktree', '--', '.'], { quiet: true, allowFail: true });
+      // Fallback for older git without `restore`: force-materialize HEAD to the tree.
+      if (countDiskMd(cwd) === 0) git(cwd, ['checkout', 'HEAD', '--', '.'], { quiet: true, allowFail: true });
+      throw new Error(`org working-tree wipe detected on '${label}' and restored from HEAD`);
+    }
+  }
+  return result;
 }
 
 // Atomic write for the org index.json is shared via scripts/atomic-write.mjs
@@ -342,7 +393,12 @@ async function main() {
   // <name>` is pathspec-ambiguous when <name> matches a root path (org-vault/ is a
   // subdir of the repo toplevel), silently staying on the wrong branch.
   try {
-    git(ORG_VAULT_DIR, ['switch', BRANCH], { quiet: true });
+    // H2: wrap the only tree-mutating op in the wipe tripwire. A `switch` that
+    // restores the tree against a stale/empty index would empty it; the guard
+    // restores from HEAD and throws rather than proceeding to commit an empty tree.
+    guardTreeWipe(ORG_VAULT_DIR, `switch ${BRANCH}`, () =>
+      git(ORG_VAULT_DIR, ['switch', BRANCH], { quiet: true }),
+    );
   } catch (e) {
     // switch can refuse if an untracked org file clashes with a tracked one on
     // BRANCH (rare, only if the working tree drifted off it), or if BRANCH doesn't
@@ -430,7 +486,17 @@ async function main() {
   console.log(`Synced ${key} to org vault.`);
 }
 
-main().then(() => {
+// Export the H2 wipe-tripwire helpers for unit testing. Guard the top-level
+// main() run behind an "invoked as a script" check so importing this module in a
+// test does NOT kick off a real org sync (which would need HOME/config/git set up).
+export { countHeadMd, countDiskMd, guardTreeWipe };
+
+const invokedDirectly =
+  process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (!invokedDirectly) {
+  // imported (e.g. by a test) — do not auto-run main()
+} else main().then(() => {
   // 4.4 (REVIEW 1.6): stamp a success marker on any non-throwing main() resolution
   // (a clean sync, "nothing to sync", or a privacy-blocked early return — none of
   // those is a push failure). The SessionStart check-sync-errors.sh hook compares
