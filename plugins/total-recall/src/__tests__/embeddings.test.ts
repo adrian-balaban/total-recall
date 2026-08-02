@@ -1,4 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+// Redirect HOME before any module import — paths.ts captures os.homedir() once
+// at module load. Without this, loadConfig() reads the DEVELOPER's real
+// ~/.total-recall/config.json, so the load-failure warning below named whatever
+// embeddingModel that machine happened to have configured: test output that
+// varies per developer, and a latent flake for any future assertion on the
+// model name. Nothing here needs a real HOME (the HF pipeline and vectorStore
+// are both fully mocked); only loadConfig() reads it.
+vi.hoisted(() => {
+  process.env.HOME = '/tmp/tr-embeddings-' + process.pid;
+});
+
 import {
   embed,
   embedAndUpsert,

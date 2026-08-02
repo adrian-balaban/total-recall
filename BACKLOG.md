@@ -209,44 +209,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   DeepEval if agentic/multi-turn MCP-interaction metrics are actually needed. Keep
   it a dev-only harness (not shipped in `dist/`), same as the mutation tooling.
 
-### Multilingual query expansion double-counts duplicate tokens
-- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 1 (proposal file deleted
-  after triage; this entry is the record).
-- **What:** `src/tfidf.ts:159-167` — `tfidfSearch`'s bilingual expansion pushes
-  each query token plus its translation, but the dict is bidirectional (RO→EN
-  *and* EN→RO), so a query containing a word **and** its translation produces
-  collisions: `"decizie decision"` →
-  `['decizie','decision','decision','decizie']`. The scoring loop
-  (`tfidf.ts:189-216`) adds each doc's score once per token, so a doc matching
-  `decizie` gets its `(1+log tf)·idf ·boost` added twice → ~2× inflation vs. the
-  monolingual baseline. An artifact of the translation step, not genuine
-  query-term frequency.
-- **Trigger:** any user enabling `config.enableMultilingualSearch` and issuing a
-  mixed-language query. Low severity today (gated, default off, Stryker-excluded
-  so lightly tested), but a trivial fix worth pinning.
-- **Shape when picked up:** dedupe `tokens` after expansion (preserve first-seen
-  order so the title/tag boost path sees each token once). Pin in
-  `tfidf-multilingual.test.ts`: query `"decizie decision"` against a
-  single-`decizie` doc must score equal to the monolingual `"decizie"` query.
-
-### `get_memories_by_keys(summary=true)` exec-summary capture bleeds past the section boundary
-- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 2 (proposal file deleted
-  after triage; this entry is the record).
-- **What:** `src/tools/query.ts:82` — the regex
-  `/^## Executive Summary\n+([\s\S]{0,500})/m` captures up to 500 chars after the
-  header with **no stop at the next `## ` heading**. `withExecutiveSummary`
-  (frontmatter.ts) lays the body out as `## Executive Summary\n\n<summary>\n\n## <next>…`,
-  so a short summary (the common case) swallows the following section's heading
-  line + body up to the 500-char cap, leaking the next section into the
-  `summary` field of the injected index / any rendering UI.
-- **Trigger:** surfaced as a quality issue in summaries; low severity, no
-  correctness impact on search.
-- **Shape when picked up:** lazy capture with a `(?=\n##\s|\n*$)` lookahead, then
-  cap to 500: `body.match(/^## Executive Summary\n+([\s\S]*?)(?=\n##\s|\n*$)/m)`,
-  falling back to `body.slice(0,500)` for legacy bodies lacking the header. Pin
-  with a body `## Executive Summary\n\nshort.\n\n## Details\n\nlong…` asserting
-  `summary === "short."` and no `## Details`.
-
 ### Org-sync branch-default divergence on detached HEAD (pull vs sync)
 - **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 3 (proposal file deleted
   after triage; this entry is the record).
@@ -329,6 +291,42 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ## DONE — landed, kept for cross-reference
 
+- **Multilingual query expansion double-counted duplicate tokens** (v1.1.17) —
+  `tfidfSearch`'s bilingual expansion now dedupes via a `Set`, preserving
+  first-seen order so the title/tag boost path still sees each distinct token
+  once. The dict is bidirectional (17 of 28 entries map both ways), so
+  `"decizie decision"` expanded to `['decizie','decision','decision','decizie']`
+  and the per-token scoring loop inflated a matching doc ~2× over its
+  monolingual baseline. **The original entry graded this "low severity (gated,
+  default off)" — that was stale**: the maintainer's own
+  `~/.total-recall/config.json` sets `enableMultilingualSearch: true`, so it was
+  live in production. Also removed the `'concept': 'concept'` **self-mapping**
+  from `BILINGUAL_DICT` — a key whose value equals itself double-counted on a
+  PLAIN single-word query with no mixed-language input at all, which the
+  original triage missed. Pinned by the `dedupe prevents double-counting`
+  describe block in `tfidf-multilingual.test.ts` (2 tests, verified to fail
+  against the pre-fix expansion).
+- **`get_memories_by_keys(summary=true)` exec-summary bled past the section
+  boundary** (v1.1.17) — `src/tools/query.ts` now captures lazily with a
+  `(?=\n##\s|\n*$)` lookahead and re-applies the 500-char cap. The prior greedy
+  `[\s\S]{0,500}` had no stop at the next `## ` heading, so the COMMON case (a
+  short summary, given `withExecutiveSummary`'s
+  `## Executive Summary\n\n<summary>\n\n## <next>` layout) swallowed the
+  following section's heading + body up to the cap. That text is surfaced in the
+  SessionStart injected index, so every session paid tokens for the leak. Legacy
+  headerless bodies still fall back to `slice(0,500)`. Pinned by the
+  `summary=true exec-summary extraction` describe block in `query.test.ts`
+  (4 tests: bleed / trailing-last-section / legacy-fallback / 500-cap).
+- **`embeddings.test.ts` read the developer's real `~/.total-recall/config.json`**
+  (v1.1.17) — it was the only vault-touching test file with no hoisted
+  `process.env.HOME` override, so `paths.ts` (which captures `os.homedir()` once
+  at module load) resolved the real home and the load-failure warning named
+  whatever `embeddingModel` that machine had configured. Read-only, but it made
+  test output vary per developer and left any future assertion on the model name
+  latently flaky. Fixed with the same `vi.hoisted` pattern the other 20 files
+  use; the warning now names the tmp HOME and the default model. Nothing in the
+  file needed a real HOME — the HF pipeline and `vectorStore` are both fully
+  mocked, so only `loadConfig()` read it.
 - **Multilingual RO/EN excluded from Stryker** — bilingual dict + expansion
   branch wrapped in `// Stryker disable all`; toggling tests split into
   `tfidf-multilingual.test.ts` (out of the Stryker allow-list). `7d978a7`.
