@@ -79,7 +79,20 @@ export function getMemoriesByKeys(args: any): any {
       const body = readMemoryContent(meta.filePath, key);
       if (body === null) return { key, error: 'Failed to read memory file' };
       bumpAccess(meta);
-      const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
+      // Capture lazily and stop at the next `## ` heading. The prior greedy
+      // `[\s\S]{0,500}` had no section boundary, so the common case (a short
+      // summary) swallowed the FOLLOWING section's heading + body up to the
+      // 500-char cap — `withExecutiveSummary` lays bodies out as
+      // `## Executive Summary\n\n<summary>\n\n## <next>…`, so the leak was the
+      // rule, not the edge case. That text is surfaced in the SessionStart
+      // injected index, so every session paid tokens for it. The `\n*$` arm
+      // terminates a body whose exec summary is the last (or only) section.
+      // Legacy bodies with no header still fall back to slice(0,500); the cap
+      // is re-applied after the match so a pathologically long summary section
+      // stays bounded. Never drop the lookahead — the bleed returns silently.
+      const execSummary = (
+        body.match(/^## Executive Summary\n+([\s\S]*?)(?=\n##\s|\n*$)/m)?.[1] ?? body.slice(0, 500)
+      ).slice(0, 500);
       return { key, title: meta.title, category: meta.category, tags: meta.tags, summary: execSummary.trim() };
     }
     // LRU-or-read via the shared helper (see vault-scan.ts readCachedOrFresh).

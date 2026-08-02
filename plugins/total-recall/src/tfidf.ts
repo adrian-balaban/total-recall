@@ -49,7 +49,12 @@ const BILINGUAL_DICT: Record<string, string> = {
   'intalnire': 'meeting',
   'intalniri': 'meeting',
   'concepte': 'concepts',
-  'concept': 'concept',
+  // NOTE: no 'concept' entry — the RO and EN spellings are identical, so a
+  // self-mapping ('concept' -> 'concept') would expand the query to
+  // ['concept','concept'] and double-score every match on a PLAIN single-word
+  // query, with no mixed-language input needed. The dedupe in tfidfSearch now
+  // neutralizes it either way, but the entry buys nothing: never re-add a
+  // key whose value equals itself.
   'arhitectura': 'architecture',
   'arhitecturi': 'architecture',
   'problema': 'troubleshooting',
@@ -217,11 +222,22 @@ export function tfidfSearch(query: string, excludeJournal = true): Array<{ key: 
   // tfidf-multilingual.test.ts, which is excluded from Stryker's allow-list
   // (see BILINGUAL_DICT note above). Only English queries are used in practice.
   if (config.enableMultilingualSearch) {
+    // Dedupe (first-seen order preserved). The dict is BIDIRECTIONAL — 17 of its
+    // entries map both RO->EN and EN->RO — so a query containing a word AND its
+    // translation collides: "decizie decision" expanded to
+    // ['decizie','decision','decision','decizie']. The scoring loop below adds a
+    // doc's (1+log tf)·idf·boost once PER TOKEN, so a doc matching 'decizie'
+    // scored ~2x its monolingual baseline — an artifact of the translation step,
+    // not genuine query-term frequency. A Set keyed on the token collapses the
+    // duplicates while keeping first-seen order, so the title/tag boost path
+    // still sees each distinct token exactly once.
+    const seen = new Set<string>();
     const expanded: string[] = [];
+    const push = (t: string) => { if (!seen.has(t)) { seen.add(t); expanded.push(t); } };
     for (const t of tokens) {
-      expanded.push(t);
+      push(t);
       const translated = BILINGUAL_DICT[t];
-      if (translated) expanded.push(translated);
+      if (translated) push(translated);
     }
     tokens = expanded;
   }

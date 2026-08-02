@@ -1,4 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { listMemories, getMemoriesByKeys, getTimeline, getRelatedMemories, pruneMemories } from '../tools/query.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -117,6 +120,52 @@ describe('query tools', () => {
       expect(getMemoriesByKeys({ keys: null })).toEqual([]);
       expect(getMemoriesByKeys({ keys: {} })).toEqual([]);
       expect(getMemoriesByKeys({ keys: 42 })).toEqual([]);
+    });
+
+    // Exec-summary section boundary. The prior greedy `[\s\S]{0,500}` capture had
+    // no stop at the next `## ` heading, so a short summary (the COMMON case —
+    // withExecutiveSummary lays bodies out as `## Executive Summary\n\n<summary>
+    // \n\n## <next>…`) swallowed the following section up to the 500-char cap and
+    // leaked it into the SessionStart injected index.
+    describe('summary=true exec-summary extraction', () => {
+      const written: string[] = [];
+      const writeBody = (key: string, body: string) => {
+        const fp = path.join(os.tmpdir(), `tr-summary-${process.pid}-${key}.md`);
+        fs.writeFileSync(fp, `---\ntitle: ${key}\ntags: []\n---\n\n${body}`);
+        written.push(fp);
+        memIndex[key] = mkMeta({ key, title: key, filePath: fp });
+        return fp;
+      };
+      afterEach(() => {
+        for (const f of written.splice(0)) { try { fs.unlinkSync(f); } catch { /* already gone */ } }
+      });
+
+      it('stops at the next ## heading instead of bleeding into it', () => {
+        writeBody('bleed', '## Executive Summary\n\nShort summary.\n\n## Details\n\nThis must not leak.');
+        const res = getMemoriesByKeys({ keys: ['bleed'], summary: true });
+        expect(res[0].summary).toBe('Short summary.');
+        expect(res[0].summary).not.toContain('## Details');
+        expect(res[0].summary).not.toContain('must not leak');
+      });
+
+      it('captures a trailing exec summary that is the last section', () => {
+        writeBody('last', '## Executive Summary\n\nOnly section here.');
+        const res = getMemoriesByKeys({ keys: ['last'], summary: true });
+        expect(res[0].summary).toBe('Only section here.');
+      });
+
+      it('falls back to the body slice for a legacy body with no header', () => {
+        writeBody('legacy', 'No exec summary header at all, just prose.');
+        const res = getMemoriesByKeys({ keys: ['legacy'], summary: true });
+        expect(res[0].summary).toContain('just prose');
+      });
+
+      it('caps a pathologically long exec-summary section at 500 chars', () => {
+        writeBody('long', `## Executive Summary\n\n${'x'.repeat(900)}\n\n## Next\n\ntail`);
+        const res = getMemoriesByKeys({ keys: ['long'], summary: true });
+        expect(res[0].summary!.length).toBe(500);
+        expect(res[0].summary).not.toContain('tail');
+      });
     });
   });
 

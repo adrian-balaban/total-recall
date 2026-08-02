@@ -31138,7 +31138,12 @@ var BILINGUAL_DICT = {
   "intalnire": "meeting",
   "intalniri": "meeting",
   "concepte": "concepts",
-  "concept": "concept",
+  // NOTE: no 'concept' entry — the RO and EN spellings are identical, so a
+  // self-mapping ('concept' -> 'concept') would expand the query to
+  // ['concept','concept'] and double-score every match on a PLAIN single-word
+  // query, with no mixed-language input needed. The dedupe in tfidfSearch now
+  // neutralizes it either way, but the entry buys nothing: never re-add a
+  // key whose value equals itself.
   "arhitectura": "architecture",
   "arhitecturi": "architecture",
   "problema": "troubleshooting",
@@ -31244,11 +31249,18 @@ function tfidfSearch(query, excludeJournal = true) {
   const config3 = loadConfig();
   let tokens = tokenize(query);
   if (config3.enableMultilingualSearch) {
+    const seen = /* @__PURE__ */ new Set();
     const expanded = [];
+    const push = (t) => {
+      if (!seen.has(t)) {
+        seen.add(t);
+        expanded.push(t);
+      }
+    };
     for (const t of tokens) {
-      expanded.push(t);
+      push(t);
       const translated = BILINGUAL_DICT[t];
-      if (translated) expanded.push(translated);
+      if (translated) push(translated);
     }
     tokens = expanded;
   }
@@ -32840,7 +32852,7 @@ function getMemoriesByKeys(args) {
       const body = readMemoryContent(meta3.filePath, key);
       if (body === null) return { key, error: "Failed to read memory file" };
       bumpAccess(meta3);
-      const execSummary = body.match(/^## Executive Summary\n+([\s\S]{0,500})/m)?.[1] ?? body.slice(0, 500);
+      const execSummary = (body.match(/^## Executive Summary\n+([\s\S]*?)(?=\n##\s|\n*$)/m)?.[1] ?? body.slice(0, 500)).slice(0, 500);
       return { key, title: meta3.title, category: meta3.category, tags: meta3.tags, summary: execSummary.trim() };
     }
     const { status, content } = readCachedOrFresh(key, meta3.filePath, "reread");
@@ -33571,7 +33583,7 @@ function register6(server2) {
 }
 
 // src/server.ts
-var PLUGIN_VERSION = true ? "1.1.16" : null.version;
+var PLUGIN_VERSION = true ? "1.1.17" : null.version;
 var server = new McpServer(
   { name: "total-recall", version: PLUGIN_VERSION },
   {

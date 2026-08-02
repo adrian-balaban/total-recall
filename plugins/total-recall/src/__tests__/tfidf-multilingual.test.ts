@@ -222,3 +222,58 @@ describe('multilingual OFF vs ON produces different results for a RO query', () 
     cleanKeys([key]);
   });
 });
+// ─── Expansion dedupe (double-count fix) ─────────────────────────────────────
+// BILINGUAL_DICT is bidirectional (17 of its entries map RO->EN *and* EN->RO),
+// so a query containing a word AND its translation used to collide:
+// "decizie decision" expanded to ['decizie','decision','decision','decizie'].
+// tfidfSearch adds a doc's (1+log tf)*idf*boost once PER TOKEN, so a matching
+// doc scored ~2x its monolingual baseline — an artifact of the translation
+// step, not genuine query-term frequency. The expansion now dedupes
+// (first-seen order preserved).
+describe('multilingual expansion — dedupe prevents double-counting', () => {
+  const HOME = process.env.HOME!;
+
+  beforeEach(() => {
+    const cfgDir = path.join(HOME, '.total-recall');
+    fs.mkdirSync(cfgDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(cfgDir, 'config.json'),
+      JSON.stringify({ enableMultilingualSearch: true }),
+    );
+  });
+
+  afterEach(() => {
+    fs.rmSync(path.join(HOME, '.total-recall'), { recursive: true, force: true });
+  });
+
+  function scoreFor(query: string, key: string): number {
+    return tfidfSearch(query, false).find((r) => r.key === key)?.score ?? 0;
+  }
+
+  it('scores a mixed-language query equal to its monolingual baseline', () => {
+    const key = 'knowledge/dedupe-decizie';
+    seedDoc(key, 'decizie importanta', ['decizie'], 'corp despre decizie');
+    rebuildInvertedIndex();
+
+    const monolingual = scoreFor('decizie', key);
+    const mixed = scoreFor('decizie decision', key);
+
+    expect(monolingual).toBeGreaterThan(0);
+    // Pre-fix this was ~2x the monolingual score.
+    expect(mixed).toBeCloseTo(monolingual, 10);
+    cleanKeys([key]);
+  });
+
+  it('scores a repeated translation pair equal to the single-term query', () => {
+    const key = 'knowledge/dedupe-meeting';
+    seedDoc(key, 'meeting notes', ['meeting'], 'meeting body');
+    rebuildInvertedIndex();
+
+    const single = scoreFor('sedinta', key);
+    const both = scoreFor('sedinta meeting', key);
+
+    expect(single).toBeGreaterThan(0);
+    expect(both).toBeCloseTo(single, 10);
+    cleanKeys([key]);
+  });
+});
