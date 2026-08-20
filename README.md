@@ -18,23 +18,22 @@ flowchart LR
 | | |
 |---|---|
 | **Unit tests** | 744 passing · 41 files |
+| **Integration** | 20/20 passing |
 | **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
-| **Mutation** | Stryker over 16 core modules · CI gate breaks below 65% |
-| **Integration** | 16/20 passing — 4 known failures ([see below](#-known-issues)) |
+| **Mutation** | 65.9% · Stryker over 16 core modules · gate breaks below 65% |
+| **Audit** | 0 critical in production deps |
 
 Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
 (from `plugins/total-recall/`)
 
 ### ⚠️ Known issues
 
-- **4 integration tests fail** in `boundary-enforcement.integration.test.ts`. The Zod
-  boundary guard itself works — malformed args are correctly rejected with MCP error
-  `-32602`. Zod 4 changed the issue text from JSON (`"expected": "array"`) to prose
-  (`expected array, received string at tags`), and the assertions still match the old
-  format. Test-only break, no product regression.
 - **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
   93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
-  95.3%. `npm run test:coverage` therefore exits non-zero.
+  95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
+  `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
+- **Mutation score has only 0.9 pts of headroom** over the 65% break threshold, so a
+  small drop in test strictness will fail the gate.
 
 ## 🚀 Install
 
