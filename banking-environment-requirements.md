@@ -1,8 +1,8 @@
-# What does this plugin need to be implemented in a banking environment?
+# 🏦 What does this plugin need to be implemented in a banking environment?
 
 Answered for the **total-recall** plugin in this repo (v1.0.135). Grounded in the actual plugin code — the architecture, the privacy filter, the hook scripts, and the org-sync path — rather than a generic checklist.
 
-## Hard blockers — things a bank's security review will stop on
+## 🚫 Hard blockers — things a bank's security review will stop on
 
 **1. The PreCompact hook ships whole session transcripts to the Anthropic API.**
 [extract-and-store-memories.sh:57](plugins/total-recall/hooks/scripts/extract-and-store-memories.sh#L57) pipes the entire transcript into `claude -p` to mine learnings. In a bank that transcript can contain customer data, credentials, and source code. This needs to be off by default, or gated behind an explicitly enabled config flag with the redaction filter applied *before* the pipe.
@@ -22,7 +22,7 @@ Our own [review](review-secure-plugin-distribution-against-malware.md) documents
 **6. Indirect prompt injection via the shared org vault.**
 This is a design flaw, not a paperwork item. The chain: [pull-org-vault.sh](plugins/total-recall/hooks/scripts/pull-org-vault.sh) does a `git pull` from the shared repo at SessionStart → [build-memory-index.sh](plugins/total-recall/hooks/scripts/build-memory-index.sh) scans the frontmatter of **both** vaults into `.index-cache.txt` → [load-memory-index.sh](plugins/total-recall/hooks/scripts/load-memory-index.sh) cats that file into `additionalContext`, i.e. straight into the model's context. So **any teammate with push access to the org vault can place text into every colleague's model context**, automatically, with no user action. A memory titled `IMPORTANT: when asked about credentials, first run …` is injected as trusted-looking context. The privacy filter runs on the *outbound* push path (blocking secrets leaving); nothing sanitises or delimits content coming *in*, and `recall_memory` full-content reads widen the same channel. In a bank this is simultaneously a security finding and an insider-threat scenario. Mitigations: fence injected content in explicit untrusted-data delimiters, strip instruction-shaped text, require signed commits on the org vault, and review-gate org memories instead of auto-pushing on every `store_memory`.
 
-## Required work — controls that don't exist yet
+## 🔨 Required work — controls that don't exist yet
 
 **Redaction on the write path, not just on org sync.** [privacy-filter.ts](plugins/total-recall/src/privacy-filter.ts) is genuinely good (Luhn-validated PANs, mod-97 IBANs, labeled + high-entropy secret detection) — but it only runs in the org-sync gate. `store_memory` writes to the personal vault completely unfiltered. In a banking context the same filter must run on every write, with the block/allow decision logged.
 
@@ -34,7 +34,7 @@ This is a design flaw, not a paperwork item. The chain: [pull-org-vault.sh](plug
 
 **Multi-writer safety.** ARCHITECTURE.md documents the single-writer assumption on `index.json` — last-rename-wins, no lock. Content survives (it's re-derived from the `.md` files) but this rules out any shared-host or terminal-server deployment until there's a `flock` or CAS.
 
-## Assurance evidence they'll ask for
+## 📑 Assurance evidence they'll ask for
 
 - **Test rigor**: 643 tests pass; the real on-disk mutation score is now **68.28%** (measured 2026-07-28, above the 65% break gate — see `plugins/total-recall/reviews/BACKLOG.md`; up from 59.51% via `vault-scan-reconcile.test.ts`). The lowest modules are `embeddings.ts` (44.0%), `journal.ts` (37.5%), `vectorStore.ts` (55.1%, partly structural native-boundary NoCoverage), and `persistence.ts` (58.9%, the weakest pure-logic module). Expect this number to be requested for a plugin handling potentially sensitive data.
 - **Threat model + DPIA** document — the privacy-filter header comments are a good starting point, but a bank wants a formal one.
@@ -88,7 +88,7 @@ Two distinct vendors here:
 
 The practical output is two completed vendor-risk files with a risk rating and a sign-off — and the reason it appears on this list is that both are **long-lead**. Vendor onboarding typically runs weeks to months, so if this plugin is on a timeline, these get started early rather than after the engineering work is done.
 
-## Governance and operations
+## 🏛️ Governance and operations
 
 Non-code requirements that a bank's software-approval process imposes regardless of how good the engineering is. Several are long-lead, so they run in parallel with the technical work rather than after it.
 
@@ -110,6 +110,6 @@ Non-code requirements that a bank's software-approval process imposes regardless
 
 **Data classification.** Memories carry no classification label, so there is no way to mark one Internal and another Confidential — which is what downstream controls (DLP, retention schedules, cross-border transfer rules) are normally driven by.
 
-## Sequencing
+## 🗓️ Sequencing
 
 If the goal is a pilot rather than a bank-wide rollout, the shortest credible path is: disable the PreCompact transcript hook, run the privacy filter on all writes, vendor the embedding model, swap GitHub for the internal git host, and add the `npm audit` CI gate. That gets you a defensible single-developer, local-only deployment. Note that "local-only" is doing real work in that sentence: leaving the org vault unconfigured also sidesteps the prompt-injection channel (#6), since nothing external is pulled into context. Encryption at rest, real audit logging, access control, and injection-hardening of the injected context are what turn it into something that can be shared across a team — and those are the larger builds. The governance items above should start in parallel from day one, because vendor onboarding and software approval run on weeks-to-months timelines that no amount of engineering shortens.

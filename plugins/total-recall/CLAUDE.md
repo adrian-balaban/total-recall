@@ -1,8 +1,8 @@
-# CLAUDE.md
+# 📘 CLAUDE.md
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Commands
+## ⌨️ Commands
 
 ```bash
 npm run build          # Bundle src/index.ts → dist/index.js (esbuild, ESM)
@@ -19,21 +19,21 @@ npx vitest run src/__tests__/ebbinghaus.test.ts  # run a single test file
 
 Tests run sequentially (maxWorkers=1) because the server has module-level state (the shared singletons in `src/state.ts`).
 
-## Docs must track install.sh
+## 📌 Docs must track install.sh
 
 `README.md` / `INSTALL.md` client-support claims (profile flags, per-client status like Gemini/agy) must match `install.sh`'s actual flags/behavior — they've drifted before (e.g. README labeling a fully-supported client as "work in progress"). Cross-check all three when touching any one.
 
-## Install / setup
+## 🚀 Install / setup
 
 `install.sh` (plugin root) is the one-shot, state-aware setup script: profile prompt (a. minimal — no optional deps / b. complete — hybrid vector search, the DEFAULT; embeddings come from a local in-process HuggingFace MiniLM — no external service or daemon) → vault dirs (incl. one-time local-only `git init` of the personal vault for H1 durability) → MCP registration → index build → optional org vault / vector search → verify. Hooks are NOT wired by install.sh — they auto-load from the plugin manifest's `hooks/hooks.json`; a manual clone gets the same via `claude plugin install "$(pwd)"`. Run `./install.sh --help` for flags (`-y`/`--yes`, `--default`/`--complete`/`--vector` (alias group), `--no-vector`, `--statusline`, `--gemini` (requires `agy` CLI), `--org-repo`, `--allowed-email-domain`, `--plugin-root`, `-h`/`--help`). User-facing install docs live in `INSTALL.md` (incl. Windows/Git Bash notes) — keep it in sync with install.sh flags. (The `--standalone` user-scope hook-wiring path was removed — there is now exactly one hook source, `hooks/hooks.json`, so no inline copy to keep in sync.)
 
-## Build artifacts (`dist/`)
+## 📦 Build artifacts (`dist/`)
 
 `dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.
 
 **Release build gate.** `npm run release:build` (= `scripts/release-build.sh`: `typecheck && test && build`) is the one-command publish-time gate — it refuses to emit `dist/` unless typecheck and the full test suite are green. The hygiene fix for the committed-bundle distribution model is **not** "gitignore `dist/`" (that would break `claude plugin update` installs, since `install.sh` does not build on a normal install) — it is "never commit a `dist/` that wasn't produced by this gate". Run `npm run release:build` instead of bare `npm run build` whenever you ship a version; then commit the rebuilt `dist/` together with the source change.
 
-## Before committing — mandatory pre-commit checklist
+## ✅ Before committing — mandatory pre-commit checklist
 
 Run all four, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
 
@@ -55,7 +55,7 @@ Because plugin distribution uses `git-subdir` (where `claude plugin install` and
   ```
 - **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`).
 
-## Architecture
+## 🏗️ Architecture
 
 This is an MCP server that exposes 17 tools for persistent memory management. It runs as a stdio process compatible with Claude Code and Gemini CLI. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
 
@@ -102,7 +102,7 @@ This is an MCP server that exposes 17 tools for persistent memory management. It
 - `PreCompact`: extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.mjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)
 - `SessionEnd`: `session-end.sh` logs the session, SIGTERMs the MCP child to flush pending embedding writes, auto-commits the personal vault if it is a git repo (H1 durability; see gotcha), and emits `{"continue":true}` — NOT a `hookSpecificOutput.additionalContext` envelope (SessionEnd rejects that shape as "Invalid input", unlike SessionStart)
 
-## Memory Workflow
+## 🧠 Memory Workflow
 
 When using total-recall tools, follow the retrieval order in `skills/memory-workflow/SKILL.md`:
 1. Check the injected index already in context (free)
@@ -114,7 +114,7 @@ When using total-recall tools, follow the retrieval order in `skills/memory-work
 
 Every stored memory must include a `## Executive Summary` section (answers WHY it matters, not just WHAT). Call `store_memory` from the main agent, never a subagent. Check for duplicates with `search_index` before storing. Set `importanceScore` (0.3=low, 0.7=high, 1.0=critical).
 
-## Key Gotchas
+## ⚠️ Key Gotchas
 
 - `get_stats` vector reporting (v1.1.9) — `vector.enabled` / `depsPresent` / the back-compat `vectorSearchEnabled` are driven by the `depsInstalled()` capability probe (`src/embeddings.ts`), NOT the old `isVectorAvailable()` ("has the HF pipeline lazy-loaded yet"). On a fresh session the pipeline has never loaded, so the old wiring reported `depsPresent: false` and made vector search look disabled when it was merely idle — driving users to "fix" a non-problem and to miss the real footgun (a missing `better-sqlite3` binding, the post-`claude plugin update` source-only state). `depsInstalled()` probes what matters — can the three optional deps import AND can `better-sqlite3` instantiate `new Database(':memory:')` (the binding test) — with no side effects (no model load, no DB file touch). `enabled = isVectorAvailable() || depsInstalled()` → defaults to true when deps are loadable, honestly false only when the binding is truly missing. A `true` result latches per-process; a `false` re-probes so a mid-session self-heal rebuild is reflected on the next `get_stats`. Do not "simplify" back to `isVectorAvailable()` alone, or a fresh session reverts to reporting disabled-while-idle. Pinned by the `get_stats` describe block in `index.test.ts` (enabled-when-deps-present / disabled-when-absent) and the `depsInstalled probe` describe block in `embeddings.test.ts`.
 - Multilingual expansion **dedupes** (v1.1.17) — `tfidfSearch`'s bilingual expansion collects tokens through a `Set` (first-seen order preserved, so the title/tag boost path still sees each distinct token once). `BILINGUAL_DICT` is bidirectional — 17 of its 28 entries map RO→EN *and* EN→RO — so without the dedupe a query holding a word **and** its translation collided (`"decizie decision"` → `['decizie','decision','decision','decizie']`) and the per-token scoring loop added a matching doc's `(1+log tf)·idf·boost` twice, ~2× its monolingual baseline. Relatedly, **never add a dict key whose value equals itself**: the removed `'concept': 'concept'` self-mapping double-counted on a plain single-word query with no mixed-language input at all. Pinned by the `dedupe prevents double-counting` block in `tfidf-multilingual.test.ts`.

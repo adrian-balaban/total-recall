@@ -1,4 +1,4 @@
-# Backlog — deferred / by-design items
+# 📋 Backlog — deferred / by-design items
 
 Single, searchable home for review items that are **not** going to be coded right
 now, with the reason and the trigger that would reopen each. Keeping these here
@@ -12,7 +12,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ---
 
-## DEFERRED — waiting for a trigger
+## ⏸️ DEFERRED — waiting for a trigger
 
 ### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE**
 - **Source:** `plugins/total-recall/scripts/loadtest.ts` (throwaway-HOME driver,
@@ -268,7 +268,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ---
 
-## DECIDED — documented as by-design, no change intended
+## ✅ DECIDED — documented as by-design, no change intended
 
 ### rerank silent degradation (no-embedder → score 0, original order)
 - **Source:** `review-synthetized-25072026.txt`; contract comment in
@@ -289,7 +289,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ---
 
-## DONE — landed, kept for cross-reference
+## 🏁 DONE — landed, kept for cross-reference
 
 - **Multilingual query expansion double-counted duplicate tokens** (v1.1.17) —
   `tfidfSearch`'s bilingual expansion now dedupes via a `Set`, preserving

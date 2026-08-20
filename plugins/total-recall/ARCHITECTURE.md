@@ -1,12 +1,12 @@
-# Total-Recall — Architecture
+# 🏗️ Total-Recall — Architecture
 
-## What it is
+## 📦 What it is
 
 Total-recall is a plugin that gives the AI persistent, searchable memory across sessions. It runs as an MCP stdio server. The compiled entry point is `dist/index.js`; the source is TypeScript under `src/`.
 Is compatible with Claude Code and Gemini CLI.
 ---
 
-## Module Map
+## 🗺️ Module Map
 
 ```
 src/
@@ -39,7 +39,7 @@ src/
 
 ---
 
-## Data Model
+## 🧬 Data Model
 
 ### On-disk format
 
@@ -87,7 +87,7 @@ org:      same but prefixed with "org/"
 
 ---
 
-## Boot Sequence
+## 🚀 Boot Sequence
 
 ```
 main()
@@ -112,7 +112,7 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 
 ---
 
-## The 17 MCP Tools
+## 🛠️ The 17 MCP Tools
 
 ### Write
 | Tool | Description |
@@ -153,7 +153,7 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 
 ---
 
-## Dual Vault Routing
+## 🔀 Dual Vault Routing
 
 ```
 store_memory(tags=[...])
@@ -172,7 +172,7 @@ store_memory(tags=[...])
 
 ---
 
-## Write Path (`store_memory`)
+## ✍️ Write Path (`store_memory`)
 
 ```
 store_memory(title, content, tags, category, importanceScore, ...)
@@ -194,7 +194,7 @@ store_memory(title, content, tags, category, importanceScore, ...)
 
 ---
 
-## Search Pipeline (`recall_memory`)
+## 🔍 Search Pipeline (`recall_memory`)
 
 ```
 query
@@ -242,7 +242,7 @@ A memory with `importanceScore=1.0` has `λ=0.032` (slow decay); one with `impor
 
 ---
 
-## Persistence & Debounce
+## 💾 Persistence & Debounce
 
 All writes go to disk synchronously for the `.md` file but debounce the index:
 
@@ -263,7 +263,7 @@ any write operation
 
 ---
 
-## LRU Content Cache
+## ⚡ LRU Content Cache
 
 `contentCache` (in `lru-cache.ts`) keeps the last 100 memory bodies in memory for 30 minutes, keyed by memory key. It is:
 
@@ -275,7 +275,7 @@ The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
 
 ---
 
-## Frontmatter Parser
+## 📄 Frontmatter Parser
 
 `src/frontmatter.ts` is a purpose-built replacement for `gray-matter` (which depended on EOL `js-yaml 3.x`, CVE GHSA-h67p-54hq-rp68). It handles only what total-recall writes:
 
@@ -288,7 +288,7 @@ The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
 
 ---
 
-## Hook Lifecycle
+## 🪝 Hook Lifecycle
 
 Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness.
 
@@ -345,7 +345,7 @@ session-end.sh  — logs the session and flushes pending embedding writes before
 
 ---
 
-## Org Vault Sync & Privacy Filter
+## 🔐 Org Vault Sync & Privacy Filter
 
 `scripts/sync-org-memory.mjs` runs after every org write. Before pushing it applies a fail-closed privacy filter that blocks:
 
@@ -366,7 +366,7 @@ Configuration in `~/.total-recall/config.json`:
 
 ---
 
-## Key Invariants
+## ⚖️ Key Invariants
 
 | Invariant | Where enforced |
 |---|---|

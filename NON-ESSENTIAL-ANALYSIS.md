@@ -1,4 +1,4 @@
-# Total Recall — Non-Essential Analysis
+# 🧹 Total Recall — Non-Essential Analysis
 
 > **Status (2026-07-29):** Several items below have since been actioned: the
 > `scripts/eval/` audit harness, the `reviews/` folder (transcripts pruned
@@ -8,7 +8,7 @@
 > actions below are retained as the analysis record; treat the done items as
 > historical.
 
-## Method
+## 🔬 Method
 
 Essential was defined as: **what must exist for a consumer to install and run the MCP memory server with its 17 tools and the SessionStart index-injection headline feature.** This boundary is drawn at "what ships and runs", not "what is in the source tree". Three categories result:
 
@@ -18,7 +18,7 @@ Essential was defined as: **what must exist for a consumer to install and run th
 
 A critical correction from the critic: **`dist/` is NOT non-essential generated bloat for runtime.** `.mcp.json` runs `node ${CLAUDE_PLUGIN_ROOT}/dist/index.js` and the plugin manager does not build from source — consumers receive `dist/index.js` as-is. The repo-hygiene recommendation to gitignore `dist/` and build at publish time is correct and orthogonal, but until a publish-time build step replaces the committed-bundle distribution model, the three `dist/` files are essential runtime artifacts. The "non-essential" classification below applies to repo-weight hygiene, not to whether the bundle must ship.
 
-## Essential core (keep list)
+## 🧱 Essential core (keep list)
 
 These MUST stay for install + run:
 
@@ -35,7 +35,7 @@ These MUST stay for install + run:
 
 The entire `src/` tree is **dev input to the bundle** — essential to the ship-a-new-version process but not to run the shipped plugin. It is kept in the repo (not trimmed) because it is the source of truth; it is just not part of what a consumer needs on disk to run.
 
-## Non-essential — safe to remove
+## 🗑️ Non-essential — safe to remove
 
 | Path | Kind | Size | Why removable | Impact |
 |------|------|------|---------------|--------|
@@ -69,7 +69,7 @@ The entire `src/` tree is **dev input to the bundle** — essential to the ship-
 
 `package-lock.json` (~193 KB, git-tracked) is **not needed at runtime** for an esbuild-bundled plugin whose `dist/` is committed. It is good practice for reproducible dev installs. Recommendation: **keep in repo for reproducibility, but it is borderline-trimmable from the shipped subtree.** Net verdict: keep with caveat.
 
-## Non-essential but git-tracked (CRITICAL subset)
+## ⚠️ Non-essential but git-tracked (CRITICAL subset)
 
 These are the real repo-bloat problem — both non-essential to runtime AND currently committed. Reasoning from the maps (no execution needed):
 
@@ -79,7 +79,7 @@ These are the real repo-bloat problem — both non-essential to runtime AND curr
 
 **Total tracked non-runtime weight:** ~1.2 MB compiled JS + ~250 KB review transcripts + ~193 KB lockfile ≈ ~1.6 MB of tracked files that are either pure build output or historical docs.
 
-## Borderline / keep-with-caveats
+## 🤔 Borderline / keep-with-caveats
 
 - **`dist/` (3 files)** — Essential to RUN (the bundle), but should be gitignored and built at publish time. Keep until a publish build step exists; then move to a release pipeline.
 - **`CLAUDE.md` (~36 KB)** — Largest doc; contributor/AI-agent operating manual, not for end users. Heavy overlap with `ARCHITECTURE.md` and `README.md`. Essential for contributors; keep in repo, exclude from shipped plugin subtree.
@@ -101,7 +101,7 @@ These are the real repo-bloat problem — both non-essential to runtime AND curr
 - **`hooks/scripts/pull-org-vault.sh`** — Essential only for org-vault users; personal-only installs skip it. Maybe from a core-recall standpoint.
 - **`skills/review-fix-ship/SKILL.md`** — Useful hardening loop but redundant with the project `CLAUDE.md` pre-commit checklist; tangential to memory recall.
 
-## Recommended actions
+## 🎯 Recommended actions
 
 Ordered, concrete, highest-impact first:
 
@@ -115,7 +115,7 @@ Ordered, concrete, highest-impact first:
 8. **Delete untracked local artifacts** when repo size matters locally: `node_modules/`, `coverage/`, `reports/`, `.remember/` are all gitignored and safe to delete outright (regenerated on demand). No git action needed.
 9. **Consider dropping `package-lock.json` from the shipped subtree** if install reproducibility is not a consumer concern (~193 KB); keep it in the source repo for dev reproducibility.
 
-## Estimated cleanup impact
+## 📊 Estimated cleanup impact
 
 - **Tracked-weight removal (after action 1 + 2):** ~1.2 MB compiled JS (`dist/`, pending publish-build step) + ~250 KB review transcripts = **~1.45 MB** removed from git-tracked repo weight, plus the elimination of per-build diff churn on `dist/index.js`.
 - **If `dist/` stays tracked (no publish build yet):** action 2 alone removes ~250 KB of tracked review transcripts (8 files); `dist/` remains a known hygiene debt.
