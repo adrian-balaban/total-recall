@@ -96,3 +96,19 @@ describe('startAutoReconcile', () => {
     }
   });
 });
+
+// The `'unref' in interval` guard exists so a poll timer never keeps a test or a
+// shutting-down process alive. Node's Timeout exposes hasRef(), which makes the
+// effect observable — without this the guard could be deleted outright and no
+// test would notice.
+describe('startAutoReconcile — timer does not hold the process open', () => {
+  it('unrefs the interval it returns', () => {
+    const interval = startAutoReconcile(60_000);
+    try {
+      expect(typeof (interval as any).hasRef).toBe('function');
+      expect((interval as any).hasRef()).toBe(false);
+    } finally {
+      clearInterval(interval);
+    }
+  });
+});
