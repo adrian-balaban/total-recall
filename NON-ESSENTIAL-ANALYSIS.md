@@ -1,5 +1,10 @@
 # 🧹 Total Recall — Non-Essential Analysis
 
+> **Refreshed 2026-08-20:** test-suite figures updated to the current 12,993
+> lines / 45 files, and the "no CI gate" note corrected — a Stryker gate
+> (`.github/workflows/mutation.yml`) now runs on every push/PR to `main`.
+> Recommendation 7 is annotated where `--standalone` was since removed.
+>
 > **Status (2026-07-29):** Several items below have since been actioned: the
 > `scripts/eval/` audit harness, the `reviews/` folder (transcripts pruned
 > earlier; `BACKLOG.md` moved to the repo root as the sole deferred-items
@@ -92,7 +97,7 @@ These are the real repo-bloat problem — both non-essential to runtime AND curr
 - **`scripts/atomic-write.mjs`** — Marked "yes" but only loaded by the two optional standalone scripts. The bundled server has its own `persistence.atomicWrite`. **maybe**: essential for org-sync + PreCompact paths, unused otherwise.
 - **`tsconfig.json`** — Marked "yes" by two mappers, but it drives only `npm run typecheck` (a pre-commit dev gate) and the esbuild build's type resolution. Runtime consumers run pre-built `dist/index.js` and never invoke tsc. **maybe**: essential to the SHIP-a-new-version process, not to RUN the shipped plugin.
 - **`src/optional-deps.d.ts`** — Single-line ambient type shim used only by `tsc --noEmit`. Behaviorally non-load-bearing (`vectorStore.ts` lazy-imports better-sqlite3 as `any` regardless). **no** for ship+run; needed only for the typecheck dev gate.
-- **Test suite (~12,346 lines, 41 files)** — Essential to the shipping process (no CI gate; pre-commit checklist mandates `npm test`). Keep in repo. They are devDependencies and NOT in the shipped `dist/` bundle, so consumers do not receive them. Keep but ensure they stay out of any shipped subtree.
+- **Test suite (~12,993 lines, 45 files — 41 unit + 4 integration)** — Essential to the shipping process. Since this analysis was written a CI gate has landed (`.github/workflows/mutation.yml` runs Stryker on every push/PR to `main` and fails below 65%); the pre-commit checklist mandating `npm test` still applies on top of it. Keep in repo. They are devDependencies and NOT in the shipped `dist/` bundle, so consumers do not receive them. Keep but ensure they stay out of any shipped subtree.
 - **`vitest.config.ts`, `vitest.integration.config.ts`** — Essential to the pre-commit + integration gates. Keep in repo, exclude from shipped plugin.
 - **`BACKLOG.md` (repo root)** — Borderline-essential; ongoing reference as the deferred-items registry. Moved out of the now-removed `reviews/` folder (2026-07-29).
 - **`hooks/scripts/load-open-questions.sh`** — Optional ambient-curiosity feature, not core recall. Maybe/experimental; safe to drop without affecting recall/store/sync.
@@ -111,7 +116,7 @@ Ordered, concrete, highest-impact first:
 4. **Fix the stale `ARCHITECTURE.md` Module Map line** for `server.ts` (it still claims "17 tool schemas, CallTool dispatch" post-McpServer migration).
 5. **Reconcile `GEMINI.md`** with the current `README.md`/`CLAUDE.md` to remove duplication drift, or fold its Gemini-specific notes into `README`'s Client Compatibility section and delete the standalone file.
 6. **Move contributor docs out of the shipped plugin subtree:** `CLAUDE.md`, `ARCHITECTURE.md`, `GEMINI.md`, `ARCHITECTURE-REVIEW-TODO.md`, and the test suite (`src/__tests__/`, vitest configs, stryker configs) should remain in the source repo but be excluded from the consumer-facing distributed subtree (they are not needed to run `dist/index.js`).
-7. **Trim `install.sh` optional sprawl** (documentation-level, not removal): make clear in `INSTALL.md` that `--no-vector`, `--no-statusline`, no `--org-repo`, and no `--standalone` is the lean personal-recall path; the Minimal profile already exists for this.
+7. **Trim `install.sh` optional sprawl** (documentation-level, not removal): make clear in `INSTALL.md` that `--no-vector`, `--no-statusline`, no `--org-repo`, and no `--standalone` is the lean personal-recall path; the Minimal profile already exists for this. *(Partly superseded: `--standalone` was removed in v1.1.14 — there is now a single hook source, `hooks/hooks.json`.)*
 8. **Delete untracked local artifacts** when repo size matters locally: `node_modules/`, `coverage/`, `reports/`, `.remember/` are all gitignored and safe to delete outright (regenerated on demand). No git action needed.
 9. **Consider dropping `package-lock.json` from the shipped subtree** if install reproducibility is not a consumer concern (~193 KB); keep it in the source repo for dev reproducibility.
 
