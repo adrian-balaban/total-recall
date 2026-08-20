@@ -4,7 +4,7 @@
 A tool that gives your AI assistant persistent memory — memories are saved on your computer and survive across sessions, so you don't have to re-explain the same things every time.
 
 ## 📦 What it is
-Total Recall is an extension (version 1.1.19) that plugs into Claude Code and Gemini CLI. Memories are Markdown files stored locally on your machine (under `~/.total-recall/`), organised in two places:
+Total Recall is an extension (version 1.1.20) that plugs into Claude Code and Gemini CLI. Memories are Markdown files stored locally on your machine (under `~/.total-recall/`), organised in two places:
 - **Personal vault** — your private memories
 - **Team vault** — memories shared with colleagues (optional, synced via git)
 
@@ -47,9 +47,9 @@ If the second method is unavailable, the system automatically falls back to the 
 - **Tests:** 744 unit + 20 integration tests, all green · 45 files · ~13,000 lines of test code
 - **Coverage:** 93.6% statements · 88.2% branches · 95.3% lines (the configured threshold wants 95% across the board, so `npm run test:coverage` still exits non-zero — see README status)
 - **Mutation testing:** a method for checking whether the tests are actually any good. It takes the code and deliberately changes small things (e.g. `>` becomes `<`, `true` becomes `false`). If the tests don't notice the change and don't fail, they aren't strict enough. A tool called Stryker does this automatically.
-  - Current score: 65.9% across 16 core modules (the tests catch 65.9% of the deliberately introduced faults; the threshold that breaks the build is 65%)
+  - Current score: 65.39% across 16 core modules, as measured in CI (the tests catch 65.39% of the deliberately introduced faults; the threshold that breaks the build is 65%, so the margin is a thin 0.39 points)
   - Headroom over that threshold is just 0.9 points, so a single new untested branch can turn CI red
-- **Version:** 1.1.19 — stable
+- **Version:** 1.1.20 — stable
 - **CI:** the GitHub Actions workflow `.github/workflows/mutation.yml` is the single verification gate — dependency audit, typecheck, build, and the Stryker mutation gate (fails below 65%) — on every push/PR to `main`. As of v1.1.19 there is no local build pipeline at all: the compiled bundle is gitignored, GitHub Actions builds it, and `.github/workflows/release.yml` publishes it to the `release` branch that the marketplace installs from. The plugin has exactly one distribution channel (the marketplace) and one thing that can produce a shipped artifact (CI)
 
 ## 🔗 Dependencies
