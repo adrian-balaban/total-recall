@@ -53,8 +53,8 @@ The entire `src/` tree is **dev input to the bundle** — essential to the ship-
 | `.remember/` (now.md, recent.md, archive.md, today-*.md, logs/, tmp/) | Per-user session memory | ~144 KB | Gitignored via `**/.remember` + local `.gitignore`. Should never be committed. | None — local runtime state. |
 | `.remember/logs/` | Runtime logs | — | Gitignored. Local-only. | None. |
 | `.remember/tmp/` | Runtime scratch | — | Gitignored. Local-only. | None. |
-| `vitest.stryker.config.ts` | Mutation-test config | small | Dev-only; only `npm run mutation` uses it. NOT on the pre-commit checklist. Not needed to build or run. | Loses the mutation dev gate (already optional). |
-| `stryker.conf.json` | Mutation-test config | small | Same as above — dev-only, not on pre-commit critical path. | Loses mutation testing config. |
+| `vitest.stryker.config.ts` | Mutation-test config | small | Dev-only; only `npm run mutation` uses it locally — but it is what the GitHub mutation gate runs. Not needed to build or run. | Loses the mutation dev gate (already optional). |
+| `stryker.conf.json` | Mutation-test config | small | Same as above — the thresholds it holds (`break: 65`) are what fail the GitHub gate. | Loses mutation testing config. |
 | `scripts/eval/recall_harness.py` | Maintainer audit | — | Offline ranking audit run on demand; spawns a built `dist/index.js` but never by users or the install path. | Loses the Phase-5 TF-IDF regression proof. |
 | `scripts/eval/README.md` | Audit doc | small | Documents the eval harness; not install or runtime. | None. |
 | `scripts/sync-version.mjs` | Build-time script | small | Runs at `npm run build`, not at install or runtime. Consumers of the shipped bundle never execute it. | None for runtime; build still needs it. |
@@ -95,22 +95,22 @@ These are the real repo-bloat problem — both non-essential to runtime AND curr
 - **`src/errors.ts`** — Marked "maybe" by one mapper but it is on the hot write path (`store_memory` throws `MemoryExistsError`; `import_memories` branches on `instanceof` for skip classification). Correct verdict: **yes** (essential runtime), not maybe.
 - **`scripts/sync-org-memory.mjs`** — Marked "no" by one mapper but it is the runtime target of the PostToolUse hook for org-tagged writes. **maybe**: essential for org-vault users, never runs for personal-only.
 - **`scripts/atomic-write.mjs`** — Marked "yes" but only loaded by the two optional standalone scripts. The bundled server has its own `persistence.atomicWrite`. **maybe**: essential for org-sync + PreCompact paths, unused otherwise.
-- **`tsconfig.json`** — Marked "yes" by two mappers, but it drives only `npm run typecheck` (a pre-commit dev gate) and the esbuild build's type resolution. Runtime consumers run pre-built `dist/index.js` and never invoke tsc. **maybe**: essential to the SHIP-a-new-version process, not to RUN the shipped plugin.
-- **`src/optional-deps.d.ts`** — Single-line ambient type shim used only by `tsc --noEmit`. Behaviorally non-load-bearing (`vectorStore.ts` lazy-imports better-sqlite3 as `any` regardless). **no** for ship+run; needed only for the typecheck dev gate.
-- **Test suite (~12,993 lines, 45 files — 41 unit + 4 integration)** — Essential to the shipping process. Since this analysis was written a CI gate has landed (`.github/workflows/mutation.yml` runs Stryker on every push/PR to `main` and fails below 65%); the pre-commit checklist mandating `npm test` still applies on top of it. Keep in repo. They are devDependencies and NOT in the shipped `dist/` bundle, so consumers do not receive them. Keep but ensure they stay out of any shipped subtree.
-- **`vitest.config.ts`, `vitest.integration.config.ts`** — Essential to the pre-commit + integration gates. Keep in repo, exclude from shipped plugin.
+- **`tsconfig.json`** — Marked "yes" by two mappers, but it drives only `npm run typecheck` (now a GitHub-CI gate) and the esbuild build's type resolution. Runtime consumers run pre-built `dist/index.js` and never invoke tsc. **maybe**: essential to the SHIP-a-new-version process, not to RUN the shipped plugin.
+- **`src/optional-deps.d.ts`** — Single-line ambient type shim used only by `tsc --noEmit`. Behaviorally non-load-bearing (`vectorStore.ts` lazy-imports better-sqlite3 as `any` regardless). **no** for ship+run; needed only for the typecheck gate.
+- **Test suite (~12,993 lines, 45 files — 41 unit + 4 integration)** — Essential to the shipping process. Since this analysis was written a CI gate has landed (`.github/workflows/mutation.yml` runs Stryker on every push/PR to `main` and fails below 65%); as of v1.1.19 that workflow is the *only* gate — the local `release:build` script and the mandatory pre-commit checklist were removed, and CI additionally rebuilds and fails on `dist/` drift. Keep in repo. They are devDependencies and NOT in the shipped `dist/` bundle, so consumers do not receive them. Keep but ensure they stay out of any shipped subtree.
+- **`vitest.config.ts`, `vitest.integration.config.ts`** — Essential to the CI + integration gates. Keep in repo, exclude from shipped plugin.
 - **`BACKLOG.md` (repo root)** — Borderline-essential; ongoing reference as the deferred-items registry. Moved out of the now-removed `reviews/` folder (2026-07-29).
 - **`hooks/scripts/load-open-questions.sh`** — Optional ambient-curiosity feature, not core recall. Maybe/experimental; safe to drop without affecting recall/store/sync.
 - **`hooks/scripts/check-sync-errors.sh`** — Pure org-sync health observability; only relevant for org users. Maybe; non-essential to the memory loop.
 - **`hooks/scripts/session-end.sh`** — Observability + backup SIGTERM flush; the primary flush is the MCP server's stdin-end handler. Maybe/defensive; cheap and harmless.
 - **`hooks/scripts/pull-org-vault.sh`** — Essential only for org-vault users; personal-only installs skip it. Maybe from a core-recall standpoint.
-- **`skills/review-fix-ship/SKILL.md`** — Useful hardening loop but redundant with the project `CLAUDE.md` pre-commit checklist; tangential to memory recall.
+- **`skills/review-fix-ship/SKILL.md`** — Useful hardening loop but redundant with the project `CLAUDE.md` commit guidance; tangential to memory recall.
 
 ## 🎯 Recommended actions
 
 Ordered, concrete, highest-impact first:
 
-1. **Introduce a publish-time build step** that runs `npm run build` and emits `dist/`, then add `dist/` to `.gitignore` and `git rm --cached dist/index.js dist/frontmatter.mjs dist/privacy-filter.mjs`. This is the single biggest hygiene win (~1.2 MB of compiled JS stops regenerating repo weight on every build). Until this step exists, `dist/` must remain tracked because consumers receive it as-is.
+1. ~~**Introduce a publish-time build step** and untrack `dist/`.~~ **Done in v1.1.19** — `dist/` is gitignored, `.github/workflows/release.yml` builds it and force-publishes `main`'s validated tree plus the bundle to the `release` branch, and `.claude-plugin/marketplace.json` pins its `git-subdir` source to `ref: release`. The `git-subdir` consumer path is preserved (they still receive a prebuilt `dist/`, now provably CI-built), ~1.2 MB of compiled JS left the tracked tree, and `install.sh` builds `dist/` itself for anyone working from a clone of `main`.
 2. **Gitignore and untrack the review transcripts:** add `reviews/*.txt`, `reviews/*.md` (except `BACKLOG.md`), `reviews/archive/` to `.gitignore`; `git rm --cached` the 8 tracked review files (all except `BACKLOG.md`). Keep `BACKLOG.md` tracked as the deferred-items registry. (~250 KB removed from tracked weight.)
 3. **Prune `ARCHITECTURE-REVIEW-TODO.md`:** mark Items 4 and 8 as done (completed per CLAUDE.md 6.1-6.3) or delete the file and move the remaining 6 open hardening candidates into `reviews/BACKLOG.md` or a real issue tracker.
 4. **Fix the stale `ARCHITECTURE.md` Module Map line** for `server.ts` (it still claims "17 tool schemas, CallTool dispatch" post-McpServer migration).

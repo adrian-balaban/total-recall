@@ -235,23 +235,42 @@ command -v agy >/dev/null 2>&1 || warn "'agy' CLI not found on PATH — required
 # Step 1 — Detect plugin path
 # --------------------------------------------------------------------------
 step "Step 1 — Detect plugin path"
+# `dist/` is gitignored and built by CI, so a git checkout has no dist/index.js
+# to detect against. The stable marker for "this is the plugin root" is the
+# manifest, which is tracked; dist/ is then built below if it is missing.
+PLUGIN_MARKER=".claude-plugin/plugin.json"
 if [ -z "$PLUGIN_ROOT" ]; then
   # Prefer an explicit env var, otherwise this script's own directory
   # (install.sh ships at the plugin root).
   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR}"
-  if [ ! -f "$PLUGIN_ROOT/dist/index.js" ] && command -v claude >/dev/null 2>&1; then
+  if [ ! -f "$PLUGIN_ROOT/$PLUGIN_MARKER" ] && command -v claude >/dev/null 2>&1; then
     FROM_MCP=$(claude mcp get total-recall 2>/dev/null \
       | grep -o '"[^"]*dist/index.js"' | sed 's|/dist/index.js"||; s|^"||')
     [ -n "$FROM_MCP" ] && PLUGIN_ROOT="$FROM_MCP"
   fi
 fi
-if [ ! -f "$PLUGIN_ROOT/dist/index.js" ]; then
+if [ ! -f "$PLUGIN_ROOT/$PLUGIN_MARKER" ]; then
   ask_value "Path to the total-recall plugin directory?" PLUGIN_ROOT
 fi
-[ -f "$PLUGIN_ROOT/dist/index.js" ] \
-  || die "Could not locate dist/index.js under '$PLUGIN_ROOT'. Pass --plugin-root."
+[ -f "$PLUGIN_ROOT/$PLUGIN_MARKER" ] \
+  || die "Could not locate $PLUGIN_MARKER under '$PLUGIN_ROOT'. Pass --plugin-root."
 PLUGIN_ROOT="$(cd -- "$PLUGIN_ROOT" && pwd -P)"
 ok "Plugin root: $PLUGIN_ROOT"
+
+# Build the bundle when it is absent. Release zips ship a prebuilt dist/; a
+# marketplace/git-subdir install or a manual clone does not, because dist/ is
+# gitignored — so this is the step that makes those paths runnable at all.
+if [ ! -f "$PLUGIN_ROOT/dist/index.js" ]; then
+  if [ ! -f "$PLUGIN_ROOT/package.json" ]; then
+    die "dist/index.js is missing and '$PLUGIN_ROOT' has no package.json to build from."
+  fi
+  info "dist/ not found — building the plugin bundle (npm ci && npm run build)"
+  ( cd "$PLUGIN_ROOT" && npm ci --no-audit --no-fund && npm run build ) \
+    || die "Build failed in '$PLUGIN_ROOT'. Run 'npm ci && npm run build' there and re-run install.sh."
+  ok "Built dist/index.js"
+fi
+[ -f "$PLUGIN_ROOT/dist/index.js" ] \
+  || die "Build completed but dist/index.js is still missing under '$PLUGIN_ROOT'."
 
 # Surface which version is actually being installed. A resolved PLUGIN_ROOT
 # inside the Claude plugin cache is pinned to the git SHA of the last

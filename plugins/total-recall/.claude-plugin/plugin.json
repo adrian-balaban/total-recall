@@ -1,13 +1,13 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "total-recall",
-  "version": "1.1.18",
+  "version": "1.1.19",
   "description": "Persistent knowledge management for Claude Code & Gemini. Stores memories as markdown files, exposes 17 MCP tools, and uses Claude Code hooks to inject context automatically.",
   "author": {
     "name": "Adrian Balaban"
   },
-  "homepage": "https://github.com/adrian-balaban/my-claude-plugins-marketplace/tree/main/plugins/total-recall",
-  "repository": "https://github.com/adrian-balaban/my-claude-plugins-marketplace",
+  "homepage": "https://github.com/adrian-balaban/total-recall/tree/main/plugins/total-recall",
+  "repository": "https://github.com/adrian-balaban/total-recall",
   "license": "MIT",
   "keywords": ["memory", "knowledge", "mcp", "productivity"]
 }

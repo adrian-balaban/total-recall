@@ -8,18 +8,18 @@
   "plugins": [
     {
       "name": "total-recall",
-      "description": "Persistent knowledge management for Claude Code. Stores memories as markdown files, exposes 12 MCP tools, and uses Claude Code hooks to inject context automatically.",
+      "description": "Persistent knowledge management for Claude Code & Gemini. Stores memories as markdown files, exposes 17 MCP tools, and uses Claude Code hooks to inject context automatically.",
       "author": {
         "name": "Adrian Balaban"
       },
       "category": "productivity",
       "source": {
         "source": "git-subdir",
-        "url": "https://github.com/adrian-balaban/my-claude-plugins-marketplace.git",
+        "url": "https://github.com/adrian-balaban/total-recall.git",
         "path": "plugins/total-recall",
-        "ref": "main"
+        "ref": "release"
       },
-      "homepage": "https://github.com/adrian-balaban/my-claude-plugins-marketplace/tree/main/plugins/total-recall"
+      "homepage": "https://github.com/adrian-balaban/total-recall/tree/main/plugins/total-recall"
     }
   ]
 }

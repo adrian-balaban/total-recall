@@ -2,7 +2,7 @@
 
 Execution plan derived from [banking-environment-requirements.md](banking-environment-requirements.md). That document says *what's missing*; this one says *what to build, in what order, and what can run in parallel*.
 
-Baseline: total-recall **v1.0.135**, 643 unit tests + 20 integration tests green, **real mutation score 68.28%** (above the 65% break gate — see the repo-root `BACKLOG.md`: up from 59.51% via `vault-scan-reconcile.test.ts`, commit `7d978a7`; the ~24.6% figure in earlier drafts predates the mutation-hardening pass). The pre-commit gate is now `npm run release:build` (`typecheck && test && build`).
+Baseline: total-recall **v1.0.135**, 643 unit tests + 20 integration tests green, **real mutation score 68.28%** (above the 65% break gate — see the repo-root `BACKLOG.md`: up from 59.51% via `vault-scan-reconcile.test.ts`, commit `7d978a7`; the ~24.6% figure in earlier drafts predates the mutation-hardening pass). The verification gate is now GitHub Actions only (`.github/workflows/mutation.yml`: `npm audit` + typecheck + build + Stryker); the local `npm run release:build` script was removed in v1.1.19, `dist/` is gitignored and CI-built, and the plugin is distributed solely through the marketplace's `release` branch.
 
 Sizing is relative (S = hours, M = days, L = weeks) and deliberately coarse — treat it as ordering information, not a schedule.
 

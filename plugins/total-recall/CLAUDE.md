@@ -29,20 +29,43 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## 📦 Build artifacts (`dist/`)
 
-`dist/` is **intentionally committed to git**. The plugin is distributed via `git-subdir` in the marketplace, so consumers need the built artifacts without running `npm run build` themselves. Always run `npm run build` before committing to ensure `dist/` stays in sync with source.
+`dist/` is **gitignored — never commit it.** It is produced by GitHub Actions and by nothing else in the normal flow.
 
-**Release build gate.** `npm run release:build` (= `scripts/release-build.sh`: `typecheck && test && build`) is the one-command publish-time gate — it refuses to emit `dist/` unless typecheck and the full test suite are green. The hygiene fix for the committed-bundle distribution model is **not** "gitignore `dist/`" (that would break `claude plugin update` installs, since `install.sh` does not build on a normal install) — it is "never commit a `dist/` that wasn't produced by this gate". Run `npm run release:build` instead of bare `npm run build` whenever you ship a version; then commit the rebuilt `dist/` together with the source change.
+How the pieces fit:
 
-## ✅ Before committing — mandatory pre-commit checklist
+- `.github/workflows/mutation.yml` is the gate: `npm ci` → `npm audit --audit-level=critical --omit=dev` → `npm run typecheck` → `npm run build` (proving the bundle builds, and that `sync:version` leaves the manifests unchanged) → Stryker ≥65%. It runs on every push/PR to `main`.
+- `.github/workflows/release.yml` runs after a green gate, rebuilds `dist/`, and force-pushes `main`'s validated tree **plus** the built `dist/` to the **`release` branch**. It also cuts a `vX.Y.Z` tag + notes when `package.json`'s version has advanced.
+- `.claude-plugin/marketplace.json` pins its `git-subdir` source to `"ref": "release"`, so what consumers install is always a GitHub-built bundle. `main` stays artifact-free.
 
-Run all four, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed change is fetchable by consumers on `claude plugin update` the moment it lands on `main` — **before** CI has finished. `.github/workflows/mutation.yml` (Stryker ≥65% + `npm audit` + typecheck, on every push/PR to `main`) is a post-hoc regression net, not a pre-merge gate for direct pushes; `main` is branch-protected for status checks but admins can still push directly. Run the four checks locally — CI going red afterwards means the bad commit already shipped.
+Consequences worth internalising:
 
-1. **Increase the version.** Bump the version in **`package.json` only** — it is the single source of truth. Do **not** edit `.claude-plugin/plugin.json`'s version by hand: the `npm run build` step (below) runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into `plugin.json` automatically, so the two can never drift. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`), so the version must be set **before** step 2.
-2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.mjs` + `dist/privacy-filter.mjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
-3. **Audit dependencies.** `npm audit --audit-level=critical --omit=dev`. Ensure zero critical supply-chain vulnerabilities exist in production dependencies.
-4. **Test all.** `npm test` (the full unit/component suite, `maxWorkers=1` — see the run output for the current count) AND `npm run typecheck` (`tsc --noEmit`). Both must pass clean. If you add or change behavior, add/adjust tests in `src/__tests__/` first.
+- **Do not `git add -f` `dist/`.** The only writer is CI. A hand-published bundle is unreviewable and defeats the gate.
+- **A change is not live for consumers until the release workflow refreshes `release`.** Pushing to `main` alone changes nothing for anyone installing from the marketplace — the gate has to go green first. That is the intended trade: slower propagation, no unverified bundle.
+- **Locally you still run `npm run build`** to get a runnable `dist/index.js` (the MCP server, `hooks/scripts/store-learning.mjs`'s import of `dist/frontmatter.mjs`, and `npm run test:integration` all need it). That is a dev convenience, not a release step, and its output is ignored by git.
+- `install.sh` builds `dist/` itself when it is missing (`npm ci && npm run build`), so a manual clone of `main` still installs. It detects the plugin root by `.claude-plugin/plugin.json` — a tracked file — rather than by `dist/index.js`, which no longer exists in a fresh checkout.
 
-Only after all four are green: `git add -A && git commit -S` from the plugin root (signed commit), then push.
+## 🚚 Distribution
+
+**Marketplace only.** The supported path is:
+
+```
+/plugin marketplace add adrian-balaban/total-recall
+/plugin install total-recall
+```
+
+then `./install.sh` inside the installed plugin for vaults/MCP registration. Releases carry notes and a tag but **no zip artifact** — there is deliberately one channel, so there is one thing to trust.
+
+## ✅ Before committing
+
+There is **no local build pipeline** — the former `npm run release:build` / `scripts/release-build.sh` gate was removed in v1.1.19. Verification is GitHub Actions only.
+
+The one step CI cannot do for you:
+
+**Increase the version.** Bump it in **`package.json` only** — it is the single source of truth. Do **not** hand-edit `.claude-plugin/plugin.json` or `gemini-extension.json`: `npm run build` runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into both, and CI fails if they are out of sync. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`).
+
+Then `git add -A && git commit -S` from the plugin root (signed commit), and push.
+
+Running `npm test` and `npm run typecheck` locally before pushing is optional now, not mandated — but CI going red means the release branch simply does not refresh, so consumers keep the last good build rather than receiving a broken one. That is the safety property untracking `dist/` bought.
 
 ### Git Commit & Tag Signing Policy
 
@@ -53,7 +76,7 @@ Because plugin distribution uses `git-subdir` (where `claude plugin install` and
   git config --global commit.gpgsign true
   git config --global tag.gpgsign true
   ```
-- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`). Note that `.github/workflows/release.yml` cuts unsigned lightweight tags automatically when `package.json`'s version changes on green CI; sign manually only when you tag by hand.
+- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`). Note that `.github/workflows/release.yml` cuts unsigned lightweight tags automatically when `package.json`'s version changes on green CI, and publishes the built `release` branch under the `github-actions[bot]` identity; sign manually only when you tag by hand.
 
 ## 🏗️ Architecture
 
