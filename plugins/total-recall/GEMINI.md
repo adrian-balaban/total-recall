@@ -1,4 +1,4 @@
-# Total Recall — Gemini CLI working notes
+# ♊ Total Recall — Gemini CLI working notes
 
 This plugin runs in Gemini CLI. The 17 tools are exposed as
 `mcp_total-recall_<tool>` and invoked in plain English ("recall X",
@@ -12,7 +12,7 @@ Claude Code.
 > duplicates / date-filter / frontmatter rules that apply to *both* clients.
 > The notes below are only the Gemini-specific deltas not covered there.
 
-## Gemini-specific deltas
+## 🔀 Gemini-specific deltas
 
 - **Tool namespace:** `mcp_total-recall_<tool>` (single underscore). The full
   matcher is wired in `hooks/hooks.gemini.json`.

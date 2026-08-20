@@ -1,31 +1,83 @@
-# 🧠 total-recall plugin
+# 🧠 total-recall
 
-Repository containing the **total-recall** plugin — a persistent, searchable memory system for Claude Code and Gemini CLI.
+**Your AI assistant forgets everything at the end of each session. This fixes that.**
 
-## 🔌 Main Plugin
+A persistent, searchable memory for Claude Code and Gemini CLI. Memories are plain Markdown files on your disk — greppable, git-versionable, Obsidian-readable. Nothing leaves your machine unless you tag it `org`.
 
-*   **[total-recall](plugins/total-recall)**: Persistent memory plugin.
-    *   Exposes 17 MCP tools for knowledge management (CRUD, hybrid search, semantic rerank, bulk export/import/delete, confirm/flag feedback).
-    *   Wires lifecycle hooks (SessionStart, PostToolUse/AfterTool, PreCompact/PreCompress, SessionEnd) for automated context injection and sync.
-    *   Uses a dual-vault architecture: personal memories stay local, while `org`-tagged memories sync to a shared Git repository through a fail-closed privacy filter.
-    *   Implements hybrid search (TF-IDF + Ebbinghaus memory decay, fused optionally with vector embeddings).
-    *   Includes a one-shot `install.sh` setup script with two profiles (default: no optional deps; complete: local vector search). Works on Linux, macOS, and Windows (Git Bash).
+```mermaid
+flowchart LR
+    A[Session starts] --> B[Relevant memories<br/>injected into context]
+    B --> C[You work]
+    C --> D[Decisions & preferences<br/>captured automatically]
+    D --> E[(~/.total-recall<br/>Markdown vault)]
+    E -.-> A
+```
 
-For detailed features, configuration options, client compatibility matrices, and developer documentation, please refer to the main plugin page:
+## 📊 Status
 
-👉 **[Go to total-recall Plugin Documentation](plugins/total-recall/README.md)**
-👉 **[Installation guide (INSTALL.md)](plugins/total-recall/INSTALL.md)**
+| | |
+|---|---|
+| **Unit tests** | 744 passing · 41 files |
+| **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
+| **Mutation** | Stryker over 16 core modules · CI gate breaks below 65% |
+| **Integration** | 16/20 passing — 4 known failures ([see below](#-known-issues)) |
 
-## 🎤 Talks
+Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
+(from `plugins/total-recall/`)
 
-*   **Claude vs Ollama & Total Recall Plugin** (Romanian, 21 Jul 2026) — slide deck + per-slide deep-dive notes covering this plugin's architecture, hybrid search, and dual-vault design: [adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026)
+### ⚠️ Known issues
 
-## 💡 Proactive Memory Saving
+- **4 integration tests fail** in `boundary-enforcement.integration.test.ts`. The Zod
+  boundary guard itself works — malformed args are correctly rejected with MCP error
+  `-32602`. Zod 4 changed the issue text from JSON (`"expected": "array"`) to prose
+  (`expected array, received string at tags`), and the assertions still match the old
+  format. Test-only break, no product regression.
+- **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
+  93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
+  95.3%. `npm run test:coverage` therefore exits non-zero.
 
-The total-recall plugin is designed to automatically capture and save memories (without explicit user command) when:
+## 🚀 Install
 
-*   **Work observations** — style preferences, validated approaches, what worked vs. what didn't.
-*   **Non-obvious project context** — motivations, external constraints, non-trivial decisions.
-*   **Session end** — asks: "Is there anything from today I should remember?"
+From inside a Claude Code session:
 
-*Note: Code snippets, raw file paths, and general git history are typically not saved as they can be derived directly from the active workspace.*
+```
+/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
+/plugin install total-recall
+```
+
+Linux · macOS · Windows (Git Bash). Gemini CLI, local clones, and the minimal
+(no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
+
+## ⚙️ How it works
+
+| | |
+|---|---|
+| **17 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import |
+| **Hybrid search** | TF-IDF × Ebbinghaus forgetting curve, fused with vector embeddings |
+| **Lifecycle hooks** | context injected at session start, memories captured as you work |
+| **Two vaults** | personal stays local; `org`-tagged syncs to a shared Git repo |
+
+```mermaid
+flowchart TD
+    S[store_memory] --> F{tagged org?}
+    F -->|no| P[Personal vault<br/>local only]
+    F -->|yes| PF[Privacy filter<br/>fail-closed]
+    PF --> O[Org vault → Git]
+```
+
+Module map, data model, boot sequence, search pipeline and hook lifecycle are
+documented in **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
+
+## 💡 What gets saved automatically
+
+Work observations (what worked, what didn't) · non-obvious project context
+(motivations, constraints, non-trivial decisions) · an end-of-session
+"anything worth remembering?" prompt.
+
+Not saved: code snippets, file paths, git history — all derivable from the workspace.
+
+---
+
+📖 **[Full documentation](plugins/total-recall/README.md)** ·
+🏗️ **[Architecture](plugins/total-recall/ARCHITECTURE.md)** ·
+🎤 **[Talk: Claude vs Ollama & Total Recall](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026)** (Romanian, Jul 2026)

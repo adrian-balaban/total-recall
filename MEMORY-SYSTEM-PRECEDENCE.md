@@ -1,4 +1,4 @@
-# Memory system precedence
+# 🥇 Memory system precedence
 
 **Total Recall is the exclusive memory system for this workspace.** The harness
 file-based memory (the `memory/` directory with a `MEMORY.md` index and per-fact
@@ -6,14 +6,14 @@ markdown files) and the `.remember/` history system are **disabled** by user
 instruction — even though the SessionStart hooks and harness defaults describe
 and encourage them.
 
-## Why
+## ❓ Why
 
 The user's global `CLAUDE.md` mandates Total Recall exclusively. Per the
 instruction-priority order — **user `CLAUDE.md` > skills > harness defaults** —
 the user instruction wins over the conflicting hook/default behavior. The
 `.remember/` and `memory/` prompts are background context, not instructions.
 
-## How to apply
+## 🔧 How to apply
 
 - **Store** via Total Recall `store_memory` / `update_memory`.
 - **Recall** cheapest-first: injected active-memory index → `get_memories_by_keys`

@@ -1,4 +1,4 @@
-# Banking readiness — implementation plan
+# 🏦 Banking readiness — implementation plan
 
 Execution plan derived from [banking-environment-requirements.md](banking-environment-requirements.md). That document says *what's missing*; this one says *what to build, in what order, and what can run in parallel*.
 
@@ -8,7 +8,7 @@ Sizing is relative (S = hours, M = days, L = weeks) and deliberately coarse — 
 
 ---
 
-## Code changes required (consolidated)
+## 🔨 Code changes required (consolidated)
 
 One row per code change implied by the phases below. Governance/paperwork items (Phase 0) and runbook-only items are omitted — this is the engineering change list. Cross-references the phase rows for rationale, ordering, and dependencies.
 
@@ -42,7 +42,7 @@ One row per code change implied by the phases below. Governance/paperwork items 
 
 ---
 
-## Scope: team-shared — decided
+## 🎯 Scope: team-shared — decided
 
 The target is a **team deployment with the shared org vault enabled**. That resolves the scope question and has three consequences:
 
@@ -54,7 +54,7 @@ The sequencing below reflects this: 4.1 (injection fencing) is pulled forward in
 
 ---
 
-## Phase 0 — Decisions and long-lead paperwork (start day one, no code)
+## 0️⃣ Phase 0 — Decisions and long-lead paperwork (start day one, no code)
 
 These gate nothing technically but gate *approval*, and they run on weeks-to-months timelines. Starting them last is the most common way this kind of rollout slips.
 
@@ -72,7 +72,7 @@ These gate nothing technically but gate *approval*, and they run on weeks-to-mon
 
 ---
 
-## Phase 1 — Stop the bleeding (config and CI; smallest change, largest risk reduction)
+## 1️⃣ Phase 1 — Stop the bleeding (config and CI; smallest change, largest risk reduction)
 
 The goal of this phase is that an unmodified install stops doing the things a reviewer will reject. Nearly all of it is gating and defaults, not new subsystems.
 
@@ -90,7 +90,7 @@ The goal of this phase is that an unmodified install stops doing the things a re
 
 ---
 
-## Phase 2 — Data protection in code
+## 2️⃣ Phase 2 — Data protection in code
 
 The substantive engineering. Each item is independently shippable and independently reviewable.
 
@@ -104,7 +104,7 @@ The substantive engineering. Each item is independently shippable and independen
 
 ---
 
-## Phase 3 — Deployment fit (parallelisable with Phase 2)
+## 3️⃣ Phase 3 — Deployment fit (parallelisable with Phase 2)
 
 Making it work *inside* the bank's network and endpoint constraints. None of these depend on Phase 2.
 
@@ -117,7 +117,7 @@ Making it work *inside* the bank's network and endpoint constraints. None of the
 
 ---
 
-## Phase 4 — Shared-vault hardening (mandatory — this is a team deployment)
+## 4️⃣ Phase 4 — Shared-vault hardening (mandatory — this is a team deployment)
 
 **`orgRepo` stays unset until every item here is done and signed off.** Enabling it is its own approval gate, not a config tweak.
 
@@ -132,7 +132,7 @@ Making it work *inside* the bank's network and endpoint constraints. None of the
 
 ---
 
-## Phase 5 — Assurance evidence
+## 5️⃣ Phase 5 — Assurance evidence
 
 Produced alongside the engineering, submitted at the end. Several depend on the code being final.
 
@@ -148,7 +148,7 @@ Produced alongside the engineering, submitted at the end. Several depend on the 
 
 ---
 
-## Critical path
+## 🛤️ Critical path
 
 ```
 Phase 1 (1.1 → 1.2 → 1.3/1.4/1.5/1.6/1.7 in parallel)   ← fastest risk reduction
@@ -171,7 +171,7 @@ Two milestones, deliberately: **A** is a defensible single-developer install tha
 
 Phase 0's paperwork is the true long pole; 0.7–0.9 in particular block Phase 4 and are owned outside engineering, so chase them early. Phase 1 is a few days of work that removes most of what a reviewer would reject on sight.
 
-## What this plan deliberately does not do
+## 🚧 What this plan deliberately does not do
 
 - **No encrypted vault implementation** in the first pass — full-disk encryption plus a documented decision is the proportionate control, and building key management is weeks that buy little.
 - **No shared-host / VDI deployment.** Team-shared here means *many machines syncing through a git repo*, which is what the architecture supports. Several developers driving one host is a different problem; 4.4 makes it safe but does not make it designed-for.

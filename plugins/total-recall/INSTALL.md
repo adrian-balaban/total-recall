@@ -2,7 +2,7 @@
 
 One plugin, two clients — Claude Code and Gemini CLI — all set up by a single state-aware `install.sh`.
 
-## Prerequisites
+## 📋 Prerequisites
 
 - **Node.js v18+** on PATH
 - `claude` CLI (for MCP registration; skipped with a warning if absent)
@@ -10,13 +10,13 @@ One plugin, two clients — Claude Code and Gemini CLI — all set up by a singl
 - `agy` CLI — **only** for `--gemini`
 - **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))
 
-## Windows
+## 🪟 Windows
 
 Run `install.sh` from **Git Bash** (ships with [Git for Windows](https://gitforwindows.org/)). Claude Code on Windows also executes the plugin's lifecycle hooks through Git Bash, so having it installed covers both.
 
 Use a **Windows Node.js** (`node.exe` on PATH). Node installed only inside WSL is not visible to Git Bash/Claude Code.
 
-## Install profiles
+## 🎚️ Install profiles
 
 On start, `install.sh` asks which profile you want (skip the prompt with a flag). **Complete is the default** — pressing Enter, `-y`, or a non-interactive run all select it:
 
@@ -27,7 +27,7 @@ On start, `install.sh` asks which profile you want (skip the prompt with a flag)
 
 Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
 
-## Quick install by client
+## ⚡ Quick install by client
 
 ```bash
 # 1. Clone and build
@@ -80,7 +80,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 
 Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 
-## Org vault (team memory)
+## 👥 Org vault (team memory)
 
 ```bash
 ./install.sh --org-repo https://github.com/your-org/team-vault.git \
@@ -89,7 +89,7 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 
 Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `org-vault`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
-## Privacy model — what is blocked, what is only warned
+## 🔐 Privacy model — what is blocked, what is only warned
 
 Two layers, with different threat models:
 
@@ -97,7 +97,7 @@ Two layers, with different threat models:
 - **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process; nothing leaves the host), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
 
 
-## Enabling vector search later
+## 🧭 Enabling vector search later
 
 ```bash
 cd plugins/total-recall
@@ -107,13 +107,13 @@ npm run build
 
 Or just re-run `./install.sh --complete`.
 
-## Codex CLI (MCP only, no hooks)
+## 🤖 Codex CLI (MCP only, no hooks)
 
 Codex CLI speaks MCP but does **not** run Claude Code lifecycle hooks, so the SessionStart memory-index injection, PostToolUse org-vault sync, and PreCompact journal extraction do not fire. You get the 17 MCP tools (read/write/search via `recall_memory`, `search_index`, `store_memory`, …) but no automatic capture or proactive injection — call the tools explicitly.
 
 To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`); hooks are simply ignored. Memory is fully usable on demand; only the auto-capture hooks are absent.
 
-## Verify
+## ✅ Verify
 
 Start a new session; the memory index should be injected automatically (Claude Code). Or ask: *"what do you remember about …"* → the model calls `recall_memory`. `get_stats` shows totals, cache stats, and recent errors.
 

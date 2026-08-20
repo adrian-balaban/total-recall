@@ -3,9 +3,9 @@ name: memory-workflow
 description: Use when storing or retrieving memories with the Total Recall plugin — establishes the cheapest-first retrieval order (injected index → get_memories_by_keys → search_index → recall_memory), the knowledge-capture rules (executive summary, dedup check, importanceScore, org tagging for the org vault), and the category and quality guidelines for store_memory.
 ---
 
-# Memory Workflow — Total Recall Retrieval & Capture
+# 🧠 Memory Workflow — Total Recall Retrieval & Capture
 
-## Retrieval Decision Tree
+## 🌳 Retrieval Decision Tree
 
 Follow this order strictly — earlier steps are cheaper:
 
@@ -22,7 +22,7 @@ Follow this order strictly — earlier steps are cheaper:
 
 **Never jump straight to recall_memory if the key is already in the injected index.**
 
-## Knowledge Capture Rules
+## 📥 Knowledge Capture Rules
 
 - Call `store_memory` **directly from the main agent** — never delegate to a subagent
 - **Check for duplicates** with `search_index` before storing
@@ -31,7 +31,7 @@ Follow this order strictly — earlier steps are cheaper:
   - Appropriate tags (use `org` for team-shared knowledge)
   - `importanceScore` between 0.0 and 1.0
 
-## Category Guidelines
+## 🏷️ Category Guidelines
 
 | Category | Content | Target length |
 |---|---|---|
@@ -42,14 +42,14 @@ Follow this order strictly — earlier steps are cheaper:
 | `knowledge` | Concepts, how-tos, references | 200–1000 words |
 | `journal` | Auto-appended activity log — do not store manually | — |
 
-## Org Vault Routing
+## 🔀 Org Vault Routing
 
 - Tag with `org` to route to shared org vault
 - **Never** use both `org` and `personal` tags on the same memory
 - Key collisions between vaults are prevented by design, not resolved by precedence: org keys are always prefixed `org/`, and the personal vault reserves (skips scanning) any `org/` subdirectory — so the same key can never resolve to both a personal and an org memory
 - Org sync uses `spawnSync` with args as array — no shell interpolation risk
 
-## Quality Checklist
+## ✅ Quality Checklist
 
 Before calling `store_memory`, verify:
 - [ ] Title is searchable and specific (not "Notes from today")
@@ -58,7 +58,7 @@ Before calling `store_memory`, verify:
 - [ ] No duplicate exists (checked with `search_index`)
 - [ ] `importanceScore` reflects actual reuse value (0.3=low, 0.7=high, 1.0=critical)
 
-## Known Gotchas
+## ⚠️ Known Gotchas
 
 - `since` date filter silently **excludes** memories with missing `updated` field (by design)
 - `rebuild_index` now preserves `accessCount`/`lastAccessed` — safe to run anytime

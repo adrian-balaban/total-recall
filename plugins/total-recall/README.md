@@ -58,7 +58,7 @@ created: 2026-06-01T10:00:00Z
 updated: 2026-06-15T14:30:00Z
 ---
 
-## Executive Summary
+## 📊 Executive Summary
 
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
