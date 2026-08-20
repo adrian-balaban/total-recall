@@ -1,8 +1,14 @@
-# Cuts a GitHub Release whenever the plugin's version changes on main.
+# Cuts a GitHub Release (tag + notes + plugin zip) when the plugin's version
+# changes on main.
 #
 # Trigger model: `workflow_run` on the mutation gate, so a release is only ever
 # created from a commit whose Stryker/audit/typecheck job went green. A plain
 # `on: push` would race the gate and could tag a red commit.
+#
+# `workflow_dispatch` is the bootstrap/manual escape hatch: `workflow_run` only
+# fires for workflow files that already exist on the default branch, so the
+# commit that introduces this file cannot trigger itself. Run it once by hand
+# (Actions → release → Run workflow) to cut the release for the current version.
 #
 # Idempotent: if the tag for the current package.json version already exists,
 # the job exits without doing anything — so doc-only commits (which don't bump
@@ -14,20 +20,26 @@ on:
     workflows: [mutation]
     types: [completed]
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   release:
-    if: github.event.workflow_run.conclusion == 'success'
+    # On workflow_run, only release from a green gate. On manual dispatch there
+    # is no upstream run, so the condition passes through.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    env:
+      # The commit the mutation gate validated — not the branch tip, which may
+      # have advanced while the gate was running. Falls back to the dispatch SHA.
+      SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
-          # Check out the exact commit the mutation gate validated, not the
-          # branch tip, and fetch all history so release notes can diff tags.
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          # Full history so --generate-notes can diff against the previous tag.
           fetch-depth: 0
 
       - name: Read plugin version
@@ -44,12 +56,50 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'false'
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: plugins/total-recall/package-lock.json
+
+      # dist/ is a build artifact (not tracked in git), so the zip has to be
+      # assembled from a fresh build rather than from `git archive`.
+      - name: Build plugin
+        if: steps.check.outputs.exists == 'false'
+        working-directory: plugins/total-recall
+        run: |
+          npm ci
+          npm run build
+
+      # Ships everything install.sh needs (it runs `npm ci && npm run build`
+      # itself, hence src/ stays in) minus the dev-only weight and local scratch.
+      - name: Package plugin zip
+        if: steps.check.outputs.exists == 'false'
+        id: pkg
+        run: |
+          VERSION="${{ steps.v.outputs.version }}"
+          STAGE="$(mktemp -d)"
+          tar -cf - \
+            --exclude=node_modules \
+            --exclude=coverage \
+            --exclude=reports \
+            --exclude=.stryker-tmp \
+            --exclude=.remember \
+            --exclude=.claude \
+            --exclude='src/__tests__' \
+            -C plugins total-recall | tar -xf - -C "$STAGE"
+          ( cd "$STAGE" && zip -qr "total-recall-v${VERSION}.zip" total-recall )
+          echo "zip=${STAGE}/total-recall-v${VERSION}.zip" >> "$GITHUB_OUTPUT"
+          ls -lh "${STAGE}/total-recall-v${VERSION}.zip"
+
       - name: Create tag and release
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "v${{ steps.v.outputs.version }}" \
-            --target "${{ github.event.workflow_run.head_sha }}" \
+            --target "$SHA" \
             --title "v${{ steps.v.outputs.version }}" \
-            --generate-notes
+            --generate-notes \
+            "${{ steps.pkg.outputs.zip }}#total-recall-v${{ steps.v.outputs.version }}.zip"

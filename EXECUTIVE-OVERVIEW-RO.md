@@ -44,12 +44,11 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Compatibilitate:** funcționează pe orice Linux/Mac + Git Bash pe Windows; necesită Node.js 18+
 
 ## ✅ Calitate și fiabilitate
-- **Teste:** peste 12.000 linii de cod de test în 45 de fișiere
-- **Acoperire:** 93,6% din instrucțiuni, 95,3% din linii (pragul configurat cere 95% instrucțiuni — vezi secțiunea Status din README)
+- **Teste:** 744 unitare + 20 de integrare, toate verzi · 45 de fișiere · ~13.000 de linii de cod de test
+- **Acoperire:** 93,6% instrucțiuni · 88,2% ramuri · 95,3% linii (pragul configurat cere 95% peste tot, deci `npm run test:coverage` iese încă non-zero — vezi secțiunea Status din README)
 - **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
-  - Scor curent: 65,9% (testele capturează 65,9% din erorile introduse deliberat; ținta e minim 65%)
-  - Modulele critice (salvare pe disc, căutare text) au scor mai mare (70%+)
-  - Modulele opționale (căutare semantică) au scor acceptabil
+  - Scor curent: 65,9% pe 16 module de bază (testele capturează 65,9% din erorile introduse deliberat; pragul care pică build-ul e 65%)
+  - Marja peste prag e de doar 0,9 puncte, deci o singură ramură nouă netestată poate face CI-ul roșu
 - **Versiune:** 1.1.18 — stabil
 - **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` rulează gate-ul Stryker la fiecare push/PR pe `main` și pică build-ul sub 65%. În plus, întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat și local înainte de a fi trimis
 
