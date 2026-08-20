@@ -44,12 +44,11 @@ If the second method is unavailable, the system automatically falls back to the 
 - **Compatibility:** works on any Linux/Mac plus Git Bash on Windows; requires Node.js 18+
 
 ## ✅ Quality and reliability
-- **Tests:** over 12,000 lines of test code across 45 files
-- **Coverage:** 93.6% of statements, 95.3% of lines (the configured gate wants 95% statements — see README status)
+- **Tests:** 744 unit + 20 integration tests, all green · 45 files · ~13,000 lines of test code
+- **Coverage:** 93.6% statements · 88.2% branches · 95.3% lines (the configured threshold wants 95% across the board, so `npm run test:coverage` still exits non-zero — see README status)
 - **Mutation testing:** a method for checking whether the tests are actually any good. It takes the code and deliberately changes small things (e.g. `>` becomes `<`, `true` becomes `false`). If the tests don't notice the change and don't fail, they aren't strict enough. A tool called Stryker does this automatically.
-  - Current score: 65.9% (the tests catch 65.9% of the deliberately introduced faults; the target is at least 65%)
-  - Critical modules (disk persistence, text search) score higher (70%+)
-  - Optional modules (semantic search) score acceptably
+  - Current score: 65.9% across 16 core modules (the tests catch 65.9% of the deliberately introduced faults; the threshold that breaks the build is 65%)
+  - Headroom over that threshold is just 0.9 points, so a single new untested branch can turn CI red
 - **Version:** 1.1.18 — stable
 - **CI:** the GitHub Actions workflow `.github/workflows/mutation.yml` runs the Stryker gate on every push/PR to `main` and fails the build below 65%. On top of that, since the plugin is distributed straight from git (not through npm), every commit is also tested locally before being pushed
 
