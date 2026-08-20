@@ -36,12 +36,6 @@ jobs:
       # Security gate: audit production dependencies to prevent critical supply-chain vulnerabilities
       - run: npm audit --audit-level=critical --omit=dev
       - run: npm run typecheck
-      # The full unit suite. Stryker's dry run only executes the ~21-file
-      # allow-list in vitest.stryker.config.ts (293 of 744 tests), so without
-      # this step the majority of the suite — server-boot, e2e, org-sync,
-      # hook-scripts, the tool tests — would run nowhere automatically now that
-      # the local pre-commit gate is gone.
-      - run: npm test
       # dist/ is gitignored — CI is the only thing that builds it. Proving the
       # bundle builds is therefore part of the gate, not a local step. The build
       # also runs sync:version, so this catches a manifest that was hand-edited
@@ -49,6 +43,14 @@ jobs:
       - run: npm run build
       - name: Verify manifests are version-synced with package.json
         run: git diff --exit-code -- .claude-plugin/plugin.json gemini-extension.json
+      # The full unit suite — MUST run after the build. dist/ is gitignored, and
+      # hooks/scripts/store-learning.mjs imports dist/frontmatter.mjs at runtime,
+      # so hook-scripts.test.ts hits ERR_MODULE_NOT_FOUND on an unbuilt tree
+      # (and install.sh, which now builds when dist/ is absent, would burn a
+      # 90s `npm ci` inside its test and time out). Stryker's dry run only
+      # executes the ~21-file allow-list in vitest.stryker.config.ts (293 of 744
+      # tests), so without this step most of the suite runs nowhere.
+      - run: npm test
       # Boots the real dist/index.js over stdio — the only check that the bundle
       # CI is about to publish to the `release` branch actually starts and
       # answers MCP calls. Kept as its own step so a failure here is

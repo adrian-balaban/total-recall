@@ -55,10 +55,13 @@ function detectOrgBranch() {
 const BRANCH = config.orgBranch || detectOrgBranch() || 'org-vault';
 
 const ORG_REPO = config.orgRepo;
-if (!ORG_REPO) {
-  console.error('Error: orgRepo is not set. Add {"orgRepo": "https://github.com/you/your-vault.git"} to ~/.total-recall/config.json');
-  process.exit(1);
-}
+// NOTE: the `!ORG_REPO` precondition is checked at the top of main(), NOT here.
+// At module scope it fired on IMPORT, so `import { guardTreeWipe } from
+// './sync-org-memory.mjs'` in a test called process.exit(1) on any machine
+// without orgRepo configured — defeating the main-guard at the bottom of this
+// file and making sync-org-wipe-guard.test.ts pass only on a developer box that
+// happened to have an org vault set up. It went unnoticed because CI never ran
+// the full unit suite until v1.1.21. Keep preconditions inside main().
 
 // Inject gh token so git push/pull authenticate without prompting
 try {
@@ -339,6 +342,11 @@ async function main() {
   const force = flags.includes('--force');
 
   if (!key) { console.error('Usage: sync-org-memory.mjs <key> [--delete]'); process.exit(1); }
+
+  if (!ORG_REPO) {
+    console.error('Error: orgRepo is not set. Add {"orgRepo": "https://github.com/you/your-vault.git"} to ~/.total-recall/config.json');
+    process.exit(1);
+  }
 
   const relKey = key.replace(/^org\//, '');
   const orgFile = path.join(ORG_VAULT, relKey + '.md');
