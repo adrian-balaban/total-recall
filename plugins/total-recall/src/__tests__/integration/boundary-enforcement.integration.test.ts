@@ -114,13 +114,27 @@ afterAll(async () => {
 // expected field name in the error text. The MCP SDK returns a CallToolResult
 // with isError: true and content[0].text = "MCP error -32602: Input
 // validation error: Invalid arguments for tool <name>: ..." — it does NOT
-// throw. The Zod issue array embedded in the text contains `"path": ["<field>"]`
-// and `"expected": "<type>"`, so a substring check on the field name is a
-// faithful proxy for "the rejection was about this field."
+// throw. The error text names the offending field, so a substring check on
+// the field name is a faithful proxy for "the rejection was about this field."
 function assertBoundaryRejection(res: any, field: string): void {
   expect(res.isError).toBe(true);
   expect(text(res)).toContain('Input validation error');
   expect(text(res)).toContain(field);
+}
+
+// Helper: assert the rejection was a TYPE mismatch naming `expected` as the
+// wanted type, without pinning Zod's rendering of the issue.
+//
+// Zod 3 embedded a JSON issue array (`"expected": "array"`); Zod 4 emits prose
+// (`expected array, received string at tags`). Both are the same contract —
+// safeParse rejected the arg because the declared type did not match — so this
+// matches either form. Asserting on one rendering broke all four cases on the
+// Zod 3→4 bump while the guard itself was working correctly (MCP -32602 was
+// still returned); the format is the SDK's business, the rejection is ours.
+function assertExpectedType(res: any, expectedType: string): void {
+  expect(text(res)).toMatch(
+    new RegExp(`"expected":\\s*"${expectedType}"|expected ${expectedType}\\b`),
+  );
 }
 
 describe('6.2 boundary enforcement: safeParse rejects malformed arguments before the handler runs', () => {
@@ -158,7 +172,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
     });
     assertBoundaryRejection(res, 'tags');
     // The Zod issue for an array-expected field reports expected "array".
-    expect(text(res)).toContain('"expected": "array"');
+    assertExpectedType(res, 'array');
   });
 
   // store_memory also declares `tags` as an array in its Zod raw shape, so
@@ -169,7 +183,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
       arguments: { title: 'T', content: 'c', tags: 'scalar' },
     });
     assertBoundaryRejection(res, 'tags');
-    expect(text(res)).toContain('"expected": "array"');
+    assertExpectedType(res, 'array');
   });
 
   // recall_memory declares `limit` as a number; a string is rejected at the
@@ -180,7 +194,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
       arguments: { query: 'x', limit: 'abc' },
     });
     assertBoundaryRejection(res, 'limit');
-    expect(text(res)).toContain('"expected": "number"');
+    assertExpectedType(res, 'number');
   });
 
   // get_memories_by_keys declares `keys` as an array; a scalar is rejected
@@ -191,7 +205,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
       arguments: { keys: 'not-an-array' },
     });
     assertBoundaryRejection(res, 'keys');
-    expect(text(res)).toContain('"expected": "array"');
+    assertExpectedType(res, 'array');
   });
 
   // NEGATIVE CASE — a negative numeric limit must NOT be rejected.
