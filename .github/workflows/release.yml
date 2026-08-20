@@ -1,0 +1,55 @@
+# Cuts a GitHub Release whenever the plugin's version changes on main.
+#
+# Trigger model: `workflow_run` on the mutation gate, so a release is only ever
+# created from a commit whose Stryker/audit/typecheck job went green. A plain
+# `on: push` would race the gate and could tag a red commit.
+#
+# Idempotent: if the tag for the current package.json version already exists,
+# the job exits without doing anything — so doc-only commits (which don't bump
+# the version) produce no release noise.
+name: release
+
+on:
+  workflow_run:
+    workflows: [mutation]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Check out the exact commit the mutation gate validated, not the
+          # branch tip, and fetch all history so release notes can diff tags.
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
+      - name: Read plugin version
+        id: v
+        run: echo "version=$(jq -r .version plugins/total-recall/package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Skip if this version was already released
+        id: check
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.v.outputs.version }} already tagged — nothing to release."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create tag and release
+        if: steps.check.outputs.exists == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v${{ steps.v.outputs.version }}" \
+            --target "${{ github.event.workflow_run.head_sha }}" \
+            --title "v${{ steps.v.outputs.version }}" \
+            --generate-notes
