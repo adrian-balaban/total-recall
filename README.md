@@ -13,41 +13,6 @@ flowchart LR
     E -.-> A
 ```
 
-## 📊 Status
-
-| | |
-|---|---|
-| **Version** | 1.1.18 — stable |
-| **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
-| **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
-| **Mutation** | 65.9% (Stryker, 16 core modules) · CI gate fails below 65% |
-| **CI** | [`.github/workflows/mutation.yml`](.github/workflows/mutation.yml) on every push/PR to `main` |
-| **Audit** | 0 critical in production deps |
-
-Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
-(from `plugins/total-recall/`)
-
-### ⚠️ Known issues
-
-- **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
-  93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
-  95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
-  `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
-- **Mutation score has only 0.9 pts of headroom** over the 65% break threshold, so a
-  small drop in test strictness will fail the gate.
-
-## 🚀 Install
-
-From inside a Claude Code session:
-
-```
-/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
-/plugin install total-recall
-```
-
-Linux · macOS · Windows (Git Bash). Gemini CLI, local clones, and the minimal
-(no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
-
 ## ⚙️ How it works
 
 | | |
@@ -65,8 +30,33 @@ flowchart TD
     PF --> O[Org vault → Git]
 ```
 
-Module map, data model, boot sequence, search pipeline and hook lifecycle are
-documented in **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
+C4 diagrams (context → containers → components → code), module map, data model,
+boot sequence, search pipeline and hook lifecycle are documented in
+**[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
+
+## 💡 What gets saved automatically
+
+Work observations (what worked, what didn't) · non-obvious project context
+(motivations, constraints, non-trivial decisions) · an end-of-session
+"anything worth remembering?" prompt.
+
+Not saved: code snippets, file paths, git history — all derivable from the workspace.
+
+## 🚀 Install
+
+From inside a Claude Code session:
+
+```
+/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
+/plugin install total-recall
+```
+
+Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini CLI, local clones, and the
+minimal (no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
+
+Prefer a pinned artifact? Every version bump on green CI publishes a
+[GitHub Release](https://github.com/adrian-balaban/total-recall/releases) with the
+plugin zip attached.
 
 ### 🔗 Footprint
 
@@ -88,13 +78,29 @@ and are only pulled in if you enable it.
   the source of truth; the vector index is a local SQLite, regenerable anytime.
 - **Fault-tolerant** — degrades to text search if the vector path is unavailable.
 
-## 💡 What gets saved automatically
+## 📊 Status
 
-Work observations (what worked, what didn't) · non-obvious project context
-(motivations, constraints, non-trivial decisions) · an end-of-session
-"anything worth remembering?" prompt.
+| | |
+|---|---|
+| **Version** | 1.1.18 — stable |
+| **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
+| **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
+| **Mutation** | 65.9% (Stryker, 16 core modules) · CI gate fails below 65% |
+| **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — Stryker + audit + typecheck on every push/PR to `main` |
+| **Releases** | [`release.yml`](.github/workflows/release.yml) — tag + notes + plugin zip, cut on green CI when the version changes |
+| **Audit** | 0 critical in production deps |
 
-Not saved: code snippets, file paths, git history — all derivable from the workspace.
+Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
+(from `plugins/total-recall/`)
+
+### ⚠️ Known issues
+
+- **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
+  93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
+  95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
+  `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
+- **Mutation score has only 0.9 pts of headroom** over the 65% break threshold, so a
+  small drop in test strictness will fail the gate.
 
 ---
 

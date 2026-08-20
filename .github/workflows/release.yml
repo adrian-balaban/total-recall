@@ -36,7 +36,7 @@ jobs:
       # have advanced while the gate was running. Falls back to the dispatch SHA.
       SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: ${{ github.event.workflow_run.head_sha || github.sha }}
           # Full history so --generate-notes can diff against the previous tag.
@@ -56,7 +56,7 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: steps.check.outputs.exists == 'false'
         with:
           node-version: '20'

@@ -35,7 +35,7 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## ✅ Before committing — mandatory pre-commit checklist
 
-Run all four, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed-but-untested change ships to consumers on `claude plugin update` with no CI gate in between.
+Run all four, in order, **before every commit** that touches source or the plugin manifest (not just releases). The plugin is distributed via `git-subdir`, so a committed change is fetchable by consumers on `claude plugin update` the moment it lands on `main` — **before** CI has finished. `.github/workflows/mutation.yml` (Stryker ≥65% + `npm audit` + typecheck, on every push/PR to `main`) is a post-hoc regression net, not a pre-merge gate for direct pushes; `main` is branch-protected for status checks but admins can still push directly. Run the four checks locally — CI going red afterwards means the bad commit already shipped.
 
 1. **Increase the version.** Bump the version in **`package.json` only** — it is the single source of truth. Do **not** edit `.claude-plugin/plugin.json`'s version by hand: the `npm run build` step (below) runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into `plugin.json` automatically, so the two can never drift. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`), so the version must be set **before** step 2.
 2. **Build all.** `npm run build` (rebuilds `dist/index.js` + `dist/frontmatter.mjs` + `dist/privacy-filter.mjs`). The committed `dist/` must match the source — a stale `dist/` ships an older bundle at a newer version number.
@@ -53,7 +53,7 @@ Because plugin distribution uses `git-subdir` (where `claude plugin install` and
   git config --global commit.gpgsign true
   git config --global tag.gpgsign true
   ```
-- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`).
+- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`). Note that `.github/workflows/release.yml` cuts unsigned lightweight tags automatically when `package.json`'s version changes on green CI; sign manually only when you tag by hand.
 
 ## 🏗️ Architecture
 

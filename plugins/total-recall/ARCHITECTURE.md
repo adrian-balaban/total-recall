@@ -6,6 +6,211 @@ Total-recall is a plugin that gives the AI persistent, searchable memory across 
 Is compatible with Claude Code and Gemini CLI.
 ---
 
+## 🧭 C4 Model
+
+Four zoom levels over the same system, per Simon Brown's C4 model: context → containers → components → code.
+
+### C1 — System Context
+
+Who uses total-recall and what it talks to. The plugin never calls a hosted inference API: the only outbound network traffic is git (org vault) and a one-time model download.
+
+```mermaid
+graph TB
+    dev["👤 Developer<br/><i>works in an AI coding session</i>"]
+    tr["🧠 Total Recall<br/><b>[Software System]</b><br/>Persistent, searchable memory<br/>across sessions"]
+    host["💻 Claude Code / Gemini CLI<br/><b>[External System]</b><br/>Host harness — spawns the MCP<br/>server and runs the hooks"]
+    orgrepo["🗂️ Org memory repo<br/><b>[External System]</b><br/>Git remote holding the<br/>team-shared vault branch"]
+    hub["🤗 HuggingFace Hub<br/><b>[External System]</b><br/>Serves all-MiniLM-L6-v2 once,<br/>then cached on disk"]
+    team["👥 Teammates"]
+
+    dev -->|"asks questions,<br/>stores decisions"| host
+    host -->|"MCP tool calls over stdio;<br/>hook events"| tr
+    tr -->|"injects the memory index<br/>at SessionStart"| host
+    tr -->|"push/pull filtered<br/>org memories"| orgrepo
+    tr -.->|"first run only,<br/>then offline"| hub
+    team -->|"pull/push shared memories"| orgrepo
+
+    classDef sys fill:#1168bd,stroke:#0b4884,color:#fff
+    classDef ext fill:#999,stroke:#6b6b6b,color:#fff
+    classDef person fill:#08427b,stroke:#052e56,color:#fff
+    class tr sys
+    class host,orgrepo,hub ext
+    class dev,team person
+```
+
+### C2 — Containers
+
+The system is not one process. A short-lived Node process serves MCP tools; separate shell/Node scripts run on harness hook events; state lives in plain files. Note the two writers of `.index-cache.txt`: the MCP server (debounced) and `build-memory-index.sh` (a standalone bash scan that needs no running server).
+
+```mermaid
+graph TB
+    host["💻 Host harness<br/><b>[External]</b>"]
+
+    subgraph TR["Total Recall"]
+        mcp["⚙️ MCP stdio server<br/><b>[Node · dist/index.js]</b><br/>17 tools, in-memory index,<br/>debounced persistence"]
+        hooks["🪝 Hook scripts<br/><b>[bash + Node · hooks/scripts]</b><br/>SessionStart · PostToolUse<br/>PreCompact · SessionEnd"]
+        emb["🔢 Embedder<br/><b>[in-process HF pipeline]</b><br/>all-MiniLM-L6-v2, 384-dim<br/>lazy-loaded, optional"]
+
+        pv[("📁 Personal vault<br/><b>[Markdown + local git]</b><br/>~/.total-recall/personal-vault")]
+        ov[("📁 Org vault<br/><b>[Markdown + git branch]</b><br/>~/.total-recall/org/org-vault")]
+        idx[("🗃️ Index files<br/><b>[JSON + txt]</b><br/>index.json · invertedIndex.json<br/>.index-cache.txt")]
+        vdb[("🧮 vectors.db<br/><b>[SQLite + sqlite-vec]</b><br/>optional")]
+    end
+
+    orgrepo["🗂️ Org git remote<br/><b>[External]</b>"]
+
+    host -->|"MCP / stdio"| mcp
+    host -->|"hook events + stdin JSON"| hooks
+    hooks -->|"injects .index-cache.txt<br/>as context"| host
+
+    mcp -->|"read/write .md"| pv
+    mcp -->|"read/write .md"| ov
+    mcp -->|"atomic write"| idx
+    mcp -->|"upsert / knn search"| vdb
+    mcp -->|"embed(text)"| emb
+    emb -->|"384-dim vectors"| vdb
+
+    hooks -->|"standalone frontmatter scan<br/>(no MCP)"| pv
+    hooks -->|"writes .index-cache.txt"| idx
+    hooks -->|"privacy filter → add/commit/push"| ov
+    hooks -->|"git pull / push"| orgrepo
+    hooks -->|"PreCompact: writes<br/>extracted learnings"| pv
+
+    classDef c fill:#438dd5,stroke:#2e6295,color:#fff
+    classDef d fill:#438dd5,stroke:#2e6295,color:#fff
+    classDef ext fill:#999,stroke:#6b6b6b,color:#fff
+    class mcp,hooks,emb c
+    class pv,ov,idx,vdb d
+    class host,orgrepo ext
+```
+
+### C3 — Components (inside the MCP stdio server)
+
+`server.ts` owns no schemas and no dispatch table: each `tools/*.ts` module co-locates its Zod shape, handler and `register(server)`, and `registry.ts`'s `wrapHandler` adds the result envelope plus perf/error instrumentation. Everything reads the index through the single `state.ts` singleton.
+
+```mermaid
+graph TB
+    idxts["index.ts<br/><i>boot stub · signal handlers<br/>· shutdown() latch</i>"]
+    srv["server.ts<br/><i>McpServer · six register() calls · main()</i>"]
+    reg["tools/registry.ts<br/><i>wrapHandler · CallToolResult<br/>envelope · perf + error samples</i>"]
+
+    subgraph Tools["tools/ — the 17 tools"]
+        direction LR
+        t1["store.ts"]
+        t2["recall.ts"]
+        t3["query.ts"]
+        t4["mutate.ts"]
+        t5["rerank.ts"]
+        t6["bulk.ts"]
+    end
+
+    subgraph Search["retrieval"]
+        direction LR
+        tf["tfidf.ts<br/><i>tokenize · inverted index<br/>· bilingual expansion</i>"]
+        eb["ebbinghaus.ts<br/><i>retention decay</i>"]
+        rrf["rrf.ts<br/><i>reciprocal rank fusion, k=60</i>"]
+        embc["embeddings.ts<br/><i>lazy HF pipeline<br/>· depsInstalled() probe</i>"]
+        vs["vectorStore.ts<br/><i>sqlite-vec wrapper<br/>· binding self-heal</i>"]
+    end
+
+    subgraph Core["state + storage"]
+        direction LR
+        st["state.ts<br/><i>memIndex · invertedIndex<br/>· errors · perfSamples</i>"]
+        pers["persistence.ts<br/><i>debounced save · atomicWrite<br/>· buildIndexCache</i>"]
+        scan["vault-scan.ts<br/><i>reconcileIndex · indexFile<br/>· slugify · keyFromPath</i>"]
+        fm["frontmatter.ts<br/><i>minimal YAML parse/serialize</i>"]
+        lru["lru-cache.ts<br/><i>contentCache · 100 · 30 min</i>"]
+        paths["paths.ts<br/><i>vault paths · EXCLUDED_DIRS</i>"]
+        jr["journal.ts · dates.ts"]
+    end
+
+    ar["auto-reconcile.ts<br/><i>polls .reconcile-requested</i>"]
+
+    idxts --> srv
+    srv -->|"register(server)"| Tools
+    Tools -->|"every handler is wrapped"| reg
+    reg -->|"records into"| st
+
+    t1 --> fm
+    t1 --> lru
+    t1 --> jr
+    t2 --> tf
+    t2 --> rrf
+    t2 --> embc
+    t2 --> lru
+    t3 --> eb
+    t4 --> lru
+    t5 --> embc
+    t6 --> pers
+
+    tf --> st
+    tf --> eb
+    embc --> vs
+    rrf -.->|"fuses the two<br/>ranked lists"| tf
+
+    scan --> fm
+    scan --> paths
+    scan --> st
+    pers --> st
+    ar --> scan
+    Tools --> pers
+
+    classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
+    class idxts,srv,reg,t1,t2,t3,t4,t5,t6,tf,eb,rrf,embc,vs,st,pers,scan,fm,lru,paths,ar,jr comp
+```
+
+### C4 — Code: `recall_memory` hybrid path
+
+The lowest zoom level, showing the actual call order for one tool. The vector branch is best-effort: any failure there (embed, sqlite-vec, fusion) is recorded via `recordError` and the result degrades to the TF-IDF ranking instead of throwing.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Host (Claude Code)
+    participant R as registry.wrapHandler
+    participant H as recall.ts handler
+    participant T as tfidf.tfidfSearch
+    participant E as ebbinghaus
+    participant V as embeddings + vectorStore
+    participant F as rrf
+    participant L as lru-cache + fs
+    participant P as persistence
+
+    C->>R: CallTool recall_memory{query, hybrid, full, limit}
+    R->>R: Zod safeParse (rejects malformed args here)
+    R->>H: handler(args)
+    H->>T: tfidfSearch(query)
+    T->>T: tokenize → Set (dedupe bilingual expansion)
+    T->>T: per token: invertedIndex lookup, TF×IDF<br/>×2 title, ×1.5 tag (memoized per doc)
+    T->>E: computeRetentionStrength(importance, days, accessCount)
+    E-->>T: decay factor
+    T-->>H: ranked candidates
+
+    alt hybrid = true and optional deps loadable
+        H->>V: embed(query) → 384-dim vector
+        V->>V: searchVector(db, qvec, 50)
+        V-->>H: vector candidates
+        H->>F: reciprocalRankFusion([tfidf, vector], k=60)
+        F-->>H: fused ranking
+    else vector path unavailable or throws
+        V-->>H: recordError(...) → TF-IDF ranking kept
+    end
+
+    H->>H: excludeJournal re-filter · since/before · minScore · slice(limit)
+    loop each result
+        H->>H: accessCount++, lastAccessed = now
+        opt full = true
+            H->>L: read body through contentCache (miss → readFileSync)
+        end
+    end
+    H->>P: scheduleSave() (debounced 1s → index.json)
+    H-->>R: results
+    R->>R: recordPerfSample + wrap in CallToolResult
+    R-->>C: memories + scores
+```
+
+---
+
 ## 🗺️ Module Map
 
 ```
