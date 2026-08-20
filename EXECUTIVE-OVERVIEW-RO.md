@@ -4,7 +4,7 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## 📦 Ce este
-Total Recall este o extensie (versiunea 1.1.20) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie (versiunea 1.1.21) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
@@ -49,7 +49,7 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
   - Scor curent: 65,39% pe 16 module de bază, măsurat în CI (testele capturează 65,39% din erorile introduse deliberat; pragul care pică build-ul e 65%, deci marja e una subțire, de 0,39 puncte)
   - Marja peste prag e de doar 0,9 puncte, deci o singură ramură nouă netestată poate face CI-ul roșu
-- **Versiune:** 1.1.20 — stabil
+- **Versiune:** 1.1.21 — stabil
 - **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` este singurul gate de verificare — audit de dependențe, typecheck, build și gate-ul de mutation testing Stryker (pică sub 65%) — la fiecare push/PR pe `main`. Începând cu v1.1.19 nu mai există niciun pipeline local: bundle-ul compilat este în `.gitignore`, GitHub Actions îl construiește, iar `.github/workflows/release.yml` îl publică pe branch-ul `release` din care instalează marketplace-ul. Pluginul are exact un canal de distribuție (marketplace-ul) și un singur lucru care poate produce un artefact livrat (CI)
 
 ## 🔗 Dependințe

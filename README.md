@@ -85,7 +85,7 @@ and are only pulled in if you enable it.
 
 | | |
 |---|---|
-| **Version** | 1.1.20 — stable |
+| **Version** | 1.1.21 — stable |
 | **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
 | **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
 | **Mutation** | 65.39% (Stryker, 16 core modules, measured in CI) · gate fails below 65% |

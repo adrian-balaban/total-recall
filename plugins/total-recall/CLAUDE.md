@@ -33,7 +33,7 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 How the pieces fit:
 
-- `.github/workflows/mutation.yml` is the gate: `npm ci` → `npm audit --audit-level=critical --omit=dev` → `npm run typecheck` → `npm test` (the **full** unit suite) → `npm run build` (proving the bundle builds, and that `sync:version` leaves the manifests unchanged) → `npm run test:integration` (boots the real bundle over stdio) → Stryker ≥65%. It runs on every push/PR to `main`. The explicit `npm test` matters: Stryker's dry run only executes the ~21-file allow-list in `vitest.stryker.config.ts` (293 of 744 tests), so without it most of the suite would run nowhere now that the local pre-commit gate is gone.
+- `.github/workflows/mutation.yml` is the gate: `npm ci` → `npm audit --audit-level=critical --omit=dev` → `npm run typecheck` → `npm run build` (proving the bundle builds, and that `sync:version` leaves the manifests unchanged) → `npm test` (the **full** unit suite) → `npm run test:integration` (boots the real bundle over stdio) → Stryker ≥65%. **The build must stay ahead of the tests**: `dist/` is gitignored, and `hooks/scripts/store-learning.mjs` imports `dist/frontmatter.mjs` at runtime, so `hook-scripts.test.ts` fails with ERR_MODULE_NOT_FOUND on an unbuilt tree. It runs on every push/PR to `main`. The explicit `npm test` matters: Stryker's dry run only executes the ~21-file allow-list in `vitest.stryker.config.ts` (293 of 744 tests), so without it most of the suite would run nowhere now that the local pre-commit gate is gone.
 - `.github/workflows/release.yml` runs after a green gate, rebuilds `dist/`, and force-pushes `main`'s validated tree **plus** the built `dist/` to the **`release` branch**. It also cuts a `vX.Y.Z` tag + notes when `package.json`'s version has advanced.
 - `.claude-plugin/marketplace.json` pins its `git-subdir` source to `"ref": "release"`, so what consumers install is always a GitHub-built bundle. `main` stays artifact-free.
 
@@ -65,7 +65,7 @@ The one step CI cannot do for you:
 
 Then `git add -A && git commit -S` from the plugin root (signed commit), and push.
 
-Running `npm test` and `npm run typecheck` locally before pushing is optional now, not mandated — CI runs both. A red gate means the `release` branch simply does not refresh, so consumers keep the last good build rather than receiving a broken one. That is the safety property untracking `dist/` bought. The flip side: a red gate is also **silent** from a consumer's perspective — nothing breaks, but nothing ships either, so check the run after pushing a fix you expect people to receive.
+Running `npm test` and `npm run typecheck` locally before pushing is optional now, not mandated — CI runs both. When you do run them locally, run with a **clean `HOME`** (`HOME=$(mktemp -d) npm test`): a developer box carries `~/.total-recall/config.json`, and env-dependent tests can pass there while failing on a fresh CI runner. That is exactly how the `sync-org-memory.mjs` import-time `process.exit(1)` survived until v1.1.21. A red gate means the `release` branch simply does not refresh, so consumers keep the last good build rather than receiving a broken one. That is the safety property untracking `dist/` bought. The flip side: a red gate is also **silent** from a consumer's perspective — nothing breaks, but nothing ships either, so check the run after pushing a fix you expect people to receive.
 
 ### Git Commit & Tag Signing Policy
 
