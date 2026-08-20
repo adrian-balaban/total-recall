@@ -1,7 +1,7 @@
 # The single build/release gate for this repo — there is no local pipeline.
 #
-# Runs on every push/PR to main: npm audit, typecheck, a dist/-freshness check
-# (the committed bundle must match a fresh build), and mutation testing.
+# Runs on every push/PR to main: npm audit, typecheck, the full unit suite,
+# the build, the integration suite against the real bundle, and mutation testing.
 # Stryker re-runs the unit suite against all source modules and exits non-zero
 # when the "of total" mutation score drops below `thresholds.break` (65) in
 # stryker.conf.json. Server-boot, e2e, and integration tests are excluded from
@@ -36,6 +36,12 @@ jobs:
       # Security gate: audit production dependencies to prevent critical supply-chain vulnerabilities
       - run: npm audit --audit-level=critical --omit=dev
       - run: npm run typecheck
+      # The full unit suite. Stryker's dry run only executes the ~21-file
+      # allow-list in vitest.stryker.config.ts (293 of 744 tests), so without
+      # this step the majority of the suite — server-boot, e2e, org-sync,
+      # hook-scripts, the tool tests — would run nowhere automatically now that
+      # the local pre-commit gate is gone.
+      - run: npm test
       # dist/ is gitignored — CI is the only thing that builds it. Proving the
       # bundle builds is therefore part of the gate, not a local step. The build
       # also runs sync:version, so this catches a manifest that was hand-edited
@@ -43,6 +49,11 @@ jobs:
       - run: npm run build
       - name: Verify manifests are version-synced with package.json
         run: git diff --exit-code -- .claude-plugin/plugin.json gemini-extension.json
+      # Boots the real dist/index.js over stdio — the only check that the bundle
+      # CI is about to publish to the `release` branch actually starts and
+      # answers MCP calls. Kept as its own step so a failure here is
+      # distinguishable from a unit-test failure at a glance.
+      - run: npm run test:integration
       # Stryker runs the unit suite (all modules) under instrumentation (~5–8 min).
       # The `break: 65` threshold in stryker.conf.json makes stryker exit 1
       # when the "of total" score is below 65, failing this job.

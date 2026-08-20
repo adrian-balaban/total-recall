@@ -42,5 +42,13 @@ export default defineConfig({
     // Coverage analysis is driven by Stryker (perTest); disable vitest's own
     // coverage thresholds so the dry-run doesn't fail on the reduced file set.
     coverage: { enabled: false },
+    // Pin the reporter. Vitest's DEFAULT reporter set auto-adds `github-actions`
+    // when GITHUB_ACTIONS=true, which appends a "Vitest Test Report" block to
+    // $GITHUB_STEP_SUMMARY on every run. Stryker runs vitest once per mutant
+    // (hundreds of times), so the job summary filled up with reports whose ❌
+    // means "mutant killed" — the SUCCESS case — making a green job read as
+    // broken. Setting `reporters` explicitly replaces the defaults, so the
+    // github-actions reporter is never added. Do not remove.
+    reporters: ['dot'],
   },
 });
