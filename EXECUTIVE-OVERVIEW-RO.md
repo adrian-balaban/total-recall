@@ -4,70 +4,70 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## 📦 Ce este
-Total Recall este o extensie (versiunea 1.1.5) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie (versiunea 1.1.18) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
-Când cauți o memorie, sistemul o găsește folosind o metodă rapidă de căutare și o 'rangează' după importanță și frecvență de utilizare.
+Când cauți o memorie, sistemul o găsește folosind o metodă rapidă de căutare și o „rangează” după importanță și frecvență de utilizare.
 
 ## ⚙️ Ce face
 - **Salvează** memoriile ca fișiere Markdown cu informații structurate (titlu, etichete, categorie, importanță).
 - **Caută** memoriile rapid atunci când ai nevoie.
-- **Range-ază** rezultatele după relevanță și cât de recent ai accesat acea memorie.
+- **Rangează** rezultatele după relevanță și cât de recent ai accesat acea memorie.
 - **Separă** memoriile personale (doar pentru tine) de cele de echipă (partajate cu alții).
 - **Protejează** datele sensibile (carduri de credit, email-uri personale, parole) înainte de a le sincroniza cu echipa.
 - **Arhivează** versiunile vechi ale memoriilor, nu le șterge pur și simplu.
 - **Injectează** automat index-ul memoriilor în contextul Claude la fiecare sesiune nouă — e cea mai importantă caracteristică.
-- **Extrage** automat 0-3 lecții din conversație la sfârșitul sesiunii și le salvează.
+- **Extrage** automat 0-3 lecții din conversație înainte de compactarea contextului (hook `PreCompact`) și le salvează.
 - **Sincronizează** memoriile de echipă în git, deci toți colegii au acces.
 
 ## 🛠️ Cele 17 instrumente
 Sunt grupate în categorii:
 - **Salvare:** `store_memory`
 - **Căutare:** `recall_memory`, `search_index`
-- **Citire:** `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories`, `prune_memories`
-- **Modificare:** `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`
-- **Reordanare:** `rerank_memories`
+- **Citire:** `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories`
+- **Modificare:** `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories`
+- **Reordonare:** `rerank_memories`
 - **Operații în masă:** `export_memories`, `import_memories`, `delete_memories`
 
 ## 🔍 Cum funcționează, în termeni simpli
 Fiecare memorie e un fișier Markdown obișnuit cu informații structurate în capul fișierului (titlu, etichete, etc.). La pornire, sistemul citește toate fișierele, le indexează (pentru căutare rapidă) și apoi e gata să răspundă la întrebări. Când cauți ceva, căutarea folosește două metode:
 1. **Căutare text** — caută cuvintele din memoria ta
-2. **Căutare vectorială** (opțional) — înțelege sensul, nu doar cuvintele
+2. **Căutare vectorială (semantică)** (activată implicit la instalare) — înțelege sensul, nu doar cuvintele
 
-Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă în mod automat. Memoriile se salvează pe disk automat, iar dacă cineva din echipă adaugă o memorie nouă în git, aceasta apare automat în sesiunea ta fără să trebuie să restartezi.
+Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă în mod automat. Memoriile se salvează pe disc automat, iar dacă cineva din echipă adaugă o memorie nouă în git, aceasta apare automat în sesiunea ta fără să trebuiască să restartezi.
 
 ## 🚀 Cum se instalează și unde se folosește
 - **Pentru Claude Code:** se instalează ca plugin din meniu
 - **Pentru Gemini CLI:** se instalează ca extensie
-- **Pentru comenzi manuale:** scriptul `install.sh` setează totul — alegi între o versiune simplă (doar căutare text) sau una completă (cu căutare dupa sens/semantica)
+- **Pentru comenzi manuale:** scriptul `install.sh` setează totul — alegi între o versiune simplă (doar căutare text) sau una completă, implicită (cu căutare după sens/semantică)
 - **Compatibilitate:** funcționează pe orice Linux/Mac + Git Bash pe Windows; necesită Node.js 18+
 
-## ✅ Calitatea și fiabilitate
-- **Teste:** peste 12,000 linii de cod de test în 41 fișiere
-- **Acoperire:** 95% din cod e testat
+## ✅ Calitate și fiabilitate
+- **Teste:** peste 12.000 linii de cod de test în 45 de fișiere
+- **Acoperire:** 93,6% din instrucțiuni, 95,3% din linii (pragul configurat cere 95% instrucțiuni — vezi secțiunea Status din README)
 - **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
-  - Scor curent: 68% (testele capturează 68% din erorile introduse deliberat; ținta e minim 65%)
-  - Modulele critice (salvare pe disk, căutare text) au scor mai mare (70%+)
+  - Scor curent: 65,9% (testele capturează 65,9% din erorile introduse deliberat; ținta e minim 65%)
+  - Modulele critice (salvare pe disc, căutare text) au scor mai mare (70%+)
   - Modulele opționale (căutare semantică) au scor acceptabil
-- **Versiune:** 1.1.8 — stabil
-- **Fără CI:** întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat local înainte de a fi trimis
+- **Versiune:** 1.1.18 — stabil
+- **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` rulează gate-ul Stryker la fiecare push/PR pe `main` și pică build-ul sub 65%. În plus, întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat și local înainte de a fi trimis
 
 ## 🔗 Dependințe
 - **Esențiale:** 2 pachete mici (MCP SDK și Zod pentru validare)
 - **Opționale:** 3 pachete pentru căutarea inteligentă (descărcate doar dacă le ceri)
-  - Modelul de AI pentru înteles semantic (~200MB)
+  - Modelul de AI pentru înțeles semantic (~200MB)
   - Bază de date locală pentru vectori
-- **Dimensiune totală:** ~1-2MB pentru plugin; ~200MB opțional dacă vrei căutare semantica
+- **Dimensiune totală:** ~1-2MB pentru plugin; ~200MB opțional dacă vrei căutare semantică
 
 ## 🧭 Principii de design
 - **Local-first:** toate memoriile sunt pe computerul tău, nu în cloud
 - **Citibil:** fiecare memorie e un fișier Markdown pe care îl poți edita cu orice editor
-- **Versionabil:** fișierele se pot pune în git și se pot urmări modificările
-- **Imparțial:** nu folosește o bază de date; totul e in git
+- **Versionabil:** fișierele se pot pune în git și se pot urmări modificările (vault-ul de echipă chiar asta face; cel personal rămâne doar local)
+- **Fără infrastructură:** nu depinde de niciun server sau bază de date externă — sursa de adevăr sunt fișierele Markdown (indexul vectorial e doar un SQLite local, regenerabil oricând)
 - **Rezistent la erori:** dacă ceva se întâmplă, datele nu se pierd
 
-## 📡 Raportare la Thoughtworks Technology Radar Vol. 34 (2026)
+## 📡 Raportare la [Thoughtworks Technology Radar Vol. 34 (2026)](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)
 
 Radarul Thoughtworks grupează tehnici și unelte pe patru inele (Adopt = folosește acum, Trial = merită încercat, Assess = urmărește, Caution = atenție). Vol. 34 e dominat de maturizarea ingineriei de agenți AI. Mai multe tehnici recomandate sunt **deja implementate** în Total Recall, ca decizii de design luate independent:
 

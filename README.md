@@ -17,10 +17,11 @@ flowchart LR
 
 | | |
 |---|---|
-| **Unit tests** | 744 passing · 41 files |
-| **Integration** | 20/20 passing |
+| **Version** | 1.1.18 — stable |
+| **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
 | **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
-| **Mutation** | 65.9% · Stryker over 16 core modules · gate breaks below 65% |
+| **Mutation** | 65.9% (Stryker, 16 core modules) · CI gate fails below 65% |
+| **CI** | [`.github/workflows/mutation.yml`](.github/workflows/mutation.yml) on every push/PR to `main` |
 | **Audit** | 0 critical in production deps |
 
 Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
@@ -67,6 +68,26 @@ flowchart TD
 Module map, data model, boot sequence, search pipeline and hook lifecycle are
 documented in **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
+### 🔗 Footprint
+
+Two production dependencies — the MCP SDK and Zod. Three optional ones power
+semantic search (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec`)
+and are only pulled in if you enable it.
+
+| | |
+|---|---|
+| **Plugin** | ~1–2 MB |
+| **Optional model** | ~200 MB, downloaded on first use |
+
+## 🧭 Design principles
+
+- **Local-first** — memories live on your machine, not in the cloud.
+- **Readable** — every memory is a Markdown file you can edit in any editor.
+- **Versionable** — the team vault is git-backed; the personal vault stays local.
+- **No infrastructure** — no external server or database. The Markdown files are
+  the source of truth; the vector index is a local SQLite, regenerable anytime.
+- **Fault-tolerant** — degrades to text search if the vector path is unavailable.
+
 ## 💡 What gets saved automatically
 
 Work observations (what worked, what didn't) · non-obvious project context
@@ -77,6 +98,11 @@ Not saved: code snippets, file paths, git history — all derivable from the wor
 
 ---
 
+📄 **[Executive overview](EXECUTIVE-OVERVIEW.md)** — non-technical summary, tool
+inventory, and how the design maps to the Thoughtworks Technology Radar Vol. 34
+([🇷🇴 Romanian](EXECUTIVE-OVERVIEW-RO.md))
+
 📖 **[Full documentation](plugins/total-recall/README.md)** ·
 🏗️ **[Architecture](plugins/total-recall/ARCHITECTURE.md)** ·
+📦 **[Install guide](plugins/total-recall/INSTALL.md)** ·
 🎤 **[Talk: Claude vs Ollama & Total Recall](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026)** (Romanian, Jul 2026)
