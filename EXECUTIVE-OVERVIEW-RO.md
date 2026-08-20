@@ -4,7 +4,7 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## 📦 Ce este
-Total Recall este o extensie (versiunea 1.1.18) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie (versiunea 1.1.19) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
@@ -49,8 +49,8 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
   - Scor curent: 65,9% pe 16 module de bază (testele capturează 65,9% din erorile introduse deliberat; pragul care pică build-ul e 65%)
   - Marja peste prag e de doar 0,9 puncte, deci o singură ramură nouă netestată poate face CI-ul roșu
-- **Versiune:** 1.1.18 — stabil
-- **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` rulează gate-ul Stryker la fiecare push/PR pe `main` și pică build-ul sub 65%. În plus, întrucât pluginul se distribuie direct din git (nu prin npm), fiecare commit e testat și local înainte de a fi trimis
+- **Versiune:** 1.1.19 — stabil
+- **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` este singurul gate de verificare — audit de dependențe, typecheck, build și gate-ul de mutation testing Stryker (pică sub 65%) — la fiecare push/PR pe `main`. Începând cu v1.1.19 nu mai există niciun pipeline local: bundle-ul compilat este în `.gitignore`, GitHub Actions îl construiește, iar `.github/workflows/release.yml` îl publică pe branch-ul `release` din care instalează marketplace-ul. Pluginul are exact un canal de distribuție (marketplace-ul) și un singur lucru care poate produce un artefact livrat (CI)
 
 ## 🔗 Dependințe
 - **Esențiale:** 2 pachete mici (MCP SDK și Zod pentru validare)
@@ -72,7 +72,7 @@ Radarul Thoughtworks grupează tehnici și unelte pe patru inele (Adopt = folose
 
 - **Progressive context disclosure** (Trial) + **Context engineering** (Adopt): nu arunci tot contextul deodată (duce la „context rot"), ci pornești cu un index ușor și încarci detaliul la cerere. Exact ce face pluginul — la SessionStart injectează doar indexul memoriilor, iar conținutul complet se citește prin `get_memories_by_keys` doar când e nevoie.
 - **Mutation testing** (Trial): „cel mai onest semnal" pentru calitatea testelor în era codului generat de AI. Pluginul folosește deja Stryker (vezi *Calitate și fiabilitate*).
-- **Claude Code plugin marketplace** (Trial): distribuție bazată pe git, fără „drift de versiune" — exact modelul pluginului (git-subdir, nu npm).
+- **Claude Code plugin marketplace** (Trial): distribuție bazată pe git, fără „drift de versiune" — exact modelul pluginului (git-subdir, nu npm) și, din v1.1.19, singurul său canal, alimentat de un branch construit în CI.
 - **Structured output from LLMs** (Adopt): hook-ul de captură cere modelului linii JSON, nu text liber.
 - **MCP by default** (Caution): radarul avertizează să nu folosești reflex MCP — pluginul ține operațiile de sistem (git, indexare) în scripturi simple, nu în unelte MCP.
 

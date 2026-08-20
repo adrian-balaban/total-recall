@@ -242,14 +242,24 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 
 ## 🚀 Installation
 
-See **[INSTALL.md](INSTALL.md)** for the full guide (profiles, Windows, org vault, Codex). TL;DR:
+See **[INSTALL.md](INSTALL.md)** for the full guide (profiles, Windows, org vault, Codex).
+
+The marketplace is the **only** distribution channel — no zip, no npm package. TL;DR:
+
+```
+/plugin marketplace add adrian-balaban/total-recall
+/plugin install total-recall
+```
 
 ```bash
-cd plugins/total-recall && npm install && npm run build
-
-claude plugin install "$(pwd)"       # Claude Code (also the manual-clone path — auto-loads hooks/hooks.json)
+./install.sh                         # vaults, MCP registration, index (run once)
 ./install.sh --gemini                # Gemini CLI (agy)
 ```
+
+Hooks auto-load from `hooks/hooks.json` — nothing to wire. What the marketplace
+installs is the `release` branch, whose `dist/` bundle is built by GitHub Actions
+after CI goes green; `dist/` is gitignored on `main`, so working from a clone means
+building it yourself (`npm install && npm run build`, or just let `install.sh` do it).
 
 `install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
 

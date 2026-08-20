@@ -27,37 +27,50 @@ On start, `install.sh` asks which profile you want (skip the prompt with a flag)
 
 Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
 
-## ⚡ Quick install by client
+## ⚡ Install (marketplace)
 
-```bash
-# 1. Clone and build
-git clone https://github.com/adrian-balaban/my-claude-plugins-marketplace.git
-cd my-claude-plugins-marketplace/plugins/total-recall
-npm install && npm run build
-
-# 2. Register for your client:
-
-# Claude Code (native — hooks auto-load from hooks/hooks.json)
-claude plugin install "$(pwd)"
-
-# Gemini CLI (MCP + hooks/hooks.gemini.json)
-./install.sh --gemini
-
-# Manual clone (no marketplace): install the checkout itself as a local plugin,
-# which auto-loads hooks/hooks.json exactly like a marketplace install.
-claude plugin install "$(pwd)"
-```
-
-### From inside a Claude Code session
-
-Instead of running `claude plugin install` from the shell, you can add and install it interactively with slash commands:
+The plugin is distributed **only through the marketplace**. From inside a Claude Code session:
 
 ```
-/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
+/plugin marketplace add adrian-balaban/total-recall
 /plugin install total-recall
 ```
 
-This is equivalent to `claude plugin install "$(pwd)"` above but doesn't require a local clone — Claude Code fetches the marketplace and plugin directly. Hooks still auto-load from `hooks/hooks.json`.
+or from the shell:
+
+```bash
+claude plugin marketplace add adrian-balaban/total-recall
+claude plugin install total-recall
+```
+
+Then run the setup script once, from the installed plugin directory, to create the vaults, register the MCP server, and build the index:
+
+```bash
+./install.sh
+```
+
+Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.json`.
+
+**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact can reach you. There is deliberately no zip download and no npm package — one channel, one thing to trust.
+
+### Gemini CLI
+
+```bash
+./install.sh --gemini    # MCP + hooks/hooks.gemini.json (requires the `agy` CLI)
+```
+
+### Developing from a clone
+
+Only for working on the plugin — not a supported install path for users:
+
+```bash
+git clone https://github.com/adrian-balaban/total-recall.git
+cd total-recall/plugins/total-recall
+npm install && npm run build   # dist/ is gitignored, so a clone has none
+claude plugin install "$(pwd)"
+```
+
+`./install.sh` also builds `dist/` for you when it is missing.
 
 If you only want the MCP server registered (no hooks, e.g. to inspect/manage it) without going through the plugin flow, use `/mcp`:
 
@@ -69,7 +82,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
-1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags the repo until `claude plugin update`)
+1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt), identified by the tracked `.claude-plugin/plugin.json`; **builds `dist/` if it is absent** (`npm ci && npm run build`, needed for a clone of `main`); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags until `claude plugin update`)
 2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots)
 3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed
 4. Build the initial index
@@ -104,6 +117,8 @@ cd plugins/total-recall
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3
 npm run build
 ```
+
+(`npm run build` here rebuilds your local `dist/`, which is gitignored — it changes only your working copy.)
 
 Or just re-run `./install.sh --complete`.
 

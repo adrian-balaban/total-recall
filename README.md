@@ -47,16 +47,19 @@ Not saved: code snippets, file paths, git history — all derivable from the wor
 From inside a Claude Code session:
 
 ```
-/plugin marketplace add adrian-balaban/my-claude-plugins-marketplace
+/plugin marketplace add adrian-balaban/total-recall
 /plugin install total-recall
 ```
+
+then `./install.sh` once, from the installed plugin directory, to create the
+vaults and register the MCP server.
 
 Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini CLI, local clones, and the
 minimal (no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
 
-Prefer a pinned artifact? Every version bump on green CI publishes a
-[GitHub Release](https://github.com/adrian-balaban/total-recall/releases) with the
-plugin zip attached.
+**The marketplace is the only distribution channel** — no zip, no npm package. It
+installs the `release` branch, whose bundle is built by GitHub Actions after the CI
+gate goes green; `dist/` is gitignored on `main`, so no hand-built artifact can ship.
 
 ### 🔗 Footprint
 
@@ -82,12 +85,12 @@ and are only pulled in if you enable it.
 
 | | |
 |---|---|
-| **Version** | 1.1.18 — stable |
+| **Version** | 1.1.19 — stable |
 | **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
 | **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
 | **Mutation** | 65.9% (Stryker, 16 core modules) · CI gate fails below 65% |
-| **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — Stryker + audit + typecheck on every push/PR to `main` |
-| **Releases** | [`release.yml`](.github/workflows/release.yml) — tag + notes + plugin zip, cut on green CI when the version changes |
+| **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
+| **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production deps |
 
 Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`

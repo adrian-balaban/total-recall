@@ -5,3 +5,7 @@ coverage/
 
 # Stryker mutation testing scratch dir (never commit)
 .stryker-tmp/
+
+# Build output — produced by CI (release workflow) or by `npm run build`
+# locally / from install.sh. Never committed; see CLAUDE.md "Build artifacts".
+dist/

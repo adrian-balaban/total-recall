@@ -1,18 +1,28 @@
-# Cuts a GitHub Release (tag + notes + plugin zip) when the plugin's version
-# changes on main.
+# Builds and publishes the plugin. This is the ONLY build pipeline — there is no
+# local release gate.
+#
+# Distribution model (all three constraints held together):
+#   * `plugins/total-recall/dist/` is gitignored on `main`, so no build artifact
+#     is ever committed by hand.
+#   * The plugin is distributed ONLY through the marketplace, which fetches a
+#     git tree via `git-subdir` — so that tree must already contain `dist/`.
+#   * Therefore CI builds `dist/` and force-publishes `main`'s tree plus the
+#     built `dist/` onto the `release` branch, and `.claude-plugin/marketplace.json`
+#     pins its source `ref` to `release`. Consumers get a GitHub-built bundle;
+#     `main` stays artifact-free.
 #
 # Trigger model: `workflow_run` on the mutation gate, so a release is only ever
-# created from a commit whose Stryker/audit/typecheck job went green. A plain
-# `on: push` would race the gate and could tag a red commit.
+# published from a commit whose Stryker/audit/typecheck/build job went green. A
+# plain `on: push` would race the gate and could publish a red commit.
 #
 # `workflow_dispatch` is the bootstrap/manual escape hatch: `workflow_run` only
 # fires for workflow files that already exist on the default branch, so the
 # commit that introduces this file cannot trigger itself. Run it once by hand
-# (Actions → release → Run workflow) to cut the release for the current version.
+# (Actions → release → Run workflow) to publish the current version.
 #
-# Idempotent: if the tag for the current package.json version already exists,
-# the job exits without doing anything — so doc-only commits (which don't bump
-# the version) produce no release noise.
+# The `release` branch is refreshed on every green run (consumers must be able to
+# pick up fixes), while the tag + GitHub Release are cut only when the version in
+# package.json changes — so doc-only commits produce no release noise.
 name: release
 
 on:
@@ -27,7 +37,7 @@ permissions:
 
 jobs:
   release:
-    # On workflow_run, only release from a green gate. On manual dispatch there
+    # On workflow_run, only publish from a green gate. On manual dispatch there
     # is no upstream run, so the condition passes through.
     if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
@@ -46,53 +56,45 @@ jobs:
         id: v
         run: echo "version=$(jq -r .version plugins/total-recall/package.json)" >> "$GITHUB_OUTPUT"
 
-      - name: Skip if this version was already released
-        id: check
-        run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "v${{ steps.v.outputs.version }} already tagged — nothing to release."
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
       - uses: actions/setup-node@v5
-        if: steps.check.outputs.exists == 'false'
         with:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: plugins/total-recall/package-lock.json
 
-      # dist/ is a build artifact (not tracked in git), so the zip has to be
-      # assembled from a fresh build rather than from `git archive`.
+      # This build IS the distribution: dist/ exists nowhere in git until here.
       - name: Build plugin
-        if: steps.check.outputs.exists == 'false'
         working-directory: plugins/total-recall
         run: |
           npm ci
           npm run build
 
-      # Ships everything install.sh needs (it runs `npm ci && npm run build`
-      # itself, hence src/ stays in) minus the dev-only weight and local scratch.
-      - name: Package plugin zip
-        if: steps.check.outputs.exists == 'false'
-        id: pkg
+      # Publish the validated tree + the freshly built dist/ to `release`, the
+      # branch the marketplace installs from. Force-push because `release` is a
+      # derived branch, not a development one — its history is disposable.
+      - name: Publish built tree to the release branch
         run: |
-          VERSION="${{ steps.v.outputs.version }}"
-          STAGE="$(mktemp -d)"
-          tar -cf - \
-            --exclude=node_modules \
-            --exclude=coverage \
-            --exclude=reports \
-            --exclude=.stryker-tmp \
-            --exclude=.remember \
-            --exclude=.claude \
-            --exclude='src/__tests__' \
-            -C plugins total-recall | tar -xf - -C "$STAGE"
-          ( cd "$STAGE" && zip -qr "total-recall-v${VERSION}.zip" total-recall )
-          echo "zip=${STAGE}/total-recall-v${VERSION}.zip" >> "$GITHUB_OUTPUT"
-          ls -lh "${STAGE}/total-recall-v${VERSION}.zip"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B release "$SHA"
+          # -f overrides the .gitignore entry that keeps dist/ off main.
+          git add -f plugins/total-recall/dist
+          git commit -m "build: dist for v${{ steps.v.outputs.version }} ($SHA)"
+          git push --force origin release
 
+      - name: Skip the tag if this version was already released
+        id: check
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "v${{ steps.v.outputs.version }} already tagged — release branch refreshed, nothing to tag."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Tag the source commit on main, not the derived release commit, so the
+      # tag points at reviewable history. No artifact is attached: the plugin is
+      # distributed only through the marketplace.
       - name: Create tag and release
         if: steps.check.outputs.exists == 'false'
         env:
@@ -101,5 +103,4 @@ jobs:
           gh release create "v${{ steps.v.outputs.version }}" \
             --target "$SHA" \
             --title "v${{ steps.v.outputs.version }}" \
-            --generate-notes \
-            "${{ steps.pkg.outputs.zip }}#total-recall-v${{ steps.v.outputs.version }}.zip"
+            --generate-notes
