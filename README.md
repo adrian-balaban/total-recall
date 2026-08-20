@@ -85,10 +85,10 @@ and are only pulled in if you enable it.
 
 | | |
 |---|---|
-| **Version** | 1.1.21 — stable |
-| **Tests** | 744 unit + 20 integration passing · 45 files · ~13k lines of test code |
+| **Version** | 1.1.22 — stable |
+| **Tests** | 778 unit + 20 integration passing · 47 files · ~13k lines of test code |
 | **Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
-| **Mutation** | 65.39% (Stryker, 16 core modules, measured in CI) · gate fails below 65% |
+| **Mutation** | ≈68% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production deps |
@@ -102,11 +102,14 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
   95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
   `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
-- **Mutation score has only 0.39 pts of headroom** over the 65% break threshold
-  (65.39% as measured by [run 32400076703](https://github.com/adrian-balaban/total-recall/actions/runs/32400076703)).
-  Any small drop in test strictness fails the gate — and since the gate is what
-  publishes the `release` branch, a red gate silently leaves consumers on the
-  previous build. Widening this margin is the next piece of work.
+- **The mutation score is not reproducible run-to-run.** Two CI runs with no
+  change to any mutated source file reported 65.39% and 66.39% — about ±1 point
+  of drift, most likely from mutants that time out under varying runner load. Do
+  not read a single decimal figure as precise. Margin over the 65% break
+  threshold was widened to roughly 3 points in v1.1.22 (five modules taken from
+  0–75% up to 93–100%, +34 mutants killed), so ordinary drift no longer risks a
+  red gate — which matters because a red gate silently withholds the `release`
+  branch rather than shipping anything broken.
 
 ---
 

@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { inDateWindow, toCutoff } from '../dates.js';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { inDateWindow, toCutoff, parseRelativeDate } from '../dates.js';
 
 describe('inDateWindow', () => {
   // Fixtures: a stable window so the bounds-inclusive / bounds-exclusive edges
@@ -118,5 +118,67 @@ describe('toCutoff', () => {
   it('throws on an unparseable bound (surfaces bad input instead of a silent empty result)', () => {
     expect(() => toCutoff('yesterday')).toThrow(/Invalid date filter/);
     expect(() => toCutoff('1y')).toThrow(/Invalid date filter/);
+  });
+});
+
+// parseRelativeDate's unit ternary and its anchored regex were the weakest spot
+// in dates.ts (75.93% mutation score): the existing shorthand test asserts a
+// ~1s-tolerance window for '7d' and only `> 0` for '2w', so the week and month
+// branches — and both regex anchors — could be mutated without any test
+// noticing. Fake timers make Date.now() deterministic, which lets these assert
+// EXACT offsets rather than tolerances.
+describe('parseRelativeDate — units and anchoring', () => {
+  const NOW = new Date('2026-06-24T12:00:00.000Z').getTime();
+  const DAY = 86400000;
+  afterEach(() => { vi.useRealTimers(); });
+
+  function at(expr: string): number {
+    vi.useFakeTimers();
+    vi.setSystemTime(NOW);
+    const d = parseRelativeDate(expr);
+    if (!d) throw new Error(`expected ${expr} to parse`);
+    return NOW - d.getTime();
+  }
+
+  it('resolves days as n × 86400000', () => {
+    expect(at('7d')).toBe(7 * DAY);
+    expect(at('1d')).toBe(DAY);
+  });
+
+  // Kills the week-branch mutants: `unit === 'w'` → true/false/!==/"" and
+  // `n * 7 * 86400000` → `n * 7 / 86400000`.
+  it('resolves weeks as n × 7 × 86400000, distinct from days', () => {
+    expect(at('2w')).toBe(2 * 7 * DAY);
+    expect(at('1w')).toBe(7 * DAY);
+    expect(at('1w')).not.toBe(at('1d'));
+  });
+
+  // Kills the month-branch mutants: `n * 30 * 86400000` → `n * 30 / 86400000`
+  // and `n / 30 * 86400000`.
+  it('resolves months as n × 30 × 86400000, distinct from days and weeks', () => {
+    expect(at('1m')).toBe(30 * DAY);
+    expect(at('3m')).toBe(3 * 30 * DAY);
+    expect(at('1m')).not.toBe(at('1w'));
+  });
+
+  it('parses a multi-digit count (kills \\d+ → \\d)', () => {
+    expect(at('10d')).toBe(10 * DAY);
+    expect(at('12w')).toBe(12 * 7 * DAY);
+  });
+
+  // Both anchors carry weight: without ^ a prefixed string would parse, without
+  // $ a suffixed one would.
+  it('rejects anything but a bare <count><unit> token', () => {
+    expect(parseRelativeDate('x7d')).toBeNull();   // needs ^
+    expect(parseRelativeDate('7dx')).toBeNull();   // needs $
+    expect(parseRelativeDate('7 d')).toBeNull();
+    expect(parseRelativeDate('7y')).toBeNull();
+    expect(parseRelativeDate('d7')).toBeNull();
+    expect(parseRelativeDate('')).toBeNull();
+  });
+
+  it('accepts surrounding whitespace and uppercase units', () => {
+    expect(at(' 2W ')).toBe(2 * 7 * DAY);
+    expect(at('3D')).toBe(3 * DAY);
   });
 });

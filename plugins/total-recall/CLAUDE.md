@@ -69,14 +69,25 @@ Running `npm test` and `npm run typecheck` locally before pushing is optional no
 
 ### Git Commit & Tag Signing Policy
 
-Because plugin distribution uses `git-subdir` (where `claude plugin install` and `claude plugin update` fetch directly from this repository's git commit history without an intermediary registry like npm), signed commits and tags are **strongly enforced**:
+**Current state: commits and tags in this repo are NOT signed.** This section used to claim signing was "strongly enforced"; it was not, and describing an unimplemented control as enforced is worse than admitting the gap — it invites reviewers to tick a box that nothing backs. Recorded here as an aspiration with the real status attached.
 
-- **Configure local GPG/SSH signing:**
-  ```bash
-  git config --global commit.gpgsign true
-  git config --global tag.gpgsign true
-  ```
-- **Release Tags:** Always sign release tags (e.g. `git tag -s v1.1.14 -m "Release v1.1.14"`). Note that `.github/workflows/release.yml` cuts unsigned lightweight tags automatically when `package.json`'s version changes on green CI, and publishes the built `release` branch under the `github-actions[bot]` identity; sign manually only when you tag by hand.
+Why it would be worth doing: distribution is `git-subdir`, so `claude plugin install` / `claude plugin update` fetch straight from this repository's history with no intermediary registry (npm, a signed tarball) in between. Commit signing is therefore the only mechanism that would let a consumer verify authorship of what they install.
+
+What is actually true today:
+
+- Commits on `main` are unsigned. No GPG key is configured on the maintainer's machine, and there is no CI check that would reject an unsigned commit.
+- `.github/workflows/release.yml` cuts **unsigned lightweight tags** automatically when `package.json`'s version changes on a green gate, and publishes the `release` branch under the `github-actions[bot]` identity. Anything published by CI is attributable to the workflow run, not to a human key.
+- Nothing in the pipeline verifies signatures, so adding a key alone would not enforce anything.
+
+To close the gap (not yet done), all three are needed — the first without the third is theatre:
+
+```bash
+git config --global commit.gpgsign true
+git config --global tag.gpgsign true
+# then: sign release tags by hand, e.g. git tag -s v1.1.21 -m "Release v1.1.21"
+# and:  add a CI step that rejects unsigned commits, or enable GitHub branch
+#       protection's "Require signed commits" on main
+```
 
 ## 🏗️ Architecture
 
