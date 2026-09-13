@@ -1,11 +1,11 @@
 # 📦 Installing Total Recall
 
-One plugin, two clients — Claude Code and Gemini CLI — all set up by a single state-aware `install.sh`.
+One plugin, two clients — Claude Code and Gemini/Antigravity — all set up by a single state-aware `install.sh`.
 
 ## 📋 Prerequisites
 
 - **Node.js v18+** on PATH
-- `claude` CLI (for MCP registration; skipped with a warning if absent)
+- `claude` CLI — **only** for MCP registration (skipped with a warning if absent). The Claude Code VS Code extension ships its own `claude` binary under its extension directory, which is not on `PATH`; if `install.sh` reports the CLI as missing on such a machine, MCP registration is the only step skipped — the plugin and its hooks still load.
 - `gh` CLI authenticated — **only** if you enable the shared org vault
 - `agy` CLI — **only** for `--gemini`
 - **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))

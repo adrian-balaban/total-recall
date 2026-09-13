@@ -4,7 +4,7 @@
 A tool that gives your AI assistant persistent memory — memories are saved on your computer and survive across sessions, so you don't have to re-explain the same things every time.
 
 ## 📦 What it is
-Total Recall is an extension (version 1.1.22) that plugs into Claude Code and Gemini CLI. Memories are Markdown files stored locally on your machine (under `~/.total-recall/`), organised in two places:
+Total Recall is an extension that plugs into Claude Code and Gemini/Antigravity. Memories are Markdown files stored locally on your machine (under `~/.total-recall/`), organised in two places:
 - **Personal vault** — your private memories
 - **Team vault** — memories shared with colleagues (optional, synced via git)
 
@@ -33,13 +33,13 @@ Grouped by category:
 ## 🔍 How it works, in plain terms
 Each memory is an ordinary Markdown file with structured information at the top (title, tags, etc.). At startup the system reads every file, indexes them (for fast search) and is then ready to answer questions. When you search for something, retrieval uses two methods:
 1. **Text search** — looks for the words in your memory
-2. **Vector (semantic) search** (enabled by default at install time) — understands meaning, not just words
+2. **Vector (semantic) search** (on by default in the Complete install profile; absent in Minimal) — understands meaning, not just words
 
 If the second method is unavailable, the system automatically falls back to the first. Memories are persisted to disk automatically, and if a colleague adds a new memory to git, it shows up in your session without needing a restart.
 
 ## 🚀 How to install it and where it runs
 - **For Claude Code:** installed as a plugin from the menu
-- **For Gemini CLI:** installed as an extension
+- **For Gemini/Antigravity:** installed as an extension
 - **For manual setup:** the `install.sh` script wires everything up — you choose between a lightweight profile (text search only) and the full, default one (with semantic/meaning-based search)
 - **Compatibility:** works on any Linux/Mac plus Git Bash on Windows; requires Node.js 18+
 
@@ -48,9 +48,10 @@ If the second method is unavailable, the system automatically falls back to the 
 - **Coverage:** 93.6% statements · 88.2% branches · 95.3% lines (the configured threshold wants 95% across the board, so `npm run test:coverage` still exits non-zero — see README status)
 - **Mutation testing:** a method for checking whether the tests are actually any good. It takes the code and deliberately changes small things (e.g. `>` becomes `<`, `true` becomes `false`). If the tests don't notice the change and don't fail, they aren't strict enough. A tool called Stryker does this automatically.
   - Current score: roughly 68% across 16 core modules (the tests catch about 68% of the deliberately introduced faults; the threshold that breaks the build is 65%). The figure moves by about ±1 point between runs even with no code change, so it is quoted as an approximation on purpose — a single exact decimal would be false precision
-  - Headroom over that threshold is just 0.9 points, so a single new untested branch can turn CI red
+  - Headroom over that threshold is about 2.9 points (measured 67.91% against a break threshold of 65%), widened deliberately in v1.1.22 so that ordinary run-to-run drift no longer risks a red gate
+  - The score also exposes something coverage alone hides: three modules have tests that reach the code without checking its logic — `embeddings.ts` 49.4%, `vectorStore.ts` 54.0%, `persistence.ts` 56.2%. `persistence.ts` is the instructive case, at 86.1% coverage but only 56.2% mutation: the tests run the code, but would not notice if it broke
 - **Version:** 1.1.22 — stable
-- **CI:** the GitHub Actions workflow `.github/workflows/mutation.yml` is the single verification gate — dependency audit, typecheck, build, and the Stryker mutation gate (fails below 65%) — on every push/PR to `main`. As of v1.1.19 there is no local build pipeline at all: the compiled bundle is gitignored, GitHub Actions builds it, and `.github/workflows/release.yml` publishes it to the `release` branch that the marketplace installs from. The plugin has exactly one distribution channel (the marketplace) and one thing that can produce a shipped artifact (CI)
+- **CI:** the GitHub Actions workflow `.github/workflows/mutation.yml` is the single verification gate — dependency audit, typecheck, build, the full unit and integration suites, and the Stryker mutation gate (fails below 65%) — on every push/PR to `main`. As of v1.1.19 there is no local build pipeline at all: the compiled bundle is gitignored, GitHub Actions builds it, and `.github/workflows/release.yml` publishes it to the `release` branch that the marketplace installs from. The plugin has exactly one distribution channel (the marketplace) and one thing that can produce a shipped artifact (CI)
 
 ## 🔗 Dependencies
 - **Essential:** 2 small packages (the MCP SDK and Zod for validation)
@@ -64,7 +65,7 @@ If the second method is unavailable, the system automatically falls back to the 
 - **Readable:** every memory is a Markdown file you can edit with any editor
 - **Versionable:** the files can be put in git and their changes tracked (the team vault does exactly that; the personal one stays local only)
 - **No infrastructure:** it depends on no external server or database — the Markdown files are the source of truth (the vector index is just a local SQLite, regenerable at any time)
-- **Fault-tolerant:** if something goes wrong, no data is lost
+- **Fault-tolerant:** if the semantic-search path is unavailable, it falls back to text search instead of failing
 
 ## 📡 How it maps to the [Thoughtworks Technology Radar Vol. 34 (2026)](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)
 

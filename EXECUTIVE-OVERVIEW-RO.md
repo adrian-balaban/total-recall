@@ -4,7 +4,7 @@
 Un instrument care dă asistentului AI o memorie persistentă — memoriile se salvează pe computer și supraviețuiesc între sesiuni, așa că nu trebuie să reexplici aceleași lucruri de fiecare dată.
 
 ## 📦 Ce este
-Total Recall este o extensie (versiunea 1.1.22) care se conectează la Claude Code și Gemini CLI. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
+Total Recall este o extensie care se conectează la Claude Code și Gemini/Antigravity. Memoriile sunt fișiere Markdown stocate local pe computer (în `~/.total-recall/`), organizate în două locuri:
 - **Vault personal** — memoriile tale private
 - **Vault de echipă** — memoriile partajate cu colegii (opțional, sincronizate via git)
 
@@ -33,13 +33,13 @@ Sunt grupate în categorii:
 ## 🔍 Cum funcționează, în termeni simpli
 Fiecare memorie e un fișier Markdown obișnuit cu informații structurate în capul fișierului (titlu, etichete, etc.). La pornire, sistemul citește toate fișierele, le indexează (pentru căutare rapidă) și apoi e gata să răspundă la întrebări. Când cauți ceva, căutarea folosește două metode:
 1. **Căutare text** — caută cuvintele din memoria ta
-2. **Căutare vectorială (semantică)** (activată implicit la instalare) — înțelege sensul, nu doar cuvintele
+2. **Căutare vectorială (semantică)** (activată implicit în profilul de instalare Complete; absentă în Minimal) — înțelege sensul, nu doar cuvintele
 
 Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă în mod automat. Memoriile se salvează pe disc automat, iar dacă cineva din echipă adaugă o memorie nouă în git, aceasta apare automat în sesiunea ta fără să trebuiască să restartezi.
 
 ## 🚀 Cum se instalează și unde se folosește
 - **Pentru Claude Code:** se instalează ca plugin din meniu
-- **Pentru Gemini CLI:** se instalează ca extensie
+- **Pentru Gemini/Antigravity:** se instalează ca extensie
 - **Pentru comenzi manuale:** scriptul `install.sh` setează totul — alegi între o versiune simplă (doar căutare text) sau una completă, implicită (cu căutare după sens/semantică)
 - **Compatibilitate:** funcționează pe orice Linux/Mac + Git Bash pe Windows; necesită Node.js 18+
 
@@ -48,9 +48,10 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Acoperire:** 93,6% instrucțiuni · 88,2% ramuri · 95,3% linii (pragul configurat cere 95% peste tot, deci `npm run test:coverage` iese încă non-zero — vezi secțiunea Status din README)
 - **Mutation testing:** o metodă ca să verific dacă testele sunt într-adevăr bune. Iau codul și schimb deliberat lucruri mici (de ex. `>` devine `<`, `true` devine `false`). Dacă testele nu observă schimbarea și nu eșuează, înseamnă că nu sunt suficient de stricte. Folosesc o unealtă numită Stryker care face asta automat.
   - Scor curent: aproximativ 68% pe 16 module de bază (testele capturează în jur de 68% din erorile introduse deliberat; pragul care pică build-ul e 65%). Valoarea variază cu circa ±1 punct de la o rulare la alta chiar și fără modificări de cod, deci e dată intenționat ca aproximare — o zecimală exactă ar fi o falsă precizie
-  - Marja peste prag e de doar 0,9 puncte, deci o singură ramură nouă netestată poate face CI-ul roșu
+  - Marja peste prag e de circa 2,9 puncte (măsurat 67,91% față de pragul de 65%), lărgită deliberat în v1.1.22 ca variația obișnuită de la o rulare la alta să nu mai riște un CI roșu
+  - Scorul scoate la iveală și ceva ce acoperirea singură ascunde: trei module au teste care ating codul fără să îi verifice logica — `embeddings.ts` 49,4%, `vectorStore.ts` 54,0%, `persistence.ts` 56,2%. Cazul instructiv e `persistence.ts`, cu 86,1% acoperire dar doar 56,2% mutație: testele execută codul, dar nu ar observa dacă s-ar strica
 - **Versiune:** 1.1.22 — stabil
-- **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` este singurul gate de verificare — audit de dependențe, typecheck, build și gate-ul de mutation testing Stryker (pică sub 65%) — la fiecare push/PR pe `main`. Începând cu v1.1.19 nu mai există niciun pipeline local: bundle-ul compilat este în `.gitignore`, GitHub Actions îl construiește, iar `.github/workflows/release.yml` îl publică pe branch-ul `release` din care instalează marketplace-ul. Pluginul are exact un canal de distribuție (marketplace-ul) și un singur lucru care poate produce un artefact livrat (CI)
+- **CI:** workflow-ul GitHub Actions `.github/workflows/mutation.yml` este singurul gate de verificare — audit de dependențe, typecheck, build, suita completă de teste unitare și de integrare, plus gate-ul de mutation testing Stryker (pică sub 65%) — la fiecare push/PR pe `main`. Începând cu v1.1.19 nu mai există niciun pipeline local: bundle-ul compilat este în `.gitignore`, GitHub Actions îl construiește, iar `.github/workflows/release.yml` îl publică pe branch-ul `release` din care instalează marketplace-ul. Pluginul are exact un canal de distribuție (marketplace-ul) și un singur lucru care poate produce un artefact livrat (CI)
 
 ## 🔗 Dependințe
 - **Esențiale:** 2 pachete mici (MCP SDK și Zod pentru validare)
@@ -64,7 +65,7 @@ Dacă a doua metodă nu e disponibilă, sistemul se reîntoarce la prima metodă
 - **Citibil:** fiecare memorie e un fișier Markdown pe care îl poți edita cu orice editor
 - **Versionabil:** fișierele se pot pune în git și se pot urmări modificările (vault-ul de echipă chiar asta face; cel personal rămâne doar local)
 - **Fără infrastructură:** nu depinde de niciun server sau bază de date externă — sursa de adevăr sunt fișierele Markdown (indexul vectorial e doar un SQLite local, regenerabil oricând)
-- **Rezistent la erori:** dacă ceva se întâmplă, datele nu se pierd
+- **Rezistent la erori:** dacă traseul de căutare semantică nu e disponibil, se reîntoarce la căutarea text în loc să eșueze
 
 ## 📡 Raportare la [Thoughtworks Technology Radar Vol. 34 (2026)](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)
 

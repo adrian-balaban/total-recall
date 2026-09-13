@@ -1,6 +1,6 @@
 # 🏦 What does this plugin need to be implemented in a banking environment?
 
-Answered for the **total-recall** plugin in this repo (v1.0.135). Grounded in the actual plugin code — the architecture, the privacy filter, the hook scripts, and the org-sync path — rather than a generic checklist.
+Answered for the **total-recall** plugin in this repo. Grounded in the actual plugin code — the architecture, the privacy filter, the hook scripts, and the org-sync path — rather than a generic checklist.
 
 ## 🚫 Hard blockers — things a bank's security review will stop on
 

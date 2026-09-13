@@ -1,8 +1,18 @@
 # 🧠 Total Recall
 
-Persistent knowledge and memory management for Claude Code and Gemini CLI.
+Persistent knowledge and memory management for Claude Code and Gemini/Antigravity.
 
 Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject relevant context automatically at session start.
+
+## ⚡ TL;DR
+
+- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 17 MCP tools over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
+- **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
+- **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
+- **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
+- **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
+- **Status** — v1.1.22, stable: 798 tests passing, 93.6% statement coverage, ≈68% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -258,10 +268,11 @@ The marketplace is the **only** distribution channel — no zip, no npm package.
 
 Hooks auto-load from `hooks/hooks.json` — nothing to wire. What the marketplace
 installs is the `release` branch, whose `dist/` bundle is built by GitHub Actions
-after CI goes green; `dist/` is gitignored on `main`, so working from a clone means
-building it yourself (`npm install && npm run build`, or just let `install.sh` do it).
+after the CI gate goes green; `dist/` is gitignored on `main`, so no hand-built
+artifact can reach you. Working from a clone means building it yourself
+(`npm install && npm run build`, or just let `install.sh` do it).
 
-`install.sh` asks up front: **a. default** (no optional deps, no local LLM) or **b. complete** (vector search + local embeddings).
+`install.sh` asks up front: **a. minimal** (no optional deps, no local LLM) or **b. complete** (semantic search + local embeddings) — **complete is the default**: pressing Enter, `-y`, or any non-interactive run selects it.
 
 ---
 
@@ -271,14 +282,13 @@ building it yourself (`npm install && npm run build`, or just let `install.sh` d
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
 | **Gemini CLI (agy)** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
-| **Codex CLI** | ✅ Yes | ❌ No | ❌ No | ❌ No |
+
 
 ### Client-Specific Integration Details
 
 *   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject memories at session start.
 *   **Gemini CLI (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
-*   **Codex CLI**: MCP server only (no hooks) — see [INSTALL.md](INSTALL.md#codex-cli-mcp-only-no-hooks).
-*   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local model.
+*   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local/cloud model.
 *   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).
 
 ---
@@ -291,6 +301,28 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 *   **No file watching**: Obsidian edits are not loaded until a new session starts or you call `rebuild_index`.
 *   **Wiki-links**: `[[wikilinks]]` are tokenized by their raw words; the link graph is not resolved.
 *   **Sync safeguard**: do not use Obsidian Sync on the org-vault directory; rely exclusively on total-recall's git sync so the privacy filter runs before every push.
+
+---
+
+## 📊 Status
+
+| | |
+|---|---|
+| **Version** | 1.1.22 — stable |
+| **Tests** | 778 unit + 20 integration, all passing · 47 files · ~13k lines of test code |
+| **Test Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
+| **Mutation tests** | ≈68% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
+| **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
+| **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
+| **Audit** | 0 critical in production dependencies |
+
+Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
+
+### ⚠️ Known issues
+
+- **Test Coverage misses three of four thresholds** set in `vitest.config.ts`: statements 93.6% (needs 95), functions 93.5% (needs 95), branches 88.2% (needs 90). Lines passes at 95.3%. `npm run test:coverage` therefore exits non-zero. The biggest gaps are `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
+- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 54.0%, and `persistence.ts` 56.2%. The instructive case is `persistence.ts` — 86.1% coverage at just 56.2% mutation, with 112 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
+- **The mutation score is not reproducible run to run.** Two CI runs with no change to any mutated source file reported 65.39% and 66.39% — roughly ±1 point of variance, most likely from mutants timing out under variable runner load. Do not read a single decimal as precise. The margin above the 65% threshold was widened to roughly 3 points in v1.1.22 (five modules brought from 0–75% to 93–100%, +34 mutants killed), so ordinary variance no longer risks a red gate — which matters because a red gate silently holds back the `release` branch rather than shipping something broken.
 
 ---
 
