@@ -4,6 +4,18 @@
 
 A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories are plain Markdown files on your disk — greppable, git-versionable, Obsidian-readable. Nothing leaves your machine unless you tag it `org`.
 
+🇬🇧 English · [🇷🇴 Română](README-ro.md)
+
+## ⚡ TL;DR
+
+- **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 17 MCP tools over a vault of Markdown files in `~/.total-recall`.
+- **What it does for you** — injects the relevant memories at the start of every session and captures decisions and preferences automatically as you work and before each context compaction.
+- **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
+- **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
+- **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
+- **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
+- **Status** — v1.1.22, stable: 798 tests pass, 93.6% statement coverage, ≈68% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+
 ```mermaid
 flowchart LR
     A[Session starts] --> B[Relevant memories<br/>injected into context]
@@ -22,6 +34,11 @@ flowchart LR
 | **Lifecycle hooks** | context injected at session start, memories captured as you work |
 | **Two vaults** | personal stays local; `org`-tagged syncs to a shared Git repo |
 
+- **Headline feature:** at SessionStart only the memory index is injected; full memories are fetched on demand through `get_memories_by_keys`.
+- **PreCompact capture:** 0–3 lessons are extracted from the conversation before context compaction and saved.
+- **Live reload:** memories a teammate pushes to the org vault appear in your session without a restart.
+- **Archive, not delete:** superseded versions of a memory are kept, not overwritten.
+
 ```mermaid
 flowchart TD
     S[store_memory] --> F{tagged org?}
@@ -34,6 +51,17 @@ C4 diagrams (context → containers → components → code), module map, data m
 boot sequence, search pipeline and hook lifecycle are documented in
 **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
+## 🛠️ The 17 tools
+
+| Group | Tools |
+|---|---|
+| **Store** | `store_memory` |
+| **Search** | `recall_memory`, `search_index` |
+| **Read** | `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories` |
+| **Modify** | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories` |
+| **Re-rank** | `rerank_memories` |
+| **Bulk** | `export_memories`, `import_memories`, `delete_memories` |
+
 ## 💡 What gets saved automatically
 
 Work observations (what worked, what didn't) · non-obvious project context
@@ -41,6 +69,29 @@ Work observations (what worked, what didn't) · non-obvious project context
 "anything worth remembering?" prompt.
 
 Not saved: code snippets, file paths, git history — all derivable from the workspace.
+
+## 🥇 Using it as your only memory system
+
+Claude Code ships its own file-based memory (a `memory/` directory with a `MEMORY.md`
+index), and some setups add a `.remember/` history. If you want Total Recall to be the
+single source of truth, say so in your **global** `~/.claude/CLAUDE.md`:
+
+```markdown
+## Memory
+Use total-recall exclusively for all memories, in every project.
+- Store via `store_memory` / `update_memory`; recall via `recall_memory` / `search_index`.
+- NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
+- If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
+```
+
+**Why it works:** instruction priority is your `CLAUDE.md` > skills > harness defaults, so
+your instruction beats the hook and default prompts that encourage the built-in memory.
+
+**Retrieval order, cheapest first:** the injected index (already in context) →
+`get_memories_by_keys` → `search_index` → `recall_memory`.
+
+The `total-recall:memory-workflow` skill (retrieval order, dedup, `importanceScore`, org
+tagging) is optional reference material, not a dependency.
 
 ## 🚀 Install
 
@@ -72,6 +123,19 @@ and are only pulled in if you enable it.
 | **Plugin** | ~1–2 MB |
 | **Optional model** | ~200 MB, downloaded on first use |
 
+## 📦 What ships vs. what's for contributors
+
+<details>
+<summary>Runtime, org-vault-only and contributor-only files</summary>
+
+- **Runtime (always):** manifests (`plugin.json`, `.mcp.json`, `package.json`), `dist/index.js`, `dist/frontmatter.mjs`, `hooks/hooks.json`, and the SessionStart index scripts.
+- **Runtime for org-vault users only:** `sync-org-memory.*`, `pull-org-vault.sh`, `check-sync-errors.sh`, `dist/privacy-filter.mjs`, `atomic-write.mjs`.
+- **Contributor-only:** `src/`, tests, vitest/stryker configs, `tsconfig.json`, `CLAUDE.md`, `ARCHITECTURE.md`.
+
+Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is gitignored and safe to delete. `dist/` is built by CI, not committed.
+
+</details>
+
 ## 🧭 Design principles
 
 - **Local-first** — memories live on your machine, not in the cloud.
@@ -93,6 +157,8 @@ and are only pulled in if you enable it.
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production deps |
 
+Mutation testing checks whether the tests are actually any good: Stryker deliberately changes small things in the code (`>` becomes `<`, `true` becomes `false`), and a test suite that doesn't fail when that happens isn't strict enough.
+
 Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
 (from `plugins/total-recall/`)
 
@@ -102,6 +168,12 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
   95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
   `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
+- **Three modules reach code without checking it.** Per-module mutation score diverges
+  sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 54.0% and
+  `persistence.ts` 56.2%. `persistence.ts` is the instructive case — 86.1% coverage but
+  only 56.2% mutation, with 112 surviving mutants: the tests run the code but would not
+  notice if it broke. Coverage alone would have missed this, which is why the gate
+  looks at mutation.
 - **The mutation score is not reproducible run-to-run.** Two CI runs with no
   change to any mutated source file reported 65.39% and 66.39% — about ±1 point
   of drift, most likely from mutants that time out under varying runner load. Do
@@ -111,11 +183,27 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   red gate — which matters because a red gate silently withholds the `release`
   branch rather than shipping anything broken.
 
----
+## 📡 Thoughtworks Technology Radar Vol. 34
 
-📄 **[Executive overview](EXECUTIVE-OVERVIEW.md)** — non-technical summary, tool
-inventory, and how the design maps to the Thoughtworks Technology Radar Vol. 34
-([🇷🇴 Romanian](EXECUTIVE-OVERVIEW-RO.md))
+Several techniques from the [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
+are already implemented here, as design decisions taken independently:
+
+| Technique | Ring | How Total Recall does it |
+|---|---|---|
+| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
+| Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
+| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel since v1.1.19, fed by a CI-built branch |
+| Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
+| MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
+
+**Three future directions**, each tracked in [BACKLOG.md](BACKLOG.md) with a trigger:
+a context graph over memories (the `supersededAt` chain already stores temporal edges);
+source-grounded extraction for the capture hook; an evaluation set for `recall_memory`.
+
+The full Adopt/Trial synthesis lives in the org memory
+`org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
+
+---
 
 📖 **[Full documentation](plugins/total-recall/README.md)** ·
 🏗️ **[Architecture](plugins/total-recall/ARCHITECTURE.md)** ·

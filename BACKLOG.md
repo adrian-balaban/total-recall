@@ -266,6 +266,35 @@ pruned (2026-07-29); this backlog is now the sole record.
 > and replaced `new Server(...)` with `McpServer` + `registerTool()`. Item 3
 > (vault-scan dir-mtime) is the first DEFERRED entry above.
 
+### Slim the shipped `release` branch (contributor files, lockfile)
+- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md` (2026-10-27), checked
+  against the repo that day.
+- **What:** `release.yml` publishes `main`'s whole validated tree plus `dist/`,
+  so consumers also receive files that are not needed to run `dist/index.js`:
+  `CLAUDE.md`, `ARCHITECTURE.md`, `src/__tests__/`, the vitest/stryker configs
+  and `package-lock.json` (~193 KB, low priority).
+- **Trigger:** install size or noise in the installed plugin directory becomes a
+  complaint, or the next change to `release.yml`.
+- **Shape when picked up:** a prune step in `release.yml` before the force-push
+  to `release`; keep everything on `main`.
+
+### `GEMINI.md` duplicates `CLAUDE.md` rules
+- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
+- **What:** `plugins/total-recall/GEMINI.md` repeats "always-true" rules from
+  `CLAUDE.md` and install/compat text from the READMEs, so it can drift.
+- **Trigger:** the next edit to either file, or a Gemini-specific change.
+- **Shape when picked up:** reduce `GEMINI.md` to Gemini-only notes and link to
+  `CLAUDE.md`, or fold it into the README compatibility notes.
+
+### Two hook manifests kept in sync by hand
+- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
+- **What:** `hooks/hooks.json` and `hooks/hooks.gemini.json` must be edited
+  together (`CLAUDE.md` says so). Nothing fails if they diverge.
+- **Trigger:** any new hook (the spec-driven plan adds three), or dropping
+  Gemini support.
+- **Shape when picked up:** a unit test asserting the two list the same events
+  and scripts, or generate one from the other.
+
 ---
 
 ## ✅ DECIDED — documented as by-design, no change intended
