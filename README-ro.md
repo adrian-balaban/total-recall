@@ -183,6 +183,13 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
 
 ### ⚠️ Probleme cunoscute
 
+- **Conținutul vault-ului org este injectat nefiltrat în contextul fiecărui coleg.** La
+  SessionStart vault-ul org este adus cu `git pull`, iar indexul lui de memorii ajunge direct
+  în contextul modelului. Oricine are drept de push în repo-ul comun poate deci plasa text,
+  inclusiv text cu formă de instrucțiuni, în sesiunea fiecărui coleg. Filtrul de
+  confidențialitate protejează doar push-ul spre exterior; nimic nu izolează conținutul care
+  intră. Până la remediere, dă drept de push în vault-ul org doar persoanelor de încredere și
+  protejează-i branch-ul. Vezi [SECURITY.md](SECURITY.md).
 - **Test Coverage ratează trei din patru praguri** setate în `vitest.config.ts`: statements
   93.6% (necesar 95), functions 93.5% (necesar 95), branches 88.2% (necesar 90). Lines trece la
   95.3%. `npm run test:coverage` iese deci cu cod non-zero. Cele mai mari lacune sunt

@@ -181,6 +181,13 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
+- **Org-vault content is injected into every teammate's context unfiltered.** At
+  SessionStart the org vault is `git pull`ed and its memory index goes straight into
+  the model's context. Anyone with push access to the shared repo can therefore place
+  text, including instruction-shaped text, in every colleague's session. The privacy
+  filter guards the outbound push only; nothing fences inbound content. Until that
+  lands, give org-vault push access only to people you trust, and protect its branch.
+  See [SECURITY.md](SECURITY.md).
 - **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
   93.6% (need 95), functions 93.5% (need 95), branches 88.2% (need 90). Lines pass at
   95.3%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
