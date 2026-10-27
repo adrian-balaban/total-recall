@@ -25,6 +25,23 @@ flowchart LR
     E -.-> A
 ```
 
+## 📡 Thoughtworks Technology Radar Vol. 34
+
+Several techniques from the [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
+are already implemented here, as design decisions taken independently:
+
+| Technique | Ring | How Total Recall does it |
+|---|---|---|
+| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
+| Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
+| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a GitHub Actions CI-built on main branch |
+| Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
+| MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
+
+**Three future directions**, each tracked in [BACKLOG.md](BACKLOG.md) with a trigger:
+a context graph over memories (the `supersededAt` chain already stores temporal edges);
+source-grounded extraction for the capture hook; an evaluation set for `recall_memory`.
+
 ## ⚙️ How it works
 
 | | |
@@ -182,24 +199,6 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   0–75% up to 93–100%, +34 mutants killed), so ordinary drift no longer risks a
   red gate — which matters because a red gate silently withholds the `release`
   branch rather than shipping anything broken.
-
-## 📡 Thoughtworks Technology Radar Vol. 34
-
-Several techniques from the [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
-are already implemented here, as design decisions taken independently:
-
-| Technique | Ring | How Total Recall does it |
-|---|---|---|
-| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
-| Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a GitHub Actions CI-built on main branch |
-| Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
-| MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
-
-**Three future directions**, each tracked in [BACKLOG.md](BACKLOG.md) with a trigger:
-a context graph over memories (the `supersededAt` chain already stores temporal edges);
-source-grounded extraction for the capture hook; an evaluation set for `recall_memory`.
-
 
 ---
 

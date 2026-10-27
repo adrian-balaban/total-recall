@@ -25,6 +25,26 @@ flowchart LR
     E -.-> A
 ```
 
+## 📡 Thoughtworks Technology Radar Vol. 34
+
+Mai multe tehnici din [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
+sunt deja implementate aici, ca decizii de design luate independent:
+
+| Tehnică | Inel | Cum o face Total Recall |
+|---|---|---|
+| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injectează doar indexul memoriilor; conținutul complet se citește la cerere |
+| Mutation testing | Trial | Poartă Stryker în CI (vezi [Status](#-status)) |
+| Claude Code plugin marketplace | Trial | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de un branch construit în CI |
+| Structured output from LLMs | Adopt | hook-ul de captură cere modelului linii JSON, nu text liber |
+| MCP by default | Hold | operațiile de sistem (git, indexare) rămân în scripturi simple, nu în unelte MCP |
+
+**Trei direcții viitoare**, fiecare în [BACKLOG.md](BACKLOG.md) cu declanșator:
+un graf de context peste memorii (lanțul `supersededAt` stochează deja muchii temporale);
+extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare pentru `recall_memory`.
+
+Sinteza completă Adopt/Trial e în memoria org
+`org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
+
 ## ⚙️ Cum funcționează
 
 | | |
@@ -180,26 +200,6 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
   0–75% la 93–100%, +34 mutanți uciși), astfel încât variația obișnuită nu mai riscă o
   poartă CI roșie — ceea ce contează pentru că o poartă roșie reține în tăcere branch-ul `release`
   în loc să livreze ceva stricat.
-
-## 📡 Thoughtworks Technology Radar Vol. 34
-
-Mai multe tehnici din [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
-sunt deja implementate aici, ca decizii de design luate independent:
-
-| Tehnică | Inel | Cum o face Total Recall |
-|---|---|---|
-| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injectează doar indexul memoriilor; conținutul complet se citește la cerere |
-| Mutation testing | Trial | Poartă Stryker în CI (vezi [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de un branch construit în CI |
-| Structured output from LLMs | Adopt | hook-ul de captură cere modelului linii JSON, nu text liber |
-| MCP by default | Hold | operațiile de sistem (git, indexare) rămân în scripturi simple, nu în unelte MCP |
-
-**Trei direcții viitoare**, fiecare în [BACKLOG.md](BACKLOG.md) cu declanșator:
-un graf de context peste memorii (lanțul `supersededAt` stochează deja muchii temporale);
-extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare pentru `recall_memory`.
-
-Sinteza completă Adopt/Trial e în memoria org
-`org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
 
 ---
 
