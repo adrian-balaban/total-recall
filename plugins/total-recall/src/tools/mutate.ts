@@ -14,6 +14,8 @@ import type { MemoryFrontmatter } from '../types.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wrapHandler } from './registry.js';
+import { pickSpecFields, applySpecFields, hasSpecFields, FRONTMATTER_SCHEMA_VERSION } from '../spec/fields.js';
+import { specFieldsSchema } from '../spec/schema.js';
 
 function normalizeTags(tags: unknown): string[] {
   if (!Array.isArray(tags)) return [];
@@ -90,6 +92,11 @@ export function updateMemory(args: any): any {
     updated: now,
     sessions,
   };
+  // Spec-driven links: a field passed in the update replaces the stored one; the
+  // rest are kept. Everything goes through the same sanitiser as store_memory.
+  const spec = { ...pickSpecFields(parsed.data), ...pickSpecFields(args) };
+  applySpecFields(newFm, spec);
+  if (hasSpecFields(spec)) (newFm as Record<string, unknown>).schemaVersion = FRONTMATTER_SCHEMA_VERSION;
 
   // When new content is supplied, normalize it to begin with the Executive Summary
   // header (idempotent), matching what store_memory writes and what parseFrontmatter
@@ -118,6 +125,7 @@ export function updateMemory(args: any): any {
     tokenEstimate: tokenEstimate(fileContent),
     mtimeMs, size,
   });
+  applySpecFields(meta, spec);
 
   contentCache.delete(key);
   registerDocument(key, meta.title, meta.tags, meta.contentPreview);
@@ -399,12 +407,13 @@ const rebuildIndexSchema = {
     ),
 };
 
-export function register(server: McpServer) {
+// specFields: see store.ts register().
+export function register(server: McpServer, specFields = false) {
   server.registerTool(
     'update_memory',
     {
       description: 'Update content, tags, or importanceScore of an existing memory.',
-      inputSchema: updateMemorySchema,
+      inputSchema: specFields ? { ...updateMemorySchema, ...specFieldsSchema } : updateMemorySchema,
     },
     wrapHandler('update_memory', updateMemory),
   );

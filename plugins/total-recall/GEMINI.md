@@ -1,6 +1,6 @@
 # ♊ Total Recall — Gemini CLI working notes
 
-This plugin runs in Gemini CLI. The 17 tools are exposed as
+This plugin runs in Gemini CLI. The 22 tools (17 memory + 5 spec-driven architecture tools, see `README.md` → *Spec-driven architecture*) are exposed as
 `mcp_total-recall_<tool>` and invoked in plain English ("recall X",
 "store a memory about Y", "list memories tagged Z") — same surface as
 Claude Code.
@@ -19,11 +19,16 @@ Claude Code.
 - **Event renames:** Gemini's `AfterTool` / `PreCompress` map to Claude Code's
   `PostToolUse` / `PreCompact`. Both hook manifests (`hooks/hooks.json` and
   `hooks/hooks.gemini.json`) must stay in sync — see `CLAUDE.md` gotcha 8.5.
-- **No `Skill` tool in Gemini.** The one Claude-specific skill
-  (`memory-workflow`) ships in `skills/` but is **not loadable** in Gemini —
+- **No `Skill` tool in Gemini.** The Claude-specific skills
+  (`memory-workflow`, `spec-driven-workflow`) ship in `skills/` but are **not loadable** in Gemini —
   Gemini silently drops it. If a task needs the retrieval tree or the
-  "memorize more proactively" loop, ask the user to paste the `SKILL.md`
+  "memorize more proactively" loop, or the spec-driven loop, ask the user to paste the `SKILL.md`
   body and proceed as a one-shot knowledge injection.
+- **Spec-driven hooks are wired but silent.** `architecture-change.sh` runs on
+  `AfterTool` (`write_file|replace`) and the SessionStart summary is built, but
+  Gemini drops `additionalContext`, so neither reaches the model. Call
+  `index_architecture` / `get_architecture_context` yourself after editing
+  an `.adl` or `.calm.json` file.
 - **MCP-only registration (no hooks):** `agy plugin install "$(pwd)"`
   registers the server from `gemini-extension.json` without wiring
   the lifecycle hooks — see `README.md` → *Client Compatibility* for the

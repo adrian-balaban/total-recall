@@ -8,7 +8,10 @@ export const ENTRY = /^src\/(index|server)\.ts$/;
 export const TESTS = /^src\/__tests__\//;
 
 // ADL component `helpers`: pure leaf modules with no local imports.
-export const LEAF_NAMES = ['ebbinghaus', 'dates', 'rrf', 'lru-cache', 'frontmatter', 'errors', 'types', 'privacy-filter'];
+export const LEAF_NAMES = [
+  'ebbinghaus', 'dates', 'rrf', 'lru-cache', 'frontmatter', 'errors', 'types', 'privacy-filter',
+  'spec/config', 'spec/fields', 'spec/elements', 'spec/adl-parse', 'spec/calm-parse',
+];
 export const LEAVES = new RegExp(`^src/(${LEAF_NAMES.join('|')})\\.ts$`);
 // Everything in production that is NOT a leaf.
 export const NON_LEAVES = new RegExp(`^src/(?!__tests__/)(?!(?:${LEAF_NAMES.join('|')})\\.ts$)`);
@@ -25,5 +28,12 @@ export const NOT_ENTRY = /^src\/(?!__tests__\/|index\.ts$|server\.ts$)/;
 // ADL component `registry` and the tools that may depend on it.
 export const REGISTRY = /^src\/tools\/registry\.ts$/;
 export const TOOL_NAMES: string[] = ['store', 'mutate', 'query', 'recall', 'rerank'];
+
+// ADL [TR-R4]: the only files allowed to start external processes.
+export const PROCESS_OWNERS = /^src\/(vectorStore|spec\/exec)\.ts$/;
+export const PROCESS_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:node:)?child_process['"]/;
+
+// ADL component `spec`: src/spec/** (leaves and core modules).
+export const SPEC = /^src\/spec\//;
 
 export const MAX_LINES_PER_FILE = 600; // code-quality.adl: MAX_LINES_PER_FILE

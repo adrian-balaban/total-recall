@@ -8,7 +8,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 
 ## ⚡ TL;DR
 
-- **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code și Gemini/Antigravity: 17 unelte MCP peste un vault de fișiere Markdown din `~/.total-recall`.
+- **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code și Gemini/Antigravity: 22 de unelte MCP (17 pentru memorie, 5 pentru lucrul spec-driven cu arhitectura) peste un vault de fișiere Markdown din `~/.total-recall`.
 - **Ce face pentru tine** — injectează memoriile relevante la începutul fiecărei sesiuni și capturează automat deciziile și preferințele pe măsură ce lucrezi și înainte de fiecare compactare a contextului, ca să nu repeți același context.
 - **Cum caută** — hibrid: TF-IDF × curba uitării Ebbinghaus, plus căutare semantică opțională; degradează curat la căutare de text dacă căutarea semantică nu e activată.
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
@@ -49,7 +49,7 @@ Sinteza completă Adopt/Trial e în memoria org
 
 | | |
 |---|---|
-| **17 unelte MCP** | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă |
+| **22 de unelte MCP** | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă și 5 unelte de arhitectură pentru proiecte cu ADL/CALM |
 | **Căutare hibridă** | TF-IDF × curba uitării Ebbinghaus, combinată opțional cu embeddings vectoriale |
 | **Hook-uri de ciclu de viață** | context injectat la începutul sesiunii, memorii capturate pe măsură ce lucrezi |
 | **Două vault-uri** | cel personal rămâne local; cel etichetat `org` se sincronizează cu un repo Git comun |
@@ -71,7 +71,7 @@ Diagramele C4 (context → containere → componente → cod), harta modulelor, 
 secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-urilor sunt documentate în
 **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
-## 🛠️ Cele 17 unelte
+## 🛠️ Cele 22 de unelte
 
 | Grup | Unelte |
 |---|---|
@@ -81,13 +81,27 @@ secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-uril
 | **Modificare** | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories` |
 | **Reordonare** | `rerank_memories` |
 | **Operații în masă** | `export_memories`, `import_memories`, `delete_memories` |
+| **Arhitectură** (spec-driven, se poate dezactiva) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
+
+### 📐 Lucru spec-driven cu ADL și CALM
+
+Când un proiect își ține arhitectura ca cod (fișiere ADL și un document CALM), Total Recall reține ce nu scrie în fișiere: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Fișierele rămân în repository, ca sursă de adevăr.
+
+- `index_architecture` citește fișierele `*.adl` și `*.calm.json` ale proiectului într-o memorie de rezumat pentru fiecare sistem și leagă fiecare aserțiune ADL de testele care îi poartă ID-ul.
+- `get_architecture_context`, `trace` și `get_architecture_history` întorc regulile, controalele, deciziile, eșecurile și schimbările pentru un element, o cerință sau o aserțiune.
+- `validate_architecture` rulează CALM CLI și verificarea acoperirii ADL cu teste și înregistrează fiecare eșec și rezolvarea lui.
+- Memoriile pot avea `system`, `elements`, `requirements` și alte câteva câmpuri opționale. `recall_memory` și `search_index` filtrează după `elements`.
+- Hook-urile adaugă un scurt rezumat al arhitecturii la începutul sesiunii și cer înregistrarea schimbării când se editează un fișier `.adl` sau `.calm.json`.
+- Skill-ul `spec-driven-workflow` descrie întregul ciclu și are șabloane de pornire.
+
+Totul se configurează în blocul `specDriven` din `~/.total-recall/config.json`, iar `"specDriven": {"enabled": false}` readuce exact comportamentul cu 17 unelte. Cheile sunt descrise în [README-ul pluginului](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm).
 
 ## 💡 Ce se salvează automat
 
 Observații de lucru (ce a mers, ce nu) · context de proiect neevident (motivații, constrângeri,
 decizii non-triviale) · un prompt de sfârșit de sesiune „ceva demn de reținut?".
 
-Nu se salvează: fragmente de cod, căi de fișiere, istoric git — toate derivabile din spațiul de lucru.
+Nu se salvează: fragmente de cod, căi de fișiere, istoric git — toate derivabile din spațiul de lucru. (Singura excepție e intenționată: o memorie de specificație sau de arhitectură poate reține calea relativă în repo și commit-ul fișierului pe care îl rezumă, ca pointer în frontmatter, niciodată în text.)
 
 ## 🥇 Folosește-l ca unic sistem de memorie
 

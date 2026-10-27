@@ -47,7 +47,7 @@ graph TB
     host["💻 Host harness<br/><b>[External]</b>"]
 
     subgraph TR["Total Recall"]
-        mcp["⚙️ MCP stdio server<br/><b>[Node · dist/index.js]</b><br/>17 tools, in-memory index,<br/>debounced persistence"]
+        mcp["⚙️ MCP stdio server<br/><b>[Node · dist/index.js]</b><br/>22 tools (17 + 5 spec-driven),<br/>in-memory index,<br/>debounced persistence"]
         hooks["🪝 Hook scripts<br/><b>[bash + Node · hooks/scripts]</b><br/>SessionStart · PostToolUse<br/>PreCompact · SessionEnd"]
         emb["🔢 Embedder<br/><b>[in-process HF pipeline]</b><br/>all-MiniLM-L6-v2, 384-dim<br/>lazy-loaded, optional"]
 
@@ -94,7 +94,7 @@ graph TB
     srv["server.ts<br/><i>McpServer · six register() calls · main()</i>"]
     reg["tools/registry.ts<br/><i>wrapHandler · CallToolResult<br/>envelope · perf + error samples</i>"]
 
-    subgraph Tools["tools/ — the 17 tools"]
+    subgraph Tools["tools/ — the 22 tools"]
         direction LR
         t1["store.ts"]
         t2["recall.ts"]
@@ -102,6 +102,7 @@ graph TB
         t4["mutate.ts"]
         t5["rerank.ts"]
         t6["bulk.ts"]
+        t7["architecture.ts"]
     end
 
     subgraph Search["retrieval"]
@@ -142,6 +143,7 @@ graph TB
     t4 --> lru
     t5 --> embc
     t6 --> pers
+    t7 -->|"parse · index · trace · validate"| spec["spec/*<br/><i>ADL + CALM parsers · element index<br/>· exec (git, calm CLI)</i>"]
 
     tf --> st
     tf --> eb
@@ -156,7 +158,7 @@ graph TB
     Tools --> pers
 
     classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
-    class idxts,srv,reg,t1,t2,t3,t4,t5,t6,tf,eb,rrf,embc,vs,st,pers,scan,fm,lru,paths,ar,jr comp
+    class idxts,srv,reg,t1,t2,t3,t4,t5,t6,t7,spec,tf,eb,rrf,embc,vs,st,pers,scan,fm,lru,paths,ar,jr comp
 ```
 
 ### C4 — Code: `recall_memory` hybrid path
@@ -216,7 +218,7 @@ sequenceDiagram
 ```
 src/
 ├── index.ts          boot stub — signal handlers + calls main()
-├── server.ts         McpServer construction; six register() calls wire the 17 tools (schemas co-located in tools/*.ts); main()
+├── server.ts         McpServer construction; register() calls wire the 17 core tools plus the spec-driven tools listed in specDriven.tools (schemas co-located in tools/*.ts); main()
 ├── state.ts          shared in-memory singletons (memIndex, invertedIndex, errors, perfSamples)
 ├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
 ├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex
@@ -233,13 +235,26 @@ src/
 ├── journal.ts        appendJournal
 ├── auto-reconcile.ts polls the .reconcile-requested marker (dropped by pull-org-vault.sh) → reconcileIndex
 ├── privacy-filter.ts SECRET_TOKEN_RE + email + validated CC (Luhn) / IBAN (mod-97) / formatted-phone checks — fail-closed gate for org sync
+├── spec/             spec-driven architecture support (SPEC-DRIVEN-PLAN.md)
+│   ├── config.ts     specDriven block of config.json + defaults (leaf; also bundled as dist/spec-config.mjs for hooks)
+│   ├── fields.ts     optional frontmatter fields (system, artifact, elements, …) + their sanitiser (leaf; dist/spec-fields.mjs)
+│   ├── elements.ts   element-ID matching (adl:/calm:/assert:, parent matches children) (leaf)
+│   ├── adl-parse.ts  tolerant ADL reader: DEFINE nesting, definitions, FOREACH scope, ASSERT + [ID] tags (leaf)
+│   ├── calm-parse.ts CALM nodes, relationships, controls (leaf; schema validation stays with the CALM CLI)
+│   ├── schema.ts     Zod shapes of the spec fields, shared by store_memory / update_memory
+│   ├── indexer.ts    project scan → one model per system (+ tests tagged with assertion IDs); render/parse of the index memory
+│   ├── context.ts    get_architecture_context / trace / get_architecture_history over the in-memory index
+│   ├── validate.ts   CALM CLI resolution (PATH → pinned npx if allowed) + ADL coverage check
+│   ├── org-guard.ts  hosts / credentials / blocked terms check for org spec memories
+│   └── exec.ts       the only spec module that starts processes (git, calm) — no shell ([TR-R4])
 └── tools/
     ├── store.ts      store_memory
     ├── recall.ts     recall_memory, search_index
     ├── rerank.ts     rerank_memories
     ├── query.ts      list_memories, get_memories_by_keys, get_stats, get_timeline, get_related_memories, prune_memories
     ├── mutate.ts     update_memory, delete_memory, rebuild_index, confirm_memory
-    └── bulk.ts       export_memories, import_memories, delete_memories
+    ├── bulk.ts       export_memories, import_memories, delete_memories
+    └── architecture.ts index_architecture, get_architecture_context, trace, get_architecture_history, validate_architecture
 ```
 
 ---
@@ -276,6 +291,8 @@ Each memory is a Markdown file with a YAML frontmatter block:
 | `created` | ISO string | preserved across `force` overwrites |
 | `updated` | ISO string | set on every write |
 | `importanceScore` | 0–1 | 0.5 default; drives Ebbinghaus decay rate |
+| `schemaVersion` | number | absent = 1; written as 2 on a memory that carries any spec field |
+| `system`, `artifact`, `elements`, `requirements`, `sourcePath`, `sourceRev`, `status`, `supersedes` | optional | spec-driven links, sanitised by `spec/fields.ts` on every write and read path (store, update, indexFile, index.json load, import, PreCompact) |
 
 ### In-memory index (`MemoryMetadata`)
 
@@ -317,7 +334,7 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 
 ---
 
-## 🛠️ The 17 MCP Tools
+## 🛠️ The 22 MCP Tools
 
 ### Write
 | Tool | Description |
@@ -355,6 +372,17 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 |---|---|
 | `rebuild_index` | `reconcileIndex()` + rebuild TF-IDF; preserves `accessCount`/`lastAccessed` |
 | `prune_memories` | **List** low-retention candidates (Ebbinghaus strength < threshold); does NOT delete |
+
+### Architecture (spec-driven; `specDriven.tools`)
+| Tool | Description |
+|---|---|
+| `index_architecture` | Scan a project for ADL/CALM files; store one `architecture/arch-index-<system>` memory per system (summary + JSON model). Fingerprinted: unchanged files → no write. Uses `store_memory(force)`, so each rebuild archives the previous index under `.superseded/` |
+| `get_architecture_context` | System summary, or an element's rules, controls, definitions, decisions (current and superseded), failures, open questions, guardrails |
+| `trace` | Requirement / assertion / element → assertions + controls → tagged tests → fitness results + decisions |
+| `get_architecture_history` | `architecture-changes` memories oldest-first, plus index rebuild times |
+| `validate_architecture` | CALM CLI + ADL coverage; records `fitness-result` memories (`failed` → `resolved`) |
+
+With `specDriven.enabled: false` none of these are registered and the spec fields are left out of the `store_memory`, `update_memory`, `recall_memory` and `search_index` schemas, so `tools/list` is exactly the 17-tool golden (`schema-parity.integration.test.ts`).
 
 ---
 
@@ -503,6 +531,7 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)
 2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
 3. load-memory-index.sh    — cat .index-cache.txt → injected into context
+                             (+ architecture-summary.mjs: ADL/CALM in cwd → short summary from index.json)
 4. check-sync-errors.sh    — warn if org-sync pushes failed since the last success marker
 ```
 
@@ -527,6 +556,14 @@ sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers
 > `store_memory|update_memory|delete_memory` never matches and the hook silently
 > never fires. The parens force the unanchored-regex path. Pinned by
 > `src/__tests__/hooks-matcher.test.ts`.
+
+### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
+
+```
+architecture-change.sh — edited file is .adl / .calm.json (specDriven extensions) and captureChanges on?
+  ├─ no  → {"continue":true}   (decided in bash for the default extensions: no Node start per edit)
+  └─ yes → additionalContext: run index_architecture, store an architecture-changes memory, run validate_architecture
+```
 
 ### `PreCompact`
 
@@ -582,6 +619,8 @@ The rules in this document are also written as code and checked on every `npm te
 | Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
 
 **ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
+
+**Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`, `calm-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
 
 **Known debt.** `[TR-S7]` (no circular dependencies) is an `it.fails` test: the `state.ts` → `persistence.ts` back-edge closes six cycles. It turns red when the debt is paid, which forces the marker to be flipped.
 

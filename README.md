@@ -8,7 +8,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 17 MCP tools over a vault of Markdown files in `~/.total-recall`.
+- **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
 - **What it does for you** — injects the relevant memories at the start of every session and captures decisions and preferences automatically as you work and before each context compaction.
 - **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
@@ -46,7 +46,7 @@ source-grounded extraction for the capture hook; an evaluation set for `recall_m
 
 | | |
 |---|---|
-| **17 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import |
+| **22 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import, and 5 architecture tools for ADL/CALM projects |
 | **Hybrid search** | TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings |
 | **Lifecycle hooks** | context injected at session start, memories captured as you work |
 | **Two vaults** | personal stays local; `org`-tagged syncs to a shared Git repo |
@@ -68,7 +68,7 @@ C4 diagrams (context → containers → components → code), module map, data m
 boot sequence, search pipeline and hook lifecycle are documented in
 **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
-## 🛠️ The 17 tools
+## 🛠️ The 22 tools
 
 | Group | Tools |
 |---|---|
@@ -78,6 +78,20 @@ boot sequence, search pipeline and hook lifecycle are documented in
 | **Modify** | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories` |
 | **Re-rank** | `rerank_memories` |
 | **Bulk** | `export_memories`, `import_memories`, `delete_memories` |
+| **Architecture** (spec-driven, can be switched off) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
+
+### 📐 Spec-driven work with ADL and CALM
+
+When a project keeps its architecture as code (ADL files and a CALM document), Total Recall remembers what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. The files stay in your repository as the source of truth.
+
+- `index_architecture` reads the project's `*.adl` and `*.calm.json` files into one summary memory per system, and links each ADL assertion to the tests that carry its ID.
+- `get_architecture_context`, `trace` and `get_architecture_history` give back the rules, controls, decisions, failures and changes for one element, requirement or assertion.
+- `validate_architecture` runs the CALM CLI and the ADL test-coverage check, and records each failure and its fix.
+- Memories can carry `system`, `elements`, `requirements` and a few more optional fields. `recall_memory` and `search_index` filter on `elements`.
+- Hooks add a short architecture summary at session start, and a prompt to record the change when an `.adl` or `.calm.json` file is edited.
+- The `spec-driven-workflow` skill describes the whole loop and has starter templates.
+
+Everything is configurable under `specDriven` in `~/.total-recall/config.json`, and `"specDriven": {"enabled": false}` gives back exactly the 17-tool behaviour. See the [plugin README](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm) for the keys.
 
 ## 💡 What gets saved automatically
 
@@ -85,7 +99,7 @@ Work observations (what worked, what didn't) · non-obvious project context
 (motivations, constraints, non-trivial decisions) · an end-of-session
 "anything worth remembering?" prompt.
 
-Not saved: code snippets, file paths, git history — all derivable from the workspace.
+Not saved: code snippets, file paths, git history — all derivable from the workspace. (The one exception is deliberate: a spec or architecture memory may record the repo-relative path and commit of the file it summarises, as a pointer in its frontmatter, never in the text.)
 
 ## 🥇 Using it as your only memory system
 

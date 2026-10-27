@@ -1,0 +1,14 @@
+DESCRIPTION Allowed dependencies between the components of <System name>
+CATEGORY Static Coupling
+NAMESPACE <Id>StructureNS
+DEFINE SYSTEM <System name> AS <id>
+    DEFINE DOMAIN <Domain> AS <domain>
+        DEFINE COMPONENT <Component A> AS <component-a>
+        DEFINE COMPONENT <Component B> AS <component-b>
+    DEFINE DATABASE <Domain> Database AS <domain>-db
+
+# Dependencies: explicit, one rule per line, each with an ID that a test carries (rename SYS to your system)
+ASSERT(<Component A> HAS NO DEPENDENCY ON <Component B>) # [SYS-S1]
+
+# Data ownership
+ASSERT(<Domain> Database is only accessed by <Component A>) # [SYS-D1]

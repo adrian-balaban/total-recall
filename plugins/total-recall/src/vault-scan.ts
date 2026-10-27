@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { parseFrontmatter } from './frontmatter.js';
+import { applySpecFields } from './spec/fields.js';
 import { clampImportanceScore } from './ebbinghaus.js';
 import {
   PERSONAL_VAULT,
@@ -482,6 +483,8 @@ export function indexFile(filePath: string, isOrg: boolean) {
     if (Array.isArray(fm.supersededAt)) {
       meta.supersededAt = fm.supersededAt.filter((t): t is string => typeof t === 'string');
     }
+    // Spec-driven links: sanitised copy of whatever the file carries.
+    applySpecFields(meta, data);
     memIndex[key] = meta;
     // Invalidate any cached content for this key: indexFile re-reads from disk
     // (boot, reconcile, rebuild_index), so the cached body may now be stale (e.g.

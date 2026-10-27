@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { projectFiles } from 'archunit';
 import {
   PROD, TOOLS, ENTRY, TESTS, LEAVES, NON_LEAVES, OPTIONAL_DEP_OWNERS, OPTIONAL_DEP_IMPORT,
-  CORE, NOT_ENTRY, REGISTRY, TOOL_NAMES, MAX_LINES_PER_FILE,
+  CORE, NOT_ENTRY, REGISTRY, TOOL_NAMES, MAX_LINES_PER_FILE, PROCESS_OWNERS, PROCESS_IMPORT, SPEC,
 } from './components.js';
 
 // Architecture fitness functions (ArchUnitTS) enforcing architecture/adl/*.adl.
@@ -89,9 +89,23 @@ describe('architecture fitness functions', () => {
         .inPath(/^src\/(?!__tests__\/|state\.ts$|tools\/registry\.ts$)/);
       await expect(rule).toPassAsync();
     });
+
+    it('[TR-S8] spec modules never depend on the tools layer', async () => {
+      const rule = projectFiles().inPath(SPEC).shouldNot().dependOnFiles().inPath(TOOLS);
+      await expect(rule).toPassAsync();
+    });
   });
 
   describe('runtime safety', () => {
+    it('[TR-R4] only vectorStore.ts and spec/exec.ts start external processes', async () => {
+      const rule = projectFiles()
+        .inPath(/^src\/(?!__tests__\/|vectorStore\.ts$|spec\/exec\.ts$)/)
+        .should()
+        .adhereTo((file) => !PROCESS_IMPORT.test(file.content), 'must not import child_process (use spec/exec.ts)');
+      await expect(rule).toPassAsync();
+      expect(PROCESS_OWNERS.test('src/spec/exec.ts')).toBe(true);
+    });
+
     it('[TR-R1] only embeddings.ts and vectorStore.ts load optional native/ML deps', async () => {
       const rule = projectFiles()
         .inPath(/^src\/(?!__tests__\/|embeddings\.ts$|vectorStore\.ts$)/)

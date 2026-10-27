@@ -2,7 +2,7 @@
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "total-recall",
   "version": "1.1.23",
-  "description": "Persistent knowledge management for Claude Code & Gemini. Stores memories as markdown files, exposes 17 MCP tools, and uses Claude Code hooks to inject context automatically.",
+  "description": "Persistent knowledge management for Claude Code & Gemini. Stores memories as markdown files, exposes 22 MCP tools (including ADL/CALM architecture tools for spec-driven work), and uses Claude Code hooks to inject context automatically.",
   "author": {
     "name": "Adrian Balaban"
   },

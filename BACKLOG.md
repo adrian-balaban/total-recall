@@ -132,14 +132,11 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Shape when picked up:** optional `fs.watch`-based fast path, falling back to
   polling on network filesystems where inotify isn't reliable.
 
-### No schema-version marker in index.json/frontmatter
-- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 6 (file pruned 2026-07-28).
-- **What:** `index.json` and the frontmatter format carry no `indexVersion` /
-  schema marker, so a future breaking format change has no clean migration hook.
-- **Trigger:** an `index.json` or frontmatter format change that would break old
-  vaults silently.
-- **Shape when picked up:** add `indexVersion`, checked at `loadIndexes()` to
-  trigger a rebuild rather than reading a stale-shape index.
+### ~~No schema-version marker in index.json/frontmatter~~ — DONE
+- **Resolved** with SPEC-DRIVEN-PLAN phase 1: `index.json` already carried `{ v, entries }`
+  (`INDEX_VERSION`, refused when newer), and the frontmatter now has `schemaVersion`
+  (absent = 1; written as 2 on a memory that carries spec-driven fields,
+  `FRONTMATTER_SCHEMA_VERSION` in `src/spec/fields.ts`).
 
 ### state.ts global singletons couple tools/* to one process
 - **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 7 (file pruned 2026-07-28).
@@ -208,6 +205,10 @@ pruned (2026-07-29); this backlog is now the sole record.
   scored against `recall_memory`/`search_index` as a golden test; only reach for
   DeepEval if agentic/multi-turn MCP-interaction metrics are actually needed. Keep
   it a dev-only harness (not shipped in `dist/`), same as the mutation tooling.
+- **Partly started (2026-10-27):** `scripts/eval/spec-eval.ts` evaluates the
+  spec-driven tools (decision@1 per element, rule recall, trace hit rate, stale
+  decisions) on a corpus of ADL/CALM projects; `spec-eval.test.ts` runs it on a
+  generated corpus in CI. Generic `recall_memory` quality is still not evaluated.
 
 ### Org-sync branch-default divergence on detached HEAD (pull vs sync)
 - **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 3 (proposal file deleted

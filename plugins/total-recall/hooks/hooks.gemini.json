@@ -16,6 +16,12 @@
         "hooks": [
           { "type": "command", "command": "${extensionPath}/hooks/scripts/sync-org-memory.sh", "timeout": 30 }
         ]
+      },
+      {
+        "matcher": "write_file|replace",
+        "hooks": [
+          { "type": "command", "command": "${extensionPath}/hooks/scripts/architecture-change.sh", "timeout": 10 }
+        ]
       }
     ],
     "PreCompress": [

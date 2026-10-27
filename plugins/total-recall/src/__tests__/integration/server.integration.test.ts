@@ -89,14 +89,26 @@ afterAll(async () => {
 }, 30_000);
 
 describe('total-recall over real stdio', () => {
-  it('exposes the 17 documented tools via list_tools', async () => {
+  it('exposes the 22 documented tools via list_tools (17 core + 5 spec-driven, the default config)', async () => {
     const { tools } = await client.listTools();
     expect(tools.map((t: any) => t.name).sort()).toEqual([
       'confirm_memory', 'delete_memories', 'delete_memory', 'export_memories',
+      'get_architecture_context', 'get_architecture_history',
       'get_memories_by_keys', 'get_related_memories', 'get_stats', 'get_timeline',
-      'import_memories', 'list_memories', 'prune_memories', 'rebuild_index',
-      'recall_memory', 'rerank_memories', 'search_index', 'store_memory', 'update_memory',
+      'import_memories', 'index_architecture', 'list_memories', 'prune_memories', 'rebuild_index',
+      'recall_memory', 'rerank_memories', 'search_index', 'store_memory', 'trace', 'update_memory',
+      'validate_architecture',
     ]);
+  });
+
+  it('indexes this repo\'s own ADL/CALM and answers an element query over stdio', async () => {
+    const archDir = path.resolve(__dirname, '../../../architecture');
+    const indexed = json(await client.callTool({ name: 'index_architecture', arguments: { path: archDir } }));
+    expect(indexed.systems.map((s: any) => s.system)).toEqual(['tr']);
+    const ctx = json(await client.callTool({ name: 'get_architecture_context', arguments: { system: 'tr', element: 'calm:org-vault' } }));
+    expect(ctx.controls.map((c: any) => c.name).sort()).toEqual(['author-protection', 'privacy-filter']);
+    const t = json(await client.callTool({ name: 'trace', arguments: { id: 'TR-D3' } }));
+    expect(t.assertions[0].text).toMatch(/Privacy Filter/);
   });
 
   it('stores a memory and recalls it back', async () => {

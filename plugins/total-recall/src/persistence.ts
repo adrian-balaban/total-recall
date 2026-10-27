@@ -12,6 +12,7 @@ import { clampImportanceScore } from './ebbinghaus.js';
 import { memIndex, invertedIndex, recordError } from './state.js';
 import { rebuildInvertedIndex } from './tfidf.js';
 import { isReservedKey } from './vault-scan.js';
+import { applySpecFields } from './spec/fields.js';
 import * as crypto from 'crypto';
 
 // Debounce timers live here (only this module touches them).
@@ -232,7 +233,8 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
   const e = raw as Record<string, unknown>;
   const filePath = deriveFilePathFromKey(key);
   if (!filePath) return null;
-  return {
+  // applySpecFields replaces the raw spec fields carried by the spread with sanitised ones.
+  return applySpecFields({
     ...e,
     key,        // normalize to the trusted memIndex key (discard any inner key)
     filePath,   // re-derived + containment-checked; discards any persisted filePath
@@ -267,7 +269,7 @@ function coerceMemEntry(raw: unknown, key: string): Record<string, unknown> | nu
     // stale/corrupt data.
     mtimeMs: typeof e.mtimeMs === 'number' && Number.isFinite(e.mtimeMs) ? e.mtimeMs : 0,
     size: typeof e.size === 'number' && Number.isFinite(e.size) ? e.size : 0,
-  };
+  }, e);
 }
 
 function loadMemIndex() {

@@ -1702,10 +1702,11 @@ describe('reconcileIndex skips unchanged files (#19)', () => {
 // ─── list_tools ───────────────────────────────────────────────────────────────
 
 describe('ListToolsRequestSchema', () => {
-  it('returns exactly 17 tools', async () => {
+  // 17 core tools + the 5 spec-driven tools on by default (specDriven.tools).
+  it('returns exactly 22 tools', async () => {
     const handler = registeredHandlers.get('ListToolsRequestSchema')!;
     const res = await handler({ params: {} });
-    expect(res.tools.length).toBe(17);
+    expect(res.tools.length).toBe(22);
   });
 
   it('every tool has name, description, and inputSchema', async () => {
@@ -1723,10 +1724,11 @@ describe('ListToolsRequestSchema', () => {
     const { tools } = await handler({ params: {} });
     expect(tools.map((t: any) => t.name).sort()).toEqual([
       'confirm_memory', 'delete_memories', 'delete_memory', 'export_memories',
+      'get_architecture_context', 'get_architecture_history',
       'get_memories_by_keys', 'get_related_memories', 'get_stats', 'get_timeline',
-      'import_memories', 'list_memories', 'prune_memories', 'rebuild_index',
-      'recall_memory', 'rerank_memories', 'search_index', 'store_memory',
-      'update_memory',
+      'import_memories', 'index_architecture', 'list_memories', 'prune_memories', 'rebuild_index',
+      'recall_memory', 'rerank_memories', 'search_index', 'store_memory', 'trace',
+      'update_memory', 'validate_architecture',
     ]);
   });
 

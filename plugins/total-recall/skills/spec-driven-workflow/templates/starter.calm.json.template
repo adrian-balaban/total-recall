@@ -1,0 +1,47 @@
+{
+  "$schema": "https://calm.finos.org/release/1.0/meta/calm.json",
+  "nodes": [
+    {
+      "unique-id": "client",
+      "node-type": "actor",
+      "name": "Client",
+      "description": "Who or what calls the system."
+    },
+    {
+      "unique-id": "component-a",
+      "node-type": "service",
+      "name": "Component A",
+      "description": "What it does, in one sentence."
+    },
+    {
+      "unique-id": "domain-db",
+      "node-type": "database",
+      "name": "Domain database",
+      "description": "Owned by Component A only."
+    }
+  ],
+  "relationships": [
+    {
+      "unique-id": "client-uses-component-a",
+      "description": "Requests over HTTPS.",
+      "relationship-type": {
+        "connects": {
+          "source": { "node": "client" },
+          "destination": { "node": "component-a" }
+        }
+      },
+      "protocol": "HTTPS"
+    },
+    {
+      "unique-id": "component-a-owns-domain-db",
+      "description": "Reads and writes its own data.",
+      "relationship-type": {
+        "connects": {
+          "source": { "node": "component-a" },
+          "destination": { "node": "domain-db" }
+        }
+      },
+      "protocol": "JDBC"
+    }
+  ]
+}

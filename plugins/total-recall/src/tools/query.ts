@@ -10,6 +10,7 @@ import type { MemoryMetadata } from '../types.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wrapHandler } from './registry.js';
+import { sharedElements } from '../spec/elements.js';
 
 // Pagination bounds: the MCP schema advertises limit/offset as numbers, but a
 // buggy/malicious caller can pass values that are huge, negative, or NaN.
@@ -214,9 +215,14 @@ export function getRelatedMemories(args: any): any {
       // existing tag overlap, not manufacture a relation from nothing. Without
       // this guard, every same-category memory with disjoint tags leaks in at
       // score 0.2 (0 Jaccard + 0.2 boost).
-      if (shared === 0) return null;
+      // Shared architecture elements (spec-driven `elements` field) relate two
+      // memories on their own, and add up to 0.3 on top of a tag overlap.
+      const els = sharedElements(source.elements, m.elements);
+      if (shared === 0 && els.shared === 0) return null;
+      const elementBoost = els.shared ? 0.3 * (els.shared / els.union) : 0;
       const categoryBoost = m.category === source.category ? 0.2 : 0;
-      return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: shared / (srcTags.size + mTags.size - shared) + categoryBoost };
+      const jaccard = shared ? shared / (srcTags.size + mTags.size - shared) : 0;
+      return { key: m.key, title: m.title, category: m.category, tags: m.tags, score: jaccard + categoryBoost + elementBoost };
     })
     .filter((m): m is NonNullable<typeof m> => m !== null)
     .sort((a, b) => b.score - a.score)

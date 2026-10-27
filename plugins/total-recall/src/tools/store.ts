@@ -3,7 +3,7 @@ import * as os from 'os';
 import * as path from 'path';
 import { parseFrontmatter, stringifyFrontmatter, withExecutiveSummary } from '../frontmatter.js';
 import { clampImportanceScore } from '../ebbinghaus.js';
-import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir, NO_PRUNE_TAG } from '../paths.js';
+import { ORG_VAULT, PERSONAL_VAULT, HOME, ensureDir, NO_PRUNE_TAG, loadConfig } from '../paths.js';
 import { slugify, keyFromPath, tokenEstimate, deriveCategory, assertLstat, isReservedKey } from '../vault-scan.js';
 import { memIndex } from '../state.js';
 import { registerDocument } from '../tfidf.js';
@@ -12,6 +12,10 @@ import { appendJournal } from '../journal.js';
 import { scheduleSave, deriveFilePathFromKey } from '../persistence.js';
 import { embedAndUpsert } from '../embeddings.js';
 import { SECRET_TOKEN_RE } from '../privacy-filter.js';
+import { pickSpecFields, hasSpecFields, FRONTMATTER_SCHEMA_VERSION } from '../spec/fields.js';
+import { specFieldsSchema } from '../spec/schema.js';
+import { orgSpecIssue } from '../spec/org-guard.js';
+import { parseSpecConfig } from '../spec/config.js';
 import { MemoryExistsError } from '../errors.js';
 import type { MemoryFrontmatter, MemoryMetadata } from '../types.js';
 import { z } from 'zod';
@@ -141,6 +145,12 @@ export function storeMemory(args: any): any {
       'set "orgRepo" in ~/.total-recall/config.json and clone it (see the install skill). ' +
       'Writing now would leave an unsynced file that blocks the next clone.'
     );
+  }
+
+  // Spec memories stay personal unless they are safe to share (SPEC-DRIVEN-PLAN phase 6).
+  if (isOrg && args.artifact === 'spec') {
+    const issue = orgSpecIssue(`${title}\n${String(content ?? '')}`, parseSpecConfig(loadConfig().specDriven).orgBlockedTerms);
+    if (issue) throw new Error(`A spec memory cannot go to the org vault: it ${issue}. Store it without the "org" tag, or share a guardrail instead.`);
   }
 
   // Path-containment guard: `category` is caller-supplied, so a value like
@@ -294,6 +304,9 @@ export function storeMemory(args: any): any {
     importanceScore,
   };
   if (supersededAt !== undefined) fm.supersededAt = supersededAt;
+  // Spec-driven links (all optional). Sanitised here, at the write boundary.
+  const spec = pickSpecFields(args);
+  if (hasSpecFields(spec)) Object.assign(fm, spec, { schemaVersion: FRONTMATTER_SCHEMA_VERSION });
 
   // withExecutiveSummary is idempotent: if `content` already begins with the
   // header it leaves it intact, so we never double-prefix. The cached value and
@@ -346,6 +359,7 @@ export function storeMemory(args: any): any {
   // (a present-but-undefined key differs from an absent one).
   if (fm.author !== undefined) meta.author = fm.author;
   if (fm.sessions !== undefined) meta.sessions = fm.sessions;
+  Object.assign(meta, spec);
   memIndex[key] = meta;
   registerDocument(key, meta.title, meta.tags, meta.contentPreview);
   contentCache.set(key, body);
@@ -377,12 +391,14 @@ const storeMemorySchema = {
   sessions: z.array(z.string()).optional().describe('Pre-existing session history to carry over (import_memories round-trip). The current sessionId is appended (deduped, capped at 50).'),
 };
 
-export function register(server: McpServer) {
+// specFields: advertise the optional spec-driven fields (specDriven.enabled). When
+// off, the schema is exactly the pre-spec one and Zod strips those args.
+export function register(server: McpServer, specFields = false) {
   server.registerTool(
     'store_memory',
     {
       description: 'Store a new memory in the vault. Routes to org vault if tagged "org". Errors if a memory with the same key already exists — use update_memory, or pass force=true to overwrite (preserves created/accessCount). force=true is refused if the existing memory is tagged "no-prune" (immortal) — use update_memory to amend or delete_memory(force=true) then re-store.',
-      inputSchema: storeMemorySchema,
+      inputSchema: specFields ? { ...storeMemorySchema, ...specFieldsSchema } : storeMemorySchema,
     },
     wrapHandler('store_memory', storeMemory),
   );

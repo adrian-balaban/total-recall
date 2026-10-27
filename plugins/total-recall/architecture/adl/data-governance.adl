@@ -17,3 +17,6 @@ ASSERT(Org Sync pushes a memory only after Privacy Filter passes it, and blocks 
 
 # Org vault writes
 ASSERT(Only the author of an org memory may overwrite it, even with force) # [TR-D4]
+
+# Specs stay personal unless they are safe to share
+ASSERT(A spec memory naming a host, a credential or a blocked client term is never written to Org Vault) # [TR-D5]

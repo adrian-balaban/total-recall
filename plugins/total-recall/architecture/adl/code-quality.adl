@@ -11,6 +11,7 @@ DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Tool Registry AS registry
     DEFINE COMPONENT Tools AS tools
     DEFINE COMPONENT Server AS server
+    DEFINE COMPONENT Spec AS spec
 
 FOREACH COMPONENT c IN tr DO
     ASSERT(every file of c has at most MAX_LINES_PER_FILE lines of code) # [TR-Q1]

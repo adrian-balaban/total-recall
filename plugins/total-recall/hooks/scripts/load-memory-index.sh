@@ -43,6 +43,11 @@ else
   INDEX_CONTENT="(no memories yet — store one with store_memory)"
 fi
 
+# Spec-driven (specDriven.sessionSummary): a short architecture summary when the
+# working directory holds ADL or CALM files; empty otherwise, so other projects
+# see exactly the output below. Best-effort: a failure adds nothing.
+ARCH_SUMMARY=$(printf '%s' "${HOOK_STDIN:-}" | "$NODE_BIN" "$SCRIPT_DIR/architecture-summary.mjs" 2>/dev/null || true)
+
 INSTRUCTIONS="## Total Recall v$VERSION — Active Memory Index
 
 Total Recall v$VERSION active. The following memories are already in context. Use keys with get_memories_by_keys before searching.
@@ -61,6 +66,11 @@ Total Recall v$VERSION active. The following memories are already in context. Us
 
 ### Memory Index
 $INDEX_CONTENT"
+if [ -n "$ARCH_SUMMARY" ]; then
+  INSTRUCTIONS="$INSTRUCTIONS
+
+$ARCH_SUMMARY"
+fi
 
 # hookSpecificOutput REQUIRES hookEventName:"SessionStart" or additionalContext is
 # silently dropped (verified against the Claude Code hooks reference). Without it,

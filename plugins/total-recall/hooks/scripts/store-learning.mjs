@@ -17,6 +17,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { stringifyFrontmatter, withExecutiveSummary } from '../../dist/frontmatter.mjs';
 import { atomicWrite, cleanupInFlightTmp } from '../../scripts/atomic-write.mjs';
+import { pickSpecFields, hasSpecFields, FRONTMATTER_SCHEMA_VERSION } from '../../dist/spec-fields.mjs';
 
 const CONFIG_FILE = path.join(os.homedir(), '.total-recall', 'config.json');
 let VAULT = path.join(os.homedir(), '.total-recall', 'personal-vault');
@@ -136,6 +137,9 @@ process.stdin.on('end', () => {
       updated: now,
       importanceScore: clampImportance(obj.importanceScore),
     };
+    // Spec-driven links (system, elements, …): sanitised like store_memory does.
+    const spec = pickSpecFields(obj);
+    if (hasSpecFields(spec)) Object.assign(fm, spec, { schemaVersion: FRONTMATTER_SCHEMA_VERSION });
     // 8.2 (REVIEW C-16): normalize the body through withExecutiveSummary so a
     // PreCompact extract lands with the same "## Executive Summary" preamble
     // the TS store_memory path enforces. Without this, extracted memories

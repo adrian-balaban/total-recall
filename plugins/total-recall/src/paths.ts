@@ -15,6 +15,8 @@ export interface TotalRecallConfig {
   allowedEmailDomains?: string[];
   embeddingModel?: string;
   enableMultilingualSearch?: boolean;
+  // Spec-driven features; parsed by spec/config.ts (parseSpecConfig).
+  specDriven?: unknown;
 }
 
 // Cache the parsed config by mtime. loadConfig() is a hot path — embeddings.ts

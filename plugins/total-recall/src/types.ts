@@ -25,6 +25,19 @@ export interface MemoryFrontmatter {
   // validity-window / relation layer is a later assess-level experiment, not
   // this change.
   supersededAt?: string[];
+  // Frontmatter format version; absent means 1. See FRONTMATTER_SCHEMA_VERSION.
+  schemaVersion?: number;
+  // Optional spec-driven links (SPEC-DRIVEN-PLAN phase 1). Declared loosely here so
+  // this leaf stays import-free; spec/fields.ts holds the allowed values and the
+  // sanitiser every write and read goes through.
+  system?: string;
+  artifact?: string;
+  elements?: string[];
+  requirements?: string[];
+  sourcePath?: string;
+  sourceRev?: string;
+  status?: string;
+  supersedes?: string;
 }
 
 export interface MemoryMetadata extends MemoryFrontmatter {

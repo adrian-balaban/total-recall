@@ -7,6 +7,7 @@ import type { MemoryMetadata } from '../types.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wrapHandler } from './registry.js';
+import { pickSpecFields } from '../spec/fields.js';
 
 // ─── export_memories ─────────────────────────────────────────────────────────
 
@@ -58,6 +59,7 @@ export function exportMemories(args: any): any {
       created: m.created,
       updated: m.updated,
       isOrg: m.isOrg,
+      ...pickSpecFields(m as unknown as Record<string, unknown>),
     });
   }
 
@@ -108,6 +110,7 @@ export function importMemories(args: any): any {
         created: m.created,
         updated: m.updated,
         sessions: Array.isArray(m.sessions) ? m.sessions : undefined,
+        ...pickSpecFields(m),
       });
       imported++;
       results.push({ key: res.key, status: 'imported' });

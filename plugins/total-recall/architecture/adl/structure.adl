@@ -10,9 +10,11 @@ DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Tool Registry AS registry
     DEFINE COMPONENT Tools AS tools
     DEFINE COMPONENT Server AS server
+    DEFINE COMPONENT Spec AS spec
 
 # Pure helpers are leaves: also bundled standalone for the hooks (frontmatter, privacy-filter)
 ASSERT(Pure Helpers have no dependency on any other component) # [TR-S1]
+# The spec parsers, config and field sanitiser are pure helpers too (src/spec/{config,fields,elements,adl-parse,calm-parse})
 
 # Layering
 ASSERT(State, Persistence, Search and Vectors have no dependency on Tools) # [TR-S2]
@@ -22,6 +24,7 @@ ASSERT(No production code depends on test code) # [TR-S4]
 # Each tool owns its schema, handler and register(); only the registry is shared
 ASSERT(Each of the store, mutate, query, recall and rerank tools has no dependency on any other tool except Tool Registry) # [TR-S5]
 ASSERT(Tool Registry depends only on State) # [TR-S6]
+ASSERT(Spec has no dependency on Tools) # [TR-S8]
 
 # KNOWN DEBT: state -> persistence back-edge (bumpAccess calls scheduleAccessSave) closes six cycles
 ASSERT(Total Recall has no circular dependencies) # [TR-S7]

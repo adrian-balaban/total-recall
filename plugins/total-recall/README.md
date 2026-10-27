@@ -6,7 +6,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 17 MCP tools over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl--calm)) over a vault of plain Markdown files under `~/.total-recall/`.
 - **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
@@ -25,7 +25,7 @@ At the end of every conversation, an AI coding assistant loses all accumulated c
 
 **Total Recall** gives the model a persistent, searchable memory between sessions:
 
-- **What it is:** an MCP server with 17 tools + automatic lifecycle hooks + a vault of plain Markdown files under `~/.total-recall/`.
+- **What it is:** an MCP server with 22 tools + automatic lifecycle hooks + a vault of plain Markdown files under `~/.total-recall/`.
 - **What it is not:** it does not send data to the cloud (the personal vault is fully local), does not use an opaque database (every memory is a readable `.md` file you can git-version and open in Obsidian), and does not replace context — it injects into it.
 
 ---
@@ -93,7 +93,7 @@ Only ONNX (`@huggingface/transformers`) and `sqlite-vec` remain external — and
 
 ---
 
-## 🛠️ 17 MCP Tools
+## 🛠️ 22 MCP Tools
 
 All tool calls operate against an in-memory index (`index.json`), making read/search operations extremely fast and free of disk I/O. Speak naturally — *"remember that…"* / *"remind me…"* — and the model picks the right tool.
 
@@ -116,6 +116,13 @@ All tool calls operate against an in-memory index (`index.json`), making read/se
 | `import_memories` | Bulk import | Restores from an `export_memories` archive; skips existing keys unless `force=true`; skips entries carrying an `error` field so a failed export read can't clobber a live memory. |
 | `delete_memories` | Bulk delete | Deletes a list of keys; `confirm=true` required (no default). A reserved `no-prune` key (without `force`) is recorded as a per-key error and the batch continues — not a batch reject. Closes the `prune_memories` loop. |
 | `confirm_memory` | Feedback signal | `useful=true` increments confirmations; `useful=false` increments flags — both feed retention scoring. |
+| `index_architecture` | Index ADL/CALM | One architecture-index memory per system: elements, assertions, controls, and the tests tagged with each assertion ID. No-op on unchanged files. See [Spec-driven architecture](#-spec-driven-architecture-adl--calm). |
+| `get_architecture_context` | Element context | The system summary, or one element's ADL rules, CALM controls, decisions, failures and open questions. |
+| `trace` | Requirement → test | Requirement, assertion or element → assertions and controls → tests → recorded results and decisions. |
+| `get_architecture_history` | Change log | `architecture-changes` memories in time order, plus the index rebuilds. |
+| `validate_architecture` | Run checks | CALM CLI validation and ADL test coverage; failures stored as `fitness-result` memories, resolved on a later pass. |
+
+The five architecture tools are on by default and can be switched off one by one (`specDriven.tools`) or together (`specDriven.enabled: false`, which also removes the optional spec fields from the other tools' schemas).
 
 ---
 
@@ -200,7 +207,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 4. check-sync-errors.sh    — warn if org-sync pushes failed since last success
 ```
 
-Effect: every new Claude session automatically receives a summary of all your memories — without asking.
+Effect: every new Claude session automatically receives a summary of all your memories — without asking. In a project with ADL or CALM files, step 3 also adds a short architecture summary (`specDriven.sessionSummary`, capped at `sessionSummaryMaxChars`).
 
 ### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
 
@@ -208,9 +215,13 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 > **Why the matcher is a regex, not a bare tool list.** Claude Code treats a matcher containing only letters/digits/`_`/`-`/spaces/`,`/`|` as an **exact string list** compared verbatim against the full tool name. Plugin MCP tools are named `mcp__plugin_total-recall_total-recall__<tool>`, so a bare `store_memory|update_memory|delete_memory` never matched and the org-sync hook silently never fired. The parens force the **regex** path so it matches the `__<tool>` suffix.
 
+### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
+
+`architecture-change.sh` — when the edited file is an `.adl` or `.calm.json` file (`specDriven.captureChanges`), asks the model to run `index_architecture`, store an `architecture-changes` memory with the reason, and run `validate_architecture`. Any other file returns at once, without starting Node for the default extensions.
+
 ### `PreCompact`
 
-`extract-and-store-memories.sh` — reads the session transcript, asks the model to extract 0–3 key learnings as JSON lines, and `store-learning.mjs` writes them directly as `.md` files to the personal vault (no MCP round-trip; never overwrites existing files).
+`extract-and-store-memories.sh` — reads the session transcript, asks the model to extract 0–3 key learnings as JSON lines, and `store-learning.mjs` writes them directly as `.md` files to the personal vault (no MCP round-trip; never overwrites existing files). With `specDriven.extractDecisions` on, the prompt also asks for architecture decisions with their `system`, `elements` and `requirements`; those fields go through the same sanitiser as `store_memory`.
 
 ### `SessionEnd`
 
@@ -247,6 +258,60 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 
 *   **embeddingModel**: optional override for the local HuggingFace transformer model (defaults to `Xenova/all-MiniLM-L6-v2`, 384-dim). Point this at a different `@huggingface/transformers`-compatible model if you need a different embedding space — note that changing the model dimension drops the existing vector index (it is rebuilt on the next write).
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
+*   **specDriven**: the spec-driven features; see the next section.
+
+---
+
+## 📐 Spec-driven architecture (ADL + CALM)
+
+For projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) and a [FINOS CALM](https://calm.finos.org/) document. The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
+
+1. `index_architecture(path)` reads every `*.adl` and `*.calm.json` file under `path` into one memory per system. It records the elements, assertions (with their `# [ID]` tag), CALM controls, ADL definitions such as capabilities and contracts, and the test lines that carry each assertion ID. It stores the repo-relative path and the commit, not the files. Re-running it on unchanged files writes nothing.
+2. Memories link to the architecture through optional frontmatter fields: `system`, `artifact` (`spec`, `adl`, `calm`, `adr`, `fitness-result`), `elements` (`adl:<domain>.<component>`, `calm:<node>`, `assert:<ID>`), `requirements`, `sourcePath`, `sourceRev`, `status` (`proposed`, `accepted`, `superseded`, `failed`, `resolved`) and `supersedes`. `store_memory`, `update_memory`, export and import carry them; `recall_memory` and `search_index` filter on `elements`; `get_related_memories` relates memories that share elements.
+3. `get_architecture_context`, `trace` and `get_architecture_history` answer "what do we know about this element / requirement / assertion?". A superseded decision is listed separately, never as current.
+4. `validate_architecture(path)` runs the CALM CLI (a `calm` binary on `PATH`, or a pinned `npx` only if `calm.allowNpx` is on; it is never installed by the plugin) and the ADL coverage check. Failures become `fitness-result` memories; a later pass marks them resolved, optionally linked to the decision that fixed them (`resolvedBy`).
+5. Org guardrails: org memories tagged `guardrail` (reusable ADL assertions or CALM controls, with the reason) are returned by `get_architecture_context`. An org-tagged memory with `artifact: "spec"` is refused when it names a host, a credential or a term from `orgBlockedTerms`.
+
+The `spec-driven-workflow` skill describes the loop (spec → requirement IDs → ADL and CALM → tagged fitness functions → code → validation → captured decisions) and ships starter templates.
+
+### Configuration
+
+Every key is optional; a missing or wrongly typed value falls back to its default.
+
+```json
+{
+  "specDriven": {
+    "enabled": true,
+    "tools": ["index_architecture", "get_architecture_context", "trace", "get_architecture_history", "validate_architecture"],
+    "categories": ["specs", "architecture-changes"],
+    "adlExtensions": [".adl"],
+    "calmExtensions": [".calm.json"],
+    "excludeDirs": ["node_modules", ".git", "dist", "build", "coverage"],
+    "sessionSummary": true,
+    "sessionSummaryMaxChars": 1500,
+    "captureChanges": true,
+    "extractDecisions": true,
+    "guardrails": true,
+    "orgBlockedTerms": [],
+    "calm": { "allowNpx": false, "cliVersion": "1.66.0", "timeoutMs": 120000 }
+  }
+}
+```
+
+| Key | Effect |
+|---|---|
+| `enabled` | `false` switches everything below off: 17 tools, no new schema fields, no new hook output |
+| `tools` | Only the listed architecture tools are registered (`[]` for none). Read at server start: restart after a change |
+| `categories` | Extra category folders created at boot |
+| `adlExtensions`, `calmExtensions`, `excludeDirs` | What a project scan picks up and skips |
+| `sessionSummary`, `sessionSummaryMaxChars` | The SessionStart architecture summary and its size |
+| `captureChanges` | The change prompt after an ADL/CALM edit |
+| `extractDecisions` | The PreCompact request for decisions with element IDs |
+| `guardrails` | Org guardrails in `get_architecture_context` |
+| `orgBlockedTerms` | Client names and other terms an org spec memory must not contain |
+| `calm.allowNpx`, `calm.cliVersion`, `calm.timeoutMs` | How `validate_architecture` may run the CALM CLI |
+
+> **Gemini CLI:** the five tools and the field filters work. The two hooks are registered in `hooks.gemini.json` too, but Gemini drops `additionalContext` (see below), so the session summary and the change prompt are not shown there.
 
 ---
 

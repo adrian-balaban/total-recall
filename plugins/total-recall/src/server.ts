@@ -1,7 +1,8 @@
 import * as path from 'path';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir } from './paths.js';
+import { PERSONAL_VAULT, ORG_VAULT, DEFAULT_CATEGORIES, ensureDir, loadConfig } from './paths.js';
+import { parseSpecConfig } from './spec/config.js';
 import { loadIndexes, scheduleSave, recalcIdfNow, markIndexFresh } from './persistence.js';
 import { reconcileIndex } from './vault-scan.js';
 import { startAutoReconcile } from './auto-reconcile.js';
@@ -19,6 +20,7 @@ import { register as registerQuery } from './tools/query.js';
 import { register as registerMutate } from './tools/mutate.js';
 import { register as registerRerank } from './tools/rerank.js';
 import { register as registerBulk } from './tools/bulk.js';
+import { register as registerArchitecture } from './tools/architecture.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
 
@@ -40,25 +42,35 @@ const PLUGIN_VERSION: string =
 // CallToolResult — a scalar `tags` no longer reaches the handler via MCP.
 // `capabilities.tools` is advertised automatically by McpServer; only the
 // `instructions` banner is passed here.
+//
+// specDriven (spec/config.ts) is read once here: tool schemas and the tool list are
+// fixed for the life of the process, so a change to that block needs a restart.
+const spec = parseSpecConfig(loadConfig().specDriven);
+const TOOL_COUNT = 17 + spec.tools.length;
+
 const server = new McpServer(
   { name: 'total-recall', version: PLUGIN_VERSION },
   {
     instructions:
-      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (17 tools). ` +
+      `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (${TOOL_COUNT} tools). ` +
       `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories. ` +
-      `Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory.`,
+      `Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory.` +
+      (spec.tools.length
+        ? ` Architecture (spec-driven): index_architecture, then get_architecture_context / trace / get_architecture_history; validate_architecture for checks.`
+        : ''),
   }
 );
 
-// Wire the 17 tools. The order is stable (store → recall → query → mutate →
-// rerank → bulk) but does not affect tools/list ordering — the SDK returns
-// tools in registration order, matching the prior hand-written list.
-registerStore(server);
-registerRecall(server);
+// Wire the 17 core tools, then the spec-driven ones listed in specDriven.tools.
+// The order is stable (store → recall → query → mutate → rerank → bulk →
+// architecture); the SDK returns tools/list in registration order.
+registerStore(server, spec.enabled);
+registerRecall(server, spec.enabled);
 registerQuery(server);
-registerMutate(server);
+registerMutate(server, spec.enabled);
 registerRerank(server);
 registerBulk(server);
+registerArchitecture(server, spec);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
@@ -67,6 +79,8 @@ export async function main() {
   ensureDir(PERSONAL_VAULT);
   ensureDir(ORG_VAULT);
   for (const cat of DEFAULT_CATEGORIES) ensureDir(path.join(PERSONAL_VAULT, cat));
+  // Spec-driven categories (specDriven.categories; none when specDriven is off).
+  for (const cat of spec.categories) ensureDir(path.join(PERSONAL_VAULT, cat));
   loadIndexes();
   // Always reconcile against disk so orphaned files (from a missed flush on a
   // previous exit) and newly pulled org memories surface. Preserves access stats.

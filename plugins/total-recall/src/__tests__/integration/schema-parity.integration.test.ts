@@ -26,6 +26,12 @@
  *      `items` AND `items:{}` both mean "any item allowed" - semantically
  *      identical.
  *
+ * The golden describes the server with the spec-driven features OFF
+ * (`specDriven.enabled: false`), which must be exactly the pre-spec tool list.
+ * A second block starts the server with the defaults (features ON) and pins the
+ * documented additive delta: five more tools, and optional spec fields on
+ * store_memory / update_memory / recall_memory / search_index.
+ *
  * Any OTHER diff (dropped `default`, shifted `minimum`/`maximum`, added
  * `additionalProperties`, changed `required`, added/removed properties) is a
  * REAL regression that this test catches and fails on. An explicit guard
@@ -70,6 +76,8 @@ beforeAll(async () => {
   // sync hook does, and isn't in scope here). Without this the org-store test
   // fails with "Org vault is not configured" before the route is even taken.
   fs.mkdirSync(path.join(VAULT, 'org', '.git'), { recursive: true });
+  // The golden is the pre-spec tool list: start this server with the spec-driven features off.
+  fs.writeFileSync(path.join(VAULT, 'config.json'), JSON.stringify({ specDriven: { enabled: false } }));
 
   // StdioClientParameters.env is Record<string, string>; strip undefined values.
   const env: Record<string, string> = {};
@@ -189,5 +197,63 @@ describe('schema parity: McpServer migration (6.1-6.3) vs pre-migration golden',
         `tool ${t.name} must not render additionalProperties`,
       ).toBe(false);
     }
+  });
+});
+
+// ─── Spec-driven features ON (the default config) ─────────────────────────────
+
+const SPEC_TOOLS = ['index_architecture', 'get_architecture_context', 'trace', 'get_architecture_history', 'validate_architecture'];
+const SPEC_FIELDS = ['system', 'artifact', 'elements', 'requirements', 'sourcePath', 'sourceRev', 'status', 'supersedes'];
+const ADDITIVE: Record<string, string[]> = {
+  store_memory: SPEC_FIELDS,
+  update_memory: SPEC_FIELDS,
+  recall_memory: ['elements'],
+  search_index: ['elements'],
+};
+
+describe('schema parity with specDriven on (default config): only the documented additive delta', () => {
+  const home = path.join(os.tmpdir(), `tr-integration-spec-${process.pid}-${Date.now()}`);
+  let specClient: Client;
+  let specTransport: StdioClientTransport;
+
+  beforeAll(async () => {
+    fs.mkdirSync(path.join(home, '.total-recall', 'personal-vault'), { recursive: true });
+    const env: Record<string, string> = {};
+    for (const [k, v] of Object.entries(process.env)) if (typeof v === 'string') env[k] = v;
+    env.HOME = home;
+    specTransport = new StdioClientTransport({ command: 'node', args: [DIST], env, stderr: 'inherit' });
+    specClient = new Client({ name: 'tr-schema-parity-spec', version: '0.0.1' }, {});
+    await specClient.connect(specTransport);
+  }, 30_000);
+
+  afterAll(async () => {
+    try { await specClient?.close(); } catch { /* already gone */ }
+    fs.rmSync(home, { recursive: true, force: true });
+  }, 30_000);
+
+  it('lists the 17 golden tools plus the five spec-driven tools', async () => {
+    const { tools } = await specClient.listTools();
+    const goldenNames = (golden.tools as Array<{ name: string }>).map((t) => t.name);
+    expect(tools.map((t: any) => t.name).sort()).toEqual([...goldenNames, ...SPEC_TOOLS].sort());
+  });
+
+  it('core tool schemas equal the golden once the optional spec fields are removed, and those fields are optional', async () => {
+    const { tools } = await specClient.listTools();
+    for (const g of golden.tools as Array<{ name: string; description: string; inputSchema: any }>) {
+      const a: any = tools.find((t: any) => t.name === g.name);
+      const extra = ADDITIVE[g.name] ?? [];
+      const props = { ...a.inputSchema.properties };
+      for (const f of extra) {
+        expect(props[f], `${g.name}.${f} advertised`).toBeDefined();
+        expect(a.inputSchema.required ?? [], `${g.name}.${f} optional`).not.toContain(f);
+        delete props[f];
+      }
+      expect(normalize({ ...a.inputSchema, properties: props }), `tool ${g.name}`).toEqual(normalize(g.inputSchema));
+      expect(containsAdditionalProperties(a.inputSchema)).toBe(false);
+    }
+  });
+
+  it('the server instructions count 22 tools', () => {
+    expect(specClient.getInstructions()).toMatch(/\(22 tools\)/);
   });
 });

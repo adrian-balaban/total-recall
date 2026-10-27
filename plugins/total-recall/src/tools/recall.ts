@@ -9,6 +9,7 @@ import { readCachedOrFresh } from '../vault-scan.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { wrapHandler } from './registry.js';
+import { elementsArg, memoryMatches } from '../spec/elements.js';
 
 // Pagination bounds (mirrors query.ts): MCP does not enforce the tool's
 // inputSchema, so a buggy/malicious caller can pass a huge/negative/NaN limit.
@@ -110,6 +111,10 @@ export async function recallMemory(args: any): Promise<any> {
     ranked = ranked.filter(r => r.score >= minScore);
   }
 
+  // Spec-driven `elements` filter (only advertised when specDriven is on).
+  const wanted = elementsArg(args.elements);
+  if (wanted.length) ranked = ranked.filter(r => memoryMatches(memIndex[r.key], wanted));
+
   ranked = ranked.slice(0, limit);
 
   return ranked.map(r => {
@@ -168,6 +173,8 @@ export function searchIndex(args: any): any {
   // Default 0 = no filtering (current behavior). search_index is TF-IDF-only,
   // so scores are on the raw TF-IDF scale (no RRF rescale caveat here).
   if (minScore > 0) results = results.filter(r => r.score >= minScore);
+  const wanted = elementsArg(args.elements);
+  if (wanted.length) results = results.filter(r => memoryMatches(memIndex[r.key], wanted));
 
   return results.slice(0, limit).map(r => {
     const m = memIndex[r.key];
@@ -199,12 +206,14 @@ const searchIndexSchema = {
   tags: z.array(z.string()).optional(),
 };
 
-export function register(server: McpServer) {
+// specFields: advertise the `elements` filter (specDriven.enabled); see store.ts.
+export function register(server: McpServer, specFields = false) {
+  const elements = { elements: z.array(z.string()).optional().describe('Only memories linked to one of these architecture elements (e.g. "calm:org-vault", "assert:TR-S2", "REQ-7"); a parent such as "adl:testing" also matches its children.') };
   server.registerTool(
     'recall_memory',
     {
       description: 'Full-text TF-IDF search with Ebbinghaus decay. Fuses with vector search via Reciprocal Rank Fusion when the optional embedding deps are installed (set hybrid=false to force TF-IDF only).',
-      inputSchema: recallMemorySchema,
+      inputSchema: specFields ? { ...recallMemorySchema, ...elements } : recallMemorySchema,
     },
     wrapHandler('recall_memory', recallMemory),
   );
@@ -212,7 +221,7 @@ export function register(server: McpServer) {
     'search_index',
     {
       description: 'Lightweight metadata-only search (no file reads). Returns key, title, preview, score.',
-      inputSchema: searchIndexSchema,
+      inputSchema: specFields ? { ...searchIndexSchema, ...elements } : searchIndexSchema,
     },
     wrapHandler('search_index', searchIndex),
   );

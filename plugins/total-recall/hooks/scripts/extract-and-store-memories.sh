@@ -42,6 +42,21 @@ Rules:
 - Include WHY, not just WHAT
 - Do not store ephemeral task details'
 
+# Spec-driven (specDriven.extractDecisions): also ask for architecture decisions
+# with the elements they are about. store-learning.mjs keeps these fields only
+# after the same sanitiser the MCP server uses (dist/spec-fields.mjs).
+EXTRACT_DECISIONS=$("$NODE_BIN" --input-type=module -e '
+import fs from "node:fs"; import os from "node:os"; import path from "node:path";
+const { pathToFileURL } = await import("node:url");
+const { parseSpecConfig } = await import(pathToFileURL(process.argv[1]).href);
+let raw; try { raw = JSON.parse(fs.readFileSync(path.join(os.homedir(), ".total-recall", "config.json"), "utf8")).specDriven; } catch {}
+process.stdout.write(parseSpecConfig(raw).extractDecisions ? "1" : "0");
+' "$SCRIPT_DIR/../../dist/spec-config.mjs" 2>/dev/null || echo 0)
+if [ "$EXTRACT_DECISIONS" = "1" ]; then
+  EXTRACT_PROMPT="$EXTRACT_PROMPT
+- If the session took an architecture decision, store it with category \"decisions\" and add these optional fields: \"system\" (the ADL system id), \"elements\" (IDs such as \"adl:<domain>.<component>\", \"calm:<node>\", \"assert:<ID>\"), \"requirements\" (e.g. \"REQ-7\"), \"artifact\": \"adr\", \"status\": \"accepted\". Include the options that were rejected and why."
+fi
+
 # Extract via `claude -p` (valid), then write each JSON line straight to the vault.
 # store-learning.mjs validates JSON, slugifies, and skips existing memories.
 # Persist node's stderr to ~/.total-recall/.extract.log instead of /dev/null:
