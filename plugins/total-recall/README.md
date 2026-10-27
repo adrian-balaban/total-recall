@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.1.22, stable: 798 tests passing, 93.6% statement coverage, ≈68% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.1.23, stable: 803 tests passing, 93.6% statement coverage, ≈68% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -308,7 +308,7 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 | | |
 |---|---|
-| **Version** | 1.1.22 — stable |
+| **Version** | 1.1.23 — stable |
 | **Tests** | 778 unit + 20 integration, all passing · 47 files · ~13k lines of test code |
 | **Test Coverage** | 93.6% statements · 88.2% branches · 95.3% lines |
 | **Mutation tests** | ≈68% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
