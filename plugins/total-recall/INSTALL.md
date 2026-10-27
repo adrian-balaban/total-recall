@@ -110,6 +110,14 @@ Two layers, with different threat models:
 - **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process; nothing leaves the host), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
 
 
+## 🏷️ Same name, other plugins
+
+Other published plugins are also called `total-recall` (for example `total-recall@88plug`).
+Plugin names share one namespace per client, so install this one by its full marketplace
+ID, `total-recall@my-claude-plugins`, and don't install two plugins with the same name side by
+side. Run `claude plugin list` to see which one is active. If you also have the official
+`remember` plugin, disable it: both compete for the SessionStart and Stop hooks.
+
 ## 🧭 Enabling vector search later
 
 ```bash

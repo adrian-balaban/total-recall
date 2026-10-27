@@ -331,18 +331,20 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 Projects and ideas this plugin drew on:
 
 *   **[strvmarv/total-recall](https://github.com/strvmarv/total-recall)** and **[davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall)** — same name, different trade-offs (see table below); studying them shaped the "bounded local memory, plain files" positioning.
+*   **[88plug/total-recall](https://github.com/88plug/total-recall)** — a third plugin with the same name (installs as `total-recall@88plug`). It mines the raw session transcripts of Claude Code and 9 other CLIs into a local SQLite FTS5 + ollama-vector index with 26 MCP tools; this plugin instead stores curated, human-readable Markdown memories. Different problem, same name — see [INSTALL.md](INSTALL.md#️-same-name-other-plugins).
+*   **`remember@claude-plugins-official`** — the official session-handoff plugin, which writes `.remember/*.md` files into every project. It competes for the same hooks and the same job, so run only one of the two; see the root README's *Using it as your only memory system*.
 *   **Hermann Ebbinghaus (1885)** — the forgetting curve `e^(−t/S)` behind retention scoring.
 *   **Reciprocal Rank Fusion** (Cormack, Clarke & Buettcher, 2009) — the scale-free rank fusion (k=60) used for the hybrid lexical+vector merge.
 *   **[Obsidian](https://obsidian.md/)** — the "your knowledge is a folder of Markdown files with frontmatter" storage model.
 *   **[mozilla-ai/cq](https://github.com/mozilla-ai/cq)** — the open standard for *shared agent learning*. Complementary, not competing: cq = operational lessons shared between agents via a reviewed store; total-recall = *your* context memory (decisions, preferences, architecture) as `.md` files + git, no server, no review pipeline. cq's endorsement mechanism directly inspired total-recall's `confirm_memory` confirmations/flags signal in the retention score.
 
-| | This Plugin | [strvmarv/total-recall](https://github.com/strvmarv/total-recall) | [davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall) | [mozilla-ai/cq](https://github.com/mozilla-ai/cq) |
-|---|---|---|---|---|
-| **Language** | TypeScript / Node.js | .NET 8 + F# | Bash + Markdown | Python |
-| **Storage** | Markdown + JSON index | SQLite / Postgres | Markdown | Shared knowledge store |
-| **Text Search** | TF-IDF | BM25 | Plain files scan | — |
-| **Vector Search** | Optional sqlite-vec | Local ONNX | None | — |
-| **Rerank/Decay** | Ebbinghaus decay × TF-IDF + confirm/flag signals | 4-tier hot/warm/cold | None | Human review + endorsements |
-| **Org Sync** | Git-synced, privacy filter | DB connectors (Jira, Confluence) | None | Reviewed shared store (7 hosts) |
-| **Context injection** | ✅ Native (Claude Code hooks) | — | — | ❌ agent must query explicitly |
-| **Target** | Bounded local memory | Large team deployments | Zero dependencies | Cross-agent shared learning |
+| | This Plugin | [strvmarv/total-recall](https://github.com/strvmarv/total-recall) | [davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall) | [88plug/total-recall](https://github.com/88plug/total-recall) | [mozilla-ai/cq](https://github.com/mozilla-ai/cq) |
+|---|---|---|---|---|---|
+| **Language** | TypeScript / Node.js | .NET 8 + F# | Bash + Markdown | Python | Python |
+| **Storage** | Markdown + JSON index | SQLite / Postgres | Markdown | SQLite index over session transcripts | Shared knowledge store |
+| **Text Search** | TF-IDF | BM25 | Plain files scan | SQLite FTS5 | — |
+| **Vector Search** | Optional sqlite-vec | Local ONNX | None | ollama embeddings (default on) | — |
+| **Rerank/Decay** | Ebbinghaus decay × TF-IDF + confirm/flag signals | 4-tier hot/warm/cold | None | — | Human review + endorsements |
+| **Org Sync** | Git-synced, privacy filter | DB connectors (Jira, Confluence) | None | None | Reviewed shared store (7 hosts) |
+| **Context injection** | ✅ Native (Claude Code hooks) | — | — | ✅ SessionStart signpost + per-prompt retrieval | ❌ agent must query explicitly |
+| **Target** | Bounded local memory | Large team deployments | Zero dependencies | Mining past sessions of many CLIs | Cross-agent shared learning |
