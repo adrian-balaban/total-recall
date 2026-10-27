@@ -96,6 +96,52 @@ Când un proiect își ține arhitectura ca cod (fișiere ADL și un document CA
 
 Totul se configurează în blocul `specDriven` din `~/.total-recall/config.json`, iar `"specDriven": {"enabled": false}` readuce exact comportamentul cu 17 unelte. Cheile sunt descrise în [README-ul pluginului](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm).
 
+## 📐 Arhitectura ca cod: ADL și CALM
+
+Total Recall își descrie propria arhitectură în două notații: ADL pentru nivelul de cod și CALM pentru nivelul de sistem. Build-ul pică atunci când codul se abate de la oricare dintre ele. [Uneltele spec-driven](#-lucru-spec-driven-cu-adl-și-calm) lucrează cu aceleași două notații și în proiectele tale.
+
+### ADL: Architecture Definition Language
+
+ADL este notația folosită la masterclass-ul **„How to Teach Your Agents About Architecture"**, ținut de Neal Ford ca parte a materialului său *Architecture as Code*, la Codecamp Iași (27–28 octombrie 2026).
+
+- **Ce este.** Un mod ușor, apropiat de pseudocod, de a scrie o arhitectură, fără gramatică formală. Liniile `DEFINE` numesc sistemul, domeniile și componentele lui. Liniile `ASSERT(…)` enunță regulile pe care codul trebuie să le respecte, în engleză simplă acolo unde e mai clar așa.
+- **Cine îl citește.** Oamenii îl citesc ca documentație scurtă, care se învechește mai greu decât o diagramă. Agenții AI îl citesc drept context când scriu cod și drept specificație după care verifică codul.
+- **Cum se impune.** Un fișier ADL nu se execută niciodată. Fiecare aserțiune e verificată de un test scris pentru ea (o fitness function), de exemplu cu ArchUnitTS în acest repository.
+
+Exemplul de mai jos vine din fișierul [structure.adl](plugins/total-recall/architecture/adl/structure.adl) al acestui repository, nu din curs:
+
+```
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE COMPONENT Pure Helpers AS helpers
+    DEFINE COMPONENT Tools AS tools
+ASSERT(Pure Helpers have no dependency on any other component) # [TR-S1]
+```
+
+Eticheta `# [TR-S1]` este o convenție Total Recall, nu face parte din ADL. Testul care impune regula are aceeași etichetă în nume, iar `adl-coverage.test.ts` pică atunci când o aserțiune nu are test.
+
+> Materialul cursului nu este publicat aici: nici slide-uri, nici exerciții, nici ghidul de referință, nici soluții. Secțiunea descrie ideea cu propriile noastre cuvinte, iar toate exemplele sunt din acest repository.
+
+### CALM: Common Architecture Language Model
+
+[CALM](https://calm.finos.org/introduction/what-is-calm) este o specificație deschisă pentru descrierea arhitecturii software ca cod, în JSON pe care îl pot citi atât oamenii, cât și uneltele. O dezvoltă [comunitatea FINOS Architecture as Code](https://github.com/finos/architecture-as-code), a fost contribuită de Morgan Stanley, iar versiunea 1.0 a apărut în august 2025.
+
+- **Concepte principale.** Noduri (blocurile de bază: servicii, baze de date, actori), relațiile dintre ele și interfețele expuse de noduri. Controalele atașează cerințe unui nod sau unei relații. Specificația acoperă și fluxuri, linii de timp și decoratori.
+- **Unelte.** Un CLI (`npm install -g @finos/calm-cli`) care validează documentele după schemă, plus pluginuri VS Code, integrări AI și [CalmStudio](https://calm.finos.org/calm-studio/intro/), un editor vizual care păstrează JSON-ul ca sursă de adevăr.
+- **Scop.** Arhitectura ținută în version control, validată în CI alături de cod, și un model pe care agenții îl pot urma.
+
+Modelul propriu al Total Recall este [total-recall.calm.json](plugins/total-recall/architecture/calm/total-recall.calm.json). Acoperă serverul MCP, hook-urile, cele două vault-uri și embedder-ul local, plus trei controale (filtrul de confidențialitate fail-closed, protecția autorului în vault-ul org și fallback-ul la TF-IDF), fiecare legat de aserțiunea ADL corespunzătoare. CI îl validează cu un `@finos/calm-cli` fixat (1.66.0, schema CALM 1.0).
+
+### Cum se completează
+
+| | ADL | CALM |
+|---|---|---|
+| Nivel | Cod: module, dependențe, reguli pentru date | Sistem: containere, conexiuni, controale |
+| Format | Text de tip pseudocod (`.adl`) | JSON cu schemă publicată (`.calm.json`) |
+| Verificat de | Teste etichetate cu ID-ul aserțiunii | `calm validate`, plus `calm.test.ts`, care îl compară cu ADL |
+| Origine | Masterclass-ul *Architecture as Code* al lui Neal Ford | Standard deschis FINOS |
+
+Detalii: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITECTURE.md#-architecture-as-code).
+
 ## 💡 Ce se salvează automat
 
 Observații de lucru (ce a mers, ce nu) · context de proiect neevident (motivații, constrângeri,

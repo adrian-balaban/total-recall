@@ -93,6 +93,52 @@ When a project keeps its architecture as code (ADL files and a CALM document), T
 
 Everything is configurable under `specDriven` in `~/.total-recall/config.json`, and `"specDriven": {"enabled": false}` gives back exactly the 17-tool behaviour. See the [plugin README](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm) for the keys.
 
+## 📐 Architecture as code: ADL and CALM
+
+Total Recall describes its own architecture in two notations, ADL for the code level and CALM for the system level, and the build fails when the code drifts from either. The [spec-driven tools](#-spec-driven-work-with-adl-and-calm) work with the same two notations in your own projects.
+
+### ADL: Architecture Definition Language
+
+ADL is the notation used in the masterclass **"How to Teach Your Agents About Architecture"**, which Neal Ford taught as part of his *Architecture as Code* material at Codecamp Iași (27–28 October 2026).
+
+- **What it is.** A light, pseudocode-like way to write an architecture down, with no formal grammar. `DEFINE` lines name the system, its domains and its components. `ASSERT(…)` lines state the rules the code must keep, in plain English where that is clearer.
+- **Who reads it.** People read it as short documentation that is harder to let go stale than a diagram. AI agents read it as context when they write code, and as a specification to check the code against.
+- **How it is enforced.** An ADL file is never executed. Each assertion is checked by a test written for it (a fitness function), for example with ArchUnitTS in this repository.
+
+This example comes from this repository's own [structure.adl](plugins/total-recall/architecture/adl/structure.adl), not from the course:
+
+```
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE COMPONENT Pure Helpers AS helpers
+    DEFINE COMPONENT Tools AS tools
+ASSERT(Pure Helpers have no dependency on any other component) # [TR-S1]
+```
+
+The `# [TR-S1]` tag is a Total Recall convention, not part of ADL. The test that enforces the rule has the same tag in its name, and `adl-coverage.test.ts` fails when an assertion has no test.
+
+> The course material is not published here: no slides, exercises, reference guide or solutions. This section describes the idea in our own words, and every example is from this repository.
+
+### CALM: Common Architecture Language Model
+
+[CALM](https://calm.finos.org/introduction/what-is-calm) is an open specification for describing a software architecture as code, in JSON that people and tools can both read. The [FINOS Architecture as Code community](https://github.com/finos/architecture-as-code) develops it, Morgan Stanley contributed it, and version 1.0 came out in August 2025.
+
+- **Main concepts.** Nodes (the building blocks: services, databases, actors), the relationships between them, and the interfaces the nodes expose. Controls attach requirements to a node or a relationship. The specification also covers flows, timelines and decorators.
+- **Tooling.** A CLI (`npm install -g @finos/calm-cli`) that validates documents against the schema, plus VS Code plugins, AI integrations and [CalmStudio](https://calm.finos.org/calm-studio/intro/), a visual editor that keeps the JSON as the source of truth.
+- **Purpose.** Keep the architecture in version control, validate it in CI next to the code, and give agents a model to follow.
+
+Total Recall's own model is [total-recall.calm.json](plugins/total-recall/architecture/calm/total-recall.calm.json). It covers the MCP server, the hooks, the two vaults and the local embedder, plus three controls (the fail-closed privacy filter, org author protection and the TF-IDF fallback), each linked to its ADL assertion. CI validates it with a pinned `@finos/calm-cli` (1.66.0, CALM 1.0 schema).
+
+### How the two fit together
+
+| | ADL | CALM |
+|---|---|---|
+| Level | Code: modules, dependencies, data rules | System: containers, connections, controls |
+| Format | Pseudocode text (`.adl`) | JSON with a published schema (`.calm.json`) |
+| Checked by | Tests tagged with the assertion ID | `calm validate`, plus `calm.test.ts` cross-checks against the ADL |
+| Origin | Neal Ford's *Architecture as Code* masterclass | FINOS open standard |
+
+Details: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITECTURE.md#-architecture-as-code).
+
 ## 💡 What gets saved automatically
 
 Work observations (what worked, what didn't) · non-obvious project context
