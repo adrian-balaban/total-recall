@@ -27,8 +27,8 @@ flowchart LR
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
 
-Mai multe tehnici din [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
-sunt deja implementate aici, ca decizii de design luate independent:
+Mai multe tehnici din [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar)
+([Vol. 34, 2026 — PDF](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)) sunt deja implementate aici, ca decizii de design luate independent:
 
 | Tehnică | Inel | Cum o face Total Recall |
 |---|---|---|

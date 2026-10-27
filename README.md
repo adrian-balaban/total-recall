@@ -27,8 +27,8 @@ flowchart LR
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
 
-Several techniques from the [Thoughtworks Technology Radar Vol. 34 (2026)](tr_technology_radar_vol_34_en_1.pdf)
-are already implemented here, as design decisions taken independently:
+Several techniques from the [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar)
+([Vol. 34, 2026 — PDF](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)) are already implemented here, as design decisions taken independently:
 
 | Technique | Ring | How Total Recall does it |
 |---|---|---|
