@@ -1,0 +1,21 @@
+DESCRIPTION Runtime-safety rules: optional native dependencies and the stdio transport
+CATEGORY Engineering Practices
+NAMESPACE TrRuntimeNS
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE COMPONENT Pure Helpers AS helpers
+    DEFINE COMPONENT State AS state
+    DEFINE COMPONENT Persistence AS persistence
+    DEFINE COMPONENT Search AS search
+    DEFINE COMPONENT Vectors AS vectors
+    DEFINE COMPONENT Tool Registry AS registry
+    DEFINE COMPONENT Tools AS tools
+    DEFINE COMPONENT Server AS server
+
+# One place degrades when a native binding is missing
+ASSERT(Only Vectors loads @huggingface/transformers, better-sqlite3 and sqlite-vec) # [TR-R1]
+
+# stdout IS the MCP transport (JSON-RPC over stdio): diagnostics go to stderr
+ASSERT(No production code writes to stdout) # [TR-R2]
+
+# A missing optional dependency must never fail a search
+ASSERT(When an optional dependency is not loadable, Vectors degrades to TF-IDF search instead of failing) # [TR-R3]

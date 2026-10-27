@@ -125,7 +125,7 @@ describe('vectorStore — native-binding self-heal', () => {
     expect(msg).toMatch(/npm rebuild better-sqlite3/i);      // actionable fix command
   });
 
-  it('degrades silently when no rebuild is attempted (optional-dep-absent / test default)', async () => {
+  it('[TR-R3] degrades silently when no rebuild is attempted (optional-dep-absent / test default)', async () => {
     // Both optional deps absent → getDb catch runs, but the default test impl
     // returns { attempted: false }, so no recordError and a silent null (matches
     // the pre-self-heal degrade behavior pinned by vectorStore.test.ts).

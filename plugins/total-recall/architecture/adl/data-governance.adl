@@ -1,0 +1,19 @@
+DESCRIPTION Which vault a memory lands in, and what may leave the machine
+CATEGORY Data
+NAMESPACE TrDataNS
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE DATABASE Personal Vault AS personal-vault
+    DEFINE DATABASE Org Vault AS org-vault
+    DEFINE COMPONENT Tools AS tools
+    DEFINE COMPONENT Org Sync AS org-sync
+    DEFINE COMPONENT Privacy Filter AS privacy-filter
+
+# Routing
+ASSERT(A memory tagged org is written to Org Vault only) # [TR-D1]
+ASSERT(A memory without the org tag is written to Personal Vault only) # [TR-D2]
+
+# Nothing reaches the shared repository unfiltered; the filter fails closed
+ASSERT(Org Sync pushes a memory only after Privacy Filter passes it, and blocks on any detection) # [TR-D3]
+
+# Org vault writes
+ASSERT(Only the author of an org memory may overwrite it, even with force) # [TR-D4]

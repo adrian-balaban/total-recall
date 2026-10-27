@@ -1,0 +1,17 @@
+DESCRIPTION Code-quality limits for Total Recall
+CATEGORY Engineering Practices
+NAMESPACE TrQualityNS
+DEFINE CONST MAX_LINES_PER_FILE = 600
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE COMPONENT Pure Helpers AS helpers
+    DEFINE COMPONENT State AS state
+    DEFINE COMPONENT Persistence AS persistence
+    DEFINE COMPONENT Search AS search
+    DEFINE COMPONENT Vectors AS vectors
+    DEFINE COMPONENT Tool Registry AS registry
+    DEFINE COMPONENT Tools AS tools
+    DEFINE COMPONENT Server AS server
+
+FOREACH COMPONENT c IN tr DO
+    ASSERT(every file of c has at most MAX_LINES_PER_FILE lines of code) # [TR-Q1]
+END

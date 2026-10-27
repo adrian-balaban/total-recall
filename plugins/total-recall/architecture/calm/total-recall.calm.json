@@ -1,0 +1,220 @@
+{
+  "$schema": "https://calm.finos.org/release/1.0/meta/calm.json",
+  "nodes": [
+    {
+      "unique-id": "host",
+      "node-type": "actor",
+      "name": "Claude Code / Gemini CLI",
+      "description": "Host harness: spawns the MCP server and runs the lifecycle hooks."
+    },
+    {
+      "unique-id": "mcp-server",
+      "node-type": "service",
+      "name": "MCP stdio server",
+      "description": "Node process (dist/index.js) serving the memory tools over stdio, with an in-memory index and debounced persistence.",
+      "interfaces": [
+        {
+          "unique-id": "mcp-stdio"
+        }
+      ]
+    },
+    {
+      "unique-id": "hooks",
+      "node-type": "service",
+      "name": "Lifecycle hooks",
+      "description": "Bash and Node scripts run on SessionStart, PostToolUse, PreCompact and SessionEnd."
+    },
+    {
+      "unique-id": "personal-vault",
+      "node-type": "database",
+      "name": "Personal vault",
+      "description": "Markdown files with YAML frontmatter under ~/.total-recall/personal-vault. Never leaves the machine."
+    },
+    {
+      "unique-id": "org-vault",
+      "node-type": "database",
+      "name": "Org vault",
+      "description": "Git working tree of the shared org memory repo; receives only memories tagged org.",
+      "controls": {
+        "privacy-filter": {
+          "description": "Fail-closed filter: a memory with a detected secret, email, card, IBAN or phone number is never pushed.",
+          "requirements": [
+            {
+              "requirement-url": "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/privacy-filter.requirement.json",
+              "config": {
+                "adl-assertion": "TR-D3"
+              }
+            }
+          ]
+        },
+        "author-protection": {
+          "description": "Only the author of an org memory may overwrite or delete it, even with force.",
+          "requirements": [
+            {
+              "requirement-url": "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/author-protection.requirement.json",
+              "config": {
+                "adl-assertion": "TR-D4"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "unique-id": "embedder",
+      "node-type": "service",
+      "name": "Local embedder",
+      "description": "Optional in-process HuggingFace pipeline (all-MiniLM-L6-v2) with a sqlite-vec store; lazy-loaded.",
+      "controls": {
+        "tfidf-fallback": {
+          "description": "When the optional dependencies are not loadable, search degrades to TF-IDF instead of failing.",
+          "requirements": [
+            {
+              "requirement-url": "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/tfidf-fallback.requirement.json",
+              "config": {
+                "adl-assertion": "TR-R3"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "unique-id": "org-remote",
+      "node-type": "system",
+      "name": "Org git remote",
+      "description": "External git repository shared with teammates."
+    }
+  ],
+  "relationships": [
+    {
+      "unique-id": "host-uses-mcp-server",
+      "description": "Tool calls over MCP/stdio. stdout is the transport, so the server never writes diagnostics to it.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "host"
+          },
+          "destination": {
+            "node": "mcp-server",
+            "interfaces": [
+              "mcp-stdio"
+            ]
+          }
+        }
+      },
+      "metadata": {
+        "transport": "stdio",
+        "adl-assertion": "TR-R2"
+      }
+    },
+    {
+      "unique-id": "host-runs-hooks",
+      "description": "Hook events with stdin JSON; SessionStart hooks inject the memory index into the context.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "host"
+          },
+          "destination": {
+            "node": "hooks"
+          }
+        }
+      }
+    },
+    {
+      "unique-id": "mcp-server-writes-personal-vault",
+      "description": "Reads and writes untagged memories as Markdown files.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "mcp-server"
+          },
+          "destination": {
+            "node": "personal-vault"
+          }
+        }
+      },
+      "metadata": {
+        "adl-assertion": "TR-D2"
+      }
+    },
+    {
+      "unique-id": "mcp-server-writes-org-vault",
+      "description": "Writes memories tagged org to the org vault working tree.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "mcp-server"
+          },
+          "destination": {
+            "node": "org-vault"
+          }
+        }
+      },
+      "metadata": {
+        "adl-assertion": "TR-D1"
+      }
+    },
+    {
+      "unique-id": "mcp-server-uses-embedder",
+      "description": "Embeds text for hybrid search; optional.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "mcp-server"
+          },
+          "destination": {
+            "node": "embedder"
+          }
+        }
+      }
+    },
+    {
+      "unique-id": "hooks-write-personal-vault",
+      "description": "PreCompact extraction and the standalone index scan write directly, without MCP.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "hooks"
+          },
+          "destination": {
+            "node": "personal-vault"
+          }
+        }
+      }
+    },
+    {
+      "unique-id": "hooks-sync-org-vault",
+      "description": "After each org write: privacy filter, then git add, commit and push.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "hooks"
+          },
+          "destination": {
+            "node": "org-vault"
+          }
+        }
+      },
+      "metadata": {
+        "adl-assertion": "TR-D3"
+      }
+    },
+    {
+      "unique-id": "org-vault-syncs-with-remote",
+      "description": "git pull at SessionStart, git push after each filtered org write.",
+      "relationship-type": {
+        "connects": {
+          "source": {
+            "node": "org-vault"
+          },
+          "destination": {
+            "node": "org-remote"
+          }
+        }
+      },
+      "protocol": "TLS"
+    }
+  ]
+}

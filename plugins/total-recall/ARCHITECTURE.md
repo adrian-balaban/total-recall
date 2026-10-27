@@ -571,6 +571,27 @@ Configuration in `~/.total-recall/config.json`:
 
 ---
 
+## 📐 Architecture as code
+
+The rules in this document are also written as code and checked on every `npm test`.
+
+| What | Where | Checked by |
+|---|---|---|
+| Code-level rules in ADL (structure, runtime safety, data governance, code quality) | `architecture/adl/*.adl` | ArchUnitTS and behavioural tests, one test per assertion |
+| System-level model in CALM (nodes, connections, controls) | `architecture/calm/total-recall.calm.json` | `calm validate` in CI (pinned `@finos/calm-cli`), plus `calm.test.ts` |
+| Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
+
+**ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
+
+**Known debt.** `[TR-S7]` (no circular dependencies) is an `it.fails` test: the `state.ts` → `persistence.ts` back-edge closes six cycles. It turns red when the debt is paid, which forces the marker to be flipped.
+
+**Where the privacy filter sits.** `store_memory` writes an org-tagged memory to the org vault locally. The fail-closed filter gates the git sync (`scripts/sync-org-memory.mjs`), so `[TR-D3]` is checked on `privacyCheck` and by the sync end-to-end tests, not on the store call.
+
+To validate the CALM document locally:
+`npx @finos/calm-cli@1.66.0 validate -a architecture/calm/total-recall.calm.json -u architecture/calm/url-mapping.json --strict`
+
+---
+
 ## ⚖️ Key Invariants
 
 | Invariant | Where enforced |

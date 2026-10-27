@@ -56,6 +56,11 @@ jobs:
       # answers MCP calls. Kept as its own step so a failure here is
       # distinguishable from a unit-test failure at a glance.
       - run: npm run test:integration
+      # Architecture as code: ADL assertion coverage and the privacy/routing tests ran inside
+      # `npm test` above; this validates the CALM document against the CALM 1.0 schema.
+      # Pinned version (supply chain): the CLI is not a dependency of the plugin.
+      - name: Validate CALM architecture
+        run: npx --yes @finos/calm-cli@1.66.0 validate -a architecture/calm/total-recall.calm.json -u architecture/calm/url-mapping.json --strict
       # Stryker runs the unit suite (all modules) under instrumentation (~5–8 min).
       # The `break: 65` threshold in stryker.conf.json makes stryker exit 1
       # when the "of total" score is below 65, failing this job.
