@@ -192,7 +192,7 @@ are already implemented here, as design decisions taken independently:
 |---|---|---|
 | Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
 | Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel since v1.1.19, fed by a CI-built branch |
+| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a GitHub Actions CI-built on main branch |
 | Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
 | MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
 
@@ -200,8 +200,6 @@ are already implemented here, as design decisions taken independently:
 a context graph over memories (the `supersededAt` chain already stores temporal edges);
 source-grounded extraction for the capture hook; an evaluation set for `recall_memory`.
 
-The full Adopt/Trial synthesis lives in the org memory
-`org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
 
 ---
 
