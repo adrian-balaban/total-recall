@@ -21,7 +21,9 @@ describe('architecture fitness functions', () => {
     it('[TR-S7] has no circular dependencies', async () => {
       const rule = projectFiles().inPath(PROD).should().haveNoCycles();
       await expect(rule).toPassAsync();
-    });
+      // Cycle detection walks the whole import graph (~8 s under v8 coverage),
+      // well past vitest's 5 s default.
+    }, 60_000);
 
     it('[TR-S2] core modules never depend on the tools layer', async () => {
       const rule = projectFiles()
