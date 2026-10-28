@@ -26,6 +26,7 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { recordError, recordPerfSample } from '../state.js';
+import { redactPaths } from '../paths.js';
 
 // The 17 tool handlers all share this shape: take a plain args object, return
 // a JSON-serializable result, throw on failure. `any` is deliberate — the
@@ -55,7 +56,10 @@ export function wrapHandler(name: string, handler: ToolHandler) {
     } catch (e: any) {
       recordError(`${name}: ${e.message}`);
       return {
-        content: [{ type: 'text' as const, text: `Error: ${e.message}` }],
+        // Filesystem paths in an error (EACCES, ENOENT, ...) are redacted the same
+        // way get_stats redacts recentErrors: the caller learns which vault, not the
+        // user's home layout. recordError above keeps the raw text for local debugging.
+        content: [{ type: 'text' as const, text: `Error: ${redactPaths(String(e?.message ?? e))}` }],
         isError: true,
       };
     }

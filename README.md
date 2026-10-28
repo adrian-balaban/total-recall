@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.3.2, stable: 894 tests pass, 96.3% statement coverage, ≈78% mutation score.
+- **Status** — v1.3.3, stable: 894 tests pass, 96.3% statement coverage, ≈78% mutation score.
 
 ```mermaid
 flowchart LR
@@ -218,7 +218,7 @@ Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is git
 
 | | |
 |---|---|
-| **Version** | 1.3.2 — stable |
+| **Version** | 1.3.3 — stable |
 | **Tests** | 894 unit + 24 integration passing · 64 files · ~15k lines of test code |
 | **Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
 | **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |

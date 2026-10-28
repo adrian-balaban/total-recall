@@ -4,6 +4,7 @@ NAMESPACE TrStructureNS
 DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Pure Helpers AS helpers
     DEFINE COMPONENT State AS state
+    DEFINE COMPONENT Paths AS paths
     DEFINE COMPONENT Persistence AS persistence
     DEFINE COMPONENT Search AS search
     DEFINE COMPONENT Vectors AS vectors
@@ -23,7 +24,8 @@ ASSERT(No production code depends on test code) # [TR-S4]
 
 # Each tool owns its schema, handler and register(); only the registry is shared
 ASSERT(Each of the store, mutate, query, recall and rerank tools has no dependency on any other tool except Tool Registry) # [TR-S5]
-ASSERT(Tool Registry depends only on State) # [TR-S6]
+# Paths is only for redactPaths(), so a tool error never leaks the user's home layout
+ASSERT(Tool Registry depends only on State and Paths) # [TR-S6]
 ASSERT(Spec has no dependency on Tools) # [TR-S8]
 
 ASSERT(Total Recall has no circular dependencies) # [TR-S7]

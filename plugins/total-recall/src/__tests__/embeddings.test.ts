@@ -369,3 +369,48 @@ describe('embeddings — depsInstalled probe', () => {
     expect(typeof res).toBe('boolean');
   });
 });
+
+// ─── bounded concurrency: a burst of stores never runs more than 2 embeds at once ─
+
+describe('embeddings — embedAndUpsert is concurrency-bounded', () => {
+  beforeEach(() => {
+    resetVectorStoreMocks();
+  });
+
+  it('never runs more than 2 embeds at once, still lands every vector, and flush waits for the queue', async () => {
+    let running = 0;
+    let peak = 0;
+    __testSetEmbedder(async () => {
+      running++;
+      peak = Math.max(peak, running);
+      await new Promise((r) => setTimeout(r, 15));
+      running--;
+      return makeVector(384, 0.3);
+    });
+    const upserted: string[] = [];
+    getVectorStoreMocks().upsertVector.mockImplementation(async (_db: string, key: string) => { upserted.push(key); });
+
+    for (let i = 0; i < 8; i++) embedAndUpsert(`knowledge/burst-${i}`, 'text');
+    await flushEmbeddings(5000);
+
+    expect(peak).toBe(2);
+    expect(upserted.sort()).toEqual(Array.from({ length: 8 }, (_, i) => `knowledge/burst-${i}`).sort());
+  });
+
+  it('a failing embed releases its slot so the queue keeps draining', async () => {
+    let calls = 0;
+    __testSetEmbedder(async () => {
+      calls++;
+      if (calls <= 3) throw new Error('boom');
+      return makeVector(384, 0.3);
+    });
+    const upserted: string[] = [];
+    getVectorStoreMocks().upsertVector.mockImplementation(async (_db: string, key: string) => { upserted.push(key); });
+
+    for (let i = 0; i < 6; i++) embedAndUpsert(`knowledge/fail-${i}`, 'text');
+    await flushEmbeddings(5000);
+
+    expect(calls).toBe(6);
+    expect(upserted).toHaveLength(3); // the last three succeeded
+  });
+});

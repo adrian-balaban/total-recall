@@ -14,6 +14,16 @@ const docs = fs.readdirSync(ADL_DIR)
   .map((f) => ({ file: f, doc: parseAdl(fs.readFileSync(path.join(ADL_DIR, f), 'utf8')) }));
 const elements = docs.flatMap(({ file, doc }) => doc.elements.filter((e) => e.kind !== 'SYSTEM').map((e) => ({ ...e, file })));
 
+// The distinct element ids an endpoint written in a DEFINE COMMUNICATION can mean:
+// an exact element id wins, otherwise every element with that display name
+// (case-insensitive). More than one hit means the endpoint is ambiguous.
+function endpointMatches(endpoint: string, els: Array<{ elementId: string; name: string }>): string[] {
+  const n = endpoint.trim().toLowerCase();
+  const byId = els.filter((e) => e.elementId.toLowerCase() === n);
+  if (byId.length) return [...new Set(byId.map((e) => e.elementId))];
+  return [...new Set(els.filter((e) => e.name.toLowerCase() === n).map((e) => e.elementId))];
+}
+
 describe('ADL consistency', () => {
   it('parses every line of every file', () => {
     expect(docs.flatMap(({ file, doc }) => doc.other.map((o) => `${file}:${o.line} ${o.text}`))).toEqual([]);
@@ -24,12 +34,29 @@ describe('ADL consistency', () => {
     expect(conflicts.map((e) => `${e.elementId} in ${e.file}`)).toEqual([]);
   });
 
-  it('every DEFINE COMMUNICATION endpoint names a defined element', () => {
-    const names = new Set(elements.map((e) => e.name.toLowerCase()));
+  it('every DEFINE COMMUNICATION endpoint names exactly one defined element', () => {
     const comms = docs.flatMap(({ file, doc }) => doc.communications.map((c) => ({ ...c, file })));
     expect(comms.length).toBeGreaterThan(0);
-    const dangling = comms.flatMap((c) => [c.from, c.to].filter((n) => !names.has(n.toLowerCase())).map((n) => `${c.file}:${c.line} ${n}`));
-    expect(dangling).toEqual([]);
+    const bad = comms.flatMap((c) =>
+      [c.from, c.to]
+        .map((n) => ({ n, hits: endpointMatches(n, elements) }))
+        .filter((r) => r.hits.length !== 1)
+        .map((r) => `${c.file}:${c.line} ${r.n} -> ${r.hits.length ? `ambiguous: ${r.hits.join(', ')}` : 'undefined'}`),
+    );
+    expect(bad).toEqual([]);
+  });
+
+  it('endpointMatches reports an undefined name, a unique name and an ambiguous one', () => {
+    const els = [
+      { elementId: 'adl:a.api', name: 'Api' },
+      { elementId: 'adl:b.api', name: 'Api' },
+      { elementId: 'adl:store', name: 'Store' },
+    ];
+    expect(endpointMatches('Nope', els)).toEqual([]);
+    expect(endpointMatches('store', els)).toEqual(['adl:store']);
+    expect(endpointMatches('Api', els).sort()).toEqual(['adl:a.api', 'adl:b.api']);
+    // an explicit element id disambiguates
+    expect(endpointMatches('adl:b.api', els)).toEqual(['adl:b.api']);
   });
 
   it('system.adl defines each landscape element once', () => {

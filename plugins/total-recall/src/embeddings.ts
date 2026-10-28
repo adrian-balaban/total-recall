@@ -191,6 +191,27 @@ export async function embed(text: string): Promise<number[] | null> {
 // (vault-scan.ts) closes pre-existing holes; this closes new ones.
 const pendingEmbeds = new Set<Promise<void>>();
 
+// Bounded concurrency: a bulk import or a burst of stores used to start one
+// embed + sqlite write per memory at once, all contending for the single
+// in-process pipeline and the one sqlite handle. At most EMBED_CONCURRENCY run
+// together; the rest wait in `embedWaiters` in FIFO order. A queued job's promise
+// is already in `pendingEmbeds`, so flushEmbeddings() still waits for it.
+const EMBED_CONCURRENCY = 2;
+let embedActive = 0;
+const embedWaiters: Array<() => void> = [];
+
+async function acquireEmbedSlot(): Promise<void> {
+  if (embedActive < EMBED_CONCURRENCY) { embedActive++; return; }
+  // Hand-off: releaseEmbedSlot passes its slot straight to the next waiter,
+  // so `embedActive` never dips below the number of running jobs.
+  await new Promise<void>(resolve => embedWaiters.push(resolve));
+}
+
+function releaseEmbedSlot(): void {
+  const next = embedWaiters.shift();
+  if (next) next(); else embedActive--;
+}
+
 export function embedAndUpsert(key: string, body: string): void {
   // 3.3: embed the CANONICAL (title + body) text so a memory's vector reflects
   // its heading — matching what rerank_memories computes for the same key, so a
@@ -201,9 +222,18 @@ export function embedAndUpsert(key: string, body: string): void {
   // unchanged; body is sliced inside embedTextFor (MiniLM truncates past 256
   // tokens, so the slice loses no signal).
   const title = memIndex[key]?.title ?? '';
-  const p = embed(embedTextFor(title, body))
-    .then(vec => { if (vec) return upsertVector(VECTORS_DB, key, vec); })
-    .catch(e => { recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`); });
+  const text = embedTextFor(title, body);
+  const p = (async () => {
+    await acquireEmbedSlot();
+    try {
+      const vec = await embed(text);
+      if (vec) await upsertVector(VECTORS_DB, key, vec);
+    } catch (e) {
+      recordError(`embedAndUpsert(${key}): ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      releaseEmbedSlot();
+    }
+  })();
   pendingEmbeds.add(p);
   p.finally(() => pendingEmbeds.delete(p));
 }
