@@ -10,7 +10,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 
 - **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
 - **What it does for you** — injects the relevant memories at the start of every session and captures decisions and preferences automatically as you work and before each context compaction.
-- **Spec-driven too** — for projects that keep their architecture as code (ADL), it also remembers the *why* behind each rule, links assertions to the tests that enforce them, and records failures and fixes. See [Spec-driven work with ADL](#-spec-driven-work-with-adl).
+- **Spec-driven too** — memories can be tied to a spec: tag any decision, requirement or failure with a `system`, the `elements` it concerns and a `requirements` ID, and recall by element or follow a requirement to its decisions. No ADL needed for that. If the project also keeps its architecture as code (ADL), the tools additionally link each rule to the tests that enforce it. See [Spec-driven work](#-spec-driven-work-with-adl).
 - **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
@@ -24,8 +24,9 @@ flowchart LR
     C --> D[Decisions & preferences<br/>captured automatically]
     D --> E[(~/.total-recall<br/>Markdown vault)]
     E -.-> A
-    C -.->|project has ADL files| G[Spec-driven:<br/>ADL assertions ↔ tests,<br/>rationale & fixes captured]
+    C -.->|memories tagged with<br/>system · elements · requirements| G[Spec-driven memories:<br/>decisions, failures, changes<br/>linked to the spec]
     G --> E
+    H[ADL files, optional] -.->|index_architecture| G
 ```
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
@@ -85,7 +86,10 @@ boot sequence, search pipeline and hook lifecycle are documented in
 
 ### 📐 Spec-driven work with ADL
 
-When a project keeps its architecture as code (ADL files), Total Recall remembers what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. The files stay in your repository as the source of truth.
+Total Recall remembers what a spec does not say: why each rule exists, what was rejected, which checks failed and how they were fixed. This works at two levels:
+
+- **With memories only.** Any memory can carry `system`, `artifact` (`spec`, `adr`, `fitness-result`, …), `elements`, `requirements` and `status`. `recall_memory` and `search_index` filter on `elements`, `get_related_memories` follows shared elements, and a requirement ID ties its decisions together. This needs no ADL file and no index.
+- **With ADL as well.** When a project keeps its architecture as code, the five architecture tools below build on the same memories. The files stay in your repository as the source of truth.
 
 - `index_architecture` reads the project's `*.adl` files into one summary memory per system (elements, assertions and the connections declared with `DEFINE COMMUNICATION`), and links each ADL assertion to the tests that carry its ID.
 - `get_architecture_context`, `trace` and `get_architecture_history` give back the rules, relationships, decisions, failures and changes for one element, requirement or assertion.

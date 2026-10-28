@@ -6,7 +6,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)) over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)), and memories can be tied to a spec with or without ADL over a vault of plain Markdown files under `~/.total-recall/`.
 - **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
@@ -264,7 +264,7 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 
 ## 📐 Spec-driven architecture (ADL)
 
-For projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) (landscape and connections go in a separate file with `DEFINE COMMUNICATION`). The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
+Spec-driven work has two levels. **Memories alone** are enough to start: any memory can carry `system`, `artifact`, `elements`, `requirements` and `status` (see step 2 below), `recall_memory` and `search_index` filter on `elements`, `get_related_memories` follows shared elements, and a requirement ID ties its decisions together. No ADL file and no index is needed. **ADL adds the architecture tools** for projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) (landscape and connections go in a separate file with `DEFINE COMMUNICATION`). The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
 
 1. `index_architecture(path)` reads every `*.adl` file under `path` into one memory per system. It records the elements, assertions (with their `# [ID]` tag), relationships (each `DEFINE COMMUNICATION`), ADL definitions such as capabilities and contracts, and the test lines that carry each assertion ID. It stores the repo-relative path and the commit, not the files. Re-running it on unchanged files writes nothing.
 2. Memories link to the architecture through optional frontmatter fields: `system`, `artifact` (`spec`, `adl`, `adr`, `fitness-result`), `elements` (`adl:<domain>.<component>`, `assert:<ID>`), `requirements`, `sourcePath`, `sourceRev`, `status` (`proposed`, `accepted`, `superseded`, `failed`, `resolved`) and `supersedes`. `store_memory`, `update_memory`, export and import carry them; `recall_memory` and `search_index` filter on `elements`; `get_related_memories` relates memories that share elements.

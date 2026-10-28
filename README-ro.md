@@ -10,7 +10,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 
 - **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code și Gemini/Antigravity: 22 de unelte MCP (17 pentru memorie, 5 pentru lucrul spec-driven cu arhitectura) peste un vault de fișiere Markdown din `~/.total-recall`.
 - **Ce face pentru tine** — injectează memoriile relevante la începutul fiecărei sesiuni și capturează automat deciziile și preferințele pe măsură ce lucrezi și înainte de fiecare compactare a contextului, ca să nu repeți același context.
-- **Și spec-driven** — pentru proiectele care își țin arhitectura ca cod (ADL), reține și *de ce* există fiecare regulă, leagă aserțiunile de testele care le impun și înregistrează eșecurile și reparațiile. Vezi [Lucru spec-driven cu ADL](#-lucru-spec-driven-cu-adl).
+- **Și spec-driven** — memoriile pot fi legate de o specificație: etichetezi orice decizie, cerință sau eșec cu un `system`, `elements` la care se referă și un ID în `requirements`, apoi cauți după element sau urmărești o cerință până la deciziile ei. Pentru asta nu ai nevoie de ADL. Dacă proiectul își ține și arhitectura ca cod (ADL), uneltele leagă în plus fiecare regulă de testele care o impun. Vezi [Lucru spec-driven](#-lucru-spec-driven-cu-adl).
 - **Cum caută** — hibrid: TF-IDF × curba uitării Ebbinghaus, plus căutare semantică opțională; degradează curat la căutare de text dacă căutarea semantică nu e activată.
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
@@ -24,8 +24,9 @@ flowchart LR
     C --> D[Deciziile & preferințele<br/>capturate automat]
     D --> E[(~/.total-recall<br/>vault Markdown)]
     E -.-> A
-    C -.->|proiectul are fișiere ADL| G[Spec-driven:<br/>aserțiuni ADL ↔ teste,<br/>motive & reparații capturate]
+    C -.->|memorii etichetate cu<br/>system · elements · requirements| G[Memorii spec-driven:<br/>decizii, eșecuri, schimbări<br/>legate de specificație]
     G --> E
+    H[Fișiere ADL, opțional] -.->|index_architecture| G
 ```
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
@@ -88,7 +89,10 @@ secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-uril
 
 ### 📐 Lucru spec-driven cu ADL
 
-Când un proiect își ține arhitectura ca cod (fișiere ADL), Total Recall reține ce nu scrie în fișiere: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Fișierele rămân în repository, ca sursă de adevăr.
+Total Recall reține ce nu spune o specificație: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Funcționează la două niveluri:
+
+- **Doar cu memorii.** Orice memorie poate purta `system`, `artifact` (`spec`, `adr`, `fitness-result`, …), `elements`, `requirements` și `status`. `recall_memory` și `search_index` filtrează după `elements`, `get_related_memories` urmărește elementele comune, iar un ID de cerință leagă între ele deciziile ei. Nu e nevoie de fișiere ADL și nici de index.
+- **Cu ADL în plus.** Când proiectul își ține arhitectura ca cod, cele cinci unelte de arhitectură de mai jos se sprijină pe aceleași memorii. Fișierele rămân în repository, ca sursă de adevăr.
 
 - `index_architecture` citește fișierele `*.adl` ale proiectului într-o memorie de rezumat pentru fiecare sistem (elemente, aserțiuni și conexiunile declarate cu `DEFINE COMMUNICATION`) și leagă fiecare aserțiune ADL de testele care îi poartă ID-ul.
 - `get_architecture_context`, `trace` și `get_architecture_history` întorc regulile, relațiile, deciziile, eșecurile și schimbările pentru un element, o cerință sau o aserțiune.
