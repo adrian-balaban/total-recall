@@ -15,7 +15,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.3.2, stabilă: 890 teste trec, Test Coverage 96.3% statements, Mutation tests ≈72%.
+- **Status** — v1.3.2, stabilă: 894 teste trec, Test Coverage 96.3% statements, Mutation tests ≈78%.
 
 ```mermaid
 flowchart LR
@@ -220,10 +220,10 @@ Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este
 
 | | |
 |---|---|
-| **Versiune** | 1.2.1 — stabilă |
-| **Teste** | 778 unitare + 20 de integrare, toate trec · 47 fișiere · ~13k linii de cod de test |
+| **Versiune** | 1.3.2 — stabilă |
+| **Teste** | 894 unitare + 24 de integrare, toate trec · 64 fișiere · ~15k linii de cod de test |
 | **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
-| **Mutation tests** | ≈72% (Stryker, 16 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
+| **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
 | **Release-uri** | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă |
 | **Audit** | 0 critice în dependențele de producție |
@@ -242,9 +242,9 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
   confidențialitate protejează doar push-ul spre exterior; nimic nu izolează conținutul care
   intră. Până la remediere, dă drept de push în vault-ul org doar persoanelor de încredere și
   protejează-i branch-ul. Vezi [SECURITY.md](SECURITY.md).
-- **Trei module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
-  modul divergă puternic de acoperire: `embeddings.ts` 48.8%, `persistence.ts` 55.1% și
-  `tfidf.ts` 60.9%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%
+- **Două module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
+  modul divergă puternic de acoperire: `embeddings.ts` 50.6% și
+  `persistence.ts` 55.1%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%
   mutație, cu 120 mutanți supraviețuitori: testele execută codul, dar nu ar observa dacă
   s-ar strica. Acoperirea singură ar fi ratat asta; de aceea poarta se uită la mutație.
 - **Scorul de Mutation tests nu este reproductibil de la o rulare la alta.** Două rulări CI fără nicio

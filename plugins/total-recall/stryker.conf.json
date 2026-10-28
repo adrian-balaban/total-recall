@@ -26,8 +26,7 @@
     "src/vault-scan.ts",
     "src/state.ts",
     "src/embeddings.ts",
-    "src/errors.ts",
-    "src/types.ts"
+    "src/errors.ts"
   ],
   "thresholds": {
     "high": 80,
