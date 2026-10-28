@@ -18,14 +18,7 @@ import {
 
 describe('architecture fitness functions', () => {
   describe('dependency structure', () => {
-    // KNOWN VIOLATION — `it.fails` keeps CI green while the debt exists and turns
-    // red the moment it is paid, forcing this marker to be flipped to `it`.
-    // All six cycles share one back-edge: state.ts → persistence.ts
-    // (bumpAccess() calls scheduleAccessSave()), and persistence.ts reaches
-    // state.ts again via tfidf, vault-scan, vectorStore and embeddings.
-    // Fix: have state.ts expose a registerAccessSaveHook() that persistence.ts
-    // sets at load, so the dependency points one way (persistence → state).
-    it.fails('[TR-S7] has no circular dependencies', async () => {
+    it('[TR-S7] has no circular dependencies', async () => {
       const rule = projectFiles().inPath(PROD).should().haveNoCycles();
       await expect(rule).toPassAsync();
     });
@@ -87,6 +80,15 @@ describe('architecture fitness functions', () => {
         .shouldNot()
         .dependOnFiles()
         .inPath(/^src\/(?!__tests__\/|state\.ts$|tools\/registry\.ts$)/);
+      await expect(rule).toPassAsync();
+    });
+
+    it('[TR-S9] state.ts has no runtime imports (type-only types.ts is fine)', async () => {
+      const rule = projectFiles()
+        .inPath(/^src\/state\.ts$/)
+        .shouldNot()
+        .dependOnFiles()
+        .inPath(/^src\/(?!__tests__\/|state\.ts$|types\.ts$)/);
       await expect(rule).toPassAsync();
     });
 

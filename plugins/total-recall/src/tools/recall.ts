@@ -1,7 +1,8 @@
 import { VECTORS_DB } from '../paths.js';
 import { tfidfSearch } from '../tfidf.js';
 import { toCutoff, inDateWindow } from '../dates.js';
-import { memIndex, bumpAccess, recordError } from '../state.js';
+import { memIndex, recordError } from '../state.js';
+import { bumpAccess } from '../persistence.js';
 import { embed } from '../embeddings.js';
 import { searchVector } from '../vectorStore.js';
 import { reciprocalRankFusion } from '../rrf.js';

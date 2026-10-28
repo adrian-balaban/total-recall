@@ -1,6 +1,7 @@
 import { computeRetentionStrength, daysSince } from '../ebbinghaus.js';
 import { toCutoff, inDateWindow } from '../dates.js';
-import { memIndex, errors, perfSamples, bumpAccess } from '../state.js';
+import { memIndex, errors, perfSamples } from '../state.js';
+import { bumpAccess } from '../persistence.js';
 import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable, depsInstalled } from '../embeddings.js';
 import { getVecMeta } from '../vectorStore.js';

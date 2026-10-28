@@ -26,5 +26,5 @@ ASSERT(Each of the store, mutate, query, recall and rerank tools has no dependen
 ASSERT(Tool Registry depends only on State) # [TR-S6]
 ASSERT(Spec has no dependency on Tools) # [TR-S8]
 
-# KNOWN DEBT: state -> persistence back-edge (bumpAccess calls scheduleAccessSave) closes six cycles
 ASSERT(Total Recall has no circular dependencies) # [TR-S7]
+ASSERT(State has no dependency on any other component) # [TR-S9]
