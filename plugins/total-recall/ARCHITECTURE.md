@@ -40,7 +40,7 @@ graph TB
 
 ### C2 — Containers
 
-The system is not one process. A short-lived Node process serves MCP tools; separate shell/Node scripts run on harness hook events; state lives in plain files. Note the two writers of `.index-cache.txt`: the MCP server (debounced) and `build-memory-index.sh` (a standalone bash scan that needs no running server).
+The system is not one process. A short-lived Node process serves MCP tools; separate shell/Node scripts run on harness hook events; state lives in plain files. The MCP server is started by the plugin's own `.mcp.json` (a stdio entry that runs `${CLAUDE_PLUGIN_ROOT}/dist/index.js`); `install.sh` registers nothing at user scope for a plugin-managed install, so an empty `.mcp.json` means no tools at all (pinned by `plugin-manifest.test.ts`). Note the two writers of `.index-cache.txt`: the MCP server (debounced) and `build-memory-index.sh` (a standalone bash scan that needs no running server).
 
 ```mermaid
 graph TB
@@ -91,7 +91,7 @@ graph TB
 ```mermaid
 graph TB
     idxts["index.ts<br/><i>boot stub · signal handlers<br/>· shutdown() latch</i>"]
-    srv["server.ts<br/><i>McpServer · six register() calls · main()</i>"]
+    srv["server.ts<br/><i>McpServer · seven register() calls · main()</i>"]
     reg["tools/registry.ts<br/><i>wrapHandler · CallToolResult<br/>envelope · perf + error samples</i>"]
 
     subgraph Tools["tools/ — the 22 tools"]
@@ -198,14 +198,14 @@ sequenceDiagram
         V-->>H: recordError(...) → TF-IDF ranking kept
     end
 
-    H->>H: excludeJournal re-filter · since/before · minScore · slice(limit)
+    H->>H: excludeJournal re-filter · since/before · minScore · elements filter · slice(limit)
     loop each result
-        H->>H: accessCount++, lastAccessed = now
         opt full = true
+            H->>P: bumpAccess(meta) → accessCount++, lastAccessed = now
             H->>L: read body through contentCache (miss → readFileSync)
         end
     end
-    H->>P: scheduleSave() (debounced 1s → index.json)
+    P-->>P: scheduleAccessSave() (debounced 1s → index.json, no IDF rebuild)
     H-->>R: results
     R->>R: recordPerfSample + wrap in CallToolResult
     R-->>C: memories + scores
@@ -222,6 +222,7 @@ src/
 ├── state.ts          shared in-memory singletons (memIndex, invertedIndex, errors, perfSamples)
 ├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
 ├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex
+├── errors.ts         typed errors (e.g. MemoryExistsError) so import_memories branches on type, not message text
 ├── lru-cache.ts      LRUCache class + shared contentCache instance (100 entries, 30 min TTL)
 ├── persistence.ts    loadIndexes, debounced scheduleSave/scheduleIdfRecalc, bumpAccess, saveNow, flushPending, buildIndexCache
 ├── frontmatter.ts    minimal YAML frontmatter parser/serializer (replaces gray-matter)
@@ -313,7 +314,7 @@ org:      same but prefixed with "org/"
 ```
 main()
  ├─ ensureDir(PERSONAL_VAULT, ORG_VAULT)
- ├─ ensureDir(<PERSONAL_VAULT>/<each DEFAULT_CATEGORIES>)
+ ├─ ensureDir(<PERSONAL_VAULT>/<each DEFAULT_CATEGORIES> and each specDriven category)
  ├─ loadIndexes()        ← reads index.json ONLY into memIndex (#18: invertedIndex.json
  │                        is no longer loaded — a dead read, since the immediately-
  │                        following recalcIdfNow rebuilds it from memIndex and main()
@@ -326,7 +327,8 @@ main()
  ├─ scheduleSave()       ← debounced 1s → index.json write
  ├─ markIndexFresh()     ← clear dirtyTokens so the boot timer skips the +2s IDF recalc
  │                        (recalcIdfNow already did it; tokens did not change in between)
- └─ server.connect(StdioServerTransport)
+ ├─ server.connect(StdioServerTransport)
+ └─ startAutoReconcile()  ← polls the .reconcile-requested marker dropped by pull-org-vault.sh
 ```
 
 On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs `flushPending()` (synchronous index write) → `await flushEmbeddings()` (drain in-flight embed→upsert) → `process.exit(0)`. `shutdown()` is **idempotent via a module-level `shuttingDown` latch** — the four triggers can fire concurrently (SIGTERM-while-stdin-closing, a double signal), and the latch makes the second-and-later call a no-op so the flush completes exactly once. `beforeExit` only calls `flushPending()` (no embedding drain, no exit). Pinned structurally by `index-stdin-end.test.ts` and dynamically by `src/__tests__/integration/shutdown-sigterm.integration.test.ts` (spawns real `dist/index.js`, SIGTERMs mid-session before the 1s debounce, asserts the stored key lands in `index.json` on disk before exit).
@@ -353,8 +355,8 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 ### Search / Read
 | Tool | Description |
 |---|---|
-| `recall_memory` | TF-IDF + Ebbinghaus, optionally fused with vector search via RRF |
-| `search_index` | Metadata-only TF-IDF (no file reads, no accessCount bump) |
+| `recall_memory` | TF-IDF + Ebbinghaus, optionally fused with vector search via RRF; optional `elements` filter (spec-driven) |
+| `search_index` | Metadata-only TF-IDF (no file reads, no accessCount bump); optional `elements` filter (spec-driven) |
 | `get_memories_by_keys` | Direct key lookup; reads through LRU cache |
 | `rerank_memories` | Re-rank a candidate list by cosine similarity to a query, using local embeddings (no LLM call) |
 
@@ -362,7 +364,7 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 | Tool | Description |
 |---|---|
 | `list_memories` | Paginated metadata listing with category/tag filter |
-| `get_related_memories` | Jaccard tag similarity + same-category boost (0.2); requires ≥1 shared tag |
+| `get_related_memories` | Jaccard tag similarity + same-category boost (0.2); requires ≥1 shared tag. With the spec-driven fields, shared `elements` also relate two memories |
 | `get_timeline` | Memories in date range, ordered by `updated` |
 | `get_stats` | Total + by-category counts, cache stats, perf percentiles, recent errors, and a `vector` block (`enabled` / `depsPresent` / live `model` / stored model+dim); `enabled` defaults to true when the optional deps are loadable (via `depsInstalled()`), so a fresh session reports vector search on before the lazy embedder load fires — back-compat `vectorSearchEnabled` alias mirrors `enabled` |
 
@@ -421,7 +423,7 @@ store_memory(title, content, tags, category, importanceScore, ...)
  ├─ contentCache.set(key, body)
  ├─ if !isOrg → appendJournal('store', key, title)
  ├─ scheduleSave()                  ← debounced 1s
- └─ embed(content).then(vec → upsertVector(...))   ← async, fire-and-forget
+ └─ embedAndUpsert(key, body)       ← async, fire-and-forget, tracked in pendingEmbeds so shutdown can drain it
 ```
 
 ---
@@ -452,13 +454,15 @@ query
   ├─ filter by `minScore` (optional floor; default 0 = no filtering. Scores are NOT
   │    comparable across hybrid modes — RRF-fused scores are tiny, raw TF-IDF larger;
   │    use hybrid=false for a predictable threshold scale)
+  ├─ filter by `elements` (optional; spec-driven, only advertised when specDriven is on)
   ├─ slice to `limit`
   └─ for each result:
-       ├─ meta.accessCount++; meta.lastAccessed = now
-       ├─ scheduleSave()
-       └─ if full=true → read file through LRU cache → return with content
-          else         → return metadata + score only
-```
+       ├─ if full=true  → bumpAccess(meta): accessCount++, lastAccessed = now,
+       │                  scheduleAccessSave() (read path: index.json only, no IDF rebuild)
+       │                  then read the body through the LRU cache
+       └─ else          → return metadata + score only. A metadata-only recall is NOT an
+                          access, otherwise every search would refresh lastAccessed, nothing
+                          would ever decay and prune_memories could never nominate anything
 
 ### Ebbinghaus Decay
 
@@ -476,7 +480,7 @@ A memory with `importanceScore=1.0` has `λ=0.032` (slow decay); one with `impor
 
 ## 💾 Persistence & Debounce
 
-All writes go to disk synchronously for the `.md` file but debounce the index:
+All writes go to disk synchronously for the `.md` file but debounce the index. There are two entry points that share one 1 s index write:
 
 ```
 any write operation
@@ -489,7 +493,15 @@ any write operation
                                               → buildIndexCache()  (.index-cache.txt)
 ```
 
-`flushPending()` (called on SIGTERM/exit) cancels pending timers and runs both synchronously so no debounced write is lost when the MCP client disconnects.
+```
+read path: bumpAccess(meta)  (persistence.ts; used by recall_memory(full) and get_memories_by_keys)
+       └─ scheduleAccessSave()
+              └─ setTimeout(1s) → writeFileSync(index.json)      ← no dirtyTokens, no IDF rebuild
+```
+
+A read changes zero tokens, so it never triggers the inverted-index rebuild; only `scheduleSave()` sets the `dirtyTokens` flag that arms it. `bumpAccess` lives in `persistence.ts`, not `state.ts`, so `state.ts` keeps no runtime imports (`[TR-S9]`) and the import graph has no cycles (`[TR-S7]`).
+
+`flushPending()` (called on SIGTERM/exit) cancels pending timers and writes the index synchronously, so no debounced write is lost when the MCP client disconnects. It runs the O(N) inverted-index rebuild only when `dirtyTokens` is set or an IDF recalc was already queued, so a read-only session exits without one.
 
 **Single-writer assumption (cross-process caveat).** `index.json` is file-backed shared state with no file lock / CAS. Each Claude Code window spawns its own total-recall stdio process; both load `memIndex` at boot, mutate in memory, and `flushPending` via `atomicWrite` (write-`.tmp` + rename) on exit. Last rename wins; an earlier process's flush is silently discarded. The disk-durable fields (`title`, `tags`, `content`, `sessions` — `sessions` is written to frontmatter by `mutate.ts` and read back by `reconcileIndex`) are re-derived from the `.md` files on the next boot, so a clobbered `index.json` does not lose them. The fields genuinely at risk are the runtime-only `accessCount` / `lastAccessed` (soft Ebbinghaus-retention signals not stored in frontmatter) — a concurrent-session clobber resets those to whatever the last writer had in memory. Impact is limited to retention-decay accuracy, not memory content. A real fix would persist `accessCount`/`lastAccessed` into `.md` frontmatter on flush or guard `index.json` writes with a `flock`; neither is implemented today.
 
@@ -522,7 +534,7 @@ The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
 
 ## 🪝 Hook Lifecycle
 
-Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness.
+Hooks are declared in `hooks/hooks.json` (Claude Code) and `hooks/hooks.gemini.json` (Gemini CLI: `SessionStart`, `AfterTool`, `PreCompress`, `SessionEnd`) and executed by the host harness. The sections below describe the Claude Code events.
 
 ### `SessionStart` (4 steps, sequential)
 
@@ -581,7 +593,12 @@ extract-and-store-memories.sh
 ### `SessionEnd`
 
 ```
-session-end.sh  — logs the session and flushes pending embedding writes before exit
+session-end.sh  — logs the session
+                  — SIGTERMs the MCP child (backup to the stdio-end handler) so pending index and
+                    embedding writes flush before exit
+                  — auto-commits the personal vault if it is a local git repo (H1 durability;
+                    never git-inits, never touches a remote)
+                  — emits {"continue":true}, not an additionalContext envelope
 ```
 
 ---
