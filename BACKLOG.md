@@ -207,7 +207,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   it a dev-only harness (not shipped in `dist/`), same as the mutation tooling.
 - **Partly started (2026-10-27):** `scripts/eval/spec-eval.ts` evaluates the
   spec-driven tools (decision@1 per element, rule recall, trace hit rate, stale
-  decisions) on a corpus of ADL/CALM projects; `spec-eval.test.ts` runs it on a
+  decisions) on a corpus of ADL projects; `spec-eval.test.ts` runs it on a
   generated corpus in CI. Generic `recall_memory` quality is still not evaluated.
 
 ### Org-sync branch-default divergence on detached HEAD (pull vs sync)

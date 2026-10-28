@@ -13,7 +13,7 @@ Each requirement has a stable ID. Never reuse an ID; mark a dropped one as withd
 | ID | Requirement | Priority | Architecture elements |
 |---|---|---|---|
 | REQ-1 | … | must | `adl:<domain>.<component>` |
-| REQ-2 | … | should | `calm:<node>` |
+| REQ-2 | … | should | `adl:<domain>.<component>` |
 
 ## Quality attributes
 

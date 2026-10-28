@@ -26,7 +26,7 @@ function reset() {
 const SPEC = {
   system: 'make-the-grade',
   artifact: 'adr',
-  elements: ['adl:testing.answercapture', 'assert:TR-S2', 'calm:org-vault'],
+  elements: ['adl:testing.answercapture', 'assert:TR-S2', 'adl:org-vault'],
   requirements: ['REQ-7'],
   sourcePath: 'docs/adl/structure.adl',
   sourceRev: 'abc1234',
@@ -58,11 +58,11 @@ describe('spec-driven frontmatter fields', () => {
     const f2 = path.join(PERSONAL, 'knowledge', 'old.md');
     fs.mkdirSync(path.dirname(f1), { recursive: true });
     fs.mkdirSync(path.dirname(f2), { recursive: true });
-    fs.writeFileSync(f1, '---\ntitle: "Hand"\ntags: []\nsystem: mtg\nelements: ["calm:org-vault"]\nstatus: accepted\n---\nbody\n');
+    fs.writeFileSync(f1, '---\ntitle: "Hand"\ntags: []\nsystem: mtg\nelements: ["adl:org-vault"]\nstatus: accepted\n---\nbody\n');
     fs.writeFileSync(f2, '---\ntitle: "Old"\ntags: [a]\n---\nbody\n');
     indexFile(f1, false);
     indexFile(f2, false);
-    expect(memIndex['decisions/hand']).toMatchObject({ system: 'mtg', elements: ['calm:org-vault'], status: 'accepted' });
+    expect(memIndex['decisions/hand']).toMatchObject({ system: 'mtg', elements: ['adl:org-vault'], status: 'accepted' });
     expect(memIndex['knowledge/old']!.title).toBe('Old');
     expect(memIndex['knowledge/old']!.elements).toBeUndefined();
   });
@@ -79,10 +79,10 @@ describe('spec-driven frontmatter fields', () => {
 
   it('update_memory patches only the fields it is given', () => {
     const { key, filePath } = storeMemory({ title: 'Patch me', content: 'x', category: 'decisions', ...SPEC });
-    updateMemory({ key, status: 'superseded', elements: ['calm:mcp-server'] });
+    updateMemory({ key, status: 'superseded', elements: ['adl:mcp-server'] });
     const { data } = parseFrontmatter(fs.readFileSync(filePath, 'utf8'));
     expect(data.status).toBe('superseded');
-    expect(data.elements).toEqual(['calm:mcp-server']);
+    expect(data.elements).toEqual(['adl:mcp-server']);
     expect(data.system).toBe('make-the-grade');
     expect(memIndex[key]).toMatchObject({ status: 'superseded', system: 'make-the-grade' });
   });

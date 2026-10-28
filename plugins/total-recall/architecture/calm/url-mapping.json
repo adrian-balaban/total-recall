@@ -1,5 +1,0 @@
-{
-  "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/privacy-filter.requirement.json": "controls/privacy-filter.requirement.json",
-  "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/author-protection.requirement.json": "controls/author-protection.requirement.json",
-  "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/tfidf-fallback.requirement.json": "controls/tfidf-fallback.requirement.json"
-}

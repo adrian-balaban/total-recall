@@ -21,24 +21,22 @@ describe('specDriven config', () => {
   });
 
   it('a wrongly typed value falls back to its default', () => {
-    const c = parseSpecConfig({ sessionSummary: 'yes', sessionSummaryMaxChars: -5, categories: 'specs', calm: 3 });
+    const c = parseSpecConfig({ sessionSummary: 'yes', sessionSummaryMaxChars: -5, categories: 'specs', adlExtensions: 3 });
     expect(c.sessionSummary).toBe(true);
     expect(c.sessionSummaryMaxChars).toBe(1500);
     expect(c.categories).toEqual(SPEC_DEFAULTS.categories);
-    expect(c.calm).toEqual(SPEC_DEFAULTS.calm);
+    expect(c.adlExtensions).toEqual(SPEC_DEFAULTS.adlExtensions);
   });
 
-  it('rejects a category that is not a safe directory name and a cliVersion that could inject arguments', () => {
+  it('rejects a category that is not a safe directory name', () => {
     expect(parseSpecConfig({ categories: ['../etc', 'ok-cat', 'Bad Name'] }).categories).toEqual(['ok-cat']);
-    expect(parseSpecConfig({ calm: { cliVersion: '1.0 --registry=evil' } }).calm.cliVersion).toBe('1.66.0');
-    expect(parseSpecConfig({ calm: { cliVersion: '1.70.2', allowNpx: true } }).calm).toMatchObject({ cliVersion: '1.70.2', allowNpx: true });
   });
 
   it('classifies architecture files by the configured extensions', () => {
     const c = parseSpecConfig({ adlExtensions: ['.adl', '.arch'] });
     expect(isArchitectureFile('a/structure.adl', c)).toBe('adl');
     expect(isArchitectureFile('x.arch', c)).toBe('adl');
-    expect(isArchitectureFile('sys.calm.json', c)).toBe('calm');
+    expect(isArchitectureFile('sys.calm.json', c)).toBeNull();
     expect(isArchitectureFile('package.json', c)).toBeNull();
   });
 });

@@ -91,7 +91,7 @@ git config --global tag.gpgsign true
 
 ## 🏗️ Architecture
 
-This is an MCP server that exposes 22 tools: 17 for persistent memory management and 5 spec-driven architecture tools (on by default; `specDriven` in config.json, see SPEC-DRIVEN-PLAN.md at the repo root). It runs as a stdio process compatible with Claude Code and Gemini CLI. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
+This is an MCP server that exposes 22 tools: 17 for persistent memory management and 5 spec-driven architecture tools (on by default; `specDriven` in config.json, see the plugin README). It runs as a stdio process compatible with Claude Code and Gemini CLI. The entry point `src/index.ts` is a thin boot stub (signal handlers + `main()`); everything else is split across focused modules:
 
 - `src/server.ts` — `McpServer` construction, the `register(server)` calls that wire the 17 core tools plus the spec-driven tools listed in `specDriven.tools`, and `main()`. `specDriven` is read once at module load: changing it needs a restart. (6.1-6.3: migrated from the deprecated low-level `Server` + `setRequestHandler(ListTools/CallTool)` to the high-level `McpServer` + `registerTool`. server.ts no longer owns schemas or a dispatch table — each tool's Zod schema + handler + `register()` are co-located in their `tools/*.ts` module, and `registerTool`'s `safeParse` enforces the schema at the dispatch boundary.)
 - `src/state.ts` — the shared in-memory singletons (`memIndex`, `invertedIndex`, `errors`, `perfSamples`). These are `const` objects with a stable identity; every module that reads/writes the index imports them from here so there is exactly one index across the process. Mutate in place (`memIndex[key] = …`, `delete memIndex[key]`); the two sites that formerly reassigned them (`loadIndexes`, `rebuildInvertedIndex`) now clear-then-populate the same object
@@ -104,7 +104,7 @@ This is an MCP server that exposes 22 tools: 17 for persistent memory management
 - `src/dates.ts` — `parseRelativeDate`
 - `src/journal.ts` — `appendJournal`
 - `src/tools/architecture.ts` — the 5 spec-driven tools (`index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture`); `register(server, spec)` registers only `spec.tools`. Like `bulk.ts` it reuses `storeMemory`/`updateMemory`
-- `src/spec/*` — spec-driven support: `config.ts` (defaults + parsing of the `specDriven` block; bundled as `dist/spec-config.mjs` for hooks), `fields.ts` (optional frontmatter fields + the one sanitiser every path uses; bundled as `dist/spec-fields.mjs`), `elements.ts`, `adl-parse.ts`, `calm-parse.ts` (leaves), `indexer.ts`, `context.ts`, `validate.ts`, `org-guard.ts`, `schema.ts`, and `exec.ts` — the only spec module that starts processes ([TR-R4])
+- `src/spec/*` — spec-driven support: `config.ts` (defaults + parsing of the `specDriven` block; bundled as `dist/spec-config.mjs` for hooks), `fields.ts` (optional frontmatter fields + the one sanitiser every path uses; bundled as `dist/spec-fields.mjs`), `elements.ts`, `adl-parse.ts` (leaves), `indexer.ts`, `context.ts`, `validate.ts`, `org-guard.ts`, `schema.ts`, and `exec.ts` — the only spec module that starts processes ([TR-R4])
 - `src/tools/{store,recall,query,mutate,rerank,bulk}.ts` — the 17 core tool implementations. Each module also exports a `register(server)` (6.3) that calls `server.registerTool(name, { description, inputSchema: <Zod raw shape> }, wrapHandler(name, handler))`, co-locating each tool's Zod schema with the handler it validates
 - `src/tools/registry.ts` — `wrapHandler` (6.1-6.3): the CallToolResult envelope + `recordPerfSample`/`recordError` instrumentation the old `setRequestHandler(CallTool)` owned. `registerTool` runs `safeParse` on the caller's args BEFORE the wrapped handler (6.2), so malformed calls are rejected at the dispatch boundary with a parse-error result; the handlers' defensive coercion (`String(args.title ?? '')`, scalar-tags leniency) is retained as belt-and-suspenders for the MCP path and the sole guard for the internal path (`import_memories` round-trip + unit tests, which bypass the Zod boundary)
 
@@ -148,7 +148,7 @@ When using total-recall tools, follow the retrieval order in `skills/memory-work
 5. `recall_memory(query=..., full=false)` — TF-IDF + Ebbinghaus
 6. `recall_memory(query=..., full=true)` — with full content
 
-For ADL/CALM projects, follow `skills/spec-driven-workflow/SKILL.md` (index → context before a change → validate → capture decisions with `system`/`elements`/`requirements`).
+For ADL projects, follow `skills/spec-driven-workflow/SKILL.md` (index → context before a change → validate → capture decisions with `system`/`elements`/`requirements`).
 
 Every stored memory must include a `## Executive Summary` section (answers WHY it matters, not just WHAT). Call `store_memory` from the main agent, never a subagent. Check for duplicates with `search_index` before storing. Set `importanceScore` (0.3=low, 0.7=high, 1.0=critical).
 

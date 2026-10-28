@@ -19,7 +19,6 @@ import { rebuildInvertedIndex } from '../tfidf.js';
 
 const TR = path.join(process.env.HOME!, '.total-recall');
 const PROJECT = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-spec-project-'));
-const BIN = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-spec-bin-'));
 const HAS_GIT = spawnSync('git', ['--version']).status === 0;
 
 const ADL = `DEFINE SYSTEM Shop AS shop
@@ -27,20 +26,10 @@ const ADL = `DEFINE SYSTEM Shop AS shop
         DEFINE COMPONENT Order Api AS api
     DEFINE DATABASE Order Store AS order-store
 
+DEFINE COMMUNICATION Order Api TO Order Store AS jdbc
 ASSERT(Order Api is the only writer of Order Store) # [SHOP-1]
 ASSERT(Order Api has no dependency on Payments) # [SHOP-2]
 `;
-const CALM = {
-  nodes: [
-    { 'unique-id': 'order-api', 'node-type': 'service', name: 'Order API', description: 'd' },
-    { 'unique-id': 'order-db', 'node-type': 'database', name: 'Order DB', description: 'd',
-      controls: { encryption: { description: 'Encrypted at rest', requirements: [] } } },
-  ],
-  relationships: [
-    { 'unique-id': 'api-db', 'relationship-type': { connects: { source: { node: 'order-api' }, destination: { node: 'order-db' } } } },
-  ],
-};
-
 function write(rel: string, text: string) {
   const p = path.join(PROJECT, rel);
   fs.mkdirSync(path.dirname(p), { recursive: true });
@@ -51,29 +40,11 @@ function git(...args: string[]) {
   spawnSync('git', args, { cwd: PROJECT, env: { ...process.env, GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@example.com', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@example.com' } });
 }
 
-// A stand-in `calm` CLI: valid unless the document mentions "ghost".
-function fakeCalm() {
-  const p = path.join(BIN, 'calm');
-  fs.writeFileSync(p, `#!/usr/bin/env node
-const fs = require('fs');
-const doc = fs.readFileSync(process.argv[process.argv.indexOf('-a') + 1], 'utf8');
-const bad = doc.includes('ghost');
-console.log(JSON.stringify({ jsonSchemaValidationOutputs: [], spectralSchemaValidationOutputs: bad
-  ? [{ severity: 'error', message: "'ghost' does not refer to an existing node", path: '/relationships/api-db/relationship-type' }] : [],
-  hasErrors: bad }));
-process.exit(bad ? 1 : 0);
-`);
-  fs.chmodSync(p, 0o755);
-}
-
 beforeAll(() => {
   write('arch/shop.adl', ADL);
-  write('arch/shop.calm.json', JSON.stringify(CALM));
   write('src/order.test.ts', "it('[SHOP-1] only the api writes the store', () => {});\n");
   write('node_modules/x/ignored.adl', 'DEFINE SYSTEM Ignored AS ignored\n');
   if (HAS_GIT) { git('init', '-q'); git('add', '.'); git('commit', '-q', '-m', 'init'); }
-  fakeCalm();
-  process.env.PATH = `${BIN}${path.delimiter}${process.env.PATH}`;
   for (const k of Object.keys(memIndex)) delete memIndex[k];
   fs.rmSync(TR, { recursive: true, force: true });
   fs.mkdirSync(path.join(TR, 'personal-vault'), { recursive: true });
@@ -82,17 +53,16 @@ beforeAll(() => {
 afterAll(() => {
   fs.rmSync(TR, { recursive: true, force: true });
   fs.rmSync(PROJECT, { recursive: true, force: true });
-  fs.rmSync(BIN, { recursive: true, force: true });
 });
 
 describe('index_architecture', () => {
-  it('stores one index memory per system with elements, assertions, controls and linked tests', () => {
+  it('stores one index memory per system with elements, assertions, relationships and linked tests', () => {
     const res = indexArchitecture({ path: PROJECT });
     expect(res.systems).toHaveLength(1);
-    expect(res.systems[0]).toMatchObject({ system: 'shop', status: 'created', files: 2 });
+    expect(res.systems[0]).toMatchObject({ system: 'shop', status: 'created', files: 1 });
     const meta = memIndex[indexKey('shop')]!;
     expect(meta.system).toBe('shop');
-    expect(meta.elements).toEqual(expect.arrayContaining(['adl:orders.api', 'adl:order-store', 'calm:order-db', 'assert:SHOP-1']));
+    expect(meta.elements).toEqual(expect.arrayContaining(['adl:orders.api', 'adl:order-store', 'assert:SHOP-1']));
     expect(meta.sourcePath).toBe('.');
     if (HAS_GIT) expect(meta.sourceRev).toMatch(/^[0-9a-f]{40}$/);
     const body = fs.readFileSync(meta.filePath, 'utf8');
@@ -127,7 +97,7 @@ describe('architecture retrieval', () => {
   beforeAll(() => {
     storeMemory({
       title: 'Encrypt the order database', content: 'Chose disk encryption because of PCI.', category: 'decisions',
-      system: 'shop', artifact: 'adr', status: 'accepted', elements: ['calm:order-db'], requirements: ['REQ-7'],
+      system: 'shop', artifact: 'adr', status: 'accepted', elements: ['adl:orders.api'], requirements: ['REQ-7'],
     });
     storeMemory({
       title: 'Why order store moved', content: 'Split the store out of the API.', category: 'architecture-changes',
@@ -135,11 +105,10 @@ describe('architecture retrieval', () => {
     });
   });
 
-  it('get_architecture_context for a CALM node returns its control, decision and relationships', () => {
-    const ctx: any = architectureContext({ system: 'shop', element: 'calm:order-db' }, { guardrails: true });
+  it('get_architecture_context for a communicating component returns its decision and relationships', () => {
+    const ctx: any = architectureContext({ system: 'shop', element: 'adl:orders.api' }, { guardrails: true });
     expect(ctx.found).toBe(true);
-    expect(ctx.controls).toEqual([{ owner: 'calm:order-db', name: 'encryption', description: 'Encrypted at rest' }]);
-    expect(ctx.relationships.map((r: any) => r.id)).toEqual(['calm:api-db']);
+    expect(ctx.relationships).toEqual([{ id: 'order-api-to-order-store', kind: 'jdbc', nodes: ['adl:orders.api', 'adl:order-store'], description: '' }]);
     expect(ctx.decisions.map((d: any) => d.title)).toEqual(['Encrypt the order database']);
     expect(ctx.guardrails).toEqual([]);
   });
@@ -162,10 +131,10 @@ describe('architecture retrieval', () => {
     expect(() => architectureContext({ system: 'nope' }, { guardrails: false })).toThrow(/Indexed systems: shop/);
   });
 
-  it('trace follows a requirement to its element, controls and decisions; and an assertion to its tests', () => {
+  it('trace follows a requirement to its element and decisions; and an assertion to its tests', () => {
     const t: any = trace({ id: 'REQ-7' });
     expect(t.requirements.map((r: any) => r.title)).toEqual(['Encrypt the order database']);
-    expect(t.controls.map((c: any) => c.name)).toEqual(['encryption']);
+    expect(t.assertions.map((x: any) => x.id)).toEqual(['SHOP-1', 'SHOP-2']);
     const a: any = trace({ id: 'SHOP-1' });
     expect(a.assertions[0].tests).toHaveLength(1);
     expect(trace({ id: 'SHOP-2' }).untested).toEqual(['SHOP-2']);
@@ -174,56 +143,47 @@ describe('architecture retrieval', () => {
   it('get_architecture_history lists changes in time order, filtered by element', () => {
     const h: any = architectureHistory({ system: 'shop', element: 'adl:order-store' });
     expect(h.changes.map((c: any) => c.title)).toEqual(['Why order store moved']);
-    expect(architectureHistory({ system: 'shop', element: 'calm:order-api' }).changes).toEqual([]);
+    expect(architectureHistory({ system: 'shop', element: 'adl:orders.api' }).changes).toEqual([]);
     expect(h.indexRebuilds.length).toBeGreaterThanOrEqual(1);
   });
 
   it('recall_memory and search_index filter by element; related memories share elements', async () => {
     rebuildInvertedIndex();
-    const hits = await recallMemory({ query: 'order', hybrid: false, elements: ['calm:order-db'] });
+    const hits = await recallMemory({ query: 'order', hybrid: false, elements: ['adl:orders.api'] });
     // the architecture index carries every element, so it matches as well
     expect(hits.map((h: any) => h.title).sort()).toEqual(['Architecture index: shop', 'Encrypt the order database']);
     const idx = searchIndex({ query: 'order', elements: ['adl:order-store'] });
     expect(idx.map((h: any) => h.title)).toContain('Why order store moved');
     expect(idx.map((h: any) => h.title)).not.toContain('Encrypt the order database');
-    const other = storeMemory({ title: 'Order DB backups', content: 'Nightly.', category: 'knowledge', elements: ['calm:order-db'] });
+    const other = storeMemory({ title: 'Order DB backups', content: 'Nightly.', category: 'knowledge', elements: ['adl:orders.api'] });
     const rel = getRelatedMemories({ key: other.key });
     expect(rel.map((r: any) => r.title)).toContain('Encrypt the order database');
   });
 });
 
 describe('validate_architecture', () => {
-  it('stores a failure for an untested assertion and a broken CALM file, then resolves them when they pass', () => {
-    write('arch/shop.calm.json', JSON.stringify(CALM).replace('"order-db"}}', '"ghost"}}'));
+  it('stores a failure for an untested assertion, then resolves it when a test carries the ID', () => {
     const first: any = validateArchitecture({ path: PROJECT });
     expect(first.ok).toBe(false);
-    expect(first.calm).toMatch(/validated with .*calm/);
-    const failed = first.systems[0].failed.map((f: any) => f.check).sort();
-    expect(failed).toEqual(['adl-coverage:SHOP-2', 'calm:arch/shop.calm.json']);
-    const calmFail = Object.values(memIndex).find((m) => m.artifact === 'fitness-result' && m.elements?.includes('calm:api-db'))!;
-    expect(calmFail.status).toBe('failed');
+    expect(first.systems[0].failed.map((f: any) => f.check)).toEqual(['adl-coverage:SHOP-2']);
+    const fail = Object.values(memIndex).find((m) => m.artifact === 'fitness-result' && m.elements?.includes('assert:SHOP-2'))!;
+    expect(fail.status).toBe('failed');
 
     const again: any = validateArchitecture({ path: PROJECT });
-    expect(again.systems[0].recorded.map((r: any) => r.recorded)).toEqual(['failed-again', 'failed-again']);
+    expect(again.systems[0].recorded.map((r: any) => r.recorded)).toEqual(['failed-again']);
 
-    write('arch/shop.calm.json', JSON.stringify(CALM));
     write('src/payments.test.ts', "it('[SHOP-2] api does not import payments', () => {});\n");
     const fixed: any = validateArchitecture({ path: PROJECT, resolvedBy: 'decisions/encrypt-the-order-database' });
     expect(fixed.ok).toBe(true);
-    expect(fixed.systems[0].recorded.map((r: any) => r.recorded)).toEqual(['resolved', 'resolved']);
-    const body = fs.readFileSync(calmFail.filePath, 'utf8');
+    expect(fixed.systems[0].recorded.map((r: any) => r.recorded)).toEqual(['resolved']);
+    const body = fs.readFileSync(fail.filePath, 'utf8');
     expect(body).toMatch(/status: resolved/);
     expect(body).toContain('Resolved by decision `decisions/encrypt-the-order-database`');
   });
 
-  it('without a calm binary and without allowNpx, reports the CLI as unavailable and still checks ADL coverage', () => {
-    const saved = process.env.PATH;
-    process.env.PATH = path.dirname(process.execPath);
-    try {
-      const res: any = validateArchitecture({ path: PROJECT, record: false });
-      expect(res.calm).toMatch(/CALM CLI not available.*npm install -g @finos\/calm-cli@1\.66\.0/);
-      expect(res.systems[0].passed).toBe(2);
-    } finally { process.env.PATH = saved; }
+  it('record: false checks ADL coverage without storing anything', () => {
+    const res: any = validateArchitecture({ path: PROJECT, record: false });
+    expect(res.systems[0]).toMatchObject({ passed: 2, recorded: [] });
   });
 });
 

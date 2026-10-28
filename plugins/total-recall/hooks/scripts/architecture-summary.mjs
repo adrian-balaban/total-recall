@@ -1,9 +1,9 @@
 #!/usr/bin/env node
 // SessionStart helper (called by load-memory-index.sh): when the session's working
-// directory holds ADL or CALM files, print a short architecture summary for the
+// directory holds ADL files, print a short architecture summary for the
 // systems found there, within specDriven.sessionSummaryMaxChars. Prints nothing
 // when the feature is off or there are no architecture files, so a project
-// without ADL/CALM sees exactly the old SessionStart output.
+// without ADL sees exactly the old SessionStart output.
 //
 // Reads ~/.total-recall/index.json (no MCP round-trip). Input: the hook's stdin
 // JSON, for `cwd`. Never fails the hook: any error prints nothing.
@@ -26,7 +26,7 @@ function slug(s) {
 }
 
 function scan(dir, cfg) {
-  const found = { adl: [], calm: [] };
+  const found = [];
   const skip = new Set(cfg.excludeDirs);
   let seen = 0;
   const walk = (d, depth) => {
@@ -37,7 +37,7 @@ function scan(dir, cfg) {
       if (++seen > MAX_ENTRIES) return;
       const p = path.join(d, e.name);
       if (e.isDirectory()) { if (!skip.has(e.name) && !e.name.startsWith('.')) walk(p, depth + 1); }
-      else if (e.isFile()) { const k = isArchitectureFile(e.name, cfg); if (k) found[k].push(p); }
+      else if (e.isFile()) { if (isArchitectureFile(e.name, cfg)) found.push(p); }
     }
   };
   walk(dir, 0);
@@ -47,9 +47,9 @@ function scan(dir, cfg) {
 export function summary(cwd, cfg, entries) {
   if (!cfg.sessionSummary) return '';
   const found = scan(cwd, cfg);
-  if (!found.adl.length && !found.calm.length) return '';
+  if (!found.length) return '';
   const systems = new Set();
-  for (const f of found.adl) {
+  for (const f of found) {
     try {
       const m = fs.readFileSync(f, 'utf8').match(/^\s*DEFINE\s+SYSTEM\s+.+?\s+AS\s+(\S+)/m);
       if (m) systems.add(slug(m[1]));
@@ -57,9 +57,9 @@ export function summary(cwd, cfg, entries) {
   }
   const all = Object.values(entries ?? {});
   const indexed = all.filter((m) => Array.isArray(m.tags) && m.tags.includes('architecture-index') && m.system);
-  // CALM-only project: fall back to the indexed systems whose sourcePath ends with this directory name.
+  // ADL without a DEFINE SYSTEM: fall back to the indexed systems whose sourcePath ends with this directory name.
   if (!systems.size) for (const m of indexed) if (String(m.sourcePath ?? '').split('/').pop() === path.basename(cwd)) systems.add(slug(m.system));
-  const lines = [`### Architecture (spec-driven)`, `${found.adl.length} ADL and ${found.calm.length} CALM file(s) in this project.`];
+  const lines = [`### Architecture (spec-driven)`, `${found.length} ADL file(s) in this project.`];
   for (const sys of systems.size ? systems : ['(unnamed)']) {
     const idx = indexed.find((m) => slug(m.system) === sys);
     if (!idx) {

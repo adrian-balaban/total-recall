@@ -14,7 +14,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.2.1, stable: 862 tests pass, 93.5% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.0, stable: 860 tests pass, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ source-grounded extraction for the capture hook; an evaluation set for `recall_m
 
 | | |
 |---|---|
-| **22 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import, and 5 architecture tools for ADL/CALM projects |
+| **22 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import, and 5 architecture tools for ADL projects |
 | **Hybrid search** | TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings |
 | **Lifecycle hooks** | context injected at session start, memories captured as you work |
 | **Two vaults** | personal stays local; `org`-tagged syncs to a shared Git repo |
@@ -80,22 +80,22 @@ boot sequence, search pipeline and hook lifecycle are documented in
 | **Bulk** | `export_memories`, `import_memories`, `delete_memories` |
 | **Architecture** (spec-driven, can be switched off) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
 
-### 📐 Spec-driven work with ADL and CALM
+### 📐 Spec-driven work with ADL
 
-When a project keeps its architecture as code (ADL files and a CALM document), Total Recall remembers what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. The files stay in your repository as the source of truth.
+When a project keeps its architecture as code (ADL files), Total Recall remembers what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. The files stay in your repository as the source of truth.
 
-- `index_architecture` reads the project's `*.adl` and `*.calm.json` files into one summary memory per system, and links each ADL assertion to the tests that carry its ID.
-- `get_architecture_context`, `trace` and `get_architecture_history` give back the rules, controls, decisions, failures and changes for one element, requirement or assertion.
-- `validate_architecture` runs the CALM CLI and the ADL test-coverage check, and records each failure and its fix.
+- `index_architecture` reads the project's `*.adl` files into one summary memory per system (elements, assertions and the connections declared with `DEFINE COMMUNICATION`), and links each ADL assertion to the tests that carry its ID.
+- `get_architecture_context`, `trace` and `get_architecture_history` give back the rules, relationships, decisions, failures and changes for one element, requirement or assertion.
+- `validate_architecture` runs the ADL test-coverage check, and records each failure and its fix.
 - Memories can carry `system`, `elements`, `requirements` and a few more optional fields. `recall_memory` and `search_index` filter on `elements`.
-- Hooks add a short architecture summary at session start, and a prompt to record the change when an `.adl` or `.calm.json` file is edited.
+- Hooks add a short architecture summary at session start, and a prompt to record the change when an `.adl` file is edited.
 - The `spec-driven-workflow` skill describes the whole loop and has starter templates.
 
-Everything is configurable under `specDriven` in `~/.total-recall/config.json`, and `"specDriven": {"enabled": false}` gives back exactly the 17-tool behaviour. See the [plugin README](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm) for the keys.
+Everything is configurable under `specDriven` in `~/.total-recall/config.json`, and `"specDriven": {"enabled": false}` gives back exactly the 17-tool behaviour. See the [plugin README](plugins/total-recall/README.md#-spec-driven-architecture-adl) for the keys.
 
-## 📐 Architecture as code: ADL and CALM
+## 📐 Architecture as code: ADL
 
-Total Recall describes its own architecture in two notations, ADL for the code level and CALM for the system level, and the build fails when the code drifts from either. The [spec-driven tools](#-spec-driven-work-with-adl-and-calm) work with the same two notations in your own projects.
+Total Recall describes its own architecture in ADL, for the code level (modules, dependencies, data rules) and the system level (who talks to whom), and the build fails when the code drifts from it. The [spec-driven tools](#-spec-driven-work-with-adl) work with the same notation in your own projects.
 
 ### ADL: Architecture Definition Language
 
@@ -118,24 +118,9 @@ The `# [TR-S1]` tag is a Total Recall convention, not part of ADL. The test that
 
 > The course material is not published here: no slides, exercises, reference guide or solutions. This section describes the idea in our own words, and every example is from this repository.
 
-### CALM: Common Architecture Language Model
+The system level lives in [system.adl](plugins/total-recall/architecture/adl/system.adl): the host, the MCP server, the hooks, the local embedder and the org git remote, and the `DEFINE COMMUNICATION` lines that connect them to the two vaults. `adl-consistency.test.ts` fails when a connection names an element nobody defined.
 
-[CALM](https://calm.finos.org/introduction/what-is-calm) is an open specification for describing a software architecture as code, in JSON that people and tools can both read. The [FINOS Architecture as Code community](https://github.com/finos/architecture-as-code) develops it, Morgan Stanley contributed it, and version 1.0 came out in August 2025.
-
-- **Main concepts.** Nodes (the building blocks: services, databases, actors), the relationships between them, and the interfaces the nodes expose. Controls attach requirements to a node or a relationship. The specification also covers flows, timelines and decorators.
-- **Tooling.** A CLI (`npm install -g @finos/calm-cli`) that validates documents against the schema, plus VS Code plugins, AI integrations and [CalmStudio](https://calm.finos.org/calm-studio/intro/), a visual editor that keeps the JSON as the source of truth.
-- **Purpose.** Keep the architecture in version control, validate it in CI next to the code, and give agents a model to follow.
-
-Total Recall's own model is [total-recall.calm.json](plugins/total-recall/architecture/calm/total-recall.calm.json). It covers the MCP server, the hooks, the two vaults and the local embedder, plus three controls (the fail-closed privacy filter, org author protection and the TF-IDF fallback), each linked to its ADL assertion. CI validates it with a pinned `@finos/calm-cli` (1.66.0, CALM 1.0 schema).
-
-### How the two fit together
-
-| | ADL | CALM |
-|---|---|---|
-| Level | Code: modules, dependencies, data rules | System: containers, connections, controls |
-| Format | Pseudocode text (`.adl`) | JSON with a published schema (`.calm.json`) |
-| Checked by | Tests tagged with the assertion ID | `calm validate`, plus `calm.test.ts` cross-checks against the ADL |
-| Origin | Neal Ford's *Architecture as Code* masterclass | FINOS open standard |
+> **Note.** Earlier versions also described the system level in a [CALM](https://calm.finos.org/) document and validated it in CI with `@finos/calm-cli`. CALM support was removed in 1.3.0; `.calm.json` files are no longer indexed.
 
 Details: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITECTURE.md#-architecture-as-code).
 
@@ -228,7 +213,7 @@ Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is git
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration passing · 47 files · ~13k lines of test code |
-| **Coverage** | 93.5% statements · 87.1% branches · 95.7% lines |
+| **Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
 | **Mutation** | ≈67% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
@@ -249,13 +234,13 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   lands, give org-vault push access only to people you trust, and protect its branch.
   See [SECURITY.md](SECURITY.md).
 - **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
-  93.5% (need 95), functions 93.1% (need 95), branches 87.1% (need 90). Lines pass at
-  95.7%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
+  93.6% (need 95), functions 92.3% (need 95), branches 87.7% (need 90). Lines pass at
+  95.8%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
   `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
 - **Three modules reach code without checking it.** Per-module mutation score diverges
   sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7% and
-  `persistence.ts` 55.0%. `persistence.ts` is the instructive case — 86.1% coverage but
-  only 55.0% mutation, with 116 surviving mutants: the tests run the code but would not
+  `persistence.ts` 53.2%. `persistence.ts` is the instructive case — 86.1% coverage but
+  only 53.2% mutation, with 122 surviving mutants: the tests run the code but would not
   notice if it broke. Coverage alone would have missed this, which is why the gate
   looks at mutation.
 - **The mutation score is not reproducible run-to-run.** Two CI runs with no

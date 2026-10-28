@@ -8,7 +8,7 @@
 //   - stale: a superseded decision is never returned among the current decisions.
 //
 // Usage: npx tsx scripts/eval/spec-eval.ts <corpus-dir> [--json]
-// A corpus is a directory whose subfolders each hold one project's .adl / .calm.json
+// A corpus is a directory whose subfolders each hold one project's .adl
 // files (a single project directory works too). Runs against a throwaway HOME, so
 // your own vault is never touched.
 import * as fs from 'fs';
@@ -36,7 +36,7 @@ export async function runSpecEval(corpus: string): Promise<EvalReport> {
   const cfg = parseSpecConfig({});
   const root = path.resolve(corpus);
   const subdirs = fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => path.join(root, d.name));
-  const hasArch = (d: string) => { const s = scanProject(d, cfg); return s.adl.length + s.calm.length > 0; };
+  const hasArch = (d: string) => { const s = scanProject(d, cfg); return s.adl.length > 0; };
   // Each subfolder with architecture files is one project; otherwise the directory itself is.
   const withArch = subdirs.filter(hasArch);
   const projects = withArch.length ? withArch : hasArch(root) ? [root] : [];

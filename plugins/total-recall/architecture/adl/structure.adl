@@ -14,7 +14,7 @@ DEFINE SYSTEM Total Recall AS tr
 
 # Pure helpers are leaves: also bundled standalone for the hooks (frontmatter, privacy-filter)
 ASSERT(Pure Helpers have no dependency on any other component) # [TR-S1]
-# The spec parsers, config and field sanitiser are pure helpers too (src/spec/{config,fields,elements,adl-parse,calm-parse})
+# The spec parsers, config and field sanitiser are pure helpers too (src/spec/{config,fields,elements,adl-parse})
 
 # Layering
 ASSERT(State, Persistence, Search and Vectors have no dependency on Tools) # [TR-S2]

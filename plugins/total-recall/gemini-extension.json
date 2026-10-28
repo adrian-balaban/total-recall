@@ -1,7 +1,7 @@
 {
   "name": "total-recall",
-  "version": "1.2.1",
-  "description": "Persistent memory MCP server (22 tools, including ADL/CALM architecture tools) with hooks for session-start index injection, org-vault auto-sync, and pre-compact learning extraction.",
+  "version": "1.3.0",
+  "description": "Persistent memory MCP server (22 tools, including ADL architecture tools) with hooks for session-start index injection, org-vault auto-sync, and pre-compact learning extraction.",
   "mcpServers": {
     "total-recall": {
       "command": "node",

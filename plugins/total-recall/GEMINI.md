@@ -28,7 +28,7 @@ Claude Code.
   `AfterTool` (`write_file|replace`) and the SessionStart summary is built, but
   Gemini drops `additionalContext`, so neither reaches the model. Call
   `index_architecture` / `get_architecture_context` yourself after editing
-  an `.adl` or `.calm.json` file.
+  an `.adl` file.
 - **MCP-only registration (no hooks):** `agy plugin install "$(pwd)"`
   registers the server from `gemini-extension.json` without wiring
   the lifecycle hooks — see `README.md` → *Client Compatibility* for the

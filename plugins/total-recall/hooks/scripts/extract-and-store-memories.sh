@@ -54,7 +54,7 @@ process.stdout.write(parseSpecConfig(raw).extractDecisions ? "1" : "0");
 ' "$SCRIPT_DIR/../../dist/spec-config.mjs" 2>/dev/null || echo 0)
 if [ "$EXTRACT_DECISIONS" = "1" ]; then
   EXTRACT_PROMPT="$EXTRACT_PROMPT
-- If the session took an architecture decision, store it with category \"decisions\" and add these optional fields: \"system\" (the ADL system id), \"elements\" (IDs such as \"adl:<domain>.<component>\", \"calm:<node>\", \"assert:<ID>\"), \"requirements\" (e.g. \"REQ-7\"), \"artifact\": \"adr\", \"status\": \"accepted\". Include the options that were rejected and why."
+- If the session took an architecture decision, store it with category \"decisions\" and add these optional fields: \"system\" (the ADL system id), \"elements\" (IDs such as \"adl:<domain>.<component>\", \"assert:<ID>\"), \"requirements\" (e.g. \"REQ-7\"), \"artifact\": \"adr\", \"status\": \"accepted\". Include the options that were rejected and why."
 fi
 
 # Extract via `claude -p` (valid), then write each JSON line straight to the vault.

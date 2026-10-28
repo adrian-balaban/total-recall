@@ -101,12 +101,15 @@ describe('total-recall over real stdio', () => {
     ]);
   });
 
-  it('indexes this repo\'s own ADL/CALM and answers an element query over stdio', async () => {
+  it('indexes this repo\'s own ADL and answers an element query over stdio', async () => {
     const archDir = path.resolve(__dirname, '../../../architecture');
     const indexed = json(await client.callTool({ name: 'index_architecture', arguments: { path: archDir } }));
     expect(indexed.systems.map((s: any) => s.system)).toEqual(['tr']);
-    const ctx = json(await client.callTool({ name: 'get_architecture_context', arguments: { system: 'tr', element: 'calm:org-vault' } }));
-    expect(ctx.controls.map((c: any) => c.name).sort()).toEqual(['author-protection', 'privacy-filter']);
+    const ctx = json(await client.callTool({ name: 'get_architecture_context', arguments: { system: 'tr', element: 'adl:org-vault' } }));
+    expect(ctx.rules.map((r: any) => r.id)).toContain('TR-D1');
+    expect(ctx.relationships.map((r: any) => r.nodes.join('>')).sort()).toEqual([
+      'adl:hooks>adl:org-vault', 'adl:mcp-server>adl:org-vault', 'adl:org-vault>adl:org-remote',
+    ]);
     const t = json(await client.callTool({ name: 'trace', arguments: { id: 'TR-D3' } }));
     expect(t.assertions[0].text).toMatch(/Privacy Filter/);
   });

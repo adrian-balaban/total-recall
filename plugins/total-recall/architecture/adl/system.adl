@@ -1,0 +1,32 @@
+DESCRIPTION The runtime landscape of Total Recall: who talks to whom (replaces the former CALM document)
+CATEGORY System Landscape
+NAMESPACE TrSystemNS
+DEFINE SYSTEM Total Recall AS tr
+    # The harness spawns the MCP server and runs the lifecycle hooks (SessionStart, PostToolUse, PreCompact, SessionEnd)
+    DEFINE ACTOR Host Harness AS host-harness
+    # Node process (dist/index.js) serving the memory tools over stdio; stdout is the transport
+    DEFINE SERVICE MCP Stdio Server AS mcp-server
+    # Bash and Node scripts; they write without going through MCP
+    DEFINE SERVICE Lifecycle Hooks AS hooks
+    # Optional in-process embeddings pipeline with a sqlite-vec store, lazy-loaded
+    DEFINE SERVICE Local Embedder AS embedder
+    # External git repository shared with teammates
+    DEFINE EXTERNAL Org Git Remote AS org-remote
+
+# Personal Vault and Org Vault are defined in data-governance.adl
+# Tool calls over MCP/stdio (TR-R2: the server never writes diagnostics to stdout)
+DEFINE COMMUNICATION Host Harness TO MCP Stdio Server AS stdio
+# Hook events with stdin JSON; SessionStart hooks inject the memory index into the context
+DEFINE COMMUNICATION Host Harness TO Lifecycle Hooks AS hook-events
+# Untagged memories, as Markdown files (TR-D2)
+DEFINE COMMUNICATION MCP Stdio Server TO Personal Vault AS file-io
+# Memories tagged org, written to the org vault working tree (TR-D1)
+DEFINE COMMUNICATION MCP Stdio Server TO Org Vault AS file-io
+# Embeds text for hybrid search; optional (TR-R3: degrades to TF-IDF when missing)
+DEFINE COMMUNICATION MCP Stdio Server TO Local Embedder AS in-process
+# PreCompact extraction and the standalone index scan write directly, without MCP
+DEFINE COMMUNICATION Lifecycle Hooks TO Personal Vault AS file-io
+# After each org write: privacy filter, then git add, commit and push (TR-D3)
+DEFINE COMMUNICATION Lifecycle Hooks TO Org Vault AS git
+# git pull at SessionStart, git push after each filtered org write
+DEFINE COMMUNICATION Org Vault TO Org Git Remote AS git-tls

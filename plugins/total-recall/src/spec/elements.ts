@@ -1,7 +1,7 @@
 // Element-ID matching shared by the recall filter, get_related_memories and the
 // architecture tools. Leaf module.
 //
-// IDs are `adl:<domain>.<component>`, `assert:<ID>`, `calm:<node>` or a requirement
+// IDs are `adl:<domain>.<component>`, `assert:<ID>` or a requirement
 // ID such as `REQ-7`. A bare assertion ID matches its `assert:` form, and a filter
 // on a parent (`adl:testing`) matches its children (`adl:testing.answercapture`).
 

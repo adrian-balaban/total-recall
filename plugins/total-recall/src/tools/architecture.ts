@@ -16,12 +16,12 @@ import { buildModels, renderModel, modelElementIds, type ArchModel } from '../sp
 import { slug } from '../spec/adl-parse.js';
 import { gitInfo } from '../spec/exec.js';
 import { INDEX_TAG, indexKey, loadModel, architectureContext, trace, architectureHistory } from '../spec/context.js';
-import { resolveCalm, validateCalmFile, adlCoverage, type CheckResult } from '../spec/validate.js';
+import { adlCoverage, type CheckResult } from '../spec/validate.js';
 
 const cfg = (): SpecConfig => parseSpecConfig(loadConfig().specDriven);
 
 function projectDir(p: unknown): string {
-  if (typeof p !== 'string' || !p.trim()) throw new Error('path is required: the project directory that holds the ADL / CALM files.');
+  if (typeof p !== 'string' || !p.trim()) throw new Error('path is required: the project directory that holds the ADL files.');
   const dir = path.resolve(p);
   if (!fs.existsSync(dir) || !fs.statSync(dir).isDirectory()) throw new Error(`Not a directory: ${p}`);
   return dir;
@@ -41,7 +41,7 @@ export function indexArchitecture(args: any): any {
   const c = cfg();
   const { git, rel, sourcePath } = locate(dir);
   const models = buildModels(dir, c, rel, typeof args.system === 'string' && args.system.trim() ? args.system : undefined);
-  if (!models.length) return { systems: [], message: `No ADL (${c.adlExtensions.join(', ')}) or CALM (${c.calmExtensions.join(', ')}) files under ${sourcePath}.` };
+  if (!models.length) return { systems: [], message: `No ADL (${c.adlExtensions.join(', ')}) files under ${sourcePath}.` };
 
   const systems = models.map((m) => {
     const key = indexKey(m.system);
@@ -58,7 +58,7 @@ export function indexArchitecture(args: any): any {
       importanceScore: 0.7,
       force: !!memIndex[key],
       system: m.system,
-      artifact: m.files.some((f) => f.kind === 'adl') ? 'adl' : 'calm',
+      artifact: 'adl',
       elements: [...ids],
       sourcePath,
       sourceRev: git?.head,
@@ -126,18 +126,12 @@ export function validateArchitecture(args: any): any {
   const c = cfg();
   const { git, rel, sourcePath } = locate(dir);
   const models = buildModels(dir, c, rel, typeof args.system === 'string' && args.system.trim() ? args.system : undefined);
-  if (!models.length) return { ok: true, checks: [], message: `No ADL or CALM files under ${sourcePath}.` };
-  const runner = resolveCalm(c);
+  if (!models.length) return { ok: true, checks: [], message: `No ADL files under ${sourcePath}.` };
   const resolvedBy = typeof args.resolvedBy === 'string' ? args.resolvedBy : undefined;
   const meta = { sourcePath, ...(git?.head ? { sourceRev: git.head } : {}), ...(resolvedBy ? { resolvedBy } : {}) };
 
   const out = models.map((m) => {
-    const checks: CheckResult[] = [...adlCoverage(m)];
-    const calmFiles = m.files.filter((f) => f.kind === 'calm');
-    if (calmFiles.length && runner) {
-      const root = git?.root ?? dir;
-      for (const f of calmFiles) checks.push(validateCalmFile(path.join(root, f.path), f.path, runner, c));
-    }
+    const checks: CheckResult[] = adlCoverage(m);
     const recorded = args.record === false ? [] : checks.map((r) => record(m.system, r, meta)).filter(Boolean);
     return {
       system: m.system,
@@ -147,24 +141,17 @@ export function validateArchitecture(args: any): any {
       recorded,
     };
   });
-  const calmFound = models.some((m) => m.files.some((f) => f.kind === 'calm'));
-  return {
-    ok: out.every((s) => s.ok),
-    systems: out,
-    calm: !calmFound ? 'no CALM files' : runner
-      ? `validated with ${runner.via === 'path' ? runner.cmd : `npx @finos/calm-cli@${c.calm.cliVersion}`}`
-      : `CALM CLI not available: install it with "npm install -g @finos/calm-cli@${c.calm.cliVersion}", or set specDriven.calm.allowNpx to true in ~/.total-recall/config.json. ADL coverage was still checked.`,
-  };
+  return { ok: out.every((s) => s.ok), systems: out };
 }
 
 // ─── Registration ───────────────────────────────────────────────────────────
 
-const elementDesc = 'An element: "adl:<domain>.<component>", "calm:<node>", "assert:<ID>" (or a bare assertion ID).';
+const elementDesc = 'An element: "adl:<domain>.<component>", "assert:<ID>" (or a bare assertion ID).';
 
 export function register(server: McpServer, spec: SpecConfig) {
   const on = new Set(spec.tools);
   if (on.has('index_architecture')) server.registerTool('index_architecture', {
-    description: 'Index the ADL (*.adl) and CALM (*.calm.json) files of a project: stores or updates one architecture-index memory per system with its elements, assertions, controls and the tests tagged with each assertion ID. Records the repo-relative path and commit, never the files. Re-running on unchanged files writes nothing.',
+    description: 'Index the ADL (*.adl) files of a project: stores or updates one architecture-index memory per system with its elements, assertions, relationships (from DEFINE COMMUNICATION) and the tests tagged with each assertion ID. Records the repo-relative path and commit, never the files. Re-running on unchanged files writes nothing.',
     inputSchema: {
       path: z.string().describe('Project directory to scan (absolute, or relative to the server working directory).'),
       system: z.string().optional().describe('System name to file everything under. Default: the ADL DEFINE SYSTEM id, else the directory name.'),
@@ -172,7 +159,7 @@ export function register(server: McpServer, spec: SpecConfig) {
   }, wrapHandler('index_architecture', indexArchitecture));
 
   if (on.has('get_architecture_context')) server.registerTool('get_architecture_context', {
-    description: 'Architecture context from the index: without element, the system summary (domains, components, CALM nodes, untested assertions, open failures, recent decisions and changes); with element, its ADL rules, CALM controls, linked decisions, failures and open questions, newest first.',
+    description: 'Architecture context from the index: without element, the system summary (domains, components, relationships, untested assertions, open failures, recent decisions and changes); with element, its ADL rules, relationships, linked decisions, failures and open questions, newest first.',
     inputSchema: {
       system: z.string(),
       element: z.string().optional().describe(elementDesc),
@@ -181,7 +168,7 @@ export function register(server: McpServer, spec: SpecConfig) {
   }, wrapHandler('get_architecture_context', (a: any) => architectureContext(a, { guardrails: cfg().guardrails })));
 
   if (on.has('trace')) server.registerTool('trace', {
-    description: 'Trace a requirement (REQ-7), assertion (TR-S2) or element (calm:org-vault) through ADL assertions and CALM controls to the tests that carry the assertion ID, recorded fitness results and decisions.',
+    description: 'Trace a requirement (REQ-7), assertion (TR-S2) or element (adl:org-vault) through ADL assertions to the tests that carry the assertion ID, recorded fitness results and decisions.',
     inputSchema: {
       id: z.string(),
       system: z.string().optional(),
@@ -198,7 +185,7 @@ export function register(server: McpServer, spec: SpecConfig) {
   }, wrapHandler('get_architecture_history', architectureHistory));
 
   if (on.has('validate_architecture')) server.registerTool('validate_architecture', {
-    description: 'Run the architecture checks on a project: CALM schema validation (calm CLI on PATH, or a pinned npx when specDriven.calm.allowNpx is on) and ADL coverage (every tagged assertion has a test carrying its ID). Each failure is stored as a fitness-result memory linked to its element; a later pass marks it resolved. CI stays the authority.',
+    description: 'Run the architecture check on a project: ADL coverage (every tagged assertion has a test carrying its ID). Each failure is stored as a fitness-result memory linked to its element; a later pass marks it resolved. CI stays the authority.',
     inputSchema: {
       path: z.string(),
       system: z.string().optional(),

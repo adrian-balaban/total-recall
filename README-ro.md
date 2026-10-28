@@ -14,7 +14,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.2.1, stabilă: 862 teste trec, Test Coverage 93.5% statements, Mutation tests ≈67%. Vezi [Probleme cunoscute](#️-probleme-cunoscute) pentru pragurile de Test Coverage pe care CI le ratează încă.
+- **Status** — v1.3.0, stabilă: 860 teste trec, Test Coverage 93.6% statements, Mutation tests ≈67%. Vezi [Probleme cunoscute](#️-probleme-cunoscute) pentru pragurile de Test Coverage pe care CI le ratează încă.
 
 ```mermaid
 flowchart LR
@@ -49,7 +49,7 @@ Sinteza completă Adopt/Trial e în memoria org
 
 | | |
 |---|---|
-| **22 de unelte MCP** | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă și 5 unelte de arhitectură pentru proiecte cu ADL/CALM |
+| **22 de unelte MCP** | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă și 5 unelte de arhitectură pentru proiecte cu ADL |
 | **Căutare hibridă** | TF-IDF × curba uitării Ebbinghaus, combinată opțional cu embeddings vectoriale |
 | **Hook-uri de ciclu de viață** | context injectat la începutul sesiunii, memorii capturate pe măsură ce lucrezi |
 | **Două vault-uri** | cel personal rămâne local; cel etichetat `org` se sincronizează cu un repo Git comun |
@@ -83,22 +83,22 @@ secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-uril
 | **Operații în masă** | `export_memories`, `import_memories`, `delete_memories` |
 | **Arhitectură** (spec-driven, se poate dezactiva) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
 
-### 📐 Lucru spec-driven cu ADL și CALM
+### 📐 Lucru spec-driven cu ADL
 
-Când un proiect își ține arhitectura ca cod (fișiere ADL și un document CALM), Total Recall reține ce nu scrie în fișiere: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Fișierele rămân în repository, ca sursă de adevăr.
+Când un proiect își ține arhitectura ca cod (fișiere ADL), Total Recall reține ce nu scrie în fișiere: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Fișierele rămân în repository, ca sursă de adevăr.
 
-- `index_architecture` citește fișierele `*.adl` și `*.calm.json` ale proiectului într-o memorie de rezumat pentru fiecare sistem și leagă fiecare aserțiune ADL de testele care îi poartă ID-ul.
-- `get_architecture_context`, `trace` și `get_architecture_history` întorc regulile, controalele, deciziile, eșecurile și schimbările pentru un element, o cerință sau o aserțiune.
-- `validate_architecture` rulează CALM CLI și verificarea acoperirii ADL cu teste și înregistrează fiecare eșec și rezolvarea lui.
+- `index_architecture` citește fișierele `*.adl` ale proiectului într-o memorie de rezumat pentru fiecare sistem (elemente, aserțiuni și conexiunile declarate cu `DEFINE COMMUNICATION`) și leagă fiecare aserțiune ADL de testele care îi poartă ID-ul.
+- `get_architecture_context`, `trace` și `get_architecture_history` întorc regulile, relațiile, deciziile, eșecurile și schimbările pentru un element, o cerință sau o aserțiune.
+- `validate_architecture` rulează verificarea acoperirii ADL cu teste și înregistrează fiecare eșec și rezolvarea lui.
 - Memoriile pot avea `system`, `elements`, `requirements` și alte câteva câmpuri opționale. `recall_memory` și `search_index` filtrează după `elements`.
-- Hook-urile adaugă un scurt rezumat al arhitecturii la începutul sesiunii și cer înregistrarea schimbării când se editează un fișier `.adl` sau `.calm.json`.
+- Hook-urile adaugă un scurt rezumat al arhitecturii la începutul sesiunii și cer înregistrarea schimbării când se editează un fișier `.adl`.
 - Skill-ul `spec-driven-workflow` descrie întregul ciclu și are șabloane de pornire.
 
-Totul se configurează în blocul `specDriven` din `~/.total-recall/config.json`, iar `"specDriven": {"enabled": false}` readuce exact comportamentul cu 17 unelte. Cheile sunt descrise în [README-ul pluginului](plugins/total-recall/README.md#-spec-driven-architecture-adl--calm).
+Totul se configurează în blocul `specDriven` din `~/.total-recall/config.json`, iar `"specDriven": {"enabled": false}` readuce exact comportamentul cu 17 unelte. Cheile sunt descrise în [README-ul pluginului](plugins/total-recall/README.md#-spec-driven-architecture-adl).
 
-## 📐 Arhitectura ca cod: ADL și CALM
+## 📐 Arhitectura ca cod: ADL
 
-Total Recall își descrie propria arhitectură în două notații: ADL pentru nivelul de cod și CALM pentru nivelul de sistem. Build-ul pică atunci când codul se abate de la oricare dintre ele. [Uneltele spec-driven](#-lucru-spec-driven-cu-adl-și-calm) lucrează cu aceleași două notații și în proiectele tale.
+Total Recall își descrie propria arhitectură în ADL, atât la nivelul de cod (module, dependențe, reguli de date), cât și la nivelul de sistem (cine cu cine comunică). Build-ul pică atunci când codul se abate de la ea. [Uneltele spec-driven](#-lucru-spec-driven-cu-adl) lucrează cu aceeași notație și în proiectele tale.
 
 ### ADL: Architecture Definition Language
 
@@ -121,24 +121,9 @@ Eticheta `# [TR-S1]` este o convenție Total Recall, nu face parte din ADL. Test
 
 > Materialul cursului nu este publicat aici: nici slide-uri, nici exerciții, nici ghidul de referință, nici soluții. Secțiunea descrie ideea cu propriile noastre cuvinte, iar toate exemplele sunt din acest repository.
 
-### CALM: Common Architecture Language Model
+Nivelul de sistem este în [system.adl](plugins/total-recall/architecture/adl/system.adl): host-ul, serverul MCP, hook-urile, embedder-ul local și remote-ul git al organizației, plus liniile `DEFINE COMMUNICATION` care le leagă de cele două vault-uri. `adl-consistency.test.ts` pică atunci când o conexiune numește un element nedefinit.
 
-[CALM](https://calm.finos.org/introduction/what-is-calm) este o specificație deschisă pentru descrierea arhitecturii software ca cod, în JSON pe care îl pot citi atât oamenii, cât și uneltele. O dezvoltă [comunitatea FINOS Architecture as Code](https://github.com/finos/architecture-as-code), a fost contribuită de Morgan Stanley, iar versiunea 1.0 a apărut în august 2025.
-
-- **Concepte principale.** Noduri (blocurile de bază: servicii, baze de date, actori), relațiile dintre ele și interfețele expuse de noduri. Controalele atașează cerințe unui nod sau unei relații. Specificația acoperă și fluxuri, linii de timp și decoratori.
-- **Unelte.** Un CLI (`npm install -g @finos/calm-cli`) care validează documentele după schemă, plus pluginuri VS Code, integrări AI și [CalmStudio](https://calm.finos.org/calm-studio/intro/), un editor vizual care păstrează JSON-ul ca sursă de adevăr.
-- **Scop.** Arhitectura ținută în version control, validată în CI alături de cod, și un model pe care agenții îl pot urma.
-
-Modelul propriu al Total Recall este [total-recall.calm.json](plugins/total-recall/architecture/calm/total-recall.calm.json). Acoperă serverul MCP, hook-urile, cele două vault-uri și embedder-ul local, plus trei controale (filtrul de confidențialitate fail-closed, protecția autorului în vault-ul org și fallback-ul la TF-IDF), fiecare legat de aserțiunea ADL corespunzătoare. CI îl validează cu un `@finos/calm-cli` fixat (1.66.0, schema CALM 1.0).
-
-### Cum se completează
-
-| | ADL | CALM |
-|---|---|---|
-| Nivel | Cod: module, dependențe, reguli pentru date | Sistem: containere, conexiuni, controale |
-| Format | Text de tip pseudocod (`.adl`) | JSON cu schemă publicată (`.calm.json`) |
-| Verificat de | Teste etichetate cu ID-ul aserțiunii | `calm validate`, plus `calm.test.ts`, care îl compară cu ADL |
-| Origine | Masterclass-ul *Architecture as Code* al lui Neal Ford | Standard deschis FINOS |
+> **Notă.** Versiunile anterioare descriau nivelul de sistem și într-un document [CALM](https://calm.finos.org/), validat în CI cu `@finos/calm-cli`. Suportul CALM a fost eliminat în 1.3.0; fișierele `.calm.json` nu mai sunt indexate.
 
 Detalii: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITECTURE.md#-architecture-as-code).
 
@@ -230,7 +215,7 @@ Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este
 |---|---|
 | **Versiune** | 1.2.1 — stabilă |
 | **Teste** | 778 unitare + 20 de integrare, toate trec · 47 fișiere · ~13k linii de cod de test |
-| **Test Coverage** | 93.5% statements · 87.1% branches · 95.7% lines |
+| **Test Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
 | **Mutation tests** | ≈67% (Stryker, 16 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
 | **Release-uri** | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă |
@@ -251,13 +236,13 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
   intră. Până la remediere, dă drept de push în vault-ul org doar persoanelor de încredere și
   protejează-i branch-ul. Vezi [SECURITY.md](SECURITY.md).
 - **Test Coverage ratează trei din patru praguri** setate în `vitest.config.ts`: statements
-  93.5% (necesar 95), functions 93.1% (necesar 95), branches 87.1% (necesar 90). Lines trece la
-  95.7%. `npm run test:coverage` iese deci cu cod non-zero. Cele mai mari lacune sunt
+  93.6% (necesar 95), functions 92.3% (necesar 95), branches 87.7% (necesar 90). Lines trece la
+  95.8%. `npm run test:coverage` iese deci cu cod non-zero. Cele mai mari lacune sunt
   `vectorStore.ts` (72.5%) și `embeddings.ts` (88.6%).
 - **Trei module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
   modul divergă puternic de acoperire: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7% și
-  `persistence.ts` 55.0%. Cazul instructiv e `persistence.ts` — 86.1% acoperire la doar 55.0%
-  mutație, cu 116 mutanți supraviețuitori: testele execută codul, dar nu ar observa dacă
+  `persistence.ts` 53.2%. Cazul instructiv e `persistence.ts` — 86.1% acoperire la doar 53.2%
+  mutație, cu 122 mutanți supraviețuitori: testele execută codul, dar nu ar observa dacă
   s-ar strica. Acoperirea singură ar fi ratat asta; de aceea poarta se uită la mutație.
 - **Scorul de Mutation tests nu este reproductibil de la o rulare la alta.** Două rulări CI fără nicio
   modificare la vreun fișier sursă mutat au raportat 65.39% și 66.39% — aproximativ ±1 punct

@@ -10,7 +10,7 @@ export const TESTS = /^src\/__tests__\//;
 // ADL component `helpers`: pure leaf modules with no local imports.
 export const LEAF_NAMES = [
   'ebbinghaus', 'dates', 'rrf', 'lru-cache', 'frontmatter', 'errors', 'types', 'privacy-filter',
-  'spec/config', 'spec/fields', 'spec/elements', 'spec/adl-parse', 'spec/calm-parse',
+  'spec/config', 'spec/fields', 'spec/elements', 'spec/adl-parse',
 ];
 export const LEAVES = new RegExp(`^src/(${LEAF_NAMES.join('|')})\\.ts$`);
 // Everything in production that is NOT a leaf.

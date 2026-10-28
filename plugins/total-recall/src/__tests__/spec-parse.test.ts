@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { parseAdl, assertionTargets, textHash } from '../spec/adl-parse.js';
-import { parseCalm } from '../spec/calm-parse.js';
 
 const ADL = `DESCRIPTION Make the Grade data
 CATEGORY Data
@@ -61,33 +60,6 @@ describe('ADL parser', () => {
   });
 });
 
-describe('CALM parser', () => {
-  it('reads nodes, relationships of every kind and controls', () => {
-    const doc = parseCalm(JSON.stringify({
-      nodes: [
-        { 'unique-id': 'app', 'node-type': 'service', name: 'App', description: 'd', interfaces: [{ 'unique-id': 'http' }] },
-        { 'unique-id': 'db', 'node-type': 'database', name: 'DB', description: 'd', controls: { encryption: { description: 'at rest', requirements: [] } } },
-        { name: 'no id is skipped' },
-      ],
-      relationships: [
-        { 'unique-id': 'app-db', 'relationship-type': { connects: { source: { node: 'app' }, destination: { node: 'db' } } }, controls: { tls: { description: 'TLS 1.3' } } },
-        { 'unique-id': 'user-app', 'relationship-type': { interacts: { actor: 'user', nodes: ['app'] } } },
-      ],
-    }));
-    expect(doc.nodes.map((n) => n.id)).toEqual(['app', 'db']);
-    expect(doc.nodes[0]!.interfaces).toEqual(['http']);
-    expect(doc.relationships.map((r) => [r.id, r.kind, r.nodes])).toEqual([['app-db', 'connects', ['app', 'db']], ['user-app', 'interacts', ['user', 'app']]]);
-    expect(doc.controls).toEqual([
-      { owner: 'calm:db', name: 'encryption', description: 'at rest' },
-      { owner: 'calm:app-db', name: 'tls', description: 'TLS 1.3' },
-    ]);
-  });
-
-  it('throws on invalid JSON so the caller can report the file', () => {
-    expect(() => parseCalm('{ nope')).toThrow();
-  });
-});
-
 describe('spec-driven-workflow skill templates', () => {
   const fs = require('fs') as typeof import('fs');
   const path = require('path') as typeof import('path');
@@ -97,11 +69,6 @@ describe('spec-driven-workflow skill templates', () => {
     const doc = parseAdl(fs.readFileSync(path.join(dir, 'starter.adl.template'), 'utf8'));
     expect(doc.assertions.every((a) => a.tagged)).toBe(true);
     expect(doc.other).toEqual([]);
-  });
-
-  it('the starter CALM document parses', () => {
-    const doc = parseCalm(fs.readFileSync(path.join(dir, 'starter.calm.json.template'), 'utf8'));
-    expect(doc.nodes.map((n) => n.id)).toEqual(['client', 'component-a', 'domain-db']);
   });
 });
 

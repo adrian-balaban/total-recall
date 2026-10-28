@@ -6,13 +6,13 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl--calm)) over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)) over a vault of plain Markdown files under `~/.total-recall/`.
 - **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.2.1, stable: 862 tests passing, 93.5% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.0, stable: 860 tests passing, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -116,11 +116,11 @@ All tool calls operate against an in-memory index (`index.json`), making read/se
 | `import_memories` | Bulk import | Restores from an `export_memories` archive; skips existing keys unless `force=true`; skips entries carrying an `error` field so a failed export read can't clobber a live memory. |
 | `delete_memories` | Bulk delete | Deletes a list of keys; `confirm=true` required (no default). A reserved `no-prune` key (without `force`) is recorded as a per-key error and the batch continues — not a batch reject. Closes the `prune_memories` loop. |
 | `confirm_memory` | Feedback signal | `useful=true` increments confirmations; `useful=false` increments flags — both feed retention scoring. |
-| `index_architecture` | Index ADL/CALM | One architecture-index memory per system: elements, assertions, controls, and the tests tagged with each assertion ID. No-op on unchanged files. See [Spec-driven architecture](#-spec-driven-architecture-adl--calm). |
-| `get_architecture_context` | Element context | The system summary, or one element's ADL rules, CALM controls, decisions, failures and open questions. |
+| `index_architecture` | Index ADL | One architecture-index memory per system: elements, assertions, relationships, and the tests tagged with each assertion ID. No-op on unchanged files. See [Spec-driven architecture](#-spec-driven-architecture-adl). |
+| `get_architecture_context` | Element context | The system summary, or one element's ADL rules, relationships, decisions, failures and open questions. |
 | `trace` | Requirement → test | Requirement, assertion or element → assertions and controls → tests → recorded results and decisions. |
 | `get_architecture_history` | Change log | `architecture-changes` memories in time order, plus the index rebuilds. |
-| `validate_architecture` | Run checks | CALM CLI validation and ADL test coverage; failures stored as `fitness-result` memories, resolved on a later pass. |
+| `validate_architecture` | Run checks | ADL test coverage; failures stored as `fitness-result` memories, resolved on a later pass. |
 
 The five architecture tools are on by default and can be switched off one by one (`specDriven.tools`) or together (`specDriven.enabled: false`, which also removes the optional spec fields from the other tools' schemas).
 
@@ -207,7 +207,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 4. check-sync-errors.sh    — warn if org-sync pushes failed since last success
 ```
 
-Effect: every new Claude session automatically receives a summary of all your memories — without asking. In a project with ADL or CALM files, step 3 also adds a short architecture summary (`specDriven.sessionSummary`, capped at `sessionSummaryMaxChars`).
+Effect: every new Claude session automatically receives a summary of all your memories — without asking. In a project with ADL files, step 3 also adds a short architecture summary (`specDriven.sessionSummary`, capped at `sessionSummaryMaxChars`).
 
 ### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
 
@@ -217,7 +217,7 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 ### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
 
-`architecture-change.sh` — when the edited file is an `.adl` or `.calm.json` file (`specDriven.captureChanges`), asks the model to run `index_architecture`, store an `architecture-changes` memory with the reason, and run `validate_architecture`. Any other file returns at once, without starting Node for the default extensions.
+`architecture-change.sh` — when the edited file is an `.adl` file (`specDriven.captureChanges`), asks the model to run `index_architecture`, store an `architecture-changes` memory with the reason, and run `validate_architecture`. Any other file returns at once, without starting Node for the default extensions.
 
 ### `PreCompact`
 
@@ -262,17 +262,17 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 
 ---
 
-## 📐 Spec-driven architecture (ADL + CALM)
+## 📐 Spec-driven architecture (ADL)
 
-For projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) and a [FINOS CALM](https://calm.finos.org/) document. The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
+For projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) (landscape and connections go in a separate file with `DEFINE COMMUNICATION`). The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
 
-1. `index_architecture(path)` reads every `*.adl` and `*.calm.json` file under `path` into one memory per system. It records the elements, assertions (with their `# [ID]` tag), CALM controls, ADL definitions such as capabilities and contracts, and the test lines that carry each assertion ID. It stores the repo-relative path and the commit, not the files. Re-running it on unchanged files writes nothing.
-2. Memories link to the architecture through optional frontmatter fields: `system`, `artifact` (`spec`, `adl`, `calm`, `adr`, `fitness-result`), `elements` (`adl:<domain>.<component>`, `calm:<node>`, `assert:<ID>`), `requirements`, `sourcePath`, `sourceRev`, `status` (`proposed`, `accepted`, `superseded`, `failed`, `resolved`) and `supersedes`. `store_memory`, `update_memory`, export and import carry them; `recall_memory` and `search_index` filter on `elements`; `get_related_memories` relates memories that share elements.
+1. `index_architecture(path)` reads every `*.adl` file under `path` into one memory per system. It records the elements, assertions (with their `# [ID]` tag), relationships (each `DEFINE COMMUNICATION`), ADL definitions such as capabilities and contracts, and the test lines that carry each assertion ID. It stores the repo-relative path and the commit, not the files. Re-running it on unchanged files writes nothing.
+2. Memories link to the architecture through optional frontmatter fields: `system`, `artifact` (`spec`, `adl`, `adr`, `fitness-result`), `elements` (`adl:<domain>.<component>`, `assert:<ID>`), `requirements`, `sourcePath`, `sourceRev`, `status` (`proposed`, `accepted`, `superseded`, `failed`, `resolved`) and `supersedes`. `store_memory`, `update_memory`, export and import carry them; `recall_memory` and `search_index` filter on `elements`; `get_related_memories` relates memories that share elements.
 3. `get_architecture_context`, `trace` and `get_architecture_history` answer "what do we know about this element / requirement / assertion?". A superseded decision is listed separately, never as current.
-4. `validate_architecture(path)` runs the CALM CLI (a `calm` binary on `PATH`, or a pinned `npx` only if `calm.allowNpx` is on; it is never installed by the plugin) and the ADL coverage check. Failures become `fitness-result` memories; a later pass marks them resolved, optionally linked to the decision that fixed them (`resolvedBy`).
-5. Org guardrails: org memories tagged `guardrail` (reusable ADL assertions or CALM controls, with the reason) are returned by `get_architecture_context`. An org-tagged memory with `artifact: "spec"` is refused when it names a host, a credential or a term from `orgBlockedTerms`.
+4. `validate_architecture(path)` runs the ADL coverage check (every tagged assertion has a test carrying its ID); no external tool is needed. Failures become `fitness-result` memories; a later pass marks them resolved, optionally linked to the decision that fixed them (`resolvedBy`).
+5. Org guardrails: org memories tagged `guardrail` (reusable ADL assertions, with the reason) are returned by `get_architecture_context`. An org-tagged memory with `artifact: "spec"` is refused when it names a host, a credential or a term from `orgBlockedTerms`.
 
-The `spec-driven-workflow` skill describes the loop (spec → requirement IDs → ADL and CALM → tagged fitness functions → code → validation → captured decisions) and ships starter templates.
+The `spec-driven-workflow` skill describes the loop (spec → requirement IDs → ADL → tagged fitness functions → code → validation → captured decisions) and ships starter templates.
 
 ### Configuration
 
@@ -285,15 +285,13 @@ Every key is optional; a missing or wrongly typed value falls back to its defaul
     "tools": ["index_architecture", "get_architecture_context", "trace", "get_architecture_history", "validate_architecture"],
     "categories": ["specs", "architecture-changes"],
     "adlExtensions": [".adl"],
-    "calmExtensions": [".calm.json"],
     "excludeDirs": ["node_modules", ".git", "dist", "build", "coverage"],
     "sessionSummary": true,
     "sessionSummaryMaxChars": 1500,
     "captureChanges": true,
     "extractDecisions": true,
     "guardrails": true,
-    "orgBlockedTerms": [],
-    "calm": { "allowNpx": false, "cliVersion": "1.66.0", "timeoutMs": 120000 }
+    "orgBlockedTerms": []
   }
 }
 ```
@@ -303,13 +301,14 @@ Every key is optional; a missing or wrongly typed value falls back to its defaul
 | `enabled` | `false` switches everything below off: 17 tools, no new schema fields, no new hook output |
 | `tools` | Only the listed architecture tools are registered (`[]` for none). Read at server start: restart after a change |
 | `categories` | Extra category folders created at boot |
-| `adlExtensions`, `calmExtensions`, `excludeDirs` | What a project scan picks up and skips |
+| `adlExtensions`, `excludeDirs` | What a project scan picks up and skips |
 | `sessionSummary`, `sessionSummaryMaxChars` | The SessionStart architecture summary and its size |
-| `captureChanges` | The change prompt after an ADL/CALM edit |
+| `captureChanges` | The change prompt after an ADL edit |
 | `extractDecisions` | The PreCompact request for decisions with element IDs |
 | `guardrails` | Org guardrails in `get_architecture_context` |
 | `orgBlockedTerms` | Client names and other terms an org spec memory must not contain |
-| `calm.allowNpx`, `calm.cliVersion`, `calm.timeoutMs` | How `validate_architecture` may run the CALM CLI |
+
+> **Upgrading from 1.2.x:** CALM support was removed in 1.3.0. `.calm.json` files are no longer indexed, and the `calm` and `calmExtensions` keys are ignored. Describe the system level in an `.adl` file with `DEFINE COMMUNICATION` instead.
 
 > **Gemini CLI:** the five tools and the field filters work. The two hooks are registered in `hooks.gemini.json` too, but Gemini drops `additionalContext` (see below), so the session summary and the change prompt are not shown there.
 
@@ -375,7 +374,7 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration, all passing · 47 files · ~13k lines of test code |
-| **Test Coverage** | 93.5% statements · 87.1% branches · 95.7% lines |
+| **Test Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
 | **Mutation tests** | ≈67% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
 | **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
 | **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
@@ -385,8 +384,8 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Test Coverage misses three of four thresholds** set in `vitest.config.ts`: statements 93.5% (needs 95), functions 93.1% (needs 95), branches 87.1% (needs 90). Lines passes at 95.7%. `npm run test:coverage` therefore exits non-zero. The biggest gaps are `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
-- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7%, and `persistence.ts` 55.0%. The instructive case is `persistence.ts` — 86.1% coverage at just 55.0% mutation, with 116 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
+- **Test Coverage misses three of four thresholds** set in `vitest.config.ts`: statements 93.6% (needs 95), functions 92.3% (needs 95), branches 87.7% (needs 90). Lines passes at 95.8%. `npm run test:coverage` therefore exits non-zero. The biggest gaps are `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
+- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7%, and `persistence.ts` 53.2%. The instructive case is `persistence.ts` — 86.1% coverage at just 53.2% mutation, with 122 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
 - **The mutation score is not reproducible run to run.** Two CI runs with no change to any mutated source file reported 65.39% and 66.39% — roughly ±1 point of variance, most likely from mutants timing out under variable runner load. Do not read a single decimal as precise. The margin above the 65% threshold was widened to roughly 3 points in v1.1.22 (five modules brought from 0–75% to 93–100%, +34 mutants killed), so ordinary variance no longer risks a red gate — which matters because a red gate silently holds back the `release` branch rather than shipping something broken.
 
 ---

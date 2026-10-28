@@ -1,7 +1,0 @@
-{
-  "$schema": "https://calm.finos.org/release/1.0/meta/control-requirement.json",
-  "$id": "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/privacy-filter.requirement.json",
-  "control-id": "TR-D3",
-  "name": "Fail-closed privacy filter",
-  "description": "A memory tagged org reaches the shared git repository only after the privacy filter passes it; any detected secret, email, card number, IBAN or phone number blocks the sync."
-}

@@ -27,7 +27,7 @@ function seedIndex() {
   const model: ArchModel = {
     system: 'shop', files: [{ path: 'a.adl', kind: 'adl', hash: 'x' }],
     elements: [{ id: 'adl:orders.api', kind: 'COMPONENT', name: 'Order Api', source: 'a.adl' }],
-    assertions: [], communications: [], relationships: [], controls: [], constants: {}, fingerprint: 'f',
+    assertions: [], communications: [], relationships: [], constants: {}, fingerprint: 'f',
   };
   storeMemory({ key: indexKey('shop'), title: 'Architecture index: shop', content: renderModel(model, { sourcePath: '.' }),
     category: 'architecture', tags: ['architecture-index'], system: 'shop', elements: ['adl:orders.api'] });

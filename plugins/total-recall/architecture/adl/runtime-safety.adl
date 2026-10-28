@@ -21,5 +21,5 @@ ASSERT(No production code writes to stdout) # [TR-R2]
 # A missing optional dependency must never fail a search
 ASSERT(When an optional dependency is not loadable, Vectors degrades to TF-IDF search instead of failing) # [TR-R3]
 
-# External processes (git, the CALM CLI, npm rebuild) start from two known places only, never through a shell
+# External processes (git, npm rebuild) start from two known places only, never through a shell
 ASSERT(Only Vectors (native binding self-heal) and the Spec exec module start external processes) # [TR-R4]

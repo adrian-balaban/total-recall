@@ -208,7 +208,7 @@ const searchIndexSchema = {
 
 // specFields: advertise the `elements` filter (specDriven.enabled); see store.ts.
 export function register(server: McpServer, specFields = false) {
-  const elements = { elements: z.array(z.string()).optional().describe('Only memories linked to one of these architecture elements (e.g. "calm:org-vault", "assert:TR-S2", "REQ-7"); a parent such as "adl:testing" also matches its children.') };
+  const elements = { elements: z.array(z.string()).optional().describe('Only memories linked to one of these architecture elements (e.g. "adl:org-vault", "assert:TR-S2", "REQ-7"); a parent such as "adl:testing" also matches its children.') };
   server.registerTool(
     'recall_memory',
     {

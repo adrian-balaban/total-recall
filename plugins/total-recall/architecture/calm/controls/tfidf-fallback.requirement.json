@@ -1,7 +1,0 @@
-{
-  "$schema": "https://calm.finos.org/release/1.0/meta/control-requirement.json",
-  "$id": "https://raw.githubusercontent.com/adrian-balaban/total-recall/main/plugins/total-recall/architecture/calm/controls/tfidf-fallback.requirement.json",
-  "control-id": "TR-R3",
-  "name": "TF-IDF fallback",
-  "description": "When an optional native or ML dependency is not loadable, search degrades to TF-IDF instead of failing."
-}

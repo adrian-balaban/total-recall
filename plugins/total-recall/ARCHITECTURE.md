@@ -143,7 +143,7 @@ graph TB
     t4 --> lru
     t5 --> embc
     t6 --> pers
-    t7 -->|"parse · index · trace · validate"| spec["spec/*<br/><i>ADL + CALM parsers · element index<br/>· exec (git, calm CLI)</i>"]
+    t7 -->|"parse · index · trace · validate"| spec["spec/*<br/><i>ADL parser · element index<br/>· exec (git)</i>"]
 
     tf --> st
     tf --> eb
@@ -235,18 +235,17 @@ src/
 ├── journal.ts        appendJournal
 ├── auto-reconcile.ts polls the .reconcile-requested marker (dropped by pull-org-vault.sh) → reconcileIndex
 ├── privacy-filter.ts SECRET_TOKEN_RE + email + validated CC (Luhn) / IBAN (mod-97) / formatted-phone checks — fail-closed gate for org sync
-├── spec/             spec-driven architecture support (SPEC-DRIVEN-PLAN.md)
+├── spec/             spec-driven architecture support
 │   ├── config.ts     specDriven block of config.json + defaults (leaf; also bundled as dist/spec-config.mjs for hooks)
 │   ├── fields.ts     optional frontmatter fields (system, artifact, elements, …) + their sanitiser (leaf; dist/spec-fields.mjs)
-│   ├── elements.ts   element-ID matching (adl:/calm:/assert:, parent matches children) (leaf)
+│   ├── elements.ts   element-ID matching (adl:/assert:, parent matches children) (leaf)
 │   ├── adl-parse.ts  tolerant ADL reader: DEFINE nesting, definitions, FOREACH scope, ASSERT + [ID] tags (leaf)
-│   ├── calm-parse.ts CALM nodes, relationships, controls (leaf; schema validation stays with the CALM CLI)
 │   ├── schema.ts     Zod shapes of the spec fields, shared by store_memory / update_memory
-│   ├── indexer.ts    project scan → one model per system (+ tests tagged with assertion IDs); render/parse of the index memory
+│   ├── indexer.ts    project scan → one model per system, with relationships from DEFINE COMMUNICATION (+ tests tagged with assertion IDs); render/parse of the index memory
 │   ├── context.ts    get_architecture_context / trace / get_architecture_history over the in-memory index
-│   ├── validate.ts   CALM CLI resolution (PATH → pinned npx if allowed) + ADL coverage check
+│   ├── validate.ts   ADL coverage check (pure function, no external tool)
 │   ├── org-guard.ts  hosts / credentials / blocked terms check for org spec memories
-│   └── exec.ts       the only spec module that starts processes (git, calm) — no shell ([TR-R4])
+│   └── exec.ts       the only spec module that starts processes (git) — no shell ([TR-R4])
 └── tools/
     ├── store.ts      store_memory
     ├── recall.ts     recall_memory, search_index
@@ -376,11 +375,11 @@ On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs 
 ### Architecture (spec-driven; `specDriven.tools`)
 | Tool | Description |
 |---|---|
-| `index_architecture` | Scan a project for ADL/CALM files; store one `architecture/arch-index-<system>` memory per system (summary + JSON model). Fingerprinted: unchanged files → no write. Uses `store_memory(force)`, so each rebuild archives the previous index under `.superseded/` |
+| `index_architecture` | Scan a project for ADL files; store one `architecture/arch-index-<system>` memory per system (summary + JSON model). Fingerprinted: unchanged files → no write. Uses `store_memory(force)`, so each rebuild archives the previous index under `.superseded/` |
 | `get_architecture_context` | System summary, or an element's rules, controls, definitions, decisions (current and superseded), failures, open questions, guardrails |
 | `trace` | Requirement / assertion / element → assertions + controls → tagged tests → fitness results + decisions |
 | `get_architecture_history` | `architecture-changes` memories oldest-first, plus index rebuild times |
-| `validate_architecture` | CALM CLI + ADL coverage; records `fitness-result` memories (`failed` → `resolved`) |
+| `validate_architecture` | ADL coverage; records `fitness-result` memories (`failed` → `resolved`) |
 
 With `specDriven.enabled: false` none of these are registered and the spec fields are left out of the `store_memory`, `update_memory`, `recall_memory` and `search_index` schemas, so `tools/list` is exactly the 17-tool golden (`schema-parity.integration.test.ts`).
 
@@ -531,7 +530,7 @@ Hooks are declared in `hooks/hooks.json` and executed by the Claude Code harness
 1. pull-org-vault.sh       — git pull on org vault branch (if configured)
 2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
 3. load-memory-index.sh    — cat .index-cache.txt → injected into context
-                             (+ architecture-summary.mjs: ADL/CALM in cwd → short summary from index.json)
+                             (+ architecture-summary.mjs: ADL in cwd → short summary from index.json)
 4. check-sync-errors.sh    — warn if org-sync pushes failed since the last success marker
 ```
 
@@ -560,7 +559,7 @@ sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers
 ### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
 
 ```
-architecture-change.sh — edited file is .adl / .calm.json (specDriven extensions) and captureChanges on?
+architecture-change.sh — edited file is .adl (specDriven extensions) and captureChanges on?
   ├─ no  → {"continue":true}   (decided in bash for the default extensions: no Node start per edit)
   └─ yes → additionalContext: run index_architecture, store an architecture-changes memory, run validate_architecture
 ```
@@ -615,19 +614,18 @@ The rules in this document are also written as code and checked on every `npm te
 | What | Where | Checked by |
 |---|---|---|
 | Code-level rules in ADL (structure, runtime safety, data governance, code quality) | `architecture/adl/*.adl` | ArchUnitTS and behavioural tests, one test per assertion |
-| System-level model in CALM (nodes, connections, controls) | `architecture/calm/total-recall.calm.json` | `calm validate` in CI (pinned `@finos/calm-cli`), plus `calm.test.ts` |
+| System-level model in ADL (actors, services, `DEFINE COMMUNICATION` connections) | `architecture/adl/system.adl` | `adl-consistency.test.ts` (unique elements, no dangling connection endpoints) |
 | Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
 
 **ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
 
-**Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`, `calm-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
+**Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
 
 **Known debt.** `[TR-S7]` (no circular dependencies) is an `it.fails` test: the `state.ts` → `persistence.ts` back-edge closes six cycles. It turns red when the debt is paid, which forces the marker to be flipped.
 
 **Where the privacy filter sits.** `store_memory` writes an org-tagged memory to the org vault locally. The fail-closed filter gates the git sync (`scripts/sync-org-memory.mjs`), so `[TR-D3]` is checked on `privacyCheck` and by the sync end-to-end tests, not on the store call.
 
-To validate the CALM document locally:
-`npx @finos/calm-cli@1.66.0 validate -a architecture/calm/total-recall.calm.json -u architecture/calm/url-mapping.json --strict`
+CALM support (a JSON system model validated with `@finos/calm-cli`) was removed in 1.3.0; the system level is now `system.adl`.
 
 ---
 

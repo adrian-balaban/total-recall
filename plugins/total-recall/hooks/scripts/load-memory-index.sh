@@ -44,7 +44,7 @@ else
 fi
 
 # Spec-driven (specDriven.sessionSummary): a short architecture summary when the
-# working directory holds ADL or CALM files; empty otherwise, so other projects
+# working directory holds ADL files; empty otherwise, so other projects
 # see exactly the output below. Best-effort: a failure adds nothing.
 ARCH_SUMMARY=$(printf '%s' "${HOOK_STDIN:-}" | "$NODE_BIN" "$SCRIPT_DIR/architecture-summary.mjs" 2>/dev/null || true)
 

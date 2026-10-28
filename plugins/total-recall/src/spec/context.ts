@@ -92,11 +92,10 @@ function systemSummary(system: string, model: ArchModel & { sourcePath?: string;
     sourceRev: model.sourceRev,
     files: model.files.map((f) => (f.error ? `${f.path} (${f.error})` : f.path)),
     domains: model.elements.filter((e) => e.kind === 'DOMAIN').map((e) => ({ id: e.id, name: e.name })),
-    components: model.elements.filter((e) => e.kind !== 'DOMAIN' && !e.kind.startsWith('calm-')).map((e) => ({ id: e.id, name: e.name, kind: e.kind })),
-    calmNodes: model.elements.filter((e) => e.kind.startsWith('calm-')).map((e) => ({ id: e.id, name: e.name })),
+    components: model.elements.filter((e) => e.kind !== 'DOMAIN').map((e) => ({ id: e.id, name: e.name, kind: e.kind })),
     assertions: model.assertions.length,
     assertionsWithoutTests: model.assertions.filter((a) => a.tagged && a.tests.length === 0).map((a) => a.id),
-    controls: model.controls.map((c) => `${c.owner}/${c.name}`),
+    relationships: model.relationships.map((r) => ({ id: r.id, kind: r.kind, nodes: r.nodes })),
     definitions: (model.definitions ?? []).map((d) => ({ kind: d.kind, name: d.name, value: d.value, targets: d.targets })),
     openFailures: mine.filter(isFailure).slice(0, limit).map(brief),
     recentDecisions: mine.filter((m) => isDecision(m) && !old.has(m.key)).slice(0, limit).map(brief),
@@ -118,8 +117,6 @@ export function architectureContext(args: { system: string; element?: string; li
     (a) => elementMatches(`assert:${a.id}`, id) || a.targets.some((t) => elementMatches(t, id)),
   );
   const relationships = model.relationships.filter((r) => elementMatches(r.id, id) || r.nodes.some((n) => elementMatches(n, id)));
-  const owners = new Set([...ids, ...relationships.map((r) => r.id)]);
-  const controls = model.controls.filter((c) => [...owners].some((o) => elementMatches(c.owner, o)));
   const linked = linkedMemories([...ids, ...assertions.map((a) => `assert:${a.id}`)], args.system);
   const old = supersededKeys();
 
@@ -129,7 +126,6 @@ export function architectureContext(args: { system: string; element?: string; li
     found: elements.length > 0 || assertions.length > 0,
     elements: elements.map((e) => ({ id: e.id, name: e.name, kind: e.kind, source: e.source })),
     rules: assertions.map((a) => ({ id: a.id, text: a.text, scope: a.scope, source: a.source, tests: a.tests })),
-    controls: controls.map((c) => ({ owner: c.owner, name: c.name, description: c.description })),
     definitions: (model.definitions ?? []).filter((d) => d.targets.some((t) => elementMatches(t, id))).map((d) => ({ kind: d.kind, name: d.name, value: d.value })),
     relationships: relationships.map((r) => ({ id: r.id, kind: r.kind, nodes: r.nodes, description: r.description })),
     decisions: linked.filter((m) => isDecision(m) && !old.has(m.key) && m.status !== 'proposed').slice(0, limit).map(brief),
@@ -143,25 +139,21 @@ export function architectureContext(args: { system: string; element?: string; li
   return out;
 }
 
-// requirement / assertion / CALM element → assertions and controls → tests → results and decisions.
+// requirement / assertion / ADL element → assertions → tests → results and decisions.
 export function trace(args: { id: string; system?: string }) {
   const raw = String(args.id ?? '').trim();
-  if (!raw) throw new Error('trace needs an id: a requirement (REQ-7), an assertion (TR-S2 or assert:TR-S2) or an element (calm:org-vault, adl:testing).');
+  if (!raw) throw new Error('trace needs an id: a requirement (REQ-7), an assertion (TR-S2 or assert:TR-S2) or an element (adl:org-vault, adl:testing).');
   const systems = args.system ? [args.system] : listSystems();
   const requirementMemories = Object.values(memIndex).filter((m) => m.requirements?.includes(raw) && inSystem(m, args.system)).sort(newestFirst);
   const start = new Set<string>([normalizeElementId(raw), ...requirementMemories.flatMap((m) => m.elements ?? [])]);
 
   const assertions: Record<string, unknown>[] = [];
-  const controls: Record<string, unknown>[] = [];
   for (const system of systems) {
     const model = loadModel(system);
     if (!model) continue;
     for (const a of model.assertions) {
       const hit = [...start].some((s) => elementMatches(`assert:${a.id}`, s) || a.targets.some((t) => elementMatches(t, s)));
       if (hit) assertions.push({ system, id: a.id, text: a.text, source: a.source, tests: a.tests, targets: a.targets });
-    }
-    for (const c of model.controls) {
-      if ([...start].some((s) => elementMatches(c.owner, s))) controls.push({ system, owner: c.owner, name: c.name, description: c.description });
     }
   }
   const followed = [...start, ...assertions.map((a) => `assert:${a.id as string}`)];
@@ -170,7 +162,6 @@ export function trace(args: { id: string; system?: string }) {
     id: raw,
     requirements: requirementMemories.map(brief),
     assertions,
-    controls,
     untested: assertions.filter((a) => (a.tests as string[]).length === 0).map((a) => a.id),
     results: linked.filter((m) => m.artifact === 'fitness-result').map(brief),
     decisions: linked.filter((m) => isDecision(m) && !supersededKeys().has(m.key)).map(brief),

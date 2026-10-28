@@ -69,7 +69,7 @@ suite('spec-driven hooks', () => {
       expect(ctx).toContain('Recent decisions: Encrypt the order DB');
     });
 
-    it('adds nothing in a project without ADL or CALM files', () => {
+    it('adds nothing in a project without ADL files', () => {
       expect(context(home)).not.toContain('Architecture (spec-driven)');
     });
 
@@ -102,8 +102,8 @@ suite('spec-driven hooks', () => {
       expect(out.hookSpecificOutput.additionalContext).toMatch(/index_architecture\(path="[^"]+"\)[\s\S]*architecture-changes[\s\S]*validate_architecture/);
     });
 
-    it('Gemini AfterTool on a .calm.json write answers with the AfterTool event name', () => {
-      const out = run({ hook_event_name: 'AfterTool', tool_name: 'write_file', tool_input: { file_path: '/p/sys.calm.json' } });
+    it('Gemini AfterTool on an .adl write answers with the AfterTool event name', () => {
+      const out = run({ hook_event_name: 'AfterTool', tool_name: 'write_file', tool_input: { file_path: '/p/sys.adl' } });
       expect(out.hookSpecificOutput.hookEventName).toBe('AfterTool');
     });
 

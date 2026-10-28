@@ -4,7 +4,7 @@
 // a value can come in by: store/update arguments, parsed frontmatter, index.json
 // and import archives.
 
-export const ARTIFACT_KINDS = ['spec', 'adl', 'calm', 'adr', 'fitness-result'] as const;
+export const ARTIFACT_KINDS = ['spec', 'adl', 'adr', 'fitness-result'] as const;
 export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
 export const SPEC_STATUSES = ['proposed', 'accepted', 'superseded', 'failed', 'resolved'] as const;
 export type SpecStatus = (typeof SPEC_STATUSES)[number];
@@ -33,7 +33,7 @@ const MAX = 200;
 const MAX_ITEMS = 500;
 // Single-line, no control characters: these values land in YAML frontmatter.
 const SAFE = /^[^\u0000-\u001f\u007f]+$/;
-// Element IDs: `adl:<component>`, `assert:<ID>`, `calm:<node>` or a bare ID.
+// Element IDs: `adl:<component>`, `assert:<ID>` or a bare ID.
 const ELEMENT_RE = /^[A-Za-z0-9][A-Za-z0-9._:/-]*$/;
 
 function str(v: unknown): string | undefined {

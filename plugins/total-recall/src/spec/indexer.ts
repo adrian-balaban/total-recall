@@ -1,12 +1,11 @@
-// Builds the architecture model of a project from its ADL and CALM files
+// Builds the architecture model of a project from its ADL files
 // (index_architecture). One model per system; the memory written from it holds a
 // readable summary plus a JSON block with the parsed elements, assertions,
-// controls and the tests that carry each assertion ID. It never copies a file.
+// communications and the tests that carry each assertion ID. It never copies a file.
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import { parseAdl, assertionTargets, slug } from './adl-parse.js';
-import { parseCalm } from './calm-parse.js';
 import { isArchitectureFile, type SpecConfig } from './config.js';
 
 const MAX_FILES = 5000;
@@ -15,25 +14,23 @@ const TEST_FILE_RE = /(\.(test|spec)\.[cm]?[jt]sx?|Tests?\.(java|kt|cs)|_test\.(
 
 export interface ModelElement { id: string; kind: string; name: string; source: string }
 export interface ModelAssertion { id: string; tagged: boolean; text: string; scope?: string; targets: string[]; source: string; tests: string[] }
-export interface ModelControl { owner: string; name: string; description: string; source: string }
 export interface ModelDefinition { kind: string; name: string; value: string; targets: string[]; source: string }
 export interface ArchModel {
   system: string;
-  files: { path: string; kind: 'adl' | 'calm'; hash: string; error?: string }[];
+  files: { path: string; kind: 'adl'; hash: string; error?: string }[];
   elements: ModelElement[];
   assertions: ModelAssertion[];
   communications: { from: string; to: string; style: string; source: string }[];
   relationships: { id: string; kind: string; nodes: string[]; description: string; source: string }[];
-  controls: ModelControl[];
   definitions?: ModelDefinition[];
   constants: Record<string, string>;
   fingerprint: string;
 }
 
-export interface ScanResult { adl: string[]; calm: string[]; tests: string[]; truncated: boolean }
+export interface ScanResult { adl: string[]; tests: string[]; truncated: boolean }
 
 export function scanProject(dir: string, cfg: SpecConfig): ScanResult {
-  const res: ScanResult = { adl: [], calm: [], tests: [], truncated: false };
+  const res: ScanResult = { adl: [], tests: [], truncated: false };
   const skip = new Set(cfg.excludeDirs);
   let seen = 0;
   const walk = (d: string) => {
@@ -46,8 +43,7 @@ export function scanProject(dir: string, cfg: SpecConfig): ScanResult {
       if (e.isDirectory()) {
         if (!skip.has(e.name) && !e.name.startsWith('.')) walk(p);
       } else if (e.isFile()) {
-        const kind = isArchitectureFile(e.name, cfg);
-        if (kind) res[kind].push(p);
+        if (isArchitectureFile(e.name, cfg)) res.adl.push(p);
         else if (TEST_FILE_RE.test(p.split(path.sep).join('/'))) res.tests.push(p);
       }
     }
@@ -73,7 +69,7 @@ export function buildModels(dir: string, cfg: SpecConfig, rel: (p: string) => st
   const model = (system: string): ArchModel => {
     let m = models.get(system);
     if (!m) {
-      m = { system, files: [], elements: [], assertions: [], communications: [], relationships: [], controls: [], definitions: [], constants: {}, fingerprint: '' };
+      m = { system, files: [], elements: [], assertions: [], communications: [], relationships: [], definitions: [], constants: {}, fingerprint: '' };
       models.set(system, m);
     }
     return m;
@@ -102,24 +98,16 @@ export function buildModels(dir: string, cfg: SpecConfig, rel: (p: string) => st
     }
   }
 
-  // CALM files belong to the named system, or to the only ADL system found.
-  const calmSystem = systemArg ? fallback : models.size === 1 ? [...models.keys()][0]! : fallback;
-  for (const f of scan.calm) {
-    const text = read(f);
-    const source = rel(f);
-    const m = model(calmSystem);
-    if (text === null) { m.files.push({ path: source, kind: 'calm', hash: '', error: 'unreadable or larger than 1 MB' }); continue; }
-    try {
-      const doc = parseCalm(text);
-      m.files.push({ path: source, kind: 'calm', hash: sha(text) });
-      for (const n of doc.nodes) {
-        if (!m.elements.some((x) => x.id === `calm:${n.id}`)) m.elements.push({ id: `calm:${n.id}`, kind: `calm-${n.type || 'node'}`, name: n.name, source });
-      }
-      for (const r of doc.relationships) m.relationships.push({ id: `calm:${r.id}`, kind: r.kind, nodes: r.nodes.map((n) => `calm:${n}`), description: r.description, source });
-      for (const c of doc.controls) m.controls.push({ ...c, source });
-    } catch (e) {
-      m.files.push({ path: source, kind: 'calm', hash: sha(text), error: `invalid JSON: ${(e as Error).message}` });
-    }
+  // Each DEFINE COMMUNICATION becomes a relationship between the elements it names
+  // (matched by display name, then id); an endpoint that matches none is kept as written.
+  for (const m of models.values()) {
+    const resolve = (n: string) => {
+      const t = n.trim().toLowerCase();
+      return (m.elements.find((e) => e.name.toLowerCase() === t) ?? m.elements.find((e) => e.id === `adl:${t}` || e.id.endsWith(`.${t}`)))?.id ?? n;
+    };
+    m.relationships = m.communications.map((c) => ({
+      id: `${slug(c.from)}-to-${slug(c.to)}`, kind: c.style, nodes: [resolve(c.from), resolve(c.to)], description: '', source: c.source,
+    }));
   }
 
   // Tests that carry a tagged assertion ID in their text, e.g. it('[TR-S2] …').
@@ -159,17 +147,15 @@ const JSON_START = '<!-- total-recall:architecture-model -->';
 
 export function renderModel(m: ArchModel, meta: { sourcePath: string; sourceRev?: string }): string {
   const domains = m.elements.filter((e) => e.kind === 'DOMAIN');
-  const parts = m.elements.filter((e) => !['DOMAIN', 'SAGA'].includes(e.kind) && !e.kind.startsWith('calm-'));
-  const nodes = m.elements.filter((e) => e.kind.startsWith('calm-'));
+  const parts = m.elements.filter((e) => !['DOMAIN', 'SAGA'].includes(e.kind));
   const untested = m.assertions.filter((a) => a.tagged && a.tests.length === 0);
   const lines = [
     `Architecture index for **${m.system}**, built by index_architecture from ${m.files.length} file(s) under \`${meta.sourcePath}\`${meta.sourceRev ? ` at ${meta.sourceRev.slice(0, 12)}` : ''}. The files in the repository are the source of truth; this is a summary.`,
     '',
     `- Domains (${domains.length}): ${domains.map((d) => d.name).join(', ') || '—'}`,
     `- Components (${parts.length}): ${parts.map((d) => `${d.name} (${d.kind.toLowerCase()})`).join(', ') || '—'}`,
-    `- CALM nodes (${nodes.length}): ${nodes.map((d) => d.id.slice(5)).join(', ') || '—'}`,
     `- Assertions: ${m.assertions.length} (${m.assertions.filter((a) => a.tagged).length} tagged, ${untested.length} tagged without a test)`,
-    `- CALM controls: ${m.controls.map((c) => `${c.owner.slice(5)}/${c.name}`).join(', ') || '—'}`,
+    `- Relationships (${m.relationships.length}): ${m.relationships.map((r) => `${r.nodes.join(' → ')} (${r.kind})`).join('; ') || '—'}`,
   ];
   const defs = m.definitions ?? [];
   if (defs.length) lines.push(`- Definitions (${defs.length}): ${defs.map((d) => `${d.name} (${d.kind.toLowerCase()})`).join(', ')}`);

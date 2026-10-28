@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // See architecture-change.sh. Reads the hook's stdin JSON and prints the hook
-// response: additionalContext for an edited ADL/CALM file, else {"continue":true}.
+// response: additionalContext for an edited ADL file, else {"continue":true}.
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -18,7 +18,7 @@ export function respond(input, cfg) {
     `Architecture file changed: ${file}.`,
     `1. Run index_architecture(path="${input.cwd ?? dir}") to refresh the architecture index; it returns the added and removed elements.`,
     '2. Then store_memory with category "architecture-changes": what changed, WHY, and the requirement or decision behind it; set system, elements (the IDs from step 1) and requirements.',
-    '3. Run validate_architecture on the same path to check the CALM document and ADL test coverage.',
+    '3. Run validate_architecture on the same path to check ADL test coverage.',
   ].join('\n');
   return { continue: true, hookSpecificOutput: { hookEventName: event, additionalContext: text } };
 }
