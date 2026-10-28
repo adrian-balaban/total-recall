@@ -39,6 +39,7 @@ import {
   assertLstat,
   RESERVED_KEY_SEGMENTS,
 } from '../vault-scan.js';
+import { assertTmpPath } from './assert-tmp-path.js';
 import { PERSONAL_VAULT, ORG_VAULT } from '../paths.js';
 import { memIndex, errors } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -68,6 +69,8 @@ function cleanMem(keys: string[]) {
 beforeEach(() => {
   errors.length = 0;
   for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
+  assertTmpPath(PERSONAL_VAULT);
+  assertTmpPath(ORG_VAULT);
   fs.rmSync(PERSONAL_VAULT, { recursive: true, force: true });
   fs.rmSync(ORG_VAULT, { recursive: true, force: true });
   fs.mkdirSync(PERSONAL_VAULT, { recursive: true });

@@ -4,7 +4,12 @@ import * as path from 'path';
 
 // ─── Paths ───────────────────────────────────────────────────────────────────
 
-export const HOME = os.homedir();
+// process.env.HOME first: os.homedir() reads the OS-level environment, which a
+// worker thread's process.env assignment does NOT reach. Tests redirect HOME this
+// way, and Stryker's vitest runner forces pool:'threads' — with os.homedir() alone
+// that redirect was ignored and the suite's rmSync(PERSONAL_VAULT) wiped the real
+// ~/.total-recall (2026-10-27). os.homedir() stays the fallback (unset HOME, Windows).
+export const HOME = process.env.HOME || os.homedir();
 export const TOTAL_RECALL_DIR = path.join(HOME, '.total-recall');
 export const CONFIG_PATH = path.join(TOTAL_RECALL_DIR, 'config.json');
 

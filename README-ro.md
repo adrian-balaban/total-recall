@@ -14,7 +14,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.2.0, stabilă: 861 teste trec, Test Coverage 93.5% statements, Mutation tests ≈67%. Vezi [Probleme cunoscute](#️-probleme-cunoscute) pentru pragurile de Test Coverage pe care CI le ratează încă.
+- **Status** — v1.2.1, stabilă: 862 teste trec, Test Coverage 93.5% statements, Mutation tests ≈67%. Vezi [Probleme cunoscute](#️-probleme-cunoscute) pentru pragurile de Test Coverage pe care CI le ratează încă.
 
 ```mermaid
 flowchart LR
@@ -228,7 +228,7 @@ Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este
 
 | | |
 |---|---|
-| **Versiune** | 1.2.0 — stabilă |
+| **Versiune** | 1.2.1 — stabilă |
 | **Teste** | 778 unitare + 20 de integrare, toate trec · 47 fișiere · ~13k linii de cod de test |
 | **Test Coverage** | 93.5% statements · 87.1% branches · 95.7% lines |
 | **Mutation tests** | ≈67% (Stryker, 16 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |

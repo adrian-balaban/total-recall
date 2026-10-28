@@ -120,3 +120,12 @@ describe('redactPaths (7.1)', () => {
     );
   });
 });
+// Regression (2026-10-27): HOME must follow process.env.HOME, not only os.homedir().
+// Under Stryker's pool:'threads' the OS-level homedir ignores an in-test HOME
+// assignment, so the vault-scan tests' rmSync hit the real ~/.total-recall.
+describe('HOME resolution', () => {
+  it('uses process.env.HOME (the test redirect), so vault paths stay in the sandbox', () => {
+    expect(HOME).toBe(process.env.HOME);
+    expect(PERSONAL_VAULT.startsWith(HOME)).toBe(true);
+  });
+});

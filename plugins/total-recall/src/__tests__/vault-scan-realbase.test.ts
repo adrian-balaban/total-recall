@@ -60,6 +60,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { indexFile, __testClearRealBaseCache } from '../vault-scan.js';
+import { assertTmpPath } from './assert-tmp-path.js';
 import { PERSONAL_VAULT } from '../paths.js';
 import { memIndex } from '../state.js';
 import { contentCache } from '../lru-cache.js';
@@ -72,6 +73,7 @@ afterAll(() => {
 
 beforeEach(() => {
   for (const k of Object.keys(memIndex)) delete (memIndex as any)[k];
+  assertTmpPath(PERSONAL_VAULT);
   fs.rmSync(PERSONAL_VAULT, { recursive: true, force: true });
   fs.mkdirSync(PERSONAL_VAULT, { recursive: true });
   // The module-level cache may already hold PERSONAL_VAULT from a prior test's
