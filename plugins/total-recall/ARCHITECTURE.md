@@ -223,7 +223,7 @@ src/
 ├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
 ├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex
 ├── lru-cache.ts      LRUCache class + shared contentCache instance (100 entries, 30 min TTL)
-├── persistence.ts    loadIndexes, debounced scheduleSave/scheduleIdfRecalc, saveNow, flushPending, buildIndexCache
+├── persistence.ts    loadIndexes, debounced scheduleSave/scheduleIdfRecalc, bumpAccess, saveNow, flushPending, buildIndexCache
 ├── frontmatter.ts    minimal YAML frontmatter parser/serializer (replaces gray-matter)
 ├── vault-scan.ts     reconcileIndex, indexFile, deriveCategory, slugify, keyFromPath, tokenEstimate
 ├── tfidf.ts          tokenize, rebuildInvertedIndex, tfidfSearch
@@ -620,8 +620,6 @@ The rules in this document are also written as code and checked on every `npm te
 **ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
 
 **Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
-
-**Known debt.** `[TR-S7]` (no circular dependencies) is an `it.fails` test: the `state.ts` → `persistence.ts` back-edge closes six cycles. It turns red when the debt is paid, which forces the marker to be flipped.
 
 **Where the privacy filter sits.** `store_memory` writes an org-tagged memory to the org vault locally. The fail-closed filter gates the git sync (`scripts/sync-org-memory.mjs`), so `[TR-D3]` is checked on `privacyCheck` and by the sync end-to-end tests, not on the store call.
 

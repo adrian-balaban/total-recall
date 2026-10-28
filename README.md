@@ -10,11 +10,12 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 
 - **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
 - **What it does for you** — injects the relevant memories at the start of every session and captures decisions and preferences automatically as you work and before each context compaction.
+- **Spec-driven too** — memories can be tied to a spec: tag any decision, requirement or failure with a `system`, the `elements` it concerns and a `requirements` ID, and recall by element or follow a requirement to its decisions. No ADL needed for that. If the project also keeps its architecture as code (ADL), the tools additionally link each rule to the tests that enforce it. See [Spec-driven work](#-spec-driven-work-with-adl).
 - **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.3.0, stable: 860 tests pass, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.1, stable: 886 tests pass, 96.3% statement coverage, ≈72% mutation score.
 
 ```mermaid
 flowchart LR
@@ -23,6 +24,9 @@ flowchart LR
     C --> D[Decisions & preferences<br/>captured automatically]
     D --> E[(~/.total-recall<br/>Markdown vault)]
     E -.-> A
+    C -.->|memories tagged with<br/>system · elements · requirements| G[Spec-driven memories:<br/>decisions, failures, changes<br/>linked to the spec]
+    G --> E
+    H[ADL files, optional] -.->|index_architecture| G
 ```
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
@@ -82,7 +86,10 @@ boot sequence, search pipeline and hook lifecycle are documented in
 
 ### 📐 Spec-driven work with ADL
 
-When a project keeps its architecture as code (ADL files), Total Recall remembers what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. The files stay in your repository as the source of truth.
+Total Recall remembers what a spec does not say: why each rule exists, what was rejected, which checks failed and how they were fixed. This works at two levels:
+
+- **With memories only.** Any memory can carry `system`, `artifact` (`spec`, `adr`, `fitness-result`, …), `elements`, `requirements` and `status`. `recall_memory` and `search_index` filter on `elements`, `get_related_memories` follows shared elements, and a requirement ID ties its decisions together. This needs no ADL file and no index.
+- **With ADL as well.** When a project keeps its architecture as code, the five architecture tools below build on the same memories. The files stay in your repository as the source of truth.
 
 - `index_architecture` reads the project's `*.adl` files into one summary memory per system (elements, assertions and the connections declared with `DEFINE COMMUNICATION`), and links each ADL assertion to the tests that carry its ID.
 - `get_architecture_context`, `trace` and `get_architecture_history` give back the rules, relationships, decisions, failures and changes for one element, requirement or assertion.
@@ -213,8 +220,8 @@ Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is git
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration passing · 47 files · ~13k lines of test code |
-| **Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
-| **Mutation** | ≈67% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
+| **Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Mutation** | ≈72% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production deps |
@@ -233,14 +240,10 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   filter guards the outbound push only; nothing fences inbound content. Until that
   lands, give org-vault push access only to people you trust, and protect its branch.
   See [SECURITY.md](SECURITY.md).
-- **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
-  93.6% (need 95), functions 92.3% (need 95), branches 87.7% (need 90). Lines pass at
-  95.8%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
-  `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
 - **Three modules reach code without checking it.** Per-module mutation score diverges
-  sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7% and
-  `persistence.ts` 53.2%. `persistence.ts` is the instructive case — 86.1% coverage but
-  only 53.2% mutation, with 122 surviving mutants: the tests run the code but would not
+  sharply from coverage: `embeddings.ts` 48.8%, `persistence.ts` 55.1% and
+  `tfidf.ts` 60.9%. `persistence.ts` is the instructive case — 86.3% coverage but
+  only 55.1% mutation, with 120 surviving mutants: the tests run the code but would not
   notice if it broke. Coverage alone would have missed this, which is why the gate
   looks at mutation.
 - **The mutation score is not reproducible run-to-run.** Two CI runs with no

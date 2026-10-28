@@ -10,6 +10,7 @@ import {
 } from './paths.js';
 import { clampImportanceScore } from './ebbinghaus.js';
 import { memIndex, invertedIndex, recordError } from './state.js';
+import type { Index } from './types.js';
 import { rebuildInvertedIndex } from './tfidf.js';
 import { isReservedKey } from './vault-scan.js';
 import { applySpecFields } from './spec/fields.js';
@@ -329,12 +330,37 @@ export function scheduleSave() {
   scheduleIndexSave();
 }
 
-// Read path (bumpAccess in state.ts): only accessCount/lastAccessed moved on
+// Read path (bumpAccess, below): only accessCount/lastAccessed moved on
 // disk — tokens unchanged, the inverted index + cache stay valid. Persist the
 // access bump WITHOUT rebuilding the inverted index. See the dirtyTokens flag
 // comment above for the full rationale.
 export function scheduleAccessSave() {
   scheduleIndexSave();
+}
+
+// Bump the access-tracking fields (accessCount + lastAccessed) on a memory entry
+// and schedule a lightweight index save. Three call sites share the exact same
+// triple:
+//   - get_memories_by_keys(full)         — deferred to after a successful read
+//   - recall_memory(full=true)           — unconditional, BEFORE the read
+//   - (update_memory / delete_memory bypass — they replace the whole metadata object)
+// Each site calls this on its own schedule (some pre-read, some post-read, some
+// never — get_related_memories' includeContent path never bumps because that
+// tool is a discovery query, not a "read"); this helper owns the
+// micro-mutation + save only. Centralized so the save cadence is in one place
+// and a future "also bump X" change happens once, not three times.
+//
+// #4: this is the READ path. scheduleAccessSave (not scheduleSave) persists
+// accessCount/lastAccessed to index.json WITHOUT rebuilding the inverted index
+// — a read changes zero tokens, so the invertedIndex.json + cache rebuild that
+// scheduleSave would trigger is pure waste (O(N) re-tokenization + a disk
+// rewrite per access on a read-heavy session). Writes (store/update/delete/
+// reconcile) still call scheduleSave, which sets the dirtyTokens flag and
+// schedules the rebuild.
+export function bumpAccess(meta: Index[string]): void {
+  meta.accessCount++;
+  meta.lastAccessed = new Date().toISOString();
+  scheduleAccessSave();
 }
 
 // Shared 1s-debounced index.json write, shared by the write and read paths.

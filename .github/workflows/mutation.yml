@@ -50,7 +50,9 @@ jobs:
       # 90s `npm ci` inside its test and time out). Stryker's dry run only
       # executes the ~21-file allow-list in vitest.stryker.config.ts (293 of 744
       # tests), so without this step most of the suite runs nowhere.
-      - run: npm test
+      # `test:coverage` is `vitest run --coverage`: the same suite, plus the 95/95/90/95
+      # thresholds in vitest.config.ts, so a coverage regression fails the gate.
+      - run: npm run test:coverage
       # Boots the real dist/index.js over stdio — the only check that the bundle
       # CI is about to publish to the `release` branch actually starts and
       # answers MCP calls. Kept as its own step so a failure here is

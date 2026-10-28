@@ -10,11 +10,12 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 
 - **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code și Gemini/Antigravity: 22 de unelte MCP (17 pentru memorie, 5 pentru lucrul spec-driven cu arhitectura) peste un vault de fișiere Markdown din `~/.total-recall`.
 - **Ce face pentru tine** — injectează memoriile relevante la începutul fiecărei sesiuni și capturează automat deciziile și preferințele pe măsură ce lucrezi și înainte de fiecare compactare a contextului, ca să nu repeți același context.
+- **Și spec-driven** — memoriile pot fi legate de o specificație: etichetezi orice decizie, cerință sau eșec cu un `system`, `elements` la care se referă și un ID în `requirements`, apoi cauți după element sau urmărești o cerință până la deciziile ei. Pentru asta nu ai nevoie de ADL. Dacă proiectul își ține și arhitectura ca cod (ADL), uneltele leagă în plus fiecare regulă de testele care o impun. Vezi [Lucru spec-driven](#-lucru-spec-driven-cu-adl).
 - **Cum caută** — hibrid: TF-IDF × curba uitării Ebbinghaus, plus căutare semantică opțională; degradează curat la căutare de text dacă căutarea semantică nu e activată.
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.3.0, stabilă: 860 teste trec, Test Coverage 93.6% statements, Mutation tests ≈67%. Vezi [Probleme cunoscute](#️-probleme-cunoscute) pentru pragurile de Test Coverage pe care CI le ratează încă.
+- **Status** — v1.3.1, stabilă: 886 teste trec, Test Coverage 96.3% statements, Mutation tests ≈72%.
 
 ```mermaid
 flowchart LR
@@ -23,6 +24,9 @@ flowchart LR
     C --> D[Deciziile & preferințele<br/>capturate automat]
     D --> E[(~/.total-recall<br/>vault Markdown)]
     E -.-> A
+    C -.->|memorii etichetate cu<br/>system · elements · requirements| G[Memorii spec-driven:<br/>decizii, eșecuri, schimbări<br/>legate de specificație]
+    G --> E
+    H[Fișiere ADL, opțional] -.->|index_architecture| G
 ```
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
@@ -85,7 +89,10 @@ secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-uril
 
 ### 📐 Lucru spec-driven cu ADL
 
-Când un proiect își ține arhitectura ca cod (fișiere ADL), Total Recall reține ce nu scrie în fișiere: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Fișierele rămân în repository, ca sursă de adevăr.
+Total Recall reține ce nu spune o specificație: de ce există fiecare regulă, ce variante au fost respinse, ce verificări au picat și cum au fost reparate. Funcționează la două niveluri:
+
+- **Doar cu memorii.** Orice memorie poate purta `system`, `artifact` (`spec`, `adr`, `fitness-result`, …), `elements`, `requirements` și `status`. `recall_memory` și `search_index` filtrează după `elements`, `get_related_memories` urmărește elementele comune, iar un ID de cerință leagă între ele deciziile ei. Nu e nevoie de fișiere ADL și nici de index.
+- **Cu ADL în plus.** Când proiectul își ține arhitectura ca cod, cele cinci unelte de arhitectură de mai jos se sprijină pe aceleași memorii. Fișierele rămân în repository, ca sursă de adevăr.
 
 - `index_architecture` citește fișierele `*.adl` ale proiectului într-o memorie de rezumat pentru fiecare sistem (elemente, aserțiuni și conexiunile declarate cu `DEFINE COMMUNICATION`) și leagă fiecare aserțiune ADL de testele care îi poartă ID-ul.
 - `get_architecture_context`, `trace` și `get_architecture_history` întorc regulile, relațiile, deciziile, eșecurile și schimbările pentru un element, o cerință sau o aserțiune.
@@ -215,8 +222,8 @@ Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este
 |---|---|
 | **Versiune** | 1.2.1 — stabilă |
 | **Teste** | 778 unitare + 20 de integrare, toate trec · 47 fișiere · ~13k linii de cod de test |
-| **Test Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
-| **Mutation tests** | ≈67% (Stryker, 16 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
+| **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Mutation tests** | ≈72% (Stryker, 16 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
 | **Release-uri** | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă |
 | **Audit** | 0 critice în dependențele de producție |
@@ -235,14 +242,10 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
   confidențialitate protejează doar push-ul spre exterior; nimic nu izolează conținutul care
   intră. Până la remediere, dă drept de push în vault-ul org doar persoanelor de încredere și
   protejează-i branch-ul. Vezi [SECURITY.md](SECURITY.md).
-- **Test Coverage ratează trei din patru praguri** setate în `vitest.config.ts`: statements
-  93.6% (necesar 95), functions 92.3% (necesar 95), branches 87.7% (necesar 90). Lines trece la
-  95.8%. `npm run test:coverage` iese deci cu cod non-zero. Cele mai mari lacune sunt
-  `vectorStore.ts` (72.5%) și `embeddings.ts` (88.6%).
 - **Trei module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
-  modul divergă puternic de acoperire: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7% și
-  `persistence.ts` 53.2%. Cazul instructiv e `persistence.ts` — 86.1% acoperire la doar 53.2%
-  mutație, cu 122 mutanți supraviețuitori: testele execută codul, dar nu ar observa dacă
+  modul divergă puternic de acoperire: `embeddings.ts` 48.8%, `persistence.ts` 55.1% și
+  `tfidf.ts` 60.9%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%
+  mutație, cu 120 mutanți supraviețuitori: testele execută codul, dar nu ar observa dacă
   s-ar strica. Acoperirea singură ar fi ratat asta; de aceea poarta se uită la mutație.
 - **Scorul de Mutation tests nu este reproductibil de la o rulare la alta.** Două rulări CI fără nicio
   modificare la vreun fișier sursă mutat au raportat 65.39% și 66.39% — aproximativ ±1 punct

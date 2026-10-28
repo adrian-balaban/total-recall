@@ -6,13 +6,13 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)) over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)), and memories can be tied to a spec with or without ADL over a vault of plain Markdown files under `~/.total-recall/`.
 - **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.3.0, stable: 860 tests passing, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.1, stable: 886 tests passing, 96.3% statement coverage, ≈72% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -264,7 +264,7 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 
 ## 📐 Spec-driven architecture (ADL)
 
-For projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) (landscape and connections go in a separate file with `DEFINE COMMUNICATION`). The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
+Spec-driven work has two levels. **Memories alone** are enough to start: any memory can carry `system`, `artifact`, `elements`, `requirements` and `status` (see step 2 below), `recall_memory` and `search_index` filter on `elements`, `get_related_memories` follows shared elements, and a requirement ID ties its decisions together. No ADL file and no index is needed. **ADL adds the architecture tools** for projects that keep their architecture as code: ADL files (the notation of the "Architecture as Code" course: `DEFINE SYSTEM`, `ASSERT(…)`, `FOREACH … DO … END`) (landscape and connections go in a separate file with `DEFINE COMMUNICATION`). The files stay in the repository as the source of truth. Total Recall indexes them and remembers what they do not say: why a rule exists, what was rejected, which checks failed and how they were fixed.
 
 1. `index_architecture(path)` reads every `*.adl` file under `path` into one memory per system. It records the elements, assertions (with their `# [ID]` tag), relationships (each `DEFINE COMMUNICATION`), ADL definitions such as capabilities and contracts, and the test lines that carry each assertion ID. It stores the repo-relative path and the commit, not the files. Re-running it on unchanged files writes nothing.
 2. Memories link to the architecture through optional frontmatter fields: `system`, `artifact` (`spec`, `adl`, `adr`, `fitness-result`), `elements` (`adl:<domain>.<component>`, `assert:<ID>`), `requirements`, `sourcePath`, `sourceRev`, `status` (`proposed`, `accepted`, `superseded`, `failed`, `resolved`) and `supersedes`. `store_memory`, `update_memory`, export and import carry them; `recall_memory` and `search_index` filter on `elements`; `get_related_memories` relates memories that share elements.
@@ -374,8 +374,8 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration, all passing · 47 files · ~13k lines of test code |
-| **Test Coverage** | 93.6% statements · 87.7% branches · 95.8% lines |
-| **Mutation tests** | ≈67% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
+| **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Mutation tests** | ≈72% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
 | **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
 | **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production dependencies |
@@ -384,8 +384,7 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Test Coverage misses three of four thresholds** set in `vitest.config.ts`: statements 93.6% (needs 95), functions 92.3% (needs 95), branches 87.7% (needs 90). Lines passes at 95.8%. `npm run test:coverage` therefore exits non-zero. The biggest gaps are `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
-- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 49.4%, `vectorStore.ts` 53.7%, and `persistence.ts` 53.2%. The instructive case is `persistence.ts` — 86.1% coverage at just 53.2% mutation, with 122 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
+- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 48.8%, `persistence.ts` 55.1%, and `tfidf.ts` 60.9%. The instructive case is `persistence.ts` — 86.3% coverage at just 55.1% mutation, with 120 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
 - **The mutation score is not reproducible run to run.** Two CI runs with no change to any mutated source file reported 65.39% and 66.39% — roughly ±1 point of variance, most likely from mutants timing out under variable runner load. Do not read a single decimal as precise. The margin above the 65% threshold was widened to roughly 3 points in v1.1.22 (five modules brought from 0–75% to 93–100%, +34 mutants killed), so ordinary variance no longer risks a red gate — which matters because a red gate silently holds back the `release` branch rather than shipping something broken.
 
 ---
