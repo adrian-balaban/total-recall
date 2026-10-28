@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.3.1, stable: 861 tests pass, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.1, stable: 886 tests pass, 96.3% statement coverage, ≈72% mutation score.
 
 ```mermaid
 flowchart LR
@@ -216,8 +216,8 @@ Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is git
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration passing · 47 files · ~13k lines of test code |
-| **Coverage** | 93.6% statements · 87.6% branches · 95.8% lines |
-| **Mutation** | ≈67% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
+| **Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Mutation** | ≈72% (Stryker, 16 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production deps |
@@ -236,14 +236,10 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
   filter guards the outbound push only; nothing fences inbound content. Until that
   lands, give org-vault push access only to people you trust, and protect its branch.
   See [SECURITY.md](SECURITY.md).
-- **Coverage misses three of four thresholds** set in `vitest.config.ts`: statements
-  93.6% (need 95), functions 92.3% (need 95), branches 87.6% (need 90). Lines pass at
-  95.8%. `npm run test:coverage` therefore exits non-zero. Largest gaps are
-  `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
 - **Three modules reach code without checking it.** Per-module mutation score diverges
-  sharply from coverage: `embeddings.ts` 48.8%, `vectorStore.ts` 54.0% and
-  `persistence.ts` 52.7%. `persistence.ts` is the instructive case — 86.3% coverage but
-  only 52.7% mutation, with 122 surviving mutants: the tests run the code but would not
+  sharply from coverage: `embeddings.ts` 48.8%, `persistence.ts` 55.1% and
+  `tfidf.ts` 60.9%. `persistence.ts` is the instructive case — 86.3% coverage but
+  only 55.1% mutation, with 120 surviving mutants: the tests run the code but would not
   notice if it broke. Coverage alone would have missed this, which is why the gate
   looks at mutation.
 - **The mutation score is not reproducible run-to-run.** Two CI runs with no

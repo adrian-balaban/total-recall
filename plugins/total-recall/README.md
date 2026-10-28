@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.3.1, stable: 861 tests passing, 93.6% statement coverage, ≈67% mutation score. See [Known issues](#️-known-issues) for the coverage thresholds CI still misses.
+- **Status** — v1.3.1, stable: 886 tests passing, 96.3% statement coverage, ≈72% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -374,8 +374,8 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 |---|---|
 | **Version** | 1.2.1 — stable |
 | **Tests** | 778 unit + 20 integration, all passing · 47 files · ~13k lines of test code |
-| **Test Coverage** | 93.6% statements · 87.6% branches · 95.8% lines |
-| **Mutation tests** | ≈67% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
+| **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Mutation tests** | ≈72% (Stryker, 16 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
 | **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
 | **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
 | **Audit** | 0 critical in production dependencies |
@@ -384,8 +384,7 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Test Coverage misses three of four thresholds** set in `vitest.config.ts`: statements 93.6% (needs 95), functions 92.3% (needs 95), branches 87.6% (needs 90). Lines passes at 95.8%. `npm run test:coverage` therefore exits non-zero. The biggest gaps are `vectorStore.ts` (72.5%) and `embeddings.ts` (88.6%).
-- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 48.8%, `vectorStore.ts` 54.0%, and `persistence.ts` 52.7%. The instructive case is `persistence.ts` — 86.3% coverage at just 52.7% mutation, with 122 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
+- **Three modules have tests that reach the code but do not verify its logic.** Per-module mutation scores diverge sharply from coverage: `embeddings.ts` 48.8%, `persistence.ts` 55.1%, and `tfidf.ts` 60.9%. The instructive case is `persistence.ts` — 86.3% coverage at just 55.1% mutation, with 120 surviving mutants: the tests execute the code but would not notice if it broke. Coverage alone would have missed this, which is why the gate looks at mutation.
 - **The mutation score is not reproducible run to run.** Two CI runs with no change to any mutated source file reported 65.39% and 66.39% — roughly ±1 point of variance, most likely from mutants timing out under variable runner load. Do not read a single decimal as precise. The margin above the 65% threshold was widened to roughly 3 points in v1.1.22 (five modules brought from 0–75% to 93–100%, +34 mutants killed), so ordinary variance no longer risks a red gate — which matters because a red gate silently holds back the `release` branch rather than shipping something broken.
 
 ---

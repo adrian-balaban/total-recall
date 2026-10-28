@@ -101,6 +101,8 @@ let __rebuildImpl: () => Promise<RebuildResult> = async () => {
 export function __testsSetRebuildImpl(fn: () => Promise<RebuildResult>): void {
   if (process.env.NODE_ENV === 'test') __rebuildImpl = fn;
 }
+// Test-only handle to the real rebuild (the default impl is a no-op under test).
+export const __testRebuildNativeBindings = rebuildNativeBindings;
 // Test-only handle to drive getDb directly without going through upsert/search.
 export async function __testsGetDb(dbPath: string): Promise<any> {
   return getDb(dbPath);
