@@ -331,7 +331,7 @@ process.exit(0);
     fs.chmodSync(stubPath, 0o755);
   }, 10000);
 
-  it('leaves the failed job in the queue for retry when the sync stub fails (4.2)', async () => {
+  it('[TR-W5] leaves the failed job in the queue for retry when the sync stub fails (4.2)', async () => {
     // 4.2 (REVIEW 1.6): drain_queue must rm the job only AFTER a successful sync.
     // The old code did `rm -f` then ran the sync, so a failed push (network/auth
     // down) permanently dropped the org memory with no retry. With a failing

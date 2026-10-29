@@ -20,3 +20,11 @@ ASSERT(Only the author of an org memory may overwrite it, even with force) # [TR
 
 # Specs stay personal unless they are safe to share
 ASSERT(A spec memory naming a host, a credential or a blocked client term is never written to Org Vault) # [TR-D5]
+
+# Containment and identity
+ASSERT(A memory category cannot resolve outside its vault root, and the check runs before any directory is created) # [TR-D6]
+ASSERT(A memory cannot carry both the org and the personal tag) # [TR-D7]
+ASSERT(For an org memory the author is the OS user; a caller-supplied author is ignored) # [TR-D8]
+ASSERT(Frontmatter scalars and array items with an embedded newline are rejected) # [TR-D9]
+ASSERT(A no-prune memory is never a prune candidate and needs force to be deleted) # [TR-D10]
+ASSERT(Overwriting with force archives the earlier body under .superseded and records supersededAt) # [TR-D11]

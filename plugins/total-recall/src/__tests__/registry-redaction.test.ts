@@ -11,7 +11,7 @@ import { wrapHandler } from '../tools/registry.js';
 import { errors } from '../state.js';
 
 describe('wrapHandler error redaction', () => {
-  it('redacts the home directory in the returned error text, keeps the raw text in the error sink', async () => {
+  it('[TR-C3] redacts the home directory in the returned error text, keeps the raw text in the error sink', async () => {
     const home = process.env.HOME!;
     const run = wrapHandler('probe_tool', async () => {
       throw new Error(`EACCES: permission denied, open '${home}/.total-recall/index.json'`);

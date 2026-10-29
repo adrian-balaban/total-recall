@@ -61,7 +61,7 @@ describe('flushPending read-only recalc gate (#4)', () => {
   // accessCount bump — zero token changes). dirtyTokens stays false and no
   // idfTimer is queued, so the gate must skip recalcIdfNow → rebuildInvertedIndex
   // must NOT run. saveNow still runs (it persists the access bump to index.json).
-  it('skips rebuildInvertedIndex on a scheduleAccessSave-only exit', () => {
+  it('[TR-P3] skips rebuildInvertedIndex on a scheduleAccessSave-only exit', () => {
     seed('knowledge/readonly-probe');
     scheduleAccessSave(); // arms indexSaveTimer; leaves dirtyTokens false
     expect(() => flushPending()).not.toThrow();

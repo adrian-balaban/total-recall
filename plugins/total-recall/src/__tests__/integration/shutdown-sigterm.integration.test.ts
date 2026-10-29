@@ -250,7 +250,7 @@ describe('SIGTERM shutdown flushes pending writes (REVIEW 11.2)', () => {
     }
   });
 
-  it('SIGTERM + SIGINT (rapid) still exits 0 cleanly with index.json intact — pins 6.10 latch (11.2)', async () => {
+  it('[TR-W2] SIGTERM + SIGINT (rapid) still exits 0 cleanly with index.json intact — pins 6.10 latch (11.2)', async () => {
     const testHome = path.join(
       os.tmpdir(),
       `tr-sigterm-${process.pid}-${Date.now()}-double`,

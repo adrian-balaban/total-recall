@@ -209,7 +209,7 @@ describe('stringifyFrontmatter', () => {
   // injection from an array value). The scalar newline rejection is tested
   // elsewhere; the array-item arm (frontmatter.ts:215) was not. Pin both the
   // LF and CR cases, and that the throw mentions the array item.
-  it('throws on a newline in an inline-array item (T4, frontmatter-key injection guard)', () => {
+  it('[TR-D9] throws on a newline in an inline-array item (T4, frontmatter-key injection guard)', () => {
     expect(() => stringifyFrontmatter('body', { title: 'T', tags: ['a\nb'] })).toThrow(/array item/);
     expect(() => stringifyFrontmatter('body', { title: 'T', tags: ['a\rb'] })).toThrow(/array item/);
     // A multi-element array where only ONE item carries a newline still throws

@@ -16,3 +16,6 @@ DEFINE SYSTEM Total Recall AS tr
 FOREACH COMPONENT c IN tr DO
     ASSERT(every file of c has at most MAX_LINES_PER_FILE lines of code) # [TR-Q1]
 END
+
+# Agents may not make the build green by weakening it
+ASSERT(Every unit test that imports a mutated module is in the Stryker allow-list, or excluded with a reason) # [TR-Q2]

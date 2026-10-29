@@ -263,7 +263,7 @@ describe('query tools', () => {
       expect(pruneMemories({ threshold: 2, limit: 1e12 })).toHaveLength(5);
     });
 
-    it('excludes memories tagged "no-prune" even when their retention is below threshold', () => {
+    it('[TR-D10] excludes memories tagged "no-prune" even when their retention is below threshold', () => {
       // resetIndex already cleared memIndex in the outer beforeEach; rebuild a
       // minimal set: one immortal (no-prune) + one ordinary prune candidate,
       // both with retention strength < threshold so the only differentiator is

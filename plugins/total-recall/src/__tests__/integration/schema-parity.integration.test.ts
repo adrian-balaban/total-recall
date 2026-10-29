@@ -160,7 +160,7 @@ function containsAdditionalProperties(node: any): boolean {
 }
 
 describe('schema parity: McpServer migration (6.1-6.3) vs pre-migration golden', () => {
-  it('renders all 17 tool schemas identical to the golden after normalization', async () => {
+  it('[TR-C1] renders all 17 tool schemas identical to the golden after normalization', async () => {
     const { tools } = await client.listTools();
 
     // Sanity guard independent of per-tool equality: the exact 17-name set.
@@ -237,7 +237,7 @@ describe('schema parity with specDriven on (default config): only the documented
     expect(tools.map((t: any) => t.name).sort()).toEqual([...goldenNames, ...SPEC_TOOLS].sort());
   });
 
-  it('core tool schemas equal the golden once the optional spec fields are removed, and those fields are optional', async () => {
+  it('[TR-C1] core tool schemas equal the golden once the optional spec fields are removed, and those fields are optional', async () => {
     const { tools } = await specClient.listTools();
     for (const g of golden.tools as Array<{ name: string; description: string; inputSchema: any }>) {
       const a: any = tools.find((t: any) => t.name === g.name);

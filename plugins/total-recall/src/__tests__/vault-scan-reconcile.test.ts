@@ -391,7 +391,7 @@ describe('indexFile — mtime/size fast path vs slow path', () => {
     cleanMem(['knowledge/chg']);
   });
 
-  it('preserves runtime accessCount/lastAccessed across a re-index', () => {
+  it('[TR-W4] preserves runtime accessCount/lastAccessed across a re-index', () => {
     const fp = path.join(PERSONAL_VAULT, 'knowledge', 'keep.md');
     writeMd(fp, 'title: "K"', 'b1');
     indexFile(fp, false);

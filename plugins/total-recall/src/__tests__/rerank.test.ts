@@ -229,7 +229,7 @@ describe('rerank_memories', () => {
   // maxItems:200 on `keys` so the contract is honest. Pin the runtime cap: pass
   // >200 keys (only one real, the rest fake) and assert the result is capped at
   // 200 — proving the silent truncation is real and bounded.
-  it('caps candidate keys at 200 (silent truncation is real and pinned) (6.6)', async () => {
+  it('[TR-P1] caps candidate keys at 200 (silent truncation is real and pinned) (6.6)', async () => {
     writeMemory('knowledge/alpha', 'Alpha Note', 'alpha content');
     reconcileIndex();
 
