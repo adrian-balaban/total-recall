@@ -20,3 +20,4 @@ ASSERT(A tool call with malformed arguments is rejected at the Zod boundary as a
 ASSERT(Every tool error returned to Host Harness has local filesystem paths redacted) # [TR-C3]
 ASSERT(The PostToolUse matcher targets the declared server's write tools only) # [TR-C4]
 ASSERT(Lifecycle Hooks inject SessionStart context only with hookEventName SessionStart) # [TR-C5]
+ASSERT(A memory file with frontmatter keys this version does not know is read without error) # [TR-C6]

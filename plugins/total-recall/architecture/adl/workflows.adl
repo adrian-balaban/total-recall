@@ -26,3 +26,6 @@ ASSERT(When the org push fails, the queued sync job stays for a retry) # [TR-W5]
 ASSERT(Org Sync aborts, without wiping Org Vault, on a corrupt committed index or a branch switch that empties the working tree) # [TR-W6]
 # Export and import
 ASSERT(export_memories records an unreadable body as an error entry, and import_memories skips error entries) # [TR-W7]
+
+# A crash between the two writes must lose index state, never memory content
+ASSERT(A memory's .md file is written before its index entry) # [TR-W3]

@@ -3,6 +3,7 @@ import { projectFiles } from 'archunit';
 import {
   PROD, TOOLS, ENTRY, TESTS, LEAVES, NON_LEAVES, OPTIONAL_DEP_OWNERS, OPTIONAL_DEP_IMPORT,
   CORE, NOT_ENTRY, REGISTRY, TOOL_NAMES, MAX_LINES_PER_FILE, PROCESS_OWNERS, PROCESS_IMPORT, SPEC,
+  SEARCH, VECTORS_AND_PERSISTENCE, REUSING_TOOLS,
 } from './components.js';
 
 // Architecture fitness functions (ArchUnitTS) enforcing architecture/adl/*.adl.
@@ -98,6 +99,25 @@ describe('architecture fitness functions', () => {
       const rule = projectFiles().inPath(SPEC).shouldNot().dependOnFiles().inPath(TOOLS);
       await expect(rule).toPassAsync();
     });
+  });
+
+  describe('search and tool reuse', () => {
+    it('[TR-S10] lexical search never depends on vectors or persistence', async () => {
+      const rule = projectFiles().inPath(SEARCH).shouldNot().dependOnFiles().inPath(VECTORS_AND_PERSISTENCE);
+      await expect(rule).toPassAsync();
+    });
+
+    it.each<string>(REUSING_TOOLS)(
+      '[TR-S11] tools/%s.ts depends on no tool other than store, mutate and the registry',
+      async (tool: string) => {
+        const rule = projectFiles()
+          .inPath(new RegExp(`^src/tools/${tool}\\.ts$`))
+          .shouldNot()
+          .dependOnFiles()
+          .inPath(new RegExp(`^src/tools/(?!registry\\.ts$|store\\.ts$|mutate\\.ts$|${tool}\\.ts$)`));
+        await expect(rule).toPassAsync();
+      },
+    );
   });
 
   describe('runtime safety', () => {

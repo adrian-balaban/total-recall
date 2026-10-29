@@ -2127,8 +2127,9 @@ describe('index cache build (more than 3 tags)', () => {
     });
     // The cache rebuild is debounced — trigger rebuild_index to force it synchronously
     await callTool('rebuild_index');
-    // Cache is written by debounced timer — may not exist yet; just verify no crash
-    expect(true).toBe(true);
+    // Cache is written by debounced timer — may not exist yet; verify the memory survives the rebuild
+    const list = result(await callTool('list_memories'));
+    expect(list.items.find((m: any) => m.title === 'Many Tags')).toBeDefined();
   });
 });
 

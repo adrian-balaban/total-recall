@@ -23,3 +23,6 @@ ASSERT(When an optional dependency is not loadable, Vectors degrades to TF-IDF s
 
 # External processes (git, npm rebuild) start from two known places only, never through a shell
 ASSERT(Only Vectors (native binding self-heal) and the Spec exec module start external processes) # [TR-R4]
+
+# Hooks run without the server bundle, except SessionEnd, which signals the MCP child
+ASSERT(Lifecycle Hooks load server code only through the standalone dist mjs bundles; session-end.sh is the one hook that names dist/index.js) # [TR-R5]

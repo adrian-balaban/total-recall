@@ -19,3 +19,9 @@ END
 
 # Agents may not make the build green by weakening it
 ASSERT(Every unit test that imports a mutated module is in the Stryker allow-list, or excluded with a reason) # [TR-Q2]
+ASSERT(The plugin manifest and the Gemini extension declare the package.json version) # [TR-Q3]
+ASSERT(Every test contains at least one assertion) # [TR-Q4]
+ASSERT(No test asserts a tautology) # [TR-Q5]
+ASSERT(The Stryker break threshold is at least 65) # [TR-Q6]
+ASSERT(The mutation workflow runs the dependency audit before the build) # [TR-Q7]
+ASSERT(The release workflow publishes only after a successful mutation run) # [TR-Q8]
