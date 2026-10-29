@@ -631,10 +631,13 @@ The rules in this document are also written as code and checked on every `npm te
 | What | Where | Checked by |
 |---|---|---|
 | Code-level rules in ADL (structure, runtime safety, data governance, code quality) | `architecture/adl/*.adl` | ArchUnitTS and behavioural tests, one test per assertion |
+| Boundary contracts in ADL (`DEFINE CONTRACT`: strict MCP tools, tolerant hook envelope and memory file) | `architecture/adl/contracts.adl` | schema-parity, boundary, redaction and hook tests |
+| Workflows and crash safety in ADL (`DEFINE SAGA`: session shutdown, org sync) | `architecture/adl/workflows.adl` | atomic-write, shutdown, org-sync and bulk tests |
+| Operational capabilities in ADL (`TYPE operational`, `DEFINE CAPABILITY … FOR`) | `architecture/adl/capabilities.adl` | rerank, session-history and read-only-flush tests |
 | System-level model in ADL (actors, services, `DEFINE COMMUNICATION` connections) | `architecture/adl/system.adl` | `adl-consistency.test.ts` (unique elements, no dangling connection endpoints) |
 | Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
 
-**ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
+**ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality, `C` contracts, `W` workflows, `P` operational capabilities). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
 
 **Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
 

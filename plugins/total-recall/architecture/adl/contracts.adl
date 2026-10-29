@@ -1,0 +1,22 @@
+DESCRIPTION Contracts at the Total Recall boundaries: strict where one release controls both ends, tolerant where it does not
+CATEGORY Static Coupling
+NAMESPACE TrContractsNS
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE ACTOR Host Harness AS host-harness
+    DEFINE SERVICE MCP Stdio Server AS mcp-server
+    DEFINE SERVICE Lifecycle Hooks AS hooks
+
+# Tool calls: Zod-validated at the dispatch boundary; schemas change additively only
+DEFINE CONTRACT mcp-tools BETWEEN {Host Harness, MCP Stdio Server} AS STRICT
+# Hook stdin/stdout JSON: the harness adds fields over time; hooks read only what they need
+DEFINE CONTRACT hook-envelope BETWEEN {Host Harness, Lifecycle Hooks} AS NAME-VALUE-PAIRS
+    including {hookEventName, additionalContext, continue, transcript_path, tool_name}
+# Memory files: written by the server, by the hooks, and by teammates on other plugin versions through the org vault
+DEFINE CONTRACT memory-file BETWEEN {MCP Stdio Server, Lifecycle Hooks} AS NAME-VALUE-PAIRS
+    including {title, tags, created, updated, author, schemaVersion}
+
+ASSERT(The 17 core tool schemas stay identical to the golden; new tools and spec fields are additive and optional) # [TR-C1]
+ASSERT(A tool call with malformed arguments is rejected at the Zod boundary as an error result, and the server keeps serving) # [TR-C2]
+ASSERT(Every tool error returned to Host Harness has local filesystem paths redacted) # [TR-C3]
+ASSERT(The PostToolUse matcher targets the declared server's write tools only) # [TR-C4]
+ASSERT(Lifecycle Hooks inject SessionStart context only with hookEventName SessionStart) # [TR-C5]

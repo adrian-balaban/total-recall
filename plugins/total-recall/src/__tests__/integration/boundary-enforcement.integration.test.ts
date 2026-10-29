@@ -165,7 +165,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
   // unit tests) and must NOT be reachable via MCP — over the real stdio
   // wire, safeParse rejects a scalar `tags` before the handler runs, so the
   // lenient branch is unreachable here. This test pins that rejection.
-  it('update_memory rejects a scalar tags arg at the Zod boundary (handler leniency unreachable via MCP)', async () => {
+  it('[TR-C2] update_memory rejects a scalar tags arg at the Zod boundary (handler leniency unreachable via MCP)', async () => {
     const res = await client.callTool({
       name: 'update_memory',
       arguments: { key: seededKey, tags: 'not-an-array' },

@@ -53,7 +53,7 @@ suite('H2 org-vault wipe tripwire', () => {
     expect(countDiskMd(repo)).toBe(3);
   });
 
-  it('an op that empties the tree while HEAD has files is aborted AND the tree is restored', () => {
+  it('[TR-W6] an op that empties the tree while HEAD has files is aborted AND the tree is restored', () => {
     expect(() =>
       guardTreeWipe(repo, 'simulated-wipe', () => {
         // Simulate the incident: working tree emptied of all .md files while HEAD

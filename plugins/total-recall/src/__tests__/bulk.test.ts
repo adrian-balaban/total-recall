@@ -202,7 +202,7 @@ describe('bulk tools', () => {
     expect(memIndex['decisions/adr']).toBeUndefined();
   });
 
-  it('(6.8) export_memories emits an error entry and increments errors when the memory file is unreadable/missing', () => {
+  it('[TR-W7] (6.8) export_memories emits an error entry and increments errors when the memory file is unreadable/missing', () => {
     seed();
     // Make Alpha's file disappear from disk while its memIndex entry persists,
     // so readMemoryContent returns null (ENOENT). Race-free and root-safe,
@@ -225,7 +225,7 @@ describe('bulk tools', () => {
     expect(beta!.error).toBeUndefined();
   });
 
-  it('(6.8) import_memories skips an archive entry carrying an error field and does NOT overwrite real content with force=true', () => {
+  it('[TR-W7] (6.8) import_memories skips an archive entry carrying an error field and does NOT overwrite real content with force=true', () => {
     const original = storeMemory({
       title: 'Alpha', content: 'Real on-disk content.', category: 'knowledge', tags: ['x'],
       importanceScore: 0.5,

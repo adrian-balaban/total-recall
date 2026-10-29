@@ -118,6 +118,18 @@ pruned (2026-07-29); this backlog is now the sole record.
   result for a short TTL) first; then add the limiter. Re-run the Stryker dry run
   3x before merging, since the abort is intermittent under plain vitest.
 
+### Atomic writes for memory `.md` files
+- **Source:** `ADL-EXPANSION-PLAN.md` (Rejected or deferred).
+- **What:** memory `.md` files are written with plain `writeFileSync` in
+  `store.ts` and `mutate.ts`. Only the index files are written atomically
+  (`persistence.ts` `atomicWrite()`), so any "all vault writes are atomic" rule
+  would fail today. The ADL plan defers it as a design decision and scopes
+  `[TR-W1]` to the index files only.
+- **Trigger:** deciding whether `.md` writes should go through `atomicWrite`
+  (for example after a report of a truncated memory file after a crash).
+- **Shape when picked up:** record the decision as an ADR; if accepted, route the
+  `.md` writes through `atomicWrite` and add the ADL assertion with its test.
+
 ### Ollama + local embedding-model path (minimax family)
 - **What:** proposals for an Ollama-backed local embedder / local-first inference
   path. Currently the embedder is a local in-process HuggingFace MiniLM; Ollama

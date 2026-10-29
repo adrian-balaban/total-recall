@@ -1,0 +1,28 @@
+DESCRIPTION Asynchronous workflows of Total Recall and what survives a crash
+CATEGORY Data
+NAMESPACE TrWorkflowsNS
+DEFINE SYSTEM Total Recall AS tr
+    DEFINE SERVICE MCP Stdio Server AS mcp-server
+    DEFINE SERVICE Lifecycle Hooks AS hooks
+    DEFINE DATABASE Personal Vault AS personal-vault
+    DEFINE DATABASE Org Vault AS org-vault
+    DEFINE COMPONENT Persistence AS persistence
+    DEFINE COMPONENT Org Sync AS org-sync
+    # SIGTERM, SIGINT, stdin end and stdin close enter one shutdown(): flushPending, flushEmbeddings, exit
+    DEFINE SAGA Session Shutdown AS shutdown-saga
+        DEFINE COORDINATION Orchestrated
+        DEFINE CONSISTENCY Eventual
+    # Org write, then PostToolUse hook, then fail-closed privacy filter, then git commit and push; pull at SessionStart
+    DEFINE SAGA Org Sync Saga AS org-sync-saga
+        DEFINE COORDINATION Choreography
+        DEFINE CONSISTENCY Eventual
+
+# Crash safety
+ASSERT(Persistence writes index.json, invertedIndex.json and .index-cache.txt atomically, via a temporary file and rename) # [TR-W1]
+ASSERT(Session Shutdown runs exactly once across concurrent exit triggers and flushes the index before exit) # [TR-W2]
+ASSERT(accessCount and lastAccessed survive rebuild_index) # [TR-W4]
+# Org Sync Saga: compensation is block, keep, record (the privacy filter itself is TR-D3)
+ASSERT(When the org push fails, the queued sync job stays for a retry) # [TR-W5]
+ASSERT(Org Sync aborts, without wiping Org Vault, on a corrupt committed index or a branch switch that empties the working tree) # [TR-W6]
+# Export and import
+ASSERT(export_memories records an unreadable body as an error entry, and import_memories skips error entries) # [TR-W7]

@@ -30,7 +30,7 @@ const importsMutated = (f: string) => {
 };
 
 describe('Stryker allow-list', () => {
-  it('lists every test that imports a mutated module, or excludes it with a reason', () => {
+  it('[TR-Q2] lists every test that imports a mutated module, or excludes it with a reason', () => {
     const missing = testFiles.filter((f) => importsMutated(f) && !allow.has(`src/__tests__/${f}`) && !EXCLUDED[f]);
     expect(missing).toEqual([]);
   });

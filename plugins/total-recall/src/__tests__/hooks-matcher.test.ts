@@ -79,7 +79,7 @@ describe.each([
     }
   });
 
-  it('does NOT match read-only tools (sync must fire on writes only)', () => {
+  it('[TR-C4] does NOT match read-only tools (sync must fire on writes only)', () => {
     for (const tool of READ_TOOLS) {
       expect(matches(matcher, tool)).toBe(false);
     }

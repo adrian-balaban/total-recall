@@ -32,7 +32,7 @@ function leakedTmps(dir: string): string[] {
 }
 
 describe('atomicWrite', () => {
-  it('writes the full file and leaves no .tmp on success', () => {
+  it('[TR-W1] writes the full file and leaves no .tmp on success', () => {
     const dir = makeScratch();
     const p = path.join(dir, 'index.json');
     atomicWrite(p, '{"hello":"world"}');

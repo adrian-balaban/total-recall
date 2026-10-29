@@ -80,7 +80,7 @@ describe('session-end flush wiring (regression for the silent-drop bug)', () => 
     expect(body).toMatch(/process\.exit\(0\)/);
   });
 
-  it('shutdown() is guarded by a shuttingDown latch — pins the stdin end+close / SIGTERM-during-shutdown double-fire (6.10)', () => {
+  it('[TR-W2] shutdown() is guarded by a shuttingDown latch — pins the stdin end+close / SIGTERM-during-shutdown double-fire (6.10)', () => {
     // REVIEW 6.10 (LOW, C-14): `process.stdin` fires BOTH 'end' AND 'close'
     // in sequence on session teardown, and both are wired to `shutdown`.
     // A SIGTERM can also arrive mid-shutdown (during the stdin-end-driven

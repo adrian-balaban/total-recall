@@ -318,7 +318,7 @@ suite('sync-org-memory.mjs end-to-end (#1: org sync actually commits+pushes)', (
   // logs to ~/.total-recall/org/.sync-errors.log and exits 0, leaving the file on disk
   // untouched for manual recovery. Runs LAST and restores index.json from HEAD so the
   // corrupt fixture can't leak into earlier tests' shared org-vault state.
-  it('refuses to rewrite a corrupt org index.json (no wipe, logs the error) (#2)', () => {
+  it('[TR-W6] refuses to rewrite a corrupt org index.json (no wipe, logs the error) (#2)', () => {
     const indexPath = path.join(orgVault, 'index.json');
     // A prior test committed a valid index.json to HEAD; corrupt the working-tree copy.
     const GARBAGE = '<<<<<<< HEAD\nnot valid json\n=======\nstill not json\n>>>>>>> branch\n';

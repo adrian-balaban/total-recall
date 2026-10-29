@@ -212,7 +212,7 @@ describe('store_memory', () => {
     expect(res.filePath).toContain('org-vault');
   });
 
-  it('rejects memories tagged both org and personal', async () => {
+  it('[TR-D7] rejects memories tagged both org and personal', async () => {
     const res = await callTool('store_memory', {
       title: 'Conflict', content: 'Both.', tags: ['org', 'personal'],
     });
@@ -281,7 +281,7 @@ describe('store_memory', () => {
     expect(res.content[0].text).toContain('other-user');
   });
 
-  it('rejects a category that escapes the vault (path traversal)', async () => {
+  it('[TR-D6] rejects a category that escapes the vault (path traversal)', async () => {
     const category = '../../../tr-traversal-leak';
     const res = await callTool('store_memory', {
       title: 'Escape', content: 'X', tags: [], category,
@@ -317,7 +317,7 @@ describe('store_memory', () => {
     expect(fs.existsSync(resNull.filePath)).toBe(true);
   });
 
-  it('ignores a caller-supplied author for org (no impersonation bypass)', async () => {
+  it('[TR-D8] ignores a caller-supplied author for org (no impersonation bypass)', async () => {
     // An existing org memory authored by "other-user". A caller passing
     // author: "other-user" + force must NOT be able to impersonate and overwrite.
     const orgDir = path.join(VAULT, 'org', 'org-vault', 'architecture');
@@ -381,7 +381,7 @@ describe('store_memory', () => {
     expect(fs.readFileSync(filePath, 'utf8')).toContain('Decision body must survive');
   });
 
-  it('rejects a title containing a newline (frontmatter injection)', async () => {
+  it('[TR-D9] rejects a title containing a newline (frontmatter injection)', async () => {
     const res = await callTool('store_memory', {
       title: 'bad\ninjected: evil', content: 'X', tags: [],
     });
@@ -460,7 +460,7 @@ describe('store_memory', () => {
 // indexing) and records the supersession moment on the new frontmatter's
 // supersededAt[] so "what did I believe and when" is recoverable.
 describe("store_memory — supersede, don't overwrite (Graphiti #45)", () => {
-  it('archives the prior body and records supersededAt on a force-overwrite', async () => {
+  it('[TR-D11] archives the prior body and records supersededAt on a force-overwrite', async () => {
     const key = 'knowledge/supersede-trial';
     const fileRel = path.join(VAULT, 'personal-vault', 'knowledge', 'supersede-trial.md');
 
@@ -1161,7 +1161,7 @@ describe('update_memory', () => {
   // session IDs via update_memory and assert exactly 50 persisted, oldest
   // dropped, most-recent kept. 2-digit padded IDs are collision-free for
   // substring checks (sess-01 is not a substring of sess-10..51).
-  it('caps the sessions array at the last 50 across repeated update_memory calls', async () => {
+  it('[TR-P2] caps the sessions array at the last 50 across repeated update_memory calls', async () => {
     const { key, filePath } = result(await callTool('store_memory', {
       title: 'Upd Cap', content: 'C', tags: [], category: 'knowledge', sessionId: 'sess-01',
     }));
@@ -1243,7 +1243,7 @@ describe('delete_memory', () => {
     expect(listed.items.find((m: any) => m.key === key)).toBeUndefined();
   });
 
-  it('refuses a "no-prune"-tagged memory without force (file stays on disk)', async () => {
+  it('[TR-D10] refuses a "no-prune"-tagged memory without force (file stays on disk)', async () => {
     // The immortality guard mirrors store_memory's `force` pattern: a no-prune
     // memory (e.g. an ADR) must survive a delete_memory call made without
     // force=true, even for the author. The file and index entry must remain.

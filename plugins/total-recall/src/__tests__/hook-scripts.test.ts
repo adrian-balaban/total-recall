@@ -453,7 +453,7 @@ function writeOrgConfig(home: string, orgRepo: string): void {
 
 const pullSuite = OK ? describe : describe.skip;
 pullSuite('pull-org-vault.sh (#5)', () => {
-  it('exits 0 with continue:true + SessionStart hookSpecificOutput when orgRepo is unset', () => {
+  it('[TR-C5] exits 0 with continue:true + SessionStart hookSpecificOutput when orgRepo is unset', () => {
     const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-norepo-'));
     fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
     // No config.json → node readFileSync throws → catch writes '' → ORG_REPO empty.
