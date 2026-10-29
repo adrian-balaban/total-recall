@@ -10,5 +10,3 @@ tr_technology_radar_*.pdf
 node_modules/
 package-lock.json
 
-# Local-only post-release manual test checklist, not project documentation
-RELEASE-SMOKE-TEST.md
