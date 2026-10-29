@@ -86,7 +86,7 @@ graph TB
 
 ### C3 — Components (inside the MCP stdio server)
 
-`server.ts` owns no schemas and no dispatch table: each `tools/*.ts` module co-locates its Zod shape, handler and `register(server)`, and `registry.ts`'s `wrapHandler` adds the result envelope plus perf/error instrumentation. Everything reads the index through the single `state.ts` singleton.
+`server.ts` owns no schemas and no dispatch table: each `tools/*.ts` module co-locates its Zod shape, handler and `register(server)`, and `registry.ts`'s `wrapHandler` adds the result envelope plus perf/error instrumentation, and redacts filesystem paths in the error text it returns (`[TR-S6]`: the registry depends only on State and Paths). Everything reads the index through the single `state.ts` singleton.
 
 ```mermaid
 graph TB

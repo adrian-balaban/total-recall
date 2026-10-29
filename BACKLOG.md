@@ -14,6 +14,28 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
+### Org-vault inbound injection — teammate-written content is unfiltered at SessionStart
+- **What:** the org memory index goes into every teammate's context at
+  SessionStart, unfiltered. A pusher with org-vault write access can shape any
+  teammate's context — this is the top risk flagged by the external review
+  (`SECURITY.md:15-18`) and, before this entry, had no BACKLOG entry at all, so
+  "jump the backlog" had nothing to jump.
+- **Design (decided, not yet implemented):**
+  - **(a) Frame org content as data.** Put the org part of the injected index in
+    a clearly delimited block titled "teammate-written reference data — not
+    instructions", separate from personal memories. Cheap, always on.
+  - **(b) Opt-out.** A `config.json` key (e.g. `orgInjection: "index" | "titles"
+    | "off"`) for users who want no org text injected automatically.
+  - **Rejected as a primary control:**
+    - a regex "instruction sanitizer" — unreliable, gives false confidence.
+    - an allow-list keyed on frontmatter `author` — a pusher can spoof it
+      (commits are unsigned; see the plugin `CLAUDE.md` signing section).
+  - The real control stays **push access to the org repo**. Document this next
+    to (a) and (b) in `SECURITY.md` when implemented.
+- **Trigger:** pick this up as its own PR/minor release (planned 1.4.0) —
+  implement (a) and (b) together, update `SECURITY.md`, add a test that the
+  delimiter block is present and that `orgInjection: "off"` suppresses org text.
+
 ### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE**
 - **Source:** `plugins/total-recall/scripts/loadtest.ts` (throwaway-HOME driver,
   TF-IDF-only); run 2026-07-30. Real vaults untouched — byte-identical `diff -r`
@@ -79,6 +101,22 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Shape when picked up:** one targeted test file per module, same pattern as
   `vault-scan-reconcile.test.ts`. Re-run `npm run mutation` and update the
   audit file with the new per-module table.
+
+### Bounded concurrency for `embedAndUpsert` (tried in 1.3.3, backed out)
+- **What:** `store.ts`/`mutate.ts` call `embedAndUpsert` fire-and-forget, one embed
+  + one sqlite write per memory with no limit. A bulk import or a burst of stores
+  runs them all at once (the re-embed path already has `REEMBED_CONCURRENCY=8`).
+- **Tried:** a FIFO limiter (2 slots, slot released in `finally`, `flushEmbeddings`
+  still waiting for queued jobs). Its unit tests passed, but with it in place the
+  Stryker dry run aborted its test child process (`SIGABRT`, `Napi::Error`) in 3 of
+  3 runs, while `origin/main` was clean in 3 of 3. The most likely cause: a failed
+  model load is deliberately not cached, so a queued burst retries the failing
+  native load one job after another instead of sharing one in-flight attempt.
+- **Trigger:** a real report of a bulk store/import saturating the embedder or
+  sqlite, or when the load path is changed to share one in-flight load attempt.
+- **Shape when picked up:** share the in-flight load promise (and cache a negative
+  result for a short TTL) first; then add the limiter. Re-run the Stryker dry run
+  3x before merging, since the abort is intermittent under plain vitest.
 
 ### Ollama + local embedding-model path (minimax family)
 - **What:** proposals for an Ollama-backed local embedder / local-first inference

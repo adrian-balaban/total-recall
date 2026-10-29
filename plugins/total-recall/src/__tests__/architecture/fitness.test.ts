@@ -76,12 +76,12 @@ describe('architecture fitness functions', () => {
       },
     );
 
-    it('[TR-S6] the registry depends on nothing but state', async () => {
+    it('[TR-S6] the registry depends on nothing but state and paths', async () => {
       const rule = projectFiles()
         .inPath(REGISTRY)
         .shouldNot()
         .dependOnFiles()
-        .inPath(/^src\/(?!__tests__\/|state\.ts$|tools\/registry\.ts$)/);
+        .inPath(/^src\/(?!__tests__\/|state\.ts$|paths\.ts$|tools\/registry\.ts$)/);
       await expect(rule).toPassAsync();
     });
 

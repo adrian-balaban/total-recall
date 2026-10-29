@@ -25,6 +25,7 @@ export default defineConfig({
       'src/__tests__/persistence-readonly-flush.test.ts',
       'src/__tests__/persistence-loadmemindex-error.test.ts',
       'src/__tests__/persistence-access.test.ts',
+      'src/__tests__/persistence-hardening.test.ts',
       'src/__tests__/atomic-write.test.ts',
       'src/__tests__/vectorStore.test.ts',
       'src/__tests__/vectorStore-getVectors.test.ts',
@@ -57,6 +58,7 @@ export default defineConfig({
       'src/__tests__/spec-guardrails.test.ts',
       'src/__tests__/tfidf-multilingual.test.ts',
       'src/__tests__/vault-scan-realbase.test.ts',
+      'src/__tests__/registry-redaction.test.ts',
     ],
     // Coverage analysis is driven by Stryker (perTest); disable vitest's own
     // coverage thresholds so the dry-run doesn't fail on the reduced file set.
