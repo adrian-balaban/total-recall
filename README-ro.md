@@ -46,9 +46,6 @@ Mai multe tehnici din [Thoughtworks Technology Radar](https://www.thoughtworks.c
 un graf de context peste memorii (lanțul `supersededAt` stochează deja muchii temporale);
 extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare pentru `recall_memory`.
 
-Sinteza completă Adopt/Trial e în memoria org
-`org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
-
 ## ⚙️ Cum funcționează
 
 | | |

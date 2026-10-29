@@ -187,8 +187,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 ### Context graph / temporal relations over memories (Technology Radar Vol 34)
 - **Source:** Thoughtworks Technology Radar Vol 34 (2026) — *Context graph*
   (Assess technique) and *Graphiti* (Trial platform, Zep's open-source
-  bi-temporal knowledge-graph engine). See org memory
-  `org/knowledge/thoughtworks-technology-radar-vol-34-2026-adopt-trial-synthesis`.
+  bi-temporal knowledge-graph engine). 
 - **What:** the plugin has a *supersede* primitive (`store_memory force=true`
   archives the prior body + appends a `supersededAt[]` chain — CLAUDE.md, and
   `supersededAt` in `store.ts`/`frontmatter.ts`) but no queryable relation/graph
