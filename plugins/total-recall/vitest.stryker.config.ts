@@ -28,6 +28,7 @@ export default defineConfig({
       'src/__tests__/persistence-hardening.test.ts',
       'src/__tests__/atomic-write.test.ts',
       'src/__tests__/vectorStore.test.ts',
+      'src/__tests__/vectorStore-reupsert.test.ts',
       'src/__tests__/vectorStore-getVectors.test.ts',
       'src/__tests__/vectorStore-selfheal.test.ts',
       'src/__tests__/vectorStore-meta.test.ts',

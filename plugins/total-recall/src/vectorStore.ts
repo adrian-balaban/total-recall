@@ -295,7 +295,12 @@ export async function upsertVector(dbPath: string, key: string, embedding: numbe
   if (!d) return;
   if (!Array.isArray(embedding) || embedding.length === 0) return;
   ensureVecTable(d, embedding.length);
-  d.prepare(`INSERT OR REPLACE INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
+  // vec0 virtual tables don't honor INSERT OR REPLACE on their PRIMARY KEY the
+  // way a regular table does — it still throws UNIQUE constraint failed on an
+  // existing key, so a re-embed (e.g. from update_memory) on a key that
+  // already has a row fails. Delete first, then insert, as one write.
+  d.prepare(`DELETE FROM vec_memories WHERE key = ?`).run(key);
+  d.prepare(`INSERT INTO vec_memories(key, embedding) VALUES (?, ?)`).run(
     key,
     JSON.stringify(embedding)
   );
