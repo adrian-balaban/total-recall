@@ -25,6 +25,7 @@ export default defineConfig({
       'src/__tests__/persistence-readonly-flush.test.ts',
       'src/__tests__/persistence-loadmemindex-error.test.ts',
       'src/__tests__/persistence-access.test.ts',
+      'src/__tests__/persistence-hardening.test.ts',
       'src/__tests__/atomic-write.test.ts',
       'src/__tests__/vectorStore.test.ts',
       'src/__tests__/vectorStore-getVectors.test.ts',
