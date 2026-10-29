@@ -1,6 +1,6 @@
 # 🧠 total-recall
 
-**Your AI assistant forgets everything at the end of each session. This fixes that.**
+**Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
 A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories are plain Markdown files on your disk — greppable, git-versionable, [Obsidian](https://obsidian.md/)-readable. Nothing leaves your machine unless you tag it `org`.
 
