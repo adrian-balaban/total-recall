@@ -1,0 +1,16 @@
+DESCRIPTION Architecture style, the capabilities it favours, and the stressors it is built to survive
+CATEGORY Architectural Capabilities
+NAMESPACE TrStyleNS
+DEFINE SYSTEM Total Recall AS tr
+DEFINE STYLE Total Recall AS Modular Monolith, local-first, one deployable per machine
+DEFINE CAPABILITY Simplicity AS one Node process, Markdown files, no server to run
+DEFINE CAPABILITY Cost AS zero runtime cost; optional embeddings run locally
+DEFINE CAPABILITY Evolvability AS tools isolated behind one registry (TR-S5, TR-S11)
+
+# Stressors and their residues
+# S1 the host harness changes its hook API (Claude Code, Gemini CLI): residue TR-C5, hooks.gemini.json
+# S2 the embedder or a native binding is missing: residue TR-R1, TR-R3
+# S3 a teammate runs an older plugin version: residue TR-C1, TR-C6
+# S4 the vault grows to tens of thousands of memories: residue the loadtest targets in capabilities.adl
+# S5 a teammate pushes hostile org content: residue TR-D3, TR-D12
+ASSERT(Each stressor above has at least one tagged assertion as its residue)

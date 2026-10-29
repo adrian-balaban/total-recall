@@ -16,3 +16,7 @@ ASSERT(rerank_memories scores at most MAX_RERANK_KEYS keys and keeps their order
 ASSERT(A memory's session history is deduplicated and capped at MAX_SESSIONS_PER_MEMORY) # [TR-P2]
 ASSERT(An access-count flush saves index.json without rebuilding invertedIndex.json) # [TR-P3]
 ASSERT(Tool Registry records a perf sample for every successful tool call and an error for every failing one) # [TR-P4]
+
+# Measured with scripts/loadtest.ts (TF-IDF only), not in CI: untagged on purpose
+ASSERT(store_memory sustains at least 1000 writes per second, flat up to 20000 memories)
+ASSERT(recall_memory p95 stays under 150 ms at 20000 memories)
