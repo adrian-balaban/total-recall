@@ -109,7 +109,7 @@ Total Recall își descrie propria arhitectură în ADL, atât la nivelul de cod
 
 ### ADL: Architecture Definition Language
 
-ADL este notația folosită la masterclass-ul **„How to Teach Your Agents About Architecture"**, ținut de Neal Ford ca parte a materialului său *Architecture as Code*, la Codecamp Iași (27–28 octombrie 2026).
+ADL este notația folosită la masterclass-ul [**„How to Teach Your Agents About Architecture"**](https://codecamp.ro/masterclasses/how-to-teach-your-agents-about-architecture-iasi-2026/), ținut de Neal Ford la Codecamp Iași (27–28 octombrie 2026).
 
 - **Ce este.** Un mod ușor, apropiat de pseudocod, de a scrie o arhitectură, fără gramatică formală. Liniile `DEFINE` numesc sistemul, domeniile și componentele lui. Liniile `ASSERT(…)` enunță regulile pe care codul trebuie să le respecte, în engleză simplă acolo unde e mai clar așa.
 - **Cine îl citește.** Oamenii îl citesc ca documentație scurtă, care se învechește mai greu decât o diagramă. Agenții AI îl citesc drept context când scriu cod și drept specificație după care verifică codul.
