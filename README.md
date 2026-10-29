@@ -106,7 +106,7 @@ Total Recall describes its own architecture in ADL, for the code level (modules,
 
 ### ADL: Architecture Definition Language
 
-ADL is the notation used in the masterclass **"How to Teach Your Agents About Architecture"**, which Neal Ford taught as part of his *Architecture as Code* material at Codecamp Iași (27–28 October 2026).
+ADL is the notation used in the masterclass [**"How to Teach Your Agents About Architecture"**](https://codecamp.ro/masterclasses/how-to-teach-your-agents-about-architecture-iasi-2026/), which Neal Ford taught at Codecamp Iași (27–28 October 2026).
 
 - **What it is.** A light, pseudocode-like way to write an architecture down, with no formal grammar. `DEFINE` lines name the system, its domains and its components. `ASSERT(…)` lines state the rules the code must keep, in plain English where that is clearer.
 - **Who reads it.** People read it as short documentation that is harder to let go stale than a diagram. AI agents read it as context when they write code, and as a specification to check the code against.
