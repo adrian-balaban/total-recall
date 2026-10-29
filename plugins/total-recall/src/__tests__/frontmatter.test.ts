@@ -159,6 +159,14 @@ describe('stringifyFrontmatter', () => {
     expect(out).not.toContain('sessions');
   });
 
+  it('[TR-C6] reads a memory file with frontmatter keys this version does not know', () => {
+    const text = '---\ntitle: T\ntags: [a]\nfutureKey: 42\nschemaVersion: 99\ncreated: 2026-01-01\n---\nbody';
+    const parsed = parseFrontmatter(text);
+    expect(parsed.data.title).toBe('T');
+    expect(parsed.data.tags).toEqual(['a']);
+    expect(parsed.content).toContain('body');
+  });
+
   it('round-trips a full memory frontmatter through parse', () => {
     const data = {
       title: 'Kafka CDC',

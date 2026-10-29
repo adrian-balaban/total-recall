@@ -37,3 +37,16 @@ describe('wrapHandler error redaction', () => {
     expect(res.content[0].text).toBe('Error: plain string');
   });
 });
+describe('wrapHandler observability', () => {
+  it('[TR-P4] records a perf sample for a successful call and an error for a failing one', async () => {
+    const { perfSamples } = await import('../state.js');
+    const before = perfSamples.length;
+    const errBefore = errors.length;
+    await wrapHandler('probe_ok', async () => ({ ok: true }))({}, undefined);
+    expect(perfSamples.length).toBe(before + 1);
+    await wrapHandler('probe_fail', async () => { throw new Error('boom'); })({}, undefined);
+    expect(perfSamples.length).toBe(before + 1); // a failure is an error record, not a latency sample
+    expect(errors.length).toBe(errBefore + 1);
+    expect(errors[errors.length - 1]!.msg).toContain('probe_fail: boom');
+  });
+});

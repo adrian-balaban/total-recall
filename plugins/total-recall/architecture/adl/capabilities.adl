@@ -1,15 +1,18 @@
 TYPE operational
 CAPABILITY bounds-and-observability
-DESCRIPTION Bounded work per tool call
+DESCRIPTION Bounded work per tool call, and every tool call observed
 NAMESPACE TrCapabilitiesNS
 DEFINE CONST MAX_RERANK_KEYS = 200
 DEFINE CONST MAX_SESSIONS_PER_MEMORY = 50
 DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Persistence AS persistence
+    DEFINE COMPONENT Tool Registry AS registry
     DEFINE COMPONENT Tools AS tools
 
 DEFINE CAPABILITY Boundedness AS rerank candidates <= MAX_RERANK_KEYS, sessions per memory <= MAX_SESSIONS_PER_MEMORY FOR Tools
+DEFINE CAPABILITY Observability AS every successful tool call yields a perf sample, every failure an error record FOR Tool Registry
 
 ASSERT(rerank_memories scores at most MAX_RERANK_KEYS keys and keeps their order) # [TR-P1]
 ASSERT(A memory's session history is deduplicated and capped at MAX_SESSIONS_PER_MEMORY) # [TR-P2]
 ASSERT(An access-count flush saves index.json without rebuilding invertedIndex.json) # [TR-P3]
+ASSERT(Tool Registry records a perf sample for every successful tool call and an error for every failing one) # [TR-P4]

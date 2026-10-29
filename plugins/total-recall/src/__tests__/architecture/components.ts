@@ -37,3 +37,10 @@ export const PROCESS_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:
 export const SPEC = /^src\/spec\//;
 
 export const MAX_LINES_PER_FILE = 600; // code-quality.adl: MAX_LINES_PER_FILE
+
+// ADL [TR-S10]: lexical search (tfidf, ebbinghaus, rrf) and the optional vector / persistence stack.
+export const SEARCH = /^src\/(tfidf|ebbinghaus|rrf)\.ts$/;
+export const VECTORS_AND_PERSISTENCE = /^src\/(embeddings|vectorStore|persistence)\.ts$/;
+
+// ADL [TR-S11]: the tools that reuse store/mutate on purpose.
+export const REUSING_TOOLS = ['bulk', 'architecture'];
