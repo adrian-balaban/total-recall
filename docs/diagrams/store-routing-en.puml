@@ -1,0 +1,14 @@
+@startuml store-routing-en
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+rectangle "store_memory" as S
+rectangle "tagged org?" as F
+database "Personal vault\nlocal only" as P
+rectangle "Privacy filter\nfail-closed" as PF
+database "Org vault → Git" as O
+S --> F
+F --> P : no
+F --> PF : yes
+PF --> O
+@enduml

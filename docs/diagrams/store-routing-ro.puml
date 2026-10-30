@@ -1,0 +1,14 @@
+@startuml store-routing-ro
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+rectangle "store_memory" as S
+rectangle "etichetat org?" as F
+database "Vault personal\ndoar local" as P
+rectangle "Filtru de confidențialitate\nfail-closed" as PF
+database "Vault org → Git" as O
+S --> F
+F --> P : nu
+F --> PF : da
+PF --> O
+@enduml

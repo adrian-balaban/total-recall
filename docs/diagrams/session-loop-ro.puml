@@ -1,0 +1,22 @@
+@startuml session-loop-ro
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+
+rectangle "Sesiunea începe" as A
+rectangle "Memoriile relevante\ninjectate în context" as B
+rectangle "Lucrezi" as C
+rectangle "Deciziile & preferințele\ncapturate automat" as D
+database "~~/.total-recall\nvault Markdown" as E
+rectangle "Memorii spec-driven:\ndecizii, eșecuri, schimbări\nlegate de specificație" as G
+rectangle "Fișiere ADL, opțional" as Hh
+A --> B
+B --> C
+C --> D
+D --> E
+E ..> A
+C ..> G : etichetate cu system,\nelements, requirements
+G --> E
+Hh ..> G : index_architecture
+@enduml

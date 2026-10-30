@@ -17,17 +17,7 @@ O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
 - **Status** — v1.3.3, stabilă: 894 teste trec, Test Coverage 96.3% statements, Mutation tests ≈78%.
 
-```mermaid
-flowchart LR
-    A[Sesiunea începe] --> B[Memoriile relevante<br/>injectate în context]
-    B --> C[Lucrezi]
-    C --> D[Deciziile & preferințele<br/>capturate automat]
-    D --> E[(~/.total-recall<br/>vault Markdown)]
-    E -.-> A
-    C -.->|memorii etichetate cu<br/>system · elements · requirements| G[Memorii spec-driven:<br/>decizii, eșecuri, schimbări<br/>legate de specificație]
-    G --> E
-    H[Fișiere ADL, opțional] -.->|index_architecture| G
-```
+![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
 
@@ -60,13 +50,7 @@ extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare p
 - **Reîncărcare live:** memoriile pe care un coleg le trimite în vault-ul org apar în sesiunea ta fără restart.
 - **Arhivare, nu ștergere:** versiunile înlocuite ale unei memorii sunt păstrate.
 
-```mermaid
-flowchart TD
-    S[store_memory] --> F{etichetat org?}
-    F -->|nu| P[Vault personal<br/>doar local]
-    F -->|da| PF[Filtru de confidențialitate<br/>fail-closed]
-    PF --> O[Vault org → Git]
-```
+![Rutarea store_memory](docs/diagrams/store-routing-ro.svg)
 
 Diagramele C4 (context → containere → componente → cod), harta modulelor, modelul de date,
 secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-urilor sunt documentate în
