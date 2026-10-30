@@ -107,6 +107,8 @@ vi.mock('@modelcontextprotocol/sdk/server/mcp.js', () => {
         });
       });
       this.connect = vi.fn().mockResolvedValue(undefined);
+      this.registerResource = vi.fn();
+      this.registerPrompt = vi.fn();
       // Synthesize the two request handlers the old low-level Server exposed via
       // setRequestHandler, so existing registeredHandlers.get(...) call sites
       // keep working. The CallTool handler delegates to the registered callback

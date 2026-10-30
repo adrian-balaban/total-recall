@@ -21,3 +21,4 @@ ASSERT(Every tool error returned to Host Harness has local filesystem paths reda
 ASSERT(The PostToolUse matcher targets the declared server's write tools only) # [TR-C4]
 ASSERT(Lifecycle Hooks inject SessionStart context only with hookEventName SessionStart) # [TR-C5]
 ASSERT(A memory file with frontmatter keys this version does not know is read without error) # [TR-C6]
+ASSERT(Resources and prompts never change the tools list; the memory index resource frames org entries as untrusted data) # [TR-C7]

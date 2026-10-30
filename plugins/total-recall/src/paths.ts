@@ -20,6 +20,8 @@ export interface TotalRecallConfig {
   allowedEmailDomains?: string[];
   embeddingModel?: string;
   enableMultilingualSearch?: boolean;
+  // How the org part of the injected index is exposed: 'index' (default) | 'titles' | 'off'.
+  orgInjection?: string;
   // Spec-driven features; parsed by spec/config.ts (parseSpecConfig).
   specDriven?: unknown;
 }
