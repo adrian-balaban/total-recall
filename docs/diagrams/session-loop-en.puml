@@ -1,0 +1,22 @@
+@startuml session-loop-en
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+
+rectangle "Session starts" as A
+rectangle "Relevant memories\ninjected into context" as B
+rectangle "You work" as C
+rectangle "Decisions & preferences\ncaptured automatically" as D
+database "~~/.total-recall\nMarkdown vault" as E
+rectangle "Spec-driven memories:\ndecisions, failures, changes\nlinked to the spec" as G
+rectangle "ADL files, optional" as Hh
+A --> B
+B --> C
+C --> D
+D --> E
+E ..> A
+C ..> G : tagged with system,\nelements, requirements
+G --> E
+Hh ..> G : index_architecture
+@enduml

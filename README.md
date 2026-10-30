@@ -17,17 +17,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
 - **Status** — v1.3.3, stable: 894 tests pass, 96.3% statement coverage, ≈78% mutation score.
 
-```mermaid
-flowchart LR
-    A[Session starts] --> B[Relevant memories<br/>injected into context]
-    B --> C[You work]
-    C --> D[Decisions & preferences<br/>captured automatically]
-    D --> E[(~/.total-recall<br/>Markdown vault)]
-    E -.-> A
-    C -.->|memories tagged with<br/>system · elements · requirements| G[Spec-driven memories:<br/>decisions, failures, changes<br/>linked to the spec]
-    G --> E
-    H[ADL files, optional] -.->|index_architecture| G
-```
+![Session loop](docs/diagrams/session-loop-en.svg)
 
 ## 📡 Thoughtworks Technology Radar Vol. 34
 
@@ -60,13 +50,7 @@ source-grounded extraction for the capture hook; an evaluation set for `recall_m
 - **Live reload:** memories a teammate pushes to the org vault appear in your session without a restart.
 - **Archive, not delete:** superseded versions of a memory are kept, not overwritten.
 
-```mermaid
-flowchart TD
-    S[store_memory] --> F{tagged org?}
-    F -->|no| P[Personal vault<br/>local only]
-    F -->|yes| PF[Privacy filter<br/>fail-closed]
-    PF --> O[Org vault → Git]
-```
+![store_memory routing](docs/diagrams/store-routing-en.svg)
 
 C4 diagrams (context → containers → components → code), module map, data model,
 boot sequence, search pipeline and hook lifecycle are documented in
