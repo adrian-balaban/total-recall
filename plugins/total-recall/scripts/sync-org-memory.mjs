@@ -42,12 +42,19 @@ const ORG_VAULT_DIR = path.dirname(ORG_VAULT);
 // branch-only and rejects that ambiguity. detectOrgBranch() returns the CURRENT
 // local branch (which always exists locally), so `git switch <detected>` is a
 // no-op success in steady state.
-function detectOrgBranch() {
+function detectOrgBranch(dir = ORG_VAULT_DIR) {
   try {
-    const r = spawnSync('git', ['-C', ORG_VAULT_DIR, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8', stdio: 'pipe' });
+    const r = spawnSync('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8', stdio: 'pipe' });
     if (r.status === 0) {
       const b = (r.stdout ?? '').trim();
       if (b && b !== 'HEAD') return b; // 'HEAD' = detached; not a branch name
+    }
+    // Detached HEAD: pull-org-vault.sh clones with --branch, so origin/HEAD names the
+    // branch pull keeps refreshing. Use it so sync and pull agree (BACKLOG: detached HEAD).
+    const o = spawnSync('git', ['-C', dir, 'symbolic-ref', '--short', 'refs/remotes/origin/HEAD'], { encoding: 'utf8', stdio: 'pipe' });
+    if (o.status === 0) {
+      const ob = (o.stdout ?? '').trim().replace(/^origin\//, '');
+      if (ob) return ob;
     }
   } catch {}
   return '';
@@ -497,7 +504,7 @@ async function main() {
 // Export the H2 wipe-tripwire helpers for unit testing. Guard the top-level
 // main() run behind an "invoked as a script" check so importing this module in a
 // test does NOT kick off a real org sync (which would need HOME/config/git set up).
-export { countHeadMd, countDiskMd, guardTreeWipe };
+export { countHeadMd, countDiskMd, guardTreeWipe, detectOrgBranch };
 
 const invokedDirectly =
   process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
