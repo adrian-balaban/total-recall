@@ -228,6 +228,36 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     expect(args).toBeNull();
   });
 
+  it('[TR-C4] accepts camelCase host payloads (toolName/toolResponse/toolInput)', async () => {
+    const r = runHook(JSON.stringify({
+      toolName: 'total-recall_store_memory',
+      toolResponse: [{ type: 'text', text: JSON.stringify({ key: 'org/knowledge/camel' }) }],
+    }));
+    expect(r.status).toBe(0);
+    expect((await waitForArgs())?.key).toBe('org/knowledge/camel');
+  });
+
+  it('[TR-C4] accepts a JSON-string tool response and camelCase toolInput.force', async () => {
+    const r = runHook(JSON.stringify({
+      toolName: 'mcp_total-recall_delete_memory',
+      toolInput: { key: 'org/knowledge/gone', force: true },
+      toolResponse: 'not json',
+    }));
+    expect(r.status).toBe(0);
+    const args = await waitForArgs();
+    expect(args).toMatchObject({ key: 'org/knowledge/gone', delete: true, force: true });
+  });
+
+  it('[TR-C4] ignores a foreign tool even when it carries an org key (matcher-less hosts)', async () => {
+    const r = runHook(JSON.stringify({
+      tool_name: 'mcp__other__recall_memory',
+      tool_response: { key: 'org/knowledge/read-only' },
+    }));
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+    expect(await waitForArgs(1500)).toBeNull();
+  });
+
   it('short-circuits and still returns continue when no key can be extracted', async () => {
     const json = JSON.stringify({
       tool_name: 'mcp__total-recall__store_memory',

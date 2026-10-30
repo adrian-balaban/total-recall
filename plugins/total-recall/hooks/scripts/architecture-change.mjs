@@ -10,7 +10,8 @@ import { parseSpecConfig, isArchitectureFile } from '../../dist/spec-config.mjs'
 export function respond(input, cfg) {
   const none = { continue: true };
   if (!cfg.captureChanges) return none;
-  const file = input?.tool_input?.file_path ?? input?.tool_input?.path ?? input?.tool_input?.absolute_path;
+  const ti = input?.tool_input ?? input?.toolInput;
+  const file = ti?.file_path ?? ti?.filePath ?? ti?.path ?? ti?.absolute_path;
   if (typeof file !== 'string' || !isArchitectureFile(path.basename(file), cfg)) return none;
   const dir = path.dirname(file);
   const event = typeof input.hook_event_name === 'string' ? input.hook_event_name : 'PostToolUse';

@@ -37,9 +37,21 @@ let s = "";
 process.stdin.on("data", d => s += d).on("end", () => {
   let d = {};
   try { d = JSON.parse(s); } catch {}
-  const tn = d.tool_name || "";
+  // Host-tolerant field names (TR-C4 filtering lives here, not only in hooks.json,
+  // because some hosts ignore matchers): Claude Code is snake_case, VS Code/Copilot
+  // payloads may be camelCase. Do NOT alias the old "tool_result" field (regression).
+  const tn = d.tool_name || d.toolName || "";
+  const tin = d.tool_input || d.toolInput;
   let key = "";
-  const resp = d.tool_response;
+  let resp = d.tool_response !== undefined ? d.tool_response : d.toolResponse;
+  // A host may deliver the response as a JSON string.
+  if (typeof resp === "string") { try { resp = JSON.parse(resp); } catch { resp = undefined; } }
+  // Tool-name match: a named tool must end in a total-recall write tool. A missing
+  // name is tolerated (matcher-less/legacy payloads); a foreign tool is a no-op.
+  if (tn && !/(^|[^A-Za-z0-9])(store_memory|update_memory|delete_memory)$/.test(tn)) {
+    process.stdout.write("\x1f0\x1f0");
+    return;
+  }
   // Three tool_response shapes (see the comment above): raw content array
   // (the actual Claude Code PostToolUse shape), the {content:[...]} MCP envelope,
   // and an unwrapped {key:...} object. Extract the text items from whichever
@@ -60,9 +72,9 @@ process.stdin.on("data", d => s += d).on("end", () => {
       }
     }
   }
-  if (!key && d.tool_input && d.tool_input.key) key = d.tool_input.key;
+  if (!key && tin && tin.key) key = tin.key;
   const flag = tn.endsWith("delete_memory") ? 1 : 0;
-  const force = d.tool_input && d.tool_input.force === true ? 1 : 0;
+  const force = tin && tin.force === true ? 1 : 0;
   process.stdout.write(key + "\x1f" + flag + "\x1f" + force);
 });
 ' 2>/dev/null || true)
