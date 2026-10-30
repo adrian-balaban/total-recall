@@ -11,7 +11,7 @@ Status: **review + proposal** · Date: 2026-10-30 · Baseline: `main` at `966d4c
 | **Claude Code extension for VS Code** (`anthropic.claude-code`) | ✅ Ready, with 2 PATH traps | Same plugin, same hooks, same MCP server as the CLI. This review was written in it. |
 | **GitHub Copilot in VS Code**, agent-plugin route | ⚠️ Probably works, unverified | VS Code agent plugins (Preview) read the Claude plugin format, including `hooks/hooks.json` and `.mcp.json` with `${CLAUDE_PLUGIN_ROOT}`. Event names, payloads and matchers differ in detail. |
 | **GitHub Copilot in VS Code**, manual `mcp.json` | ⚠️ Tools only | 22 tools work. No index injection, no auto-capture, no org push. |
-| **GitHub Copilot in Visual Studio** (IDE) | ❌ Tools only, undocumented | `.mcp.json` registration works in principle; no plugin or hook route documented; no install step; Windows `node.exe` needed. |
+| **GitHub Copilot in Visual Studio** (IDE) | ❌ Tools only, undocumented | `.mcp.json` registration works in principle; no plugin or hook route documented; no install step. |
 | **Cline** (VS Code extension) | ❌ Not wired | Same `mcpServers` shape, but no install step, no docs, different hook envelope (see the Cline review). |
 
 ## 🔍 Evidence
