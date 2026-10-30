@@ -1,0 +1,26 @@
+@startuml copilot-plan
+!pragma layout smetana
+left to right direction
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Order of work (PLAN-COPILOT-WITH-CLAUDE-FINAL)
+
+rectangle "0  1.4.0\norg-injection [TR-D12]" as G #FFF3CD
+rectangle "1 Spike\n+ host matrix" as A
+rectangle "2 PATH traps\nlauncher, _resolve-claude" as B
+rectangle "3 Host-tolerant\nhook scripts" as C
+rectangle "4 Docs + installers\n~--vscode, ~--cline, VS snippet" as F
+rectangle "5 Server context\ninstructions, resources, prompts" as D
+rectangle "6 Explicit org-sync mode\nfor hookless hosts" as E
+rectangle "7 Cline hook adapters" as H
+
+G --> C
+G --> D
+G --> H
+A --> B
+A --> C
+A --> E
+B --> F
+C --> F
+D --> F
+@enduml
