@@ -59,6 +59,16 @@ Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.
 ./install.sh --gemini    # MCP + hooks/hooks.gemini.json (requires the `agy` CLI)
 ```
 
+### VS Code (Copilot agent mode) — manual `mcp.json`
+
+Only needed when VS Code agent plugins are off (with them on, the plugin's own `.mcp.json` and hooks load).
+
+```bash
+./install.sh --vscode    # adds total-recall to VS Code's user mcp.json (tools only; no hooks)
+```
+
+The entry points at `scripts/start-server.sh`, which finds `node` even when VS Code was launched without it on `PATH`. Existing servers in the file are kept; a file with comments is left untouched and the snippet is printed instead. Without hooks the model reads the memory index from the `total-recall://index` resource and the `memory-workflow` prompt. The same command prints a snippet for Visual Studio's `.mcp.json` (not yet verified on a real install).
+
 ### Developing from a clone
 
 Only for working on the plugin — not a supported install path for users:
@@ -86,7 +96,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots)
 3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed
 4. Build the initial index
-5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini (`--gemini`)
+5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini (`--gemini`), VS Code MCP entry (`--vscode`)
 6. Org vault (optional — `--org-repo URL`, `--allowed-email-domain D`)
 7. Vector search (per the chosen profile)
 8. Verify + summary

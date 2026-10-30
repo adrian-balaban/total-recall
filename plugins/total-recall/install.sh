@@ -10,6 +10,7 @@
 #   4. Build the initial index
 #   5b. Statusline         (optional, --statusline)
 #   5c. Gemini extension   (optional, --gemini)
+#   5d. VS Code MCP entry  (optional, --vscode)
 #   6. Org vault            (optional)
 #   7. Vector search        (default on; provider auto-detected)
 #   8. Verify
@@ -48,6 +49,11 @@
 #                             — copies the dir into ~/.gemini/extensions/total-recall/
 #                             and registers the MCP server + hooks (hooks/hooks.gemini.json)
 #                             automatically. Requires the `agy` CLI on PATH.
+#   --vscode                  Register the MCP server in VS Code's user mcp.json
+#                             (Copilot / agent mode), by absolute path, via the
+#                             node-resolving launcher scripts/start-server.sh. Needed only
+#                             when VS Code agent plugins are off. Also prints the
+#                             Visual Studio .mcp.json snippet.
 #   --org-repo URL            Enable the shared org vault from this GitHub repo
 #                             (full HTTPS URL ending in .git)
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
@@ -126,6 +132,7 @@ ORG_DOMAIN_CLEARED=0  # set to 1 only when the user explicitly blanks the work d
 VECTOR=""        # "" = ask, "yes" = install, "no" = skip
 ASSUME_YES=0
 GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
+VSCODE=0         # --vscode: register the MCP server in VS Code's user mcp.json
 
 if [ -t 1 ]; then
   C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RST=$'\033[0m'
@@ -174,6 +181,7 @@ while [ $# -gt 0 ]; do
     --plugin-root)         PLUGIN_ROOT="${2:?--plugin-root needs a path}"; shift 2;;
     --statusline)          STATUSLINE=1; shift;;
     --gemini)              GEMINI=1; shift;;
+    --vscode)              VSCODE=1; shift;;
     --org-repo)            ORG_REPO="${2:?--org-repo needs a URL}"; shift 2;;
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector|--complete|--default)   VECTOR="yes"; shift;;
@@ -561,6 +569,32 @@ else
       note "Gemini extension not yet installed — run: agy plugin install $PLUGIN_ROOT"
     fi
   fi
+fi
+
+# --------------------------------------------------------------------------
+# Step 5d — VS Code MCP entry (optional, --vscode)
+# --------------------------------------------------------------------------
+step "Step 5d — VS Code MCP entry (optional)"
+if [ "$VSCODE" -ne 1 ]; then
+  ok "VS Code entry skipped. (Pass --vscode to register in VS Code's user mcp.json.)"
+else
+  case "$(uname -s)" in
+    Darwin) VSCODE_MCP="$HOME/Library/Application Support/Code/User/mcp.json";;
+    *)      VSCODE_MCP="${XDG_CONFIG_HOME:-$HOME/.config}/Code/User/mcp.json";;
+  esac
+  if [ ! -x "$PLUGIN_ROOT/scripts/start-server.sh" ]; then
+    warn "scripts/start-server.sh not found or not executable under $PLUGIN_ROOT — skipping."
+  else
+    VSCODE_RESULT=$(node "$PLUGIN_ROOT/scripts/register-vscode-mcp.mjs" "$VSCODE_MCP" "$PLUGIN_ROOT" 2>/dev/null)
+    case "$VSCODE_RESULT" in
+      written)   ok "Registered total-recall in $VSCODE_MCP"; note "VS Code MCP entry written.";;
+      unchanged) ok "total-recall already registered in $VSCODE_MCP";;
+      *)         warn "$VSCODE_MCP is not strict JSON (comments?) — left untouched. Add this under \"servers\":"
+                 info "\"total-recall\": { \"type\": \"stdio\", \"command\": \"$PLUGIN_ROOT/scripts/start-server.sh\" }";;
+    esac
+  fi
+  info "Visual Studio: put this in <solution>/.mcp.json (unverified, see plan step 1):"
+  info "{ \"servers\": { \"total-recall\": { \"type\": \"stdio\", \"command\": \"$PLUGIN_ROOT/scripts/start-server.sh\" } } }"
 fi
 
 # --------------------------------------------------------------------------
