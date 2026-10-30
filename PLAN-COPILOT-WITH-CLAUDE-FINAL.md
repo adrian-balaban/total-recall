@@ -72,6 +72,24 @@ Every step is one PR that keeps `npm test`, `test:integration` and `validate_arc
 | 5 🔄 PR #17 (1.5.0) | **Server context** (after 1.4.0) | Richer `instructions` (retrieval order, capture rules). Resources: `total-recall://index` (with `[TR-D12]` framing and `orgInjection`) and `total-recall://sync-status`. Prompts: `memory-workflow` and `extract-session-learnings` (the stand-in for PreCompact). New `[TR-C7]`: resources and prompts never change `tools/list`. | `[TR-C7]` test; `tools/list` golden unchanged (`[TR-C1]`) |
 | 6 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
 
+## 📝 ADR draft for step 6: `orgSync: hook | server`
+
+Status: **draft, decision pending**. No duplicate exists in the memory store. `[TR-R4]` today reads: "Only Vectors (native binding self-heal) and the Spec exec module start external processes".
+
+- **Context:** org sync runs only from the PostToolUse hook. On hosts without hooks (Visual Studio, a manual `mcp.json`) an `org` memory is written locally and never reaches teammates. That is a non-sync, not a leak.
+- **Decision (proposed):**
+  1. New config `orgSync: "hook" | "server"`, default `hook`. `install.sh --vscode` does not change it; the installer sets `server` for Visual Studio.
+  2. In `server` mode, after `store/update/delete_memory` on an `org/*` key, the server adds the job to the same queue (`.sync-queue`) and drains it with `sync-org-memory.mjs` under the same lock as today (`[TR-W5]`).
+  3. The privacy filter is unchanged (`[TR-D3]`).
+  4. `hook` mode is unchanged. To avoid a double push, the queue deduplicates jobs and the server does not sync while the mode is `hook`.
+- **ADL consequence:** reword `[TR-R4]` to "Only Vectors, Spec exec and Org sync (`server` mode, through `sync-org-memory.mjs`) start external processes". Without it, step 6 breaks the rule.
+- **Rejected alternatives:**
+  - Detecting the client by `clientInfo.name`: fragile; a wrong guess means a double push or none.
+  - A new MCP sync tool: changes the tool list and breaks `[TR-C1]`.
+  - No sync on these hosts: leaves a known gap.
+- **Risk:** the server starts `git` with the user's credentials. The hook already uses the same credentials, so the exposure is similar, but the process now runs inside the MCP server.
+- **Decision needed:** may the server start `git` in `server` mode, with the reworded `[TR-R4]`? If yes: publish the ADR as a `decisions` memory tagged `no-prune`, then write the step 6 code. If no: step 6 stops.
+
 ## 🚫 Rejected or deferred
 
 - **Windows-specific fixes** (`node.exe` handling, Windows hook paths): out of scope; the plan targets Linux and macOS.
