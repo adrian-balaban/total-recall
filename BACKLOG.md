@@ -14,7 +14,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
-### Org-vault inbound injection — teammate-written content is unfiltered at SessionStart
+### Org-vault inbound injection — teammate-written content is unfiltered at SessionStart · **DONE in 1.4.0**
 - **What:** the org memory index goes into every teammate's context at
   SessionStart, unfiltered. A pusher with org-vault write access can shape any
   teammate's context — this is the top risk flagged by the external review

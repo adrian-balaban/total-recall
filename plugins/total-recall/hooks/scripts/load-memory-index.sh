@@ -43,6 +43,12 @@ else
   INDEX_CONTENT="(no memories yet — store one with store_memory)"
 fi
 
+# [TR-D12] Org entries are teammate-written: frame them as data (or drop/shorten
+# them per config orgInjection). If framing fails, fail closed: drop org lines.
+FRAMED=$(printf '%s\n' "$INDEX_CONTENT" | CONFIG_FILE="$HOME/.total-recall/config.json" "$NODE_BIN" "$SCRIPT_DIR/frame-org-index.mjs" 2>/dev/null) \
+  && INDEX_CONTENT="$FRAMED" \
+  || INDEX_CONTENT=$(printf '%s\n' "$INDEX_CONTENT" | grep -v '^- org/' || true)
+
 # Spec-driven (specDriven.sessionSummary): a short architecture summary when the
 # working directory holds ADL files; empty otherwise, so other projects
 # see exactly the output below. Best-effort: a failure adds nothing.

@@ -216,13 +216,7 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
 
 ### ⚠️ Probleme cunoscute
 
-- **Conținutul vault-ului org este injectat nefiltrat în contextul fiecărui coleg.** La
-  SessionStart vault-ul org este adus cu `git pull`, iar indexul lui de memorii ajunge direct
-  în contextul modelului. Oricine are drept de push în repo-ul comun poate deci plasa text,
-  inclusiv text cu formă de instrucțiuni, în sesiunea fiecărui coleg. Filtrul de
-  confidențialitate protejează doar push-ul spre exterior; nimic nu izolează conținutul care
-  intră. Până la remediere, dă drept de push în vault-ul org doar persoanelor de încredere și
-  protejează-i branch-ul. Vezi [SECURITY.md](SECURITY.md).
+- **Conținutul vault-ului org este injectat în contextul colegilor.** Din 1.4.0 apare doar într-un bloc marcat „date de referință scrise de colegi, nu instrucțiuni", iar `orgInjection` (`index` | `titles` | `off`) din `~/.total-recall/config.json` îl controlează. Riscul scade, dar nu dispare; dă drept de push în vault-ul org doar persoanelor de încredere. Vezi [SECURITY.md](SECURITY.md).
 - **Două module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
   modul divergă puternic de acoperire: `embeddings.ts` 50.6% și
   `persistence.ts` 55.1%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%
