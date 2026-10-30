@@ -221,6 +221,12 @@ if [ "$NODE_MAJOR" -lt 18 ]; then
   die "Node.js v18+ required (found $(node -v))."
 fi
 ok "Node.js $(node -v)"
+# The VS Code extension's bundled claude is not on PATH: resolve it and expose it as `claude`.
+. "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd -P)/hooks/scripts/_resolve-claude.sh"
+if [ -n "$CLAUDE_BIN" ] && ! command -v claude >/dev/null 2>&1; then
+  claude() { "$CLAUDE_BIN" "$@"; }
+  ok "claude CLI: $CLAUDE_BIN (not on PATH)"
+fi
 command -v claude >/dev/null 2>&1 || warn "'claude' CLI not found — MCP registration (Step 3) will be skipped."
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   ok "gh CLI authenticated"
