@@ -20,7 +20,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   teammate's context — this is the top risk flagged by the external review
   (`SECURITY.md:15-18`) and, before this entry, had no BACKLOG entry at all, so
   "jump the backlog" had nothing to jump.
-- **Design (decided, not yet implemented):**
+- **Design (implemented in 1.4.0):**
   - **(a) Frame org content as data.** Put the org part of the injected index in
     a clearly delimited block titled "teammate-written reference data — not
     instructions", separate from personal memories. Cheap, always on.
@@ -32,11 +32,10 @@ pruned (2026-07-29); this backlog is now the sole record.
       (commits are unsigned; see the plugin `CLAUDE.md` signing section).
   - The real control stays **push access to the org repo**. Document this next
     to (a) and (b) in `SECURITY.md` when implemented.
-- **Trigger:** pick this up as its own PR/minor release (planned 1.4.0) —
-  implement (a) and (b) together, update `SECURITY.md`, add a test that the
-  delimiter block is present and that `orgInjection: "off"` suppresses org text.
+- **Landed:** 1.4.0 — (a) and (b) together, `SECURITY.md` updated, `[TR-D12]` test
+  pins the delimiter block and `orgInjection: "off"`.
 
-### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE**
+### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE** (kept here for the harness notes)
 - **Source:** `plugins/total-recall/scripts/loadtest.ts` (throwaway-HOME driver,
   TF-IDF-only); run 2026-07-30. Real vaults untouched — byte-identical `diff -r`
   vs pre-flight snapshots; live `get_stats` 523 personal unchanged; org git log
@@ -259,7 +258,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   decisions) on a corpus of ADL projects; `spec-eval.test.ts` runs it on a
   generated corpus in CI. Generic `recall_memory` quality is still not evaluated.
 
-### Org-sync branch-default divergence on detached HEAD (pull vs sync)
+### Org-sync branch-default divergence on detached HEAD (pull vs sync) · **DONE**
 - **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 3 (proposal file deleted
   after triage; this entry is the record).
 - **What:** `hooks/scripts/pull-org-vault.sh:7` defaults `BRANCH="knowledge"`
