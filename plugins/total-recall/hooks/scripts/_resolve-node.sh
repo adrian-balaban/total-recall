@@ -17,7 +17,7 @@ if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
   NODE_BIN="$(command -v node 2>/dev/null || true)"
 fi
 if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
-  NODE_BIN="$(ls "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)"
+  NODE_BIN="$(ls "$HOME"/.nvm/versions/node/*/bin/node 2>/dev/null | sort -V | tail -1)" || true
 fi
 if [ -z "$NODE_BIN" ] || ! [ -x "$NODE_BIN" ]; then
   for p in /usr/local/bin/node /usr/bin/node /opt/homebrew/bin/node; do
