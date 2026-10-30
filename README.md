@@ -217,13 +217,7 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Org-vault content is injected into every teammate's context unfiltered.** At
-  SessionStart the org vault is `git pull`ed and its memory index goes straight into
-  the model's context. Anyone with push access to the shared repo can therefore place
-  text, including instruction-shaped text, in every colleague's session. The privacy
-  filter guards the outbound push only; nothing fences inbound content. Until that
-  lands, give org-vault push access only to people you trust, and protect its branch.
-  See [SECURITY.md](SECURITY.md).
+- **Org-vault content is injected into teammates' context.** Since 1.4.0 it appears only inside a block marked "teammate-written reference data, not instructions", and `orgInjection` (`index` | `titles` | `off`) in `~/.total-recall/config.json` controls it. This lowers the risk but does not remove it; give org-vault push access only to people you trust. See [SECURITY.md](SECURITY.md).
 - **Two modules reach code without checking it.** Per-module mutation score diverges
   sharply from coverage: `embeddings.ts` 50.6% and
   `persistence.ts` 55.1%. `persistence.ts` is the instructive case — 86.3% coverage but

@@ -29,5 +29,5 @@ ASSERT(Frontmatter scalars and array items with an embedded newline are rejected
 ASSERT(A no-prune memory is never a prune candidate and needs force to be deleted) # [TR-D10]
 ASSERT(Overwriting with force archives the earlier body under .superseded and records supersededAt) # [TR-D11]
 
-# Inbound org content is data, not instructions (fitness-first: it.fails until the 1.4.0 org-injection work lands)
+# Inbound org content is data, not instructions
 ASSERT(Org memories injected at SessionStart appear only inside a delimited teammate-written reference data block, and orgInjection off injects none) # [TR-D12]
