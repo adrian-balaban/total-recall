@@ -1,0 +1,24 @@
+@startuml landscape
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+skinparam componentStyle rectangle
+title Runtime landscape (system.adl)
+
+actor "Host Harness" as H
+component "MCP Stdio Server" as S
+component "Lifecycle Hooks" as L
+component "Local Embedder\n(optional)" as E
+database "Personal Vault" as PV
+database "Org Vault" as OV
+cloud "Org Git Remote" as R
+
+H --> S : stdio [R2]
+H --> L : hook events [C5]
+S --> PV : untagged [D2]
+S --> OV : org tag [D1]
+S ..> E : degrades to TF-IDF [R3]
+L --> PV : file-io
+L --> OV : git, filtered [D3]
+OV --> R : git-tls
+@enduml
