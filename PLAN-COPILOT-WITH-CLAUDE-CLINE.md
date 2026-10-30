@@ -18,10 +18,10 @@ Every claim below was checked against the code (`plugins/total-recall/` at `68be
 - **Ship it in 5 PRs**, targeting **1.5.0** (1.4.0 is earmarked for the org-injection work in BACKLOG.md, which this plan depends on — see Risks):
   1. spike + docs ("Codex-style" support),
   2. `install.sh --cline` (MCP registration),
-  3. rules-based proactive memory (works everywhere, including Windows),
+  3. rules-based proactive memory (works everywhere),
   4. hook adapters for macOS/Linux (`TaskStart`, `TaskResume`, `PostToolUse`),
-  5. verification + Windows hardening.
-- **Two hard platform caveats:** Cline hooks are **macOS/Linux only** (no Windows support), and there is **no PreCompact / TaskCompleted event** — so compaction-time extraction has no hook to hang on and must be rules-driven everywhere.
+  5. verification.
+- **Two hard platform caveats:** Cline hooks are **macOS/Linux only**, and there is **no PreCompact / TaskCompleted event** — so compaction-time extraction has no hook to hang on and must be rules-driven everywhere.
 
 ## 🔍 What the code and Cline's docs say
 
@@ -50,9 +50,8 @@ Every claim below was checked against the code (`plugins/total-recall/` at `68be
 1. **No wiring exists for Cline anywhere.** `install.sh` has steps for Claude Code (Step 3 MCP registration), statusline (5b), and Gemini (`5c`, `--gemini`) — nothing for Cline. `INSTALL.md` documents only Claude Code, Gemini, and a "Codex CLI (MCP only, no hooks)" caveat.
 2. **`${CLAUDE_PLUGIN_ROOT}` does not resolve in Cline.** `.mcp.json` and `gemini-extension.json` both rely on client-provided path variables (`${CLAUDE_PLUGIN_ROOT}`, `${extensionPath}`); Cline's settings file needs a **resolved absolute path** to `dist/index.js`.
 3. **The hook envelopes differ in both directions.** Cline wants one executable script **named exactly the event** (no extension) in `.clinerules/hooks/` (project) or `~/Documents/Cline/Rules/Hooks/` (global), reading a Cline-specific stdin envelope (base fields `clineVersion`, `hookName`, `timestamp`, `taskId`, `workspaceRoots`, `userId`) and emitting `{"cancel": bool, "errorMessage"?, "contextModification"?}` — not Claude Code's `{"continue":true,"hookSpecificOutput":{"hookEventName":...,"additionalContext":...}}`. Reusing the existing scripts unmodified would inject nothing (`load-memory-index.sh` emits a Claude-shaped envelope) and could even **cancel operations** (a `cancel:true`-shaped misfire blocks the tool call). Thin adapters are required — the `hooks.gemini.json` precedent shows this repo already ships per-client envelopes.
-4. **Cline hooks don't run on Windows.** Announced macOS/Linux-only in v3.36; not re-confirmed since (spike). Windows Cline users get the rules-only path (PR 3).
-5. **`contextModification` shapes the next API request, not the current one** (Cline blog). For TaskStart that is fine (nothing has been generated yet), but it means the injected index behaves slightly differently than Claude Code's SessionStart injection. Document; don't fight it.
-6. **The hooks docs moved.** `docs.cline.bot/customization/hooks` is now a stub ("See details under SDK Plugins page") — the hooks system may have been folded into the Cline SDK/Plugins model since v3.36. Spike must confirm the current location, event set (did `TaskCompleted` land?), and settings toggle before PR 4 ships.
+4. **`contextModification` shapes the next API request, not the current one** (Cline blog). For TaskStart that is fine (nothing has been generated yet), but it means the injected index behaves slightly differently than Claude Code's SessionStart injection. Document; don't fight it.
+5. **The hooks docs moved.** `docs.cline.bot/customization/hooks` is now a stub ("See details under SDK Plugins page") — the hooks system may have been folded into the Cline SDK/Plugins model since v3.36. Spike must confirm the current location, event set (did `TaskCompleted` land?), and settings toggle before PR 4 ships.
 
 ---
 
@@ -68,8 +67,7 @@ Legend: every PR is independently shippable; PR 2–4 depend only on PR 1's spik
 2. Pick a Claude model via the Anthropic provider; confirm all 22 tools are listed; run a store→recall roundtrip; confirm `get_stats` reports `vector.enabled` correctly.
 3. Confirm the **PostToolUse-for-MCP-tools** question: does the event fire for MCP tool calls, and what is the tool-name format in the stdin payload?
 4. Confirm `autoApprove` semantics for MCP tools (exact tool-name format the list expects) so PR 2 can auto-approve read-only tools safely.
-5. Re-confirm hooks status: current docs location (SDK Plugins?), event set (TaskCompleted?), Windows support, settings toggle.
-6. Windows: repeat 1–2 on a Windows machine (settings path `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\settings\cline_mcp_settings.json` for the VS Code extension; `~/.cline/data/settings/…` for the CLI).
+5. Re-confirm hooks status: current docs location (SDK Plugins?), event set (TaskCompleted?), settings toggle.
 
 **Docs (the only change in this PR):**
 
@@ -104,9 +102,9 @@ Mirror Step 5c (Gemini) as **Step 5d**, flag `--cline`:
 - Build `dist/` first if missing (the existing Step-1/4 helpers already do this).
 - Tests: follow the repo's hook-script test conventions for the merge helper (temp HOME, assert idempotent re-run and no clobbering of foreign servers); full-path registration asserted.
 
-### PR 3 — Rules-based proactive memory (all platforms, including Windows)
+### PR 3 — Rules-based proactive memory (all platforms)
 
-Cline's `.clinerules` are loaded into every conversation — this is the portable stand-in for SessionStart injection, and it is the **only** mechanism that works on Windows and for users who keep hooks off.
+Cline's `.clinerules` are loaded into every conversation — this is the portable stand-in for SessionStart injection, and it is the **only** mechanism for users who keep hooks off.
 
 - Ship a copy-ready rule file, e.g. `plugins/total-recall/cline/total-recall.clinerule` (workspace: `.clinerules/total-recall.md`; global rules dir also works), with three directives mirroring the injected index's own instructions (`load-memory-index.sh:51-68`):
   1. **At task start** — call `recall_memory` / `get_memories_by_keys` for anything the task touches before proposing an approach (retrieval decision tree, same 4 steps);
@@ -126,9 +124,8 @@ New directory `plugins/total-recall/hooks/cline/` — thin adapters that **reuse
 - Distribution: `install.sh --cline` copies the three adapters into `.clinerules/hooks/` of the **current project** (opt-in, with printed instructions for the global `~/Documents/Cline/Rules/Hooks/` route), and reminds the user to enable Hooks in Cline settings → Features.
 - Tests: new `cline-hooks.test.ts` beside `sync-org-memory-hook.test.ts` / `extract-and-store-hook.test.ts` — Cline stdin envelope parsed; Claude envelope never emitted on the Cline path; PostToolUse adapter no-ops for non-matching tools and for malformed stdin; dedup marker suppresses double injection; adapters exit 0 with valid JSON on every input (Cline shows hook failures in the UI).
 
-### PR 5 — Verification + Windows hardening
+### PR 5 — Verification
 
-- Windows smoke (rules-only expected): MCP registration + Claude model + 22 tools + store/recall; confirm hooks are simply absent (no scary errors); document the `better-sqlite3` Windows-native-binding note (same class of issue as the `claude plugin update` case in INSTALL.md, `npm rebuild better-sqlite3`).
 - Confirm Cline's multi-root workspace behavior (`workspaceRoots` base field) doesn't break vault path resolution (vault paths come from `~/.total-recall/config.json`, not the workspace — should hold; assert in the spike).
 - Re-run the full gates: `npm test`, `test:integration`, `npm run mutation` (new adapters are bash — out of Stryker scope like the other hook scripts), update the plugin manifest description ("Claude Code & Gemini" → "+ Cline"), `README.md` TL;DR, and this plan's status line.
 
@@ -141,7 +138,6 @@ New directory `plugins/total-recall/hooks/cline/` — thin adapters that **reuse
 | Cline hooks docs now live under "SDK Plugins" — the system may have been renamed/extended since v3.36 | Spike 5 gates PR 4; adapters are additive files, safe to ship after confirmation; the rules path (PR 3) works regardless |
 | PostToolUse may not fire for MCP tool calls (org sync would silently no-op — the exact bug class `sync-org-memory.sh:6-10` documents for Claude Code) | Spike 3; if unfireable, PR 3's rule adds an explicit "after storing an `org`-tagged memory, run the org sync" instruction and the adapter ships as a no-op until Cline confirms |
 | `contextModification` only shapes the *next* request | Fine for TaskStart/TaskResume (nothing generated yet); documented, not fought |
-| Windows: no hooks at all | PR 3 is the Windows story; PR 5 documents it |
 | Org-vault inbound injection applies here too — `contextModification` injects the org index into every Cline session, unfiltered | Same known issue as Claude Code (README "Known issues", BACKLOG 1.4.0). **Dependency: land 1.4.0's framing + opt-out first; Cline support rides the same fix.** This is why the target is 1.5.0, not 1.4.x |
 | Two clients installed side-by-side (Claude Code + Cline in the same repo) double-inject | Dedup-marker parity in the TaskStart adapter (PR 4); the existing marker already handles two CLI clients |
 

@@ -107,6 +107,12 @@ suite('spec-driven hooks', () => {
       expect(out.hookSpecificOutput.hookEventName).toBe('AfterTool');
     });
 
+    it('[TR-C4] accepts a camelCase host payload (toolInput.filePath)', () => {
+      setConfig(undefined);
+      const out = run({ hook_event_name: 'PostToolUse', cwd: project, toolName: 'edit', toolInput: { filePath: path.join(project, 'arch', 'shop.adl') } });
+      expect(out.hookSpecificOutput.additionalContext).toMatch(/index_architecture/);
+    });
+
     it('any other file, or captureChanges off, is a bare continue', () => {
       expect(run({ hook_event_name: 'PostToolUse', tool_input: { file_path: '/p/src/app.ts' } })).toEqual({ continue: true });
       setConfig({ captureChanges: false });

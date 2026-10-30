@@ -179,7 +179,6 @@ When `--vscode` or `--copilot` is passed to `./install.sh`:
 2. **Idempotently merge `total-recall` into VS Code's User `mcp.json`**:
    - Linux: `${XDG_CONFIG_HOME:-$HOME/.config}/Code/User/mcp.json`
    - macOS: `$HOME/Library/Application Support/Code/User/mcp.json`
-   - Windows (Git Bash / MSYS2 / WSL): `$APPDATA/Code/User/mcp.json`
    - Schema written under `"servers"`:
      ```json
      {

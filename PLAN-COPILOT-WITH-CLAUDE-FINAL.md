@@ -16,7 +16,7 @@ Merges three reviews:
 | Copilot in VS Code, agent-plugin route | ⚠️ probably works, unverified | ✅ hooks + tools |
 | Copilot in VS Code, manual `mcp.json` | ⚠️ tools only | ✅ tools + server context |
 | Copilot in Visual Studio | ❌ tools only, undocumented | ⚠️ tools + server context (no hooks) |
-| Cline | ❌ not wired | ✅ macOS/Linux hooks · ⚠️ Windows rules only |
+| Cline | ❌ not wired | ✅ hooks |
 
 ## 🔍 Review of the inputs
 
@@ -43,7 +43,7 @@ Merges three reviews:
 | Same `mcpServers` shape; absolute path needed (no `${CLAUDE_PLUGIN_ROOT}`) | ✅ Kept. |
 | Hook mapping TaskStart/TaskResume/PostToolUse; no PreCompact or SessionEnd; macOS/Linux only | ✅ Kept, behind its own spike. |
 | In-script matcher for hosts without matchers (`[TR-C4]` moves into the script) | ✅ **Generalised** to every host (step 3). VS Code may ignore matchers too. |
-| `.clinerules` rule as the Windows and no-hooks path | ✅ Kept. It shares one source with the server `instructions` (step 5). |
+| `.clinerules` rule as the no-hooks path | ✅ Kept. It shares one source with the server `instructions` (step 5). |
 | New `get_memory_index` tool | ❌ Replaced by an MCP resource plus a prompt: no new tool, so `[TR-C1]` is untouched. |
 | Org-injection work waits for 1.4.0, target 1.5.0 | ✅ Kept for everything that injects org content. |
 | `autoApprove` list includes `confirm_memory` | ⚠️ `confirm_memory` writes (it updates confirmation metadata). Keep it out of auto-approve. |
@@ -67,15 +67,16 @@ Every step is one PR that keeps `npm test`, `test:integration` and `validate_arc
 |---|---|---|---|
 | 0 | **1.4.0 org-injection** (BACKLOG, decided) | Frame org content in a delimited "teammate-written reference data — not instructions" block; add `orgInjection: "index" \| "titles" \| "off"`; update `SECURITY.md`. | `it.fails('[TR-D12] …')` switched to `it` and green |
 | 1 | **Spike + host matrix** (docs only) | Install the existing plugin in VS Code Copilot via `chat.plugins.marketplaces` with a Claude model. Record which events fire, the stdin fields, the MCP tool-name format, matcher handling, and whether `sessionStart` honours `additionalContext`. Repeat for Visual Studio (`.mcp.json`) and Cline (B's spike list). Reproduce the bare-`node` failure. | `INSTALL.md` has a host matrix; `RELEASE-SMOKE-TEST.md` has one smoke entry per host |
-| 2 | **PATH traps** | Add an MCP launcher that resolves node the way `_resolve-node.sh` does (Windows: keep `node.exe`). Add `_resolve-claude.sh`, which probes `~/.vscode*/extensions/anthropic.claude-code-*`, and use it in `install.sh` and `extract-and-store-memories.sh`. | The server starts with `env -i HOME=$HOME`; PreCompact runs with only the bundled binary |
+| 2 | **PATH traps** | Add an MCP launcher that resolves node the way `_resolve-node.sh` does. Add `_resolve-claude.sh`, which probes `~/.vscode*/extensions/anthropic.claude-code-*`, and use it in `install.sh` and `extract-and-store-memories.sh`. | The server starts with `env -i HOME=$HOME`; PreCompact runs with only the bundled binary |
 | 3 | **Host-tolerant hooks** (after 1.4.0) | Hook scripts accept Copilot payload variants (snake/camel case, `toolName`, VS Code MCP tool names) and match tool names inside the script (`[TR-C4]`, enforced in the script). Output uses the right envelope per host. Fixtures come from the spike. | New tests with Copilot-shaped stdin; org sync fires for Copilot tool names |
 | 4 | **Installers + docs** | `install.sh --vscode` (user `mcp.json`, `servers` schema, absolute paths) as the fallback when agent plugins are off. `--cline` (B, step 2). A Visual Studio `.mcp.json` snippet. An optional `adl.instructions.md` and `.clinerules` template. | Idempotent-merge tests on a temp HOME, as in B |
 | 5 | **Server context** (after 1.4.0) | Richer `instructions` (retrieval order, capture rules). Resources: `total-recall://index` (with `[TR-D12]` framing and `orgInjection`) and `total-recall://sync-status`. Prompts: `memory-workflow` and `extract-session-learnings` (the stand-in for PreCompact). New `[TR-C7]`: resources and prompts never change `tools/list`. | `[TR-C7]` test; `tools/list` golden unchanged (`[TR-C1]`) |
-| 6 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio and Cline on Windows. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
-| 7 | **Cline hook adapters** (after 1.4.0) | B's step 4: TaskStart/TaskResume/PostToolUse adapters, dedup-marker parity, macOS/Linux only. | B's `cline-hooks.test.ts` |
+| 6 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
+| 7 | **Cline hook adapters** (after 1.4.0) | B's step 4: TaskStart/TaskResume/PostToolUse adapters, dedup-marker parity, Unix only. | B's `cline-hooks.test.ts` |
 
 ## 🚫 Rejected or deferred
 
+- **Windows-specific fixes** (`node.exe` handling, Windows hook paths): out of scope; the plan targets Linux and macOS.
 - **Client sniffing (`lifecycleMode: auto`)**: replaced by explicit config (step 6).
 - **New `get_memory_index` tool**: replaced by a resource plus a prompt (step 5).
 - **`install.sh` editing VS Code `settings.json`**: deferred until the spike shows that agent plugins are not enough.
