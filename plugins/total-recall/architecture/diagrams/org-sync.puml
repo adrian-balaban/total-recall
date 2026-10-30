@@ -1,0 +1,25 @@
+@startuml org-sync
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Org Sync Saga (workflows.adl)
+
+participant "MCP Server" as S
+participant "Org Vault" as V
+participant "PostToolUse hook" as H
+participant "Privacy Filter" as F
+participant "Org Git Remote" as R
+
+S -> V : write org memory [D1]
+S -> H : tool finished
+H -> F : scan
+alt detection
+  F --> H : block [D3]
+else clean
+  H -> V : git commit
+  H -> R : git push
+  alt push fails
+    H --> H : keep queued job [W5]
+  end
+end
+note over V, R : SessionStart: pull. Abort without wiping on corrupt index [W6]
+@enduml

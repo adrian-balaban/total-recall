@@ -1,0 +1,32 @@
+@startuml adl-files
+!pragma layout smetana
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title ADL files and the tests that keep them true
+
+rectangle "architecture/adl/*.adl" {
+  rectangle "structure  S" as s
+  rectangle "runtime-safety  R" as r
+  rectangle "data-governance  D" as d
+  rectangle "code-quality  Q" as q
+  rectangle "contracts  C" as c
+  rectangle "workflows  W" as w
+  rectangle "capabilities  P" as p
+  rectangle "system, architecture-style\n(untagged)" as u
+}
+rectangle "ASSERT  # [TR-xx]" as a
+rectangle "it('[TR-xx] ...')" as t
+rectangle "adl-coverage.test.ts" as g
+
+s --> a
+r --> a
+d --> a
+q --> a
+c --> a
+w --> a
+p --> a
+a <--> t : same ID
+g ..> a : checks
+g ..> t : checks
+u ..> a : indexed only
+@enduml

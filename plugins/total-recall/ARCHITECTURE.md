@@ -634,8 +634,17 @@ The rules in this document are also written as code and checked on every `npm te
 | Boundary contracts in ADL (`DEFINE CONTRACT`: strict MCP tools, tolerant hook envelope and memory file) | `architecture/adl/contracts.adl` | schema-parity, boundary, redaction and hook tests |
 | Workflows and crash safety in ADL (`DEFINE SAGA`: session shutdown, org sync) | `architecture/adl/workflows.adl` | atomic-write, shutdown, org-sync and bulk tests |
 | Operational capabilities in ADL (`TYPE operational`, `DEFINE CAPABILITY … FOR`) | `architecture/adl/capabilities.adl` | rerank, session-history and read-only-flush tests |
+| Style, capabilities and stressors in ADL (descriptive, no tagged assertions) | `architecture/adl/architecture-style.adl` | indexed only |
 | System-level model in ADL (actors, services, `DEFINE COMMUNICATION` connections) | `architecture/adl/system.adl` | `adl-consistency.test.ts` (unique elements, no dangling connection endpoints) |
 | Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
+
+![Runtime landscape](architecture/diagrams/landscape.svg)
+
+![ADL files and tests](architecture/diagrams/adl-files.svg)
+
+![Org sync saga](architecture/diagrams/org-sync.svg)
+
+Diagram sources: `architecture/diagrams/*.puml`. Re-render: `java -jar plantuml.jar -tsvg architecture/diagrams/*.puml` (add `!pragma layout smetana` when `dot` is absent).
 
 **ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality, `C` contracts, `W` workflows, `P` operational capabilities). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
 
@@ -652,21 +661,21 @@ CALM support (a JSON system model validated with `@finos/calm-cli`) was removed 
 | Invariant | Where enforced |
 |---|---|
 | Exactly one `memIndex` object across the process | `state.ts` — all modules import from here |
-| `.md` file always written before index update | `store.ts` — `writeFileSync` then `scheduleSave` |
-| `accessCount`/`lastAccessed` survive `rebuild_index` | `vault-scan.ts` — `reconcileIndex` copies from existing entry |
-| `org` + `personal` tags are mutually exclusive | `store.ts` — throws early |
-| Org writes are author-protected (even `force=true`) | `store.ts` — checks `existingFm.author !== effectiveAuthor` |
+| `.md` file always written before index update `[TR-W3]` | `store.ts` — `writeFileSync` then `scheduleSave` |
+| `accessCount`/`lastAccessed` survive `rebuild_index` `[TR-W4]` | `vault-scan.ts` — `reconcileIndex` copies from existing entry |
+| `org` + `personal` tags are mutually exclusive `[TR-D7]` | `store.ts` — throws early |
+| Org writes are author-protected (even `force=true`) `[TR-D4]` | `store.ts` — checks `existingFm.author !== effectiveAuthor` |
 | `journal` entries written only on `store_memory`, personal only | `store.ts` — `if (!isOrg) appendJournal(...)` |
-| `sessions` capped at 50, deduplicated | `mutate.ts` — `update_memory` |
+| `sessions` capped at 50, deduplicated `[TR-P2]` | `mutate.ts` — `update_memory` |
 | Optional deps (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`) never bundled | `tsconfig.json` + esbuild `--external` |
-| `category` cannot escape its vault (path-traversal containment) | `store.ts` — resolves `<vault>/<category>` and rejects if it falls outside the vault root; the guard runs **before** `ensureDir`, so a traversal `category` cannot even create a stray directory outside the vault |
-| Org-author guard ignores any caller-supplied `author` | `store.ts` — `effectiveAuthor = os.userInfo().username` for org; the `author` arg is ignored for org memories, so `force=true` cannot impersonate another author |
-| Index files written atomically (write-`.tmp` + rename) | `persistence.ts` — `atomicWrite()` for `index.json`, `invertedIndex.json`, `.index-cache.txt`; no partial/truncated index on crash |
-| Frontmatter scalars reject embedded newlines | `frontmatter.ts` — `serializeArrayItem`/`serializeString` throw on `/[\r\n]/`; prevents a newline in `title`/`tags` from injecting a new frontmatter key |
-| `hookSpecificOutput.additionalContext` requires `hookEventName` | `load-memory-index.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
+| `category` cannot escape its vault (path-traversal containment) `[TR-D6]` | `store.ts` — resolves `<vault>/<category>` and rejects if it falls outside the vault root; the guard runs **before** `ensureDir`, so a traversal `category` cannot even create a stray directory outside the vault |
+| Org-author guard ignores any caller-supplied `author` `[TR-D8]` | `store.ts` — `effectiveAuthor = os.userInfo().username` for org; the `author` arg is ignored for org memories, so `force=true` cannot impersonate another author |
+| Index files written atomically (write-`.tmp` + rename) `[TR-W1]` | `persistence.ts` — `atomicWrite()` for `index.json`, `invertedIndex.json`, `.index-cache.txt`; no partial/truncated index on crash |
+| Frontmatter scalars reject embedded newlines `[TR-D9]` | `frontmatter.ts` — `serializeArrayItem`/`serializeString` throw on `/[\r\n]/`; prevents a newline in `title`/`tags` from injecting a new frontmatter key |
+| `hookSpecificOutput.additionalContext` requires `hookEventName` `[TR-C5]` | `load-memory-index.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
 | PreCompact reads `transcript_path` from stdin JSON, not an env var | `extract-and-store-memories.sh` — parses the hook's stdin JSON payload (Claude Code common hook input) |
 | Frontmatter keys escaped before RegExp interpolation | `frontmatter.ts` — `escapeRegExp(k)`/`escapeRegExp(key)` at both `new RegExp` sites; a key is a literal string (any `[^:\s]+`, incl. metacharacters from a crafted/teammate-pushed org-vault memory), so it must match literally — without escaping a key like `(a+)+` is mis-matched and an explicit `(a+)+: []` array is wrongly dropped |
-| `shutdown()` runs exactly once across concurrent exit triggers | `index.ts` — module-level `shuttingDown` latch; SIGTERM/SIGINT/stdin-end/stdin-close all route to one `shutdown()` whose first line short-circuits a second call. `flushPending` → `flushEmbeddings` → `process.exit(0)` completes once |
-| `export_memories` never emits a silent `''` for an unreadable body | `bulk.ts` — null read → `{key, error}` entry + `errors` count; `import_memories` skips `error` entries, so a failed read can't clobber real content on a `force` import |
+| `shutdown()` runs exactly once across concurrent exit triggers `[TR-W2]` | `index.ts` — module-level `shuttingDown` latch; SIGTERM/SIGINT/stdin-end/stdin-close all route to one `shutdown()` whose first line short-circuits a second call. `flushPending` → `flushEmbeddings` → `process.exit(0)` completes once |
+| `export_memories` never emits a silent `''` for an unreadable body `[TR-W7]` | `bulk.ts` — null read → `{key, error}` entry + `errors` count; `import_memories` skips `error` entries, so a failed read can't clobber real content on a `force` import |
 | `delete_memories` records a reserved key per-key, not batch-reject | `bulk.ts` — no up-front reserved-key throw; the per-key `deleteMemory` catch records it in `errors` and the batch continues |
-| `rerank_memories` keys capped at 200 | `rerank.ts` — `MAX_KEYS=200` + schema `maxItems: 200`; extras sliced off the front (order preserved) before embed/score |
+| `rerank_memories` keys capped at 200 `[TR-P1]` | `rerank.ts` — `MAX_KEYS=200` + schema `maxItems: 200`; extras sliced off the front (order preserved) before embed/score |
