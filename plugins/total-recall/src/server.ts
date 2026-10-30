@@ -21,6 +21,7 @@ import { register as registerMutate } from './tools/mutate.js';
 import { register as registerRerank } from './tools/rerank.js';
 import { register as registerBulk } from './tools/bulk.js';
 import { register as registerArchitecture } from './tools/architecture.js';
+import { register as registerHostContext } from './host-context.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
 
@@ -54,7 +55,9 @@ const server = new McpServer(
     instructions:
       `total-recall v${PLUGIN_VERSION} — persistent memory MCP server (${TOOL_COUNT} tools). ` +
       `Retrieval order: search_index → recall_memory → get_memories_by_keys. Rerank with rerank_memories. ` +
-      `Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory.` +
+      `Bulk operations: export_memories / import_memories / delete_memories. Confirm with confirm_memory. ` +
+      `Capture: store_memory from the main agent, executive summary (WHY), dedup first. ` +
+      `Hookless hosts: read resource total-recall://index and prompt memory-workflow.` +
       (spec.tools.length
         ? ` Architecture (spec-driven): index_architecture, then get_architecture_context / trace / get_architecture_history; validate_architecture for checks.`
         : ''),
@@ -71,6 +74,8 @@ registerMutate(server, spec.enabled);
 registerRerank(server);
 registerBulk(server);
 registerArchitecture(server, spec);
+// Resources + prompts for hosts without SessionStart hooks; never touch tools/list ([TR-C7]).
+registerHostContext(server);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 
