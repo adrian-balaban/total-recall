@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.6.0, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.1, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -191,7 +191,7 @@ and are only pulled in if you enable it.
 
 |              |                                                                                                                                                                                                       |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**  | 1.6.0 — stable                                                                                                                                                                                        |
+| **Version**  | 1.6.1 — stable                                                                                                                                                                                        |
 | **Tests**    | 962 unit + 24 integration passing · 73 files · ~16k lines of test code                                                                                                                                |
 | **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                       |
 | **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65%                                                                                                                     |
@@ -206,7 +206,7 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Org-vault content is injected into teammates' context.** Since 1.4.0 it appears only inside a block marked "teammate-written reference data, not instructions", and `orgInjection` (`index` | `titles` | `off`) in `~/.total-recall/config.json` controls it. This lowers the risk but does not remove it; give org-vault push access only to people you trust. See [SECURITY.md](SECURITY.md).
+- **Teammate-written org memories reach your model's context.** Since 1.4.0 the org entries of the memory index (keys, titles, tags) are injected at SessionStart, and served by the `total-recall://index` resource, only inside a block marked "teammate-written reference data, not instructions"; `orgInjection` (`index` | `titles` | `off`) in `~/.total-recall/config.json` controls them. Full org memory bodies returned by `recall_memory`, `get_memories_by_keys` and `get_architecture_context` are **not** framed, and `orgInjection` does not apply to them. Framing lowers the risk but does not remove it; give org-vault push access only to people you trust. See [SECURITY.md](SECURITY.md).
 - **Two modules reach code without checking it.** Per-module mutation score diverges
   sharply from coverage: `embeddings.ts` 50.6% and
   `persistence.ts` 55.1%. `persistence.ts` is the instructive case — 86.3% coverage but

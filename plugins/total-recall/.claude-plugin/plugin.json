@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-plugin-manifest.json",
   "name": "total-recall",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Persistent knowledge management for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot). Stores memories as markdown files, exposes 22 MCP tools (including ADL architecture tools for spec-driven work), and uses lifecycle hooks to inject the memory index automatically.",
   "author": {
     "name": "Adrian Balaban"

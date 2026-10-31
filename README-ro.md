@@ -15,7 +15,7 @@ O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity ș
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.6.0, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
+- **Status** — v1.6.1, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
@@ -191,7 +191,7 @@ căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec
 
 |                    |                                                                                                                                                                                                                           |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Versiune**       | 1.6.0 — stabilă                                                                                                                                                                                                           |
+| **Versiune**       | 1.6.1 — stabilă                                                                                                                                                                                                           |
 | **Teste**          | 962 unitare + 24 de integrare, toate trec · 73 fișiere · ~16k linii de cod de test                                                                                                                                        |
 | **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                           |
 | **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65%                                                                                                                        |
@@ -206,7 +206,7 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
 
 ### ⚠️ Probleme cunoscute
 
-- **Conținutul vault-ului org este injectat în contextul colegilor.** Din 1.4.0 apare doar într-un bloc marcat „date de referință scrise de colegi, nu instrucțiuni", iar `orgInjection` (`index` | `titles` | `off`) din `~/.total-recall/config.json` îl controlează. Riscul scade, dar nu dispare; dă drept de push în vault-ul org doar persoanelor de încredere. Vezi [SECURITY.md](SECURITY.md).
+- **Memoriile org scrise de colegi ajung în contextul modelului tău.** Din 1.4.0, intrările org din indexul memoriilor (chei, titluri, etichete) sunt injectate la SessionStart, și servite de resursa `total-recall://index`, doar într-un bloc marcat „teammate-written reference data, not instructions" (date de referință scrise de colegi, nu instrucțiuni); `orgInjection` (`index` | `titles` | `off`) din `~/.total-recall/config.json` le controlează. Conținutul complet al memoriilor org întors de `recall_memory`, `get_memories_by_keys` și `get_architecture_context` **nu** este încadrat, iar `orgInjection` nu se aplică acolo. Încadrarea scade riscul, dar nu îl elimină; dă drept de push în vault-ul org doar persoanelor de încredere. Vezi [SECURITY.md](SECURITY.md).
 - **Două module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
   modul divergă puternic de acoperire: `embeddings.ts` 50.6% și
   `persistence.ts` 55.1%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%

@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.6.0, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.1, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -384,7 +384,7 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 |                    |                                                                                                                                                                                                                |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**        | 1.6.0 — stable                                                                                                                                                                                                 |
+| **Version**        | 1.6.1 — stable                                                                                                                                                                                                 |
 | **Tests**          | 962 unit + 24 integration, all passing · 73 files · ~16k lines of test code                                                                                                                                    |
 | **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                |
 | **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65%                                                                                                                          |
