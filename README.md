@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.6.1, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.2, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -182,16 +182,16 @@ and are only pulled in if you enable it.
 
 - **Local-first** — memories live on your machine, not in the cloud.
 - **Readable** — every memory is a Markdown file you can edit in any editor.
-- **Versionable** — the team vault is git-backed; the personal vault stays local.
+- **Versionable** — the team vault is git-backed; the personal vault stays local, with a local-only git repo (created by `install.sh`, never a remote) that snapshots it at the end of each session.
 - **No infrastructure** — no external server or database. The Markdown files are
-  the source of truth; the vector index is a local SQLite, regenerable anytime.
+  the source of truth; the vector index (`vectors.db`) is a local SQLite, regenerable anytime and kept out of the snapshots.
 - **Fault-tolerant** — degrades to text search if the vector path is unavailable.
 
 ## 📊 Status
 
 |              |                                                                                                                                                                                                       |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**  | 1.6.1 — stable                                                                                                                                                                                        |
+| **Version**  | 1.6.2 — stable                                                                                                                                                                                        |
 | **Tests**    | 962 unit + 24 integration passing · 73 files · ~16k lines of test code                                                                                                                                |
 | **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                       |
 | **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65%                                                                                                                     |

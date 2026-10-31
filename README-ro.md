@@ -15,7 +15,7 @@ O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity ș
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.6.1, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
+- **Status** — v1.6.2, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
@@ -182,16 +182,16 @@ căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec
 
 - **Local-first** — memoriile sunt pe mașina ta, nu în cloud.
 - **Lizibil** — fiecare memorie este un fișier Markdown pe care îl poți edita în orice editor.
-- **Versionabil** — vault-ul de echipă este susținut de git; vault-ul personal rămâne local.
+- **Versionabil** — vault-ul de echipă este susținut de git; vault-ul personal rămâne local, cu un repo git strict local (creat de `install.sh`, fără remote) care îl salvează instantaneu la finalul fiecărei sesiuni.
 - **Fără infrastructură** — niciun server sau bază de date externă. Fișierele Markdown sunt
-  sursa adevărului.
+  sursa adevărului; indexul vectorial (`vectors.db`) este un SQLite local, regenerabil oricând și lăsat în afara instantaneelor.
 - **Tolerant la erori** — degradează la căutare de text dacă căutarea semantică nu este disponibilă.
 
 ## 📊 Status
 
 |                    |                                                                                                                                                                                                                           |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Versiune**       | 1.6.1 — stabilă                                                                                                                                                                                                           |
+| **Versiune**       | 1.6.2 — stabilă                                                                                                                                                                                                           |
 | **Teste**          | 962 unitare + 24 de integrare, toate trec · 73 fișiere · ~16k linii de cod de test                                                                                                                                        |
 | **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                           |
 | **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65%                                                                                                                        |

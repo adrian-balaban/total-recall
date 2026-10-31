@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.6.1, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.2, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -51,7 +51,7 @@ Two separate vaults live under `~/.total-recall/`:
 │   ├── architecture/
 │   │   └── db-choice.md     ← one memory: YAML frontmatter + Markdown body
 │   ├── decisions/ …
-│   └── vectors.db           ← sqlite-vec embeddings (optional)
+│   └── vectors.db           ← sqlite-vec embeddings (optional, derived, git-ignored)
 └── org/
     └── org-vault/           ← team memories, git-synced (branch from `orgBranch`)
 ```
@@ -225,7 +225,7 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 ### `SessionEnd`
 
-Logs the session, flushes pending index and embedding writes before exit, and auto-commits the personal vault if it is a local git repo (never a remote).
+Logs the session, flushes pending index and embedding writes before exit, and auto-commits the personal vault if it is a local git repo (never a remote). Only `install.sh` creates that repo (one-time `git init`, a `pre-push` block, a `.gitignore` for `.superseded/`, `*.tmp.*` and `vectors.db*`); the hook never runs `git init`, so a vault without `.git` is skipped silently. `claude plugin update` does not re-run `install.sh`: re-run it to create the repo.
 
 ---
 
@@ -236,6 +236,8 @@ Logs the session, flushes pending index and embedding writes before exit, and au
 3. `search_index(query=…)` — fast metadata, no file reads
 4. `recall_memory(query=…, full=false)` — TF-IDF + Ebbinghaus
 5. `recall_memory(query=…, full=true)` — with full content
+
+`search_index` and `recall_memory` skip `journal` entries unless you pass `excludeJournal: false`.
 
 The bundled `/total-recall:memory-workflow` skill teaches the model this order plus capture rules (executive summary, dedup check, importanceScore).
 
@@ -384,7 +386,7 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 |                    |                                                                                                                                                                                                                |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**        | 1.6.1 — stable                                                                                                                                                                                                 |
+| **Version**        | 1.6.2 — stable                                                                                                                                                                                                 |
 | **Tests**          | 962 unit + 24 integration, all passing · 73 files · ~16k lines of test code                                                                                                                                    |
 | **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                |
 | **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65%                                                                                                                          |
