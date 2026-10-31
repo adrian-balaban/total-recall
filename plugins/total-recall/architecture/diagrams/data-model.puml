@@ -6,7 +6,7 @@ set separator none
 hide empty methods
 title Data model
 
-package "$HOME/.total-recall" <<Folder>> {
+package "<U+007E>/.total-recall" <<Folder>> {
   file "index.json\nRecord<key, MemoryMetadata>" as ij
   file "invertedIndex.json\nRecord<token, {docs, idf}>" as ii
   file ".index-cache.txt\ninjected at SessionStart" as ic

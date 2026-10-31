@@ -8,7 +8,7 @@ rectangle "Session starts" as A
 rectangle "Memory index\ninjected into context" as B
 rectangle "You work" as C
 rectangle "Decisions & preferences\ncaptured automatically" as D
-database "~~/.total-recall\nMarkdown vault" as E
+database "<U+007E>/.total-recall\nMarkdown vault" as E
 rectangle "Spec-driven memories:\ndecisions, failures, changes\nlinked to the spec" as G
 rectangle "ADL files, optional" as Hh
 A --> B

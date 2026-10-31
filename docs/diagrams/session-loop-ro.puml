@@ -8,7 +8,7 @@ rectangle "Sesiunea începe" as A
 rectangle "Indexul memoriilor\ninjectat în context" as B
 rectangle "Lucrezi" as C
 rectangle "Deciziile & preferințele\ncapturate automat" as D
-database "~~/.total-recall\nvault Markdown" as E
+database "<U+007E>/.total-recall\nvault Markdown" as E
 rectangle "Memorii spec-driven:\ndecizii, eșecuri, schimbări\nlegate de specificație" as G
 rectangle "Fișiere ADL, opțional" as Hh
 A --> B

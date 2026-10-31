@@ -9,8 +9,8 @@ System_Boundary(tr, "Total Recall") {
   Container(mcp, "MCP stdio server", "Node · dist/index.js", "22 tools, in-memory index, debounced persistence; started by .mcp.json")
   Container(hooks, "Hook scripts", "bash + Node · hooks/scripts", "SessionStart · PostToolUse · PreCompact · SessionEnd")
   Container(emb, "Embedder", "in-process HF pipeline", "all-MiniLM-L6-v2, 384-dim, lazy, optional")
-  ContainerDb(pv, "Personal vault", "Markdown + local git", "$HOME/.total-recall/personal-vault")
-  ContainerDb(ov, "Org vault", "Markdown + git branch", "$HOME/.total-recall/org/org-vault")
+  ContainerDb(pv, "Personal vault", "Markdown + local git", "<U+007E>/.total-recall/personal-vault")
+  ContainerDb(ov, "Org vault", "Markdown + git branch", "<U+007E>/.total-recall/org/org-vault")
   ContainerDb(idx, "Index files", "JSON + txt", "index.json · invertedIndex.json · .index-cache.txt")
   ContainerDb(vdb, "vectors.db", "SQLite + sqlite-vec", "optional")
 }
