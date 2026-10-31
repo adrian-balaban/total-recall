@@ -57,7 +57,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   3x before merging, since the abort is intermittent under plain vitest.
 
 ### Atomic writes for memory `.md` files
-- **Source:** `ADL-EXPANSION-PLAN.md` (Rejected or deferred).
+- **Source:** `ADL-EXPANSION-PLAN.md` (Rejected or deferred; file deleted 2026-10-31).
 - **What:** memory `.md` files are written with plain `writeFileSync` in
   `store.ts` and `mutate.ts`. Only the index files are written atomically
   (`persistence.ts` `atomicWrite()`), so any "all vault writes are atomic" rule

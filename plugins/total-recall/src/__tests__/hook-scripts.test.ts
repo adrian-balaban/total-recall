@@ -79,7 +79,7 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(ctx).not.toContain('vunknown');
   });
 
-  // [TR-D12] was written fitness-first (it.fails) in ADL-EXPANSION-PLAN PR 4 and
+  // [TR-D12] was written fitness-first (it.fails) in the ADL expansion plan (PR 4, since deleted) and
   // switched to `it` when 1.4.0 landed the framing + config `orgInjection`.
   function runLoad(orgInjection?: string) {
     const home = fs.mkdtempSync(path.join(tmpHome, 'inject-'));

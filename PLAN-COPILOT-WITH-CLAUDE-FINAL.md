@@ -4,9 +4,9 @@ Status: **in progress** (steps 0, 2, 3 done; 5 in review) · Date: 2026-10-30 ·
 
 Merges three reviews:
 
-- **A**: [PLAN-COPILOT-WITH-CLAUDE-ANTIGRAVITY-GEMINI.md](PLAN-COPILOT-WITH-CLAUDE-ANTIGRAVITY-GEMINI.md) (Copilot in VS Code and Visual Studio, plus the Claude Code extension).
-- **B**: [PLAN-COPILOT-WITH-CLAUDE-CLINE.md](PLAN-COPILOT-WITH-CLAUDE-CLINE.md) (Cline).
-- **C**: [PLAN-COPILOT-WITH-CLAUDE-CLAUDE.md](PLAN-COPILOT-WITH-CLAUDE-CLAUDE.md) (all five hosts, with evidence from this session and host docs fetched 2026-10-30).
+- **A**: `PLAN-COPILOT-WITH-CLAUDE-ANTIGRAVITY-GEMINI.md` (deleted) (Copilot in VS Code and Visual Studio, plus the Claude Code extension).
+- **B**: `PLAN-COPILOT-WITH-CLAUDE-CLINE.md` (deleted) (Cline).
+- **C**: `PLAN-COPILOT-WITH-CLAUDE-CLAUDE.md` (deleted) (all five hosts, with evidence from this session and host docs fetched 2026-10-30).
 
 ## ⚡ Verdict
 
