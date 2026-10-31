@@ -182,9 +182,9 @@ căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec
 
 - **Local-first** — memoriile sunt pe mașina ta, nu în cloud.
 - **Lizibil** — fiecare memorie este un fișier Markdown pe care îl poți edita în orice editor.
-- **Versionabil** — vault-ul de echipă este susținut de git; vault-ul personal rămâne local.
+- **Versionabil** — vault-ul de echipă este susținut de git; vault-ul personal rămâne local, cu un repo git strict local (creat de `install.sh`, fără remote) care îl salvează instantaneu la finalul fiecărei sesiuni.
 - **Fără infrastructură** — niciun server sau bază de date externă. Fișierele Markdown sunt
-  sursa adevărului.
+  sursa adevărului; indexul vectorial (`vectors.db`) este un SQLite local, regenerabil oricând și lăsat în afara instantaneelor.
 - **Tolerant la erori** — degradează la căutare de text dacă căutarea semantică nu este disponibilă.
 
 ## 📊 Status

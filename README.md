@@ -182,9 +182,9 @@ and are only pulled in if you enable it.
 
 - **Local-first** — memories live on your machine, not in the cloud.
 - **Readable** — every memory is a Markdown file you can edit in any editor.
-- **Versionable** — the team vault is git-backed; the personal vault stays local.
+- **Versionable** — the team vault is git-backed; the personal vault stays local, with a local-only git repo (created by `install.sh`, never a remote) that snapshots it at the end of each session.
 - **No infrastructure** — no external server or database. The Markdown files are
-  the source of truth; the vector index is a local SQLite, regenerable anytime.
+  the source of truth; the vector index (`vectors.db`) is a local SQLite, regenerable anytime and kept out of the snapshots.
 - **Fault-tolerant** — degrades to text search if the vector path is unavailable.
 
 ## 📊 Status
