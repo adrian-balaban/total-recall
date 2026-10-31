@@ -366,7 +366,7 @@ if command -v git >/dev/null 2>&1 && [ -d "$PERSONAL_VAULT" ] && [ ! -d "$PERSON
   if git -C "$PERSONAL_VAULT" init -q 2>/dev/null; then
     git -C "$PERSONAL_VAULT" config user.email "local@total-recall" 2>/dev/null || true
     git -C "$PERSONAL_VAULT" config user.name "total-recall-local" 2>/dev/null || true
-    printf '.superseded/\n*.tmp.*\n' > "$PERSONAL_VAULT/.gitignore"
+    printf '.superseded/\n*.tmp.*\nvectors.db*\n' > "$PERSONAL_VAULT/.gitignore"
     mkdir -p "$PERSONAL_VAULT/.git/hooks"
     printf '#!/bin/sh\necho "total-recall: personal-vault is LOCAL-ONLY — push is blocked by design." >&2\nexit 1\n' \
       > "$PERSONAL_VAULT/.git/hooks/pre-push"

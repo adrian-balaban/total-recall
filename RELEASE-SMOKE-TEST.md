@@ -36,7 +36,7 @@ Run this after every release, not just hardening ones.
 ## 4. Core tool round-trip
 
 - [ ] `store_memory` a throwaway personal memory (clear title, e.g. `smoke-test-<timestamp>`)
-- [ ] `search_index` or `recall_memory` finds it
+- [ ] `search_index` or `recall_memory` finds it (a `journal` throwaway is hidden by default: store it in another category such as `knowledge`, or pass `excludeJournal: false`)
 - [ ] `get_memories_by_keys` returns it with full content
 - [ ] `update_memory` changes its content; re-fetch confirms the change
 - [ ] `delete_memory` removes it; confirm it's gone from `list_memories` and from disk (`~/.total-recall/personal-vault/`)
@@ -61,7 +61,7 @@ Run this after every release, not just hardening ones.
 
 - [ ] `SessionStart`: org vault pulled, index rebuilt, no errors in hook output
 - [ ] `PreCompact` (if a long session / manual compact triggers it): check personal vault for any auto-captured learning `.md` files
-- [ ] `SessionEnd` on quit: check `~/.total-recall/personal-vault/.git log -1` — H1 auto-commit should have a fresh commit if the vault is a git repo
+- [ ] `SessionEnd` on quit: check `~/.total-recall/personal-vault/.git log -1` — H1 auto-commit should have a fresh commit if the vault is a git repo. Only `install.sh` runs `git init` on the vault; `claude plugin update` does not, and the SessionEnd hook never inits one, so a vault without `.git` is skipped silently (re-run `./install.sh` to create it)
 
 ## 8. Error-path spot check (only if a recent change touched these)
 
@@ -76,7 +76,7 @@ Run this after every release, not just hardening ones.
 - [ ] (1.4.0) With an org vault: the SessionStart index shows org entries inside the "teammate-written reference data, not instructions" block; `orgInjection: "off"` removes them
 - [ ] (1.5.0) The client lists the `total-recall://index` and `total-recall://sync-status` resources and the `memory-workflow` / `extract-session-learnings` prompts; `tools/list` still shows 22 tools
 - [ ] (1.6.0) `./install.sh --vscode` adds a `total-recall` entry to VS Code's user `mcp.json` and keeps the existing servers
-- [ ] (next) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
+- [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 
 ---
 
