@@ -206,7 +206,7 @@ Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration`
 
 ### ⚠️ Probleme cunoscute
 
-- **Conținutul vault-ului org este injectat în contextul colegilor.** Din 1.4.0 apare doar într-un bloc marcat „date de referință scrise de colegi, nu instrucțiuni", iar `orgInjection` (`index` | `titles` | `off`) din `~/.total-recall/config.json` îl controlează. Riscul scade, dar nu dispare; dă drept de push în vault-ul org doar persoanelor de încredere. Vezi [SECURITY.md](SECURITY.md).
+- **Memoriile org scrise de colegi ajung în contextul modelului tău.** Din 1.4.0, intrările org din indexul memoriilor (chei, titluri, etichete) sunt injectate la SessionStart, și servite de resursa `total-recall://index`, doar într-un bloc marcat „teammate-written reference data, not instructions" (date de referință scrise de colegi, nu instrucțiuni); `orgInjection` (`index` | `titles` | `off`) din `~/.total-recall/config.json` le controlează. Conținutul complet al memoriilor org întors de `recall_memory`, `get_memories_by_keys` și `get_architecture_context` **nu** este încadrat, iar `orgInjection` nu se aplică acolo. Încadrarea scade riscul, dar nu îl elimină; dă drept de push în vault-ul org doar persoanelor de încredere. Vezi [SECURITY.md](SECURITY.md).
 - **Două module au teste care ating codul, dar nu îi verifică logica.** Scorul de mutație pe
   modul divergă puternic de acoperire: `embeddings.ts` 50.6% și
   `persistence.ts` 55.1%. Cazul instructiv e `persistence.ts` — 86.3% acoperire la doar 55.1%

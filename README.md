@@ -206,7 +206,7 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 ### ⚠️ Known issues
 
-- **Org-vault content is injected into teammates' context.** Since 1.4.0 it appears only inside a block marked "teammate-written reference data, not instructions", and `orgInjection` (`index` | `titles` | `off`) in `~/.total-recall/config.json` controls it. This lowers the risk but does not remove it; give org-vault push access only to people you trust. See [SECURITY.md](SECURITY.md).
+- **Teammate-written org memories reach your model's context.** Since 1.4.0 the org entries of the memory index (keys, titles, tags) are injected at SessionStart, and served by the `total-recall://index` resource, only inside a block marked "teammate-written reference data, not instructions"; `orgInjection` (`index` | `titles` | `off`) in `~/.total-recall/config.json` controls them. Full org memory bodies returned by `recall_memory`, `get_memories_by_keys` and `get_architecture_context` are **not** framed, and `orgInjection` does not apply to them. Framing lowers the risk but does not remove it; give org-vault push access only to people you trust. See [SECURITY.md](SECURITY.md).
 - **Two modules reach code without checking it.** Per-module mutation score diverges
   sharply from coverage: `embeddings.ts` 50.6% and
   `persistence.ts` 55.1%. `persistence.ts` is the instructive case — 86.3% coverage but
