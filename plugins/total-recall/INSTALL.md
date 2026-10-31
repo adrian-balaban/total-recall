@@ -93,7 +93,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
 1. Detect plugin path (`--plugin-root` → `$CLAUDE_PLUGIN_ROOT` → its own dir → `claude mcp get` → prompt), identified by the tracked `.claude-plugin/plugin.json`; **builds `dist/` if it is absent** (`npm ci && npm run build`, needed for a clone of `main`); prints the resolved plugin version and warns when it resolved into the Claude plugin cache (which lags until `claude plugin update`)
-2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots)
+2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots, with `vectors.db*` git-ignored as derived data; SessionEnd only commits to a repo that already exists, so re-run `./install.sh` if your vault has no `.git`)
 3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed
 4. Build the initial index
 5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini/Antigravity (`--gemini`), VS Code MCP entry (`--vscode`)

@@ -40,7 +40,7 @@ Follow this order strictly — earlier steps are cheaper:
 | `troubleshooting` | Incident post-mortems, bug resolutions | 200–600 words |
 | `meetings` | Action items, decisions, key outcomes | 100–300 words |
 | `knowledge` | Concepts, how-tos, references | 200–1000 words |
-| `journal` | Auto-appended activity log — do not store manually | — |
+| `journal` | Auto-appended activity log — do not store manually; hidden from `search_index`/`recall_memory` unless `excludeJournal: false` | — |
 
 ## 🔀 Org Vault Routing
 
