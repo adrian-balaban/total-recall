@@ -6,7 +6,7 @@ import * as path from 'node:path';
 
 // BACKLOG "Org-sync branch-default divergence on detached HEAD": with orgBranch
 // unset and a detached HEAD, sync must target the branch pull refreshes
-// (origin/HEAD), not the literal 'org-vault'.
+// (origin/HEAD), not the literal fallback.
 // @ts-expect-error — .mjs sibling script, no types
 import { detectOrgBranch } from '../../scripts/sync-org-memory.mjs';
 
@@ -45,7 +45,7 @@ suite('detectOrgBranch', () => {
     expect(detectOrgBranch(clone)).toBe('knowledge');
   });
 
-  it('on a detached HEAD falls back to origin/HEAD instead of the literal org-vault', () => {
+  it('on a detached HEAD falls back to origin/HEAD instead of the literal fallback', () => {
     git(clone, 'checkout', '-q', '--detach');
     expect(detectOrgBranch(clone)).toBe('knowledge');
   });

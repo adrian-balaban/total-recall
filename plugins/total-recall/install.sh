@@ -616,7 +616,7 @@ elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to GitH
   else
     ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)?" ORG_REPO
   fi
-  warn "The 'org-vault' branch must already exist with at least one commit."
+  warn "The 'knowledge' branch (or the one set as orgBranch in config.json) must already exist with at least one commit."
   if [ -z "$ORG_DOMAIN" ]; then
     info "The privacy filter blocks all email addresses by default before pushing to GitHub."
     info "You can specify a domain (e.g., company.com) to allow work emails to bypass the filter."
@@ -642,7 +642,7 @@ NODE
     if bash "$PLUGIN_ROOT/hooks/scripts/pull-org-vault.sh"; then
       ok "Org vault cloned/pulled."
     else
-      warn "Clone failed. Check: 'git ls-remote $ORG_REPO org-vault' and 'gh auth status'."
+      warn "Clone failed. Check: 'git ls-remote $ORG_REPO knowledge' and 'gh auth status'."
     fi
   fi
   note "Org vault enabled ($ORG_REPO)."

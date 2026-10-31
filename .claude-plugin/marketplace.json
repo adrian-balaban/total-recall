@@ -8,7 +8,7 @@
   "plugins": [
     {
       "name": "total-recall",
-      "description": "Persistent knowledge management for Claude Code & Gemini. Stores memories as markdown files, exposes 22 MCP tools (including ADL architecture tools for spec-driven work), and uses Claude Code hooks to inject context automatically.",
+      "description": "Persistent knowledge management for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot). Stores memories as markdown files, exposes 22 MCP tools (including ADL architecture tools for spec-driven work), and uses lifecycle hooks to inject the memory index automatically.",
       "author": {
         "name": "Adrian Balaban"
       },

@@ -213,18 +213,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   dynamically at use time in `store.ts`/`mutate.ts` instead of importing the
   module-load const.
 
-### Slim the shipped `release` branch (contributor files, lockfile)
-- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md` (2026-10-27), checked
-  against the repo that day.
-- **What:** `release.yml` publishes `main`'s whole validated tree plus `dist/`,
-  so consumers also receive files that are not needed to run `dist/index.js`:
-  `CLAUDE.md`, `ARCHITECTURE.md`, `src/__tests__/`, the vitest/stryker configs
-  and `package-lock.json` (~193 KB, low priority).
-- **Trigger:** install size or noise in the installed plugin directory becomes a
-  complaint, or the next change to `release.yml`.
-- **Shape when picked up:** a prune step in `release.yml` before the force-push
-  to `release`; keep everything on `main`.
-
 ### `GEMINI.md` duplicates `CLAUDE.md` rules
 - **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
 - **What:** `plugins/total-recall/GEMINI.md` repeats "always-true" rules from

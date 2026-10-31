@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.3.3, stable: 894 tests pass, 96.3% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.1, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -28,7 +28,7 @@ Several techniques from the [Thoughtworks Technology Radar](https://www.thoughtw
 |---|---|---|
 | Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
 | Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a GitHub Actions CI-built on main branch |
+| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a `release` branch that GitHub Actions builds from `main` |
 | Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
 | MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
 
@@ -52,8 +52,8 @@ source-grounded extraction for the capture hook; an evaluation set for `recall_m
 
 ![store_memory routing](docs/diagrams/store-routing-en.svg)
 
-C4 diagrams (context → containers → components → code), module map, data model,
-boot sequence, search pipeline and hook lifecycle are documented in
+C4 diagrams (context → containers → components → code), the 22 tools, data model,
+write path, server lifecycle, persistence and hook lifecycle are drawn in
 **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
 ## 🛠️ The 22 tools
@@ -117,9 +117,9 @@ Details: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITE
 
 ## 💡 What gets saved automatically
 
-Work observations (what worked, what didn't) · non-obvious project context
-(motivations, constraints, non-trivial decisions) · an end-of-session
-"anything worth remembering?" prompt.
+Before each context compaction (PreCompact), 0–3 learnings are extracted from the
+conversation: work observations (what worked, what didn't) and non-obvious project
+context (motivations, constraints, non-trivial decisions).
 
 Not saved: code snippets, file paths, git history — all derivable from the workspace. (The one exception is deliberate: a spec or architecture memory may record the repo-relative path and commit of the file it summarises, as a pointer in its frontmatter, never in the text.)
 
@@ -176,19 +176,6 @@ and are only pulled in if you enable it.
 | **Plugin** | ~1–2 MB |
 | **Optional model** | ~200 MB, downloaded on first use |
 
-## 📦 What ships vs. what's for contributors
-
-<details>
-<summary>Runtime, org-vault-only and contributor-only files</summary>
-
-- **Runtime (always):** manifests (`plugin.json`, `.mcp.json`, `package.json`), `dist/index.js`, `dist/frontmatter.mjs`, `hooks/hooks.json`, and the SessionStart index scripts.
-- **Runtime for org-vault users only:** `sync-org-memory.*`, `pull-org-vault.sh`, `check-sync-errors.sh`, `dist/privacy-filter.mjs`, `atomic-write.mjs`.
-- **Contributor-only:** `src/`, tests, vitest/stryker configs, `tsconfig.json`, `CLAUDE.md`, `ARCHITECTURE.md`.
-
-Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is gitignored and safe to delete. `dist/` is built by CI, not committed.
-
-</details>
-
 ## 🧭 Design principles
 
 - **Local-first** — memories live on your machine, not in the cloud.
@@ -202,9 +189,9 @@ Generated output (`node_modules/`, `coverage/`, `reports/`, `.remember/`) is git
 
 | | |
 |---|---|
-| **Version** | 1.3.3 — stable |
-| **Tests** | 894 unit + 24 integration passing · 64 files · ~15k lines of test code |
-| **Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Version** | 1.6.1 — stable |
+| **Tests** | 962 unit + 24 integration passing · 73 files · ~16k lines of test code |
+| **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
 | **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |

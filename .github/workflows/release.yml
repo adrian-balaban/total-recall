@@ -77,6 +77,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B release "$SHA"
+          # Drop contributor-only files from the published tree (they stay on main).
+          # Kept on purpose: src/, tsconfig.json and package-lock.json (install.sh
+          # rebuilds dist/ after adding the vector deps), CLAUDE.md (GEMINI.md points
+          # to it) and ARCHITECTURE.md (linked from the plugin README).
+          git rm -r -q --ignore-unmatch -- \
+            plugins/total-recall/src/__tests__ \
+            plugins/total-recall/vitest.config.ts \
+            plugins/total-recall/vitest.integration.config.ts \
+            plugins/total-recall/vitest.stryker.config.ts \
+            plugins/total-recall/stryker.conf.json \
+            plugins/total-recall/scripts/loadtest.ts \
+            plugins/total-recall/scripts/eval
           # -f overrides the .gitignore entry that keeps dist/ off main.
           git add -f plugins/total-recall/dist
           git commit -m "build: dist for v${{ steps.v.outputs.version }} ($SHA)"

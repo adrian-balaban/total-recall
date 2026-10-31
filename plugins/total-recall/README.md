@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.3.3, stable: 894 tests passing, 96.3% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.1, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -53,7 +53,7 @@ Two separate vaults live under `~/.total-recall/`:
 │   ├── decisions/ …
 │   └── vectors.db           ← sqlite-vec embeddings (optional)
 └── org/
-    └── org-vault/           ← team memories, git-synced (branch org-vault)
+    └── org-vault/           ← team memories, git-synced (branch from `orgBranch`)
 ```
 
 Each memory is a `.md` file:
@@ -68,21 +68,21 @@ created: 2026-06-01T10:00:00Z
 updated: 2026-06-15T14:30:00Z
 ---
 
-## 📊 Executive Summary
+## Executive Summary
 
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
-### Design philosophy: own algorithms, one hard dependency
+### Design philosophy: own algorithms, two hard dependencies
 
-The only mandatory dependency is `@modelcontextprotocol/sdk`. TF-IDF, Ebbinghaus decay, RRF, and the YAML-frontmatter parser are all written from scratch. Why:
+The only mandatory dependencies are `@modelcontextprotocol/sdk` and `zod` (tool input schemas). TF-IDF, Ebbinghaus decay, RRF, and the YAML-frontmatter parser are all written from scratch. Why:
 
 1. **Security** — no `gray-matter` → no `js-yaml` CVE class (GHSA-h67p-54hq-rp68); the minimal parser is pinned by property-based tests (fast-check).
 2. **Coherent scoring** — title-boost, tag-boost, and decay are one formula, not three libraries.
 3. **Determinism** — zero LLM calls in the search path, zero cost, works offline/air-gapped.
 4. **Auditability** — every scoring decision is observable via `get_stats`.
 
-Only ONNX (`@huggingface/transformers`) and `sqlite-vec` remain external — and both are optional.
+Only `@huggingface/transformers` (ONNX), `sqlite-vec` and `better-sqlite3` remain external — and all three are optional.
 
 ### Privacy Filter & Org Sync
 
@@ -141,7 +141,7 @@ recall_memory(query)
   │    ├─ embed(query) → sqlite-vec KNN
   │    └─ Reciprocal Rank Fusion(tfidf, vector), k=60:  score(d) = Σ 1/(60 + rank_i(d))
   │
-  └─ slice to `limit`, bump accessCount, return with/without full content
+  └─ slice to `limit`; with full=true bump accessCount and read the body, else metadata only
 ```
 
 > **What is TF-IDF?** Term Frequency × Inverse Document Frequency — the classic text-search score: a word counts a lot if it appears **often in this document** (TF) but **rarely across the collection** (IDF). The *inverted index* is the reverse map `word → documents containing it`, like a book index — search reads the index, never the files.
@@ -201,7 +201,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 ### `SessionStart` (4 sequential steps)
 
 ```
-1. pull-org-vault.sh       — git pull on the org-sync branch (config.orgBranch, default org-vault; if configured)
+1. pull-org-vault.sh       — git pull on the org-sync branch (config.orgBranch, default knowledge; if configured)
 2. build-memory-index.sh   — frontmatter scan → .index-cache.txt
 3. load-memory-index.sh    — inject the memory index into context (Claude Code only)
 4. check-sync-errors.sh    — warn if org-sync pushes failed since last success
@@ -211,7 +211,7 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 ### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
 
-`sync-org-memory.sh` — checks the `org` tag, applies the privacy filter, commits/pushes to the team's org-sync branch (`config.orgBranch`, default `org-vault`), and rebuilds `.index-cache.txt`. Bursts of org writes are **coalesced**: an atomic job queue + `flock`ed background worker means one git sync process per session, not one per key. Pulled teammate memories are reconciled into the live index **without a restart** (marker-file poller).
+`sync-org-memory.sh` — checks the `org` tag, applies the privacy filter, commits/pushes to the team's org-sync branch (`config.orgBranch`, default `knowledge`), and rebuilds `.index-cache.txt`. Bursts of org writes are **coalesced**: an atomic job queue + `flock`ed background worker means one git sync process per session, not one per key. Pulled teammate memories are reconciled into the live index **without a restart** (marker-file poller).
 
 > **Why the matcher is a regex, not a bare tool list.** Claude Code treats a matcher containing only letters/digits/`_`/`-`/spaces/`,`/`|` as an **exact string list** compared verbatim against the full tool name. Plugin MCP tools are named `mcp__plugin_total-recall_total-recall__<tool>`, so a bare `store_memory|update_memory|delete_memory` never matched and the org-sync hook silently never fired. The parens force the **regex** path so it matches the `__<tool>` suffix.
 
@@ -225,7 +225,7 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 ### `SessionEnd`
 
-Logs the session and flushes pending embedding writes before exit.
+Logs the session, flushes pending index and embedding writes before exit, and auto-commits the personal vault if it is a local git repo (never a remote).
 
 ---
 
@@ -252,12 +252,16 @@ Configure total-recall by editing `~/.total-recall/config.json`:
   "orgRepo": "https://github.com/you/your-vault.git",
   "allowedEmailDomains": ["yourcompany.com"],
   "embeddingModel": "Xenova/all-MiniLM-L6-v2",
-  "enableMultilingualSearch": true
+  "enableMultilingualSearch": true,
+  "orgBranch": "knowledge",
+  "orgInjection": "index"
 }
 ```
 
 *   **embeddingModel**: optional override for the local HuggingFace transformer model (defaults to `Xenova/all-MiniLM-L6-v2`, 384-dim). Point this at a different `@huggingface/transformers`-compatible model if you need a different embedding space — note that changing the model dimension drops the existing vector index (it is rebuilt on the next write).
 *   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
+*   **orgBranch**: the branch of `orgRepo` the org vault pulls from and pushes to.
+*   **orgInjection**: how org memories are injected at SessionStart — `index` (default, framed as teammate-written data), `titles` (titles only) or `off`. See [SECURITY.md](../../SECURITY.md).
 *   **specDriven**: the spec-driven features; see the next section.
 
 ---
@@ -375,9 +379,9 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 | | |
 |---|---|
-| **Version** | 1.3.3 — stable |
-| **Tests** | 894 unit + 24 integration, all passing · 64 files · ~15k lines of test code |
-| **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Version** | 1.6.1 — stable |
+| **Tests** | 962 unit + 24 integration, all passing · 73 files · ~16k lines of test code |
+| **Test Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
 | **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
 | **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
 | **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |

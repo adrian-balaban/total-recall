@@ -30,8 +30,9 @@ const ORG_VAULT_DIR = path.dirname(ORG_VAULT);
 
 // Org-vault branch. Configurable via `orgBranch` in ~/.total-recall/config.json;
 // auto-detected from the existing checkout when unset, so a repo cloned on a
-// non-default branch (e.g. `knowledge`) syncs to the right ref without config.
-// Falls back to `org-vault` (the e2e fixture's branch). We switch to it with
+// non-default branch syncs to the right ref without config.
+// Falls back to `knowledge`, the same default as pull-org-vault.sh and install.sh.
+// We switch to it with
 // `git switch` (not `git checkout`): `git checkout <name>` is ambiguous when
 // `<name>` also matches a path at the repo root — here `org-vault/` is a subdir
 // of the repo toplevel (ORG_VAULT_DIR), so `git checkout org-vault` is silently
@@ -59,7 +60,7 @@ function detectOrgBranch(dir = ORG_VAULT_DIR) {
   } catch {}
   return '';
 }
-const BRANCH = config.orgBranch || detectOrgBranch() || 'org-vault';
+const BRANCH = config.orgBranch || detectOrgBranch() || 'knowledge';
 
 const ORG_REPO = config.orgRepo;
 // NOTE: the `!ORG_REPO` precondition is checked at the top of main(), NOT here.

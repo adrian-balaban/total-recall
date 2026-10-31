@@ -29,7 +29,8 @@ Claude Code.
   Gemini/Antigravity drops `additionalContext`, so neither reaches the model. Call
   `index_architecture` / `get_architecture_context` yourself after editing
   an `.adl` file.
-- **MCP-only registration (no hooks):** `agy plugin install "$(pwd)"`
-  registers the server from `gemini-extension.json` without wiring
-  the lifecycle hooks — see `README.md` → *Client Compatibility* for the
-  trade-off (no SessionStart index injection, no PreCompact learning capture).
+- **Install:** `./install.sh --gemini` runs `agy plugin install <plugin-root>`,
+  which registers the server from `gemini-extension.json` and the hooks from
+  `hooks/hooks.gemini.json`. The hooks' side effects (org sync, index cache,
+  PreCompress capture) run; their `additionalContext` is dropped, so read the
+  index from the `total-recall://index` resource or call `search_index`.

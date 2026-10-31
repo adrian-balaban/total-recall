@@ -46,7 +46,7 @@ Run this after every release, not just hardening ones.
 - [ ] `get_stats` reports `vector.enabled: true` (or check `depsPresent`)
 - [ ] Store a memory, wait a few seconds, confirm no error in `get_stats.recentErrors` about embedding/sqlite-vec
 - [ ] If this is a **fresh plugin-cache version dir** (first run after `claude plugin update`, not just a restart): specifically check for the "Could not locate binding file" self-heal path — `better-sqlite3` ships source-only per version dir and needs a rebuild. Should self-heal silently; if it doesn't, `recentErrors` should say the binding is "still missing" and name `npm rebuild better-sqlite3` as the fix (never trust npm's exit code alone here)
-- [ ] **Cross-language semantic search.** `get_stats.vector.model` should be `Xenova/paraphrase-multilingual-MiniLM-L12-v2` (or whatever `embeddingModel` is configured) — a genuinely multilingual model, not an English-only one. Store a throwaway memory with ENGLISH-only content (no Romanian words), then call `rerank_memories` with a ROMANIAN query describing the same idea against a candidate list containing that key plus 2-3 unrelated keys (and vice versa: a Romanian memory, an English query). The correct match's cosine score should be clearly separated from the unrelated candidates (e.g. 0.5+ vs <0.25) — that is direct evidence the embeddings do cross-language semantic matching, isolated from ranking/fusion effects. Delete the throwaway after.
+- [ ] **Cross-language semantic search (only with a multilingual `embeddingModel`).** The default `Xenova/all-MiniLM-L6-v2` is English-only; skip this check unless `get_stats.vector.model` shows a multilingual model such as `Xenova/paraphrase-multilingual-MiniLM-L12-v2`. Store a throwaway memory with ENGLISH-only content (no Romanian words), then call `rerank_memories` with a ROMANIAN query describing the same idea against a candidate list containing that key plus 2-3 unrelated keys (and vice versa: a Romanian memory, an English query). The correct match's cosine score should be clearly separated from the unrelated candidates (e.g. 0.5+ vs <0.25) — that is direct evidence the embeddings do cross-language semantic matching, isolated from ranking/fusion effects. Delete the throwaway after.
   - Do **not** use `recall_memory` for this check — its hybrid path merges TF-IDF and vector lists via Reciprocal Rank Fusion (`rrf.ts`, rank-based, not score-based), and a memory with ZERO lexical overlap can rank #1 in the vector list yet still be out-ranked in the fused result by memories that place decently in *both* lists. That's RRF behaving as designed, not a vector-search defect — but it means `recall_memory` alone is the wrong tool to verify the embeddings are doing their job.
 
 ## 6. Org vault + sync (only if org vault configured)
@@ -73,8 +73,10 @@ Run this after every release, not just hardening ones.
 <!-- Add release-specific checks here before running, based on what changed.
      Delete old entries once confirmed on a subsequent release. -->
 
-- [ ] (1.3.3) Confirm `redactPaths` applies to tool errors generally, not just `get_stats.recentErrors`
-- [ ] (1.3.3) Confirm embed bursts (bulk import of ~10 memories) don't throw or hang — the bounded-concurrency limiter was tried and reverted this release, so embeds are unbounded again by design; just confirm nothing crashes
+- [ ] (1.4.0) With an org vault: the SessionStart index shows org entries inside the "teammate-written reference data, not instructions" block; `orgInjection: "off"` removes them
+- [ ] (1.5.0) The client lists the `total-recall://index` and `total-recall://sync-status` resources and the `memory-workflow` / `extract-session-learnings` prompts; `tools/list` still shows 22 tools
+- [ ] (1.6.0) `./install.sh --vscode` adds a `total-recall` entry to VS Code's user `mcp.json` and keeps the existing servers
+- [ ] (next) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 
 ---
 

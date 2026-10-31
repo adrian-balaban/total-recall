@@ -15,7 +15,7 @@ O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity ș
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.3.3, stabilă: 894 teste trec, Test Coverage 96.3% statements, Mutation tests ≈78%.
+- **Status** — v1.6.1, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
@@ -28,7 +28,7 @@ Mai multe tehnici din [Thoughtworks Technology Radar](https://www.thoughtworks.c
 |---|---|---|
 | Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injectează doar indexul memoriilor; conținutul complet se citește la cerere |
 | Mutation testing | Trial | Poartă Stryker în CI (vezi [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de un branch construit în CI |
+| Claude Code plugin marketplace | Trial | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de branch-ul `release`, construit de GitHub Actions din `main` |
 | Structured output from LLMs | Adopt | hook-ul de captură cere modelului linii JSON, nu text liber |
 | MCP by default | Hold | operațiile de sistem (git, indexare) rămân în scripturi simple, nu în unelte MCP |
 
@@ -52,8 +52,8 @@ extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare p
 
 ![Rutarea store_memory](docs/diagrams/store-routing-ro.svg)
 
-Diagramele C4 (context → containere → componente → cod), harta modulelor, modelul de date,
-secvența de pornire, pipeline-ul de căutare și ciclul de viață al hook-urilor sunt documentate în
+Diagramele C4 (context → containere → componente → cod), cele 22 de unelte, modelul de date,
+calea de scriere, ciclul de viață al serverului, persistența și hook-urile sunt desenate în
 **[ARCHITECTURE.md](plugins/total-recall/ARCHITECTURE.md)**.
 
 ## 🛠️ Cele 22 de unelte
@@ -117,8 +117,9 @@ Detalii: [ARCHITECTURE.md → Architecture as code](plugins/total-recall/ARCHITE
 
 ## 💡 Ce se salvează automat
 
-Observații de lucru (ce a mers, ce nu) · context de proiect neevident (motivații, constrângeri,
-decizii non-triviale) · un prompt de sfârșit de sesiune „ceva demn de reținut?".
+Înainte de fiecare compactare a contextului (PreCompact) se extrag din conversație 0–3 lecții:
+observații de lucru (ce a mers, ce nu) și context de proiect neevident (motivații, constrângeri,
+decizii non-triviale).
 
 Nu se salvează: fragmente de cod, căi de fișiere, istoric git — toate derivabile din spațiul de lucru. (Singura excepție e intenționată: o memorie de specificație sau de arhitectură poate reține calea relativă în repo și commit-ul fișierului pe care îl rezumă, ca pointer în frontmatter, niciodată în text.)
 
@@ -173,20 +174,7 @@ căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec
 | | |
 |---|---|
 | **Plugin** | ~1–2 MB |
-| **Model opțional pentru căutare semantică „multi-language"** | ~200 MB, descărcat la prima utilizare |
-
-## 📦 Ce se livrează vs. ce e doar pentru contributori
-
-<details>
-<summary>Fișiere de runtime, doar pentru vault-ul org, doar pentru contributori</summary>
-
-- **Runtime (întotdeauna):** manifestele (`plugin.json`, `.mcp.json`, `package.json`), `dist/index.js`, `dist/frontmatter.mjs`, `hooks/hooks.json` și scripturile de index de la SessionStart.
-- **Runtime doar pentru utilizatorii vault-ului org:** `sync-org-memory.*`, `pull-org-vault.sh`, `check-sync-errors.sh`, `dist/privacy-filter.mjs`, `atomic-write.mjs`.
-- **Doar pentru contributori:** `src/`, teste, configurații vitest/stryker, `tsconfig.json`, `CLAUDE.md`, `ARCHITECTURE.md`.
-
-Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este ignorată de git și poate fi ștearsă fără grijă. `dist/` este construit de CI, nu este comis.
-
-</details>
+| **Model opțional (căutare semantică)** | ~200 MB, descărcat la prima utilizare |
 
 ## 🧭 Principii de design
 
@@ -201,9 +189,9 @@ Ieșirea generată (`node_modules/`, `coverage/`, `reports/`, `.remember/`) este
 
 | | |
 |---|---|
-| **Versiune** | 1.3.3 — stabilă |
-| **Teste** | 894 unitare + 24 de integrare, toate trec · 64 fișiere · ~15k linii de cod de test |
-| **Test Coverage** | 96.3% statements · 90.3% branches · 97.9% lines |
+| **Versiune** | 1.6.1 — stabilă |
+| **Teste** | 962 unitare + 24 de integrare, toate trec · 73 fișiere · ~16k linii de cod de test |
+| **Test Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
 | **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
 | **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
 | **Release-uri** | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă |

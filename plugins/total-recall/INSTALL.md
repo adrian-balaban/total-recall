@@ -1,6 +1,6 @@
 # 📦 Installing Total Recall
 
-One plugin, two clients — Claude Code and Gemini/Antigravity — all set up by a single state-aware `install.sh`.
+One plugin, three hosts — Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode) — all set up by a single state-aware `install.sh`.
 
 ## 📋 Prerequisites
 
@@ -110,7 +110,7 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
              --allowed-email-domain yourcompany.com
 ```
 
-Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `org-vault`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
+Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
 ## 🔐 Privacy model — what is blocked, what is only warned
 
@@ -126,7 +126,7 @@ Other published plugins are also called `total-recall` (for example `total-recal
 Plugin names share one namespace per client, so install this one by its full marketplace
 ID, `total-recall@my-claude-plugins`, and don't install two plugins with the same name side by
 side. Run `claude plugin list` to see which one is active. If you also have the official
-`remember` plugin, disable it: both compete for the SessionStart and Stop hooks.
+`remember` plugin, disable it: both inject memory at SessionStart and do the same job.
 
 ## 🧭 Enabling vector search later
 
@@ -142,9 +142,9 @@ Or just re-run `./install.sh --complete`.
 
 ## 🤖 Codex CLI (MCP only, no hooks)
 
-Codex CLI speaks MCP but does **not** run Claude Code lifecycle hooks, so the SessionStart memory-index injection, PostToolUse org-vault sync, and PreCompact journal extraction do not fire. You get the 22 MCP tools (read/write/search via `recall_memory`, `search_index`, `store_memory`, …) but no automatic capture or proactive injection — call the tools explicitly.
+Codex CLI speaks MCP but does **not** run Claude Code lifecycle hooks, so the SessionStart memory-index injection, PostToolUse org-vault sync, and PreCompact learning capture do not fire. You get the 22 MCP tools (read/write/search via `recall_memory`, `search_index`, `store_memory`, …) but no automatic capture or proactive injection — call the tools explicitly.
 
-To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`); hooks are simply ignored. Memory is fully usable on demand; only the auto-capture hooks are absent.
+To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`); hooks are simply ignored. Memory is fully usable on demand; only the auto-capture hooks are absent. If the client reads MCP resources and prompts, `total-recall://index` and the `memory-workflow` / `extract-session-learnings` prompts stand in for the hooks.
 
 ## ✅ Verify
 
@@ -155,7 +155,7 @@ Start a new session; the memory index should be injected automatically (Claude C
 A fresh `claude plugin update` creates a new version dir under `~/.claude/plugins/cache/.../<VERSION>/` and does **not** re-run `install.sh`, so the `better-sqlite3` native binding can be left source-only (no `build/Release/better_sqlite3.node`). When that happens `get_stats` reports `vector.depsPresent: false` / `vector.enabled: false` — the one honest "disabled" state. The in-process self-heal in `vectorStore.ts` tries `npm rebuild better-sqlite3` once on first load; if it still shows false, run it manually in that version dir:
 
 ```bash
-cd ~/.claude/plugins/cache/anthropic.com/total-recall/<VERSION>/total-recall/plugins/total-recall
+cd ~/.claude/plugins/cache/my-claude-plugins/total-recall/<VERSION>
 npm rebuild better-sqlite3
 ```
 
