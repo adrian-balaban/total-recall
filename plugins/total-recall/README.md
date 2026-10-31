@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.6.1, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.0, stable: 962 tests passing, 96.9% statement coverage, ≈78% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -34,10 +34,10 @@ At the end of every conversation, an AI coding assistant loses all accumulated c
 
 Two separate vaults live under `~/.total-recall/`:
 
-| Vault | Path | When Used |
-|---|---|---|
-| **Personal** | `~/.total-recall/personal-vault/` | Default for all memories (stays local). |
-| **Org** | `~/.total-recall/org/org-vault/` | Used when tagged `org`. Syncs to a remote Git repo with a privacy filter. |
+| Vault        | Path                              | When Used                                                                 |
+| ------------ | --------------------------------- | ------------------------------------------------------------------------- |
+| **Personal** | `~/.total-recall/personal-vault/` | Default for all memories (stays local).                                   |
+| **Org**      | `~/.total-recall/org/org-vault/`  | Used when tagged `org`. Syncs to a remote Git repo with a privacy filter. |
 
 ### On-disk layout
 
@@ -86,41 +86,41 @@ Only `@huggingface/transformers` (ONNX), `sqlite-vec` and `better-sqlite3` remai
 
 ### Privacy Filter & Org Sync
 
-*   **Fail-closed by default**: blocks high-entropy secret tokens/keys, labeled secrets (e.g. a pasted `aws_secret_access_key = …`), all email addresses, and validated credit cards (Luhn), IBANs (ISO 13616 mod-97), and formatted phone numbers before any git push. If the filter cannot analyze the content, it does **not** push.
-*   **Email whitelist**: allow specific domains via `allowedEmailDomains: ["yourcompany.com"]` in `config.json`.
-*   **Author protection**: org memories can only be overwritten/updated by their author (OS username).
-*   *Note: pronouns are deliberately allowed (their false-positive rate blocked legitimate work notes); the `personal` and `org` tags are mutually exclusive to prevent accidental sync.*
+- **Fail-closed by default**: blocks high-entropy secret tokens/keys, labeled secrets (e.g. a pasted `aws_secret_access_key = …`), all email addresses, and validated credit cards (Luhn), IBANs (ISO 13616 mod-97), and formatted phone numbers before any git push. If the filter cannot analyze the content, it does **not** push.
+- **Email whitelist**: allow specific domains via `allowedEmailDomains: ["yourcompany.com"]` in `config.json`.
+- **Author protection**: org memories can only be overwritten/updated by their author (OS username).
+- _Note: pronouns are deliberately allowed (their false-positive rate blocked legitimate work notes); the `personal` and `org` tags are mutually exclusive to prevent accidental sync._
 
 ---
 
 ## 🛠️ 22 MCP Tools
 
-All tool calls operate against an in-memory index (`index.json`), making read/search operations extremely fast and free of disk I/O. Speak naturally — *"remember that…"* / *"remind me…"* — and the model picks the right tool.
+All tool calls operate against an in-memory index (`index.json`), making read/search operations extremely fast and free of disk I/O. Speak naturally — _"remember that…"_ / _"remind me…"_ — and the model picks the right tool.
 
-| Tool | Function | Notable Behavior |
-|---|---|---|
-| `store_memory` | Create a memory | Routes to Org vault if tagged `org`. Overwrite needs `force=true` (refused on `no-prune` files). |
-| `update_memory` | Edit a memory | Preserves created timestamp and appends to session history (capped at 50). Re-embeds on content/tags/importance change. |
-| `delete_memory` | Delete a memory | Refuses `no-prune` memories unless `force=true` is passed. |
-| `rebuild_index` | Rescan filesystem | Full re-scan of vaults, rebuilding TF-IDF while preserving access stats. |
-| `recall_memory` | Hybrid search | TF-IDF, Ebbinghaus decay, and optional vector embeddings (fused via RRF). |
-| `search_index` | Metadata search | Fast query scan of the in-memory index; does not read files, no accessCount bump. |
-| `list_memories` | Browse vault | Paginated listing of memory metadata (filter by tag/category/date). |
-| `get_memories_by_keys` | Fetch memory | Batch fetch by key; full content or summary; served through an LRU cache. |
-| `get_stats` | Audit plugin | Totals, cache stats, recent error log (last 10), latency percentiles, and a `vector` block (`enabled`/`depsPresent` + live vs stored model/dim). `enabled` defaults to true when the optional deps are loadable, so vector search reads as on from a fresh session. |
-| `get_timeline` | Chronological view | Memories grouped and sorted by modification dates. |
-| `get_related_memories` | Find relations | Jaccard similarity of tags with a category boost. |
-| `prune_memories` | Clean stale entries | Lists Ebbinghaus decay candidates (does not auto-delete). Excludes `no-prune`. |
-| `rerank_memories` | Semantic rerank | Reorders candidate keys by cosine similarity to a query using embeddings. `keys` capped at 200 (extras dropped, order preserved). |
-| `export_memories` | Bulk export | Portable JSON archive; filter by keys, category, or tag. Unreadable bodies become `{key, error}` entries (counted in `errors`), never silent empty content. Closes the "new laptop" scenario. |
-| `import_memories` | Bulk import | Restores from an `export_memories` archive; skips existing keys unless `force=true`; skips entries carrying an `error` field so a failed export read can't clobber a live memory. |
-| `delete_memories` | Bulk delete | Deletes a list of keys; `confirm=true` required (no default). A reserved `no-prune` key (without `force`) is recorded as a per-key error and the batch continues — not a batch reject. Closes the `prune_memories` loop. |
-| `confirm_memory` | Feedback signal | `useful=true` increments confirmations; `useful=false` increments flags — both feed retention scoring. |
-| `index_architecture` | Index ADL | One architecture-index memory per system: elements, assertions, relationships, and the tests tagged with each assertion ID. No-op on unchanged files. See [Spec-driven architecture](#-spec-driven-architecture-adl). |
-| `get_architecture_context` | Element context | The system summary, or one element's ADL rules, relationships, decisions, failures and open questions. |
-| `trace` | Requirement → test | Requirement, assertion or element → assertions and controls → tests → recorded results and decisions. |
-| `get_architecture_history` | Change log | `architecture-changes` memories in time order, plus the index rebuilds. |
-| `validate_architecture` | Run checks | ADL test coverage; failures stored as `fitness-result` memories, resolved on a later pass. |
+| Tool                       | Function            | Notable Behavior                                                                                                                                                                                                                                                    |
+| -------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `store_memory`             | Create a memory     | Routes to Org vault if tagged `org`. Overwrite needs `force=true` (refused on `no-prune` files).                                                                                                                                                                    |
+| `update_memory`            | Edit a memory       | Preserves created timestamp and appends to session history (capped at 50). Re-embeds on content/tags/importance change.                                                                                                                                             |
+| `delete_memory`            | Delete a memory     | Refuses `no-prune` memories unless `force=true` is passed.                                                                                                                                                                                                          |
+| `rebuild_index`            | Rescan filesystem   | Full re-scan of vaults, rebuilding TF-IDF while preserving access stats.                                                                                                                                                                                            |
+| `recall_memory`            | Hybrid search       | TF-IDF, Ebbinghaus decay, and optional vector embeddings (fused via RRF).                                                                                                                                                                                           |
+| `search_index`             | Metadata search     | Fast query scan of the in-memory index; does not read files, no accessCount bump.                                                                                                                                                                                   |
+| `list_memories`            | Browse vault        | Paginated listing of memory metadata (filter by tag/category/date).                                                                                                                                                                                                 |
+| `get_memories_by_keys`     | Fetch memory        | Batch fetch by key; full content or summary; served through an LRU cache.                                                                                                                                                                                           |
+| `get_stats`                | Audit plugin        | Totals, cache stats, recent error log (last 10), latency percentiles, and a `vector` block (`enabled`/`depsPresent` + live vs stored model/dim). `enabled` defaults to true when the optional deps are loadable, so vector search reads as on from a fresh session. |
+| `get_timeline`             | Chronological view  | Memories grouped and sorted by modification dates.                                                                                                                                                                                                                  |
+| `get_related_memories`     | Find relations      | Jaccard similarity of tags with a category boost.                                                                                                                                                                                                                   |
+| `prune_memories`           | Clean stale entries | Lists Ebbinghaus decay candidates (does not auto-delete). Excludes `no-prune`.                                                                                                                                                                                      |
+| `rerank_memories`          | Semantic rerank     | Reorders candidate keys by cosine similarity to a query using embeddings. `keys` capped at 200 (extras dropped, order preserved).                                                                                                                                   |
+| `export_memories`          | Bulk export         | Portable JSON archive; filter by keys, category, or tag. Unreadable bodies become `{key, error}` entries (counted in `errors`), never silent empty content. Closes the "new laptop" scenario.                                                                       |
+| `import_memories`          | Bulk import         | Restores from an `export_memories` archive; skips existing keys unless `force=true`; skips entries carrying an `error` field so a failed export read can't clobber a live memory.                                                                                   |
+| `delete_memories`          | Bulk delete         | Deletes a list of keys; `confirm=true` required (no default). A reserved `no-prune` key (without `force`) is recorded as a per-key error and the batch continues — not a batch reject. Closes the `prune_memories` loop.                                            |
+| `confirm_memory`           | Feedback signal     | `useful=true` increments confirmations; `useful=false` increments flags — both feed retention scoring.                                                                                                                                                              |
+| `index_architecture`       | Index ADL           | One architecture-index memory per system: elements, assertions, relationships, and the tests tagged with each assertion ID. No-op on unchanged files. See [Spec-driven architecture](#-spec-driven-architecture-adl).                                               |
+| `get_architecture_context` | Element context     | The system summary, or one element's ADL rules, relationships, decisions, failures and open questions.                                                                                                                                                              |
+| `trace`                    | Requirement → test  | Requirement, assertion or element → assertions and controls → tests → recorded results and decisions.                                                                                                                                                               |
+| `get_architecture_history` | Change log          | `architecture-changes` memories in time order, plus the index rebuilds.                                                                                                                                                                                             |
+| `validate_architecture`    | Run checks          | ADL test coverage; failures stored as `fitness-result` memories, resolved on a later pass.                                                                                                                                                                          |
 
 The five architecture tools are on by default and can be switched off one by one (`specDriven.tools`) or together (`specDriven.enabled: false`, which also removes the optional spec fields from the other tools' schemas).
 
@@ -144,7 +144,7 @@ recall_memory(query)
   └─ slice to `limit`; with full=true bump accessCount and read the body, else metadata only
 ```
 
-> **What is TF-IDF?** Term Frequency × Inverse Document Frequency — the classic text-search score: a word counts a lot if it appears **often in this document** (TF) but **rarely across the collection** (IDF). The *inverted index* is the reverse map `word → documents containing it`, like a book index — search reads the index, never the files.
+> **What is TF-IDF?** Term Frequency × Inverse Document Frequency — the classic text-search score: a word counts a lot if it appears **often in this document** (TF) but **rarely across the collection** (IDF). The _inverted index_ is the reverse map `word → documents containing it`, like a book index — search reads the index, never the files.
 
 ### The Ebbinghaus forgetting curve (1885), in code
 
@@ -156,15 +156,15 @@ strength = clamp(importance × exp(−λ × daysSince)
                  × (1 + accessCount × 0.2 + confirmations × 0.1 − flags × 0.1), 0, 1)
 ```
 
-| importanceScore | λ (forgetting speed) | Behavior |
-|---|---|---|
-| 1.0 (critical) | 0.032 | Slow decay — relevant for weeks |
-| 0.5 (normal) | 0.096 | Medium decay |
-| 0.3 (low) | 0.122 | Fast decay — fades from results in days |
+| importanceScore | λ (forgetting speed) | Behavior                                |
+| --------------- | -------------------- | --------------------------------------- |
+| 1.0 (critical)  | 0.032                | Slow decay — relevant for weeks         |
+| 0.5 (normal)    | 0.096                | Medium decay                            |
+| 0.3 (low)       | 0.122                | Fast decay — fades from results in days |
 
 Each access adds +20% retention; each `confirm_memory(useful=true)` +10%; each flag −10% — so a frequently accessed memory that was flagged wrong today drops, refining retention beyond raw access counts (an idea validated by [mozilla-ai/cq](https://github.com/mozilla-ai/cq)'s endorsement signal).
 
-*   **Immortality (`no-prune` tag)**: excludes the memory from `prune_memories` and protects it from accidental deletion or routine overwrite. Useful for architecture decisions (ADRs).
+- **Immortality (`no-prune` tag)**: excludes the memory from `prune_memories` and protects it from accidental deletion or routine overwrite. Useful for architecture decisions (ADRs).
 
 ### Embeddings & vector search (optional)
 
@@ -258,11 +258,11 @@ Configure total-recall by editing `~/.total-recall/config.json`:
 }
 ```
 
-*   **embeddingModel**: optional override for the local HuggingFace transformer model (defaults to `Xenova/all-MiniLM-L6-v2`, 384-dim). Point this at a different `@huggingface/transformers`-compatible model if you need a different embedding space — note that changing the model dimension drops the existing vector index (it is rebuilt on the next write).
-*   **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
-*   **orgBranch**: the branch of `orgRepo` the org vault pulls from and pushes to.
-*   **orgInjection**: how org memories are injected at SessionStart — `index` (default, framed as teammate-written data), `titles` (titles only) or `off`. See [SECURITY.md](../../SECURITY.md).
-*   **specDriven**: the spec-driven features; see the next section.
+- **embeddingModel**: optional override for the local HuggingFace transformer model (defaults to `Xenova/all-MiniLM-L6-v2`, 384-dim). Point this at a different `@huggingface/transformers`-compatible model if you need a different embedding space — note that changing the model dimension drops the existing vector index (it is rebuilt on the next write).
+- **enableMultilingualSearch**: Romanian/English query token expansion for cross-language lexical retrieval.
+- **orgBranch**: the branch of `orgRepo` the org vault pulls from and pushes to.
+- **orgInjection**: how org memories are injected at SessionStart — `index` (default, framed as teammate-written data), `titles` (titles only) or `off`. See [SECURITY.md](../../SECURITY.md).
+- **specDriven**: the spec-driven features; see the next section.
 
 ---
 
@@ -286,7 +286,13 @@ Every key is optional; a missing or wrongly typed value falls back to its defaul
 {
   "specDriven": {
     "enabled": true,
-    "tools": ["index_architecture", "get_architecture_context", "trace", "get_architecture_history", "validate_architecture"],
+    "tools": [
+      "index_architecture",
+      "get_architecture_context",
+      "trace",
+      "get_architecture_history",
+      "validate_architecture"
+    ],
     "categories": ["specs", "architecture-changes"],
     "adlExtensions": [".adl"],
     "excludeDirs": ["node_modules", ".git", "dist", "build", "coverage"],
@@ -300,17 +306,17 @@ Every key is optional; a missing or wrongly typed value falls back to its defaul
 }
 ```
 
-| Key | Effect |
-|---|---|
-| `enabled` | `false` switches everything below off: 17 tools, no new schema fields, no new hook output |
-| `tools` | Only the listed architecture tools are registered (`[]` for none). Read at server start: restart after a change |
-| `categories` | Extra category folders created at boot |
-| `adlExtensions`, `excludeDirs` | What a project scan picks up and skips |
-| `sessionSummary`, `sessionSummaryMaxChars` | The SessionStart architecture summary and its size |
-| `captureChanges` | The change prompt after an ADL edit |
-| `extractDecisions` | The PreCompact request for decisions with element IDs |
-| `guardrails` | Org guardrails in `get_architecture_context` |
-| `orgBlockedTerms` | Client names and other terms an org spec memory must not contain |
+| Key                                        | Effect                                                                                                          |
+| ------------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| `enabled`                                  | `false` switches everything below off: 17 tools, no new schema fields, no new hook output                       |
+| `tools`                                    | Only the listed architecture tools are registered (`[]` for none). Read at server start: restart after a change |
+| `categories`                               | Extra category folders created at boot                                                                          |
+| `adlExtensions`, `excludeDirs`             | What a project scan picks up and skips                                                                          |
+| `sessionSummary`, `sessionSummaryMaxChars` | The SessionStart architecture summary and its size                                                              |
+| `captureChanges`                           | The change prompt after an ADL edit                                                                             |
+| `extractDecisions`                         | The PreCompact request for decisions with element IDs                                                           |
+| `guardrails`                               | Org guardrails in `get_architecture_context`                                                                    |
+| `orgBlockedTerms`                          | Client names and other terms an org spec memory must not contain                                                |
 
 > **Upgrading from 1.2.x:** CALM support was removed in 1.3.0. `.calm.json` files are no longer indexed, and the `calm` and `calmExtensions` keys are ignored. Describe the system level in an `.adl` file with `DEFINE COMMUNICATION` instead.
 
@@ -347,20 +353,19 @@ artifact can reach you. Working from a clone means building it yourself
 
 ## 💻 Client Compatibility
 
-| Client | MCP Tools | Hook Side Effects (Sync/Index) | Context Injection (`additionalContext`) | Playbook Skills |
-|---|---|---|---|---|
-| **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
-| **Gemini/Antigravity (agy)** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini/Antigravity) | ❌ No |
-| **VS Code (Copilot agent mode)** | ✅ Yes | ⚠️ Agent plugins (Preview, unverified) · ❌ `--vscode` | ⚠️ Agent plugins (unverified) · ❌ `--vscode`: index via the `total-recall://index` resource | ⚠️ Unverified |
-
+| Client                           | MCP Tools | Hook Side Effects (Sync/Index)                         | Context Injection (`additionalContext`)                                                      | Playbook Skills |
+| -------------------------------- | --------- | ------------------------------------------------------ | -------------------------------------------------------------------------------------------- | --------------- |
+| **Claude Code**                  | ✅ Yes    | ✅ Yes                                                 | ✅ Yes (SessionStart/PostToolUse)                                                            | ✅ Yes          |
+| **Gemini/Antigravity (agy)**     | ✅ Yes    | ✅ Yes                                                 | ❌ No (silently dropped by Gemini/Antigravity)                                               | ❌ No           |
+| **VS Code (Copilot agent mode)** | ✅ Yes    | ⚠️ Agent plugins (Preview, unverified) · ❌ `--vscode` | ⚠️ Agent plugins (unverified) · ❌ `--vscode`: index via the `total-recall://index` resource | ⚠️ Unverified   |
 
 ### Client-Specific Integration Details
 
-*   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject the memory index at session start.
-*   **Gemini/Antigravity (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini/Antigravity renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
-*   **VS Code (GitHub Copilot agent mode)**: with VS Code agent plugins on (Preview), the plugin's own `.mcp.json` and hooks load — expected to work, not yet verified. With them off, `./install.sh --vscode` adds the server to VS Code's user `mcp.json` (tools only, no hooks); the memory index and workflow rules then come from the `total-recall://index` resource and the `memory-workflow` prompt. Details in [INSTALL.md](INSTALL.md).
-*   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local/cloud model.
-*   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).
+- **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject the memory index at session start.
+- **Gemini/Antigravity (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini/Antigravity renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
+- **VS Code (GitHub Copilot agent mode)**: with VS Code agent plugins on (Preview), the plugin's own `.mcp.json` and hooks load — expected to work, not yet verified. With them off, `./install.sh --vscode` adds the server to VS Code's user `mcp.json` (tools only, no hooks); the memory index and workflow rules then come from the `total-recall://index` resource and the `memory-workflow` prompt. Details in [INSTALL.md](INSTALL.md).
+- **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local/cloud model.
+- **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).
 
 ---
 
@@ -368,24 +373,24 @@ artifact can reach you. Working from a clone means building it yourself
 
 Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
-*   **Simple YAML**: stick to flat string arrays and simple scalars. `src/frontmatter.ts` does not support anchors or multi-line block scalars.
-*   **No file watching**: Obsidian edits are not loaded until a new session starts or you call `rebuild_index`.
-*   **Wiki-links**: `[[wikilinks]]` are tokenized by their raw words; the link graph is not resolved.
-*   **Sync safeguard**: do not use Obsidian Sync on the org-vault directory; rely exclusively on total-recall's git sync so the privacy filter runs before every push.
+- **Simple YAML**: stick to flat string arrays and simple scalars. `src/frontmatter.ts` does not support anchors or multi-line block scalars.
+- **No file watching**: Obsidian edits are not loaded until a new session starts or you call `rebuild_index`.
+- **Wiki-links**: `[[wikilinks]]` are tokenized by their raw words; the link graph is not resolved.
+- **Sync safeguard**: do not use Obsidian Sync on the org-vault directory; rely exclusively on total-recall's git sync so the privacy filter runs before every push.
 
 ---
 
 ## 📊 Status
 
-| | |
-|---|---|
-| **Version** | 1.6.1 — stable |
-| **Tests** | 962 unit + 24 integration, all passing · 73 files · ~16k lines of test code |
-| **Test Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
-| **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65% |
-| **CI** | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
-| **Releases** | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
-| **Audit** | 0 critical in production dependencies |
+|                    |                                                                                                                                                                                                                |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Version**        | 1.6.0 — stable                                                                                                                                                                                                 |
+| **Tests**          | 962 unit + 24 integration, all passing · 73 files · ~16k lines of test code                                                                                                                                    |
+| **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                |
+| **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65%                                                                                                                          |
+| **CI**             | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
+| **Releases**       | [`release.yml`](../../.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes                                  |
+| **Audit**          | 0 critical in production dependencies                                                                                                                                                                          |
 
 Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`
 
@@ -400,21 +405,21 @@ Reproduce: `npm test` · `npm run test:coverage` · `npm run test:integration` �
 
 Projects and ideas this plugin drew on:
 
-*   **[strvmarv/total-recall](https://github.com/strvmarv/total-recall)** and **[davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall)** — same name, different trade-offs (see table below); studying them shaped the "bounded local memory, plain files" positioning.
-*   **[88plug/total-recall](https://github.com/88plug/total-recall)** — a third plugin with the same name (installs as `total-recall@88plug`). It mines the raw session transcripts of Claude Code and 9 other CLIs into a local SQLite FTS5 + ollama-vector index with 26 MCP tools; this plugin instead stores curated, human-readable Markdown memories. Different problem, same name — see [INSTALL.md](INSTALL.md#️-same-name-other-plugins).
-*   **`remember@claude-plugins-official`** — the official session-handoff plugin, which writes `.remember/*.md` files into every project. It competes for the same hooks and the same job, so run only one of the two; see the root README's *Using it as your only memory system*.
-*   **Hermann Ebbinghaus (1885)** — the forgetting curve `e^(−t/S)` behind retention scoring.
-*   **Reciprocal Rank Fusion** (Cormack, Clarke & Buettcher, 2009) — the scale-free rank fusion (k=60) used for the hybrid lexical+vector merge.
-*   **[Obsidian](https://obsidian.md/)** — the "your knowledge is a folder of Markdown files with frontmatter" storage model.
-*   **[mozilla-ai/cq](https://github.com/mozilla-ai/cq)** — the open standard for *shared agent learning*. Complementary, not competing: cq = operational lessons shared between agents via a reviewed store; total-recall = *your* context memory (decisions, preferences, architecture) as `.md` files + git, no server, no review pipeline. cq's endorsement mechanism directly inspired total-recall's `confirm_memory` confirmations/flags signal in the retention score.
+- **[strvmarv/total-recall](https://github.com/strvmarv/total-recall)** and **[davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall)** — same name, different trade-offs (see table below); studying them shaped the "bounded local memory, plain files" positioning.
+- **[88plug/total-recall](https://github.com/88plug/total-recall)** — a third plugin with the same name (installs as `total-recall@88plug`). It mines the raw session transcripts of Claude Code and 9 other CLIs into a local SQLite FTS5 + ollama-vector index with 26 MCP tools; this plugin instead stores curated, human-readable Markdown memories. Different problem, same name — see [INSTALL.md](INSTALL.md#️-same-name-other-plugins).
+- **`remember@claude-plugins-official`** — the official session-handoff plugin, which writes `.remember/*.md` files into every project. It competes for the same hooks and the same job, so run only one of the two; see the root README's _Using it as your only memory system_.
+- **Hermann Ebbinghaus (1885)** — the forgetting curve `e^(−t/S)` behind retention scoring.
+- **Reciprocal Rank Fusion** (Cormack, Clarke & Buettcher, 2009) — the scale-free rank fusion (k=60) used for the hybrid lexical+vector merge.
+- **[Obsidian](https://obsidian.md/)** — the "your knowledge is a folder of Markdown files with frontmatter" storage model.
+- **[mozilla-ai/cq](https://github.com/mozilla-ai/cq)** — the open standard for _shared agent learning_. Complementary, not competing: cq = operational lessons shared between agents via a reviewed store; total-recall = _your_ context memory (decisions, preferences, architecture) as `.md` files + git, no server, no review pipeline. cq's endorsement mechanism directly inspired total-recall's `confirm_memory` confirmations/flags signal in the retention score.
 
-| | This Plugin | [strvmarv/total-recall](https://github.com/strvmarv/total-recall) | [davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall) | [88plug/total-recall](https://github.com/88plug/total-recall) | [mozilla-ai/cq](https://github.com/mozilla-ai/cq) |
-|---|---|---|---|---|---|
-| **Language** | TypeScript / Node.js | .NET 8 + F# | Bash + Markdown | Python | Python |
-| **Storage** | Markdown + JSON index | SQLite / Postgres | Markdown | SQLite index over session transcripts | Shared knowledge store |
-| **Text Search** | TF-IDF | BM25 | Plain files scan | SQLite FTS5 | — |
-| **Vector Search** | Optional sqlite-vec | Local ONNX | None | ollama embeddings (default on) | — |
-| **Rerank/Decay** | Ebbinghaus decay × TF-IDF + confirm/flag signals | 4-tier hot/warm/cold | None | — | Human review + endorsements |
-| **Org Sync** | Git-synced, privacy filter | DB connectors (Jira, Confluence) | None | None | Reviewed shared store (7 hosts) |
-| **Context injection** | ✅ Native (Claude Code hooks) | — | — | ✅ SessionStart signpost + per-prompt retrieval | ❌ agent must query explicitly |
-| **Target** | Bounded local memory | Large team deployments | Zero dependencies | Mining past sessions of many CLIs | Cross-agent shared learning |
+|                       | This Plugin                                      | [strvmarv/total-recall](https://github.com/strvmarv/total-recall) | [davegoldblatt/total-recall](https://github.com/davegoldblatt/total-recall) | [88plug/total-recall](https://github.com/88plug/total-recall) | [mozilla-ai/cq](https://github.com/mozilla-ai/cq) |
+| --------------------- | ------------------------------------------------ | ----------------------------------------------------------------- | --------------------------------------------------------------------------- | ------------------------------------------------------------- | ------------------------------------------------- |
+| **Language**          | TypeScript / Node.js                             | .NET 8 + F#                                                       | Bash + Markdown                                                             | Python                                                        | Python                                            |
+| **Storage**           | Markdown + JSON index                            | SQLite / Postgres                                                 | Markdown                                                                    | SQLite index over session transcripts                         | Shared knowledge store                            |
+| **Text Search**       | TF-IDF                                           | BM25                                                              | Plain files scan                                                            | SQLite FTS5                                                   | —                                                 |
+| **Vector Search**     | Optional sqlite-vec                              | Local ONNX                                                        | None                                                                        | ollama embeddings (default on)                                | —                                                 |
+| **Rerank/Decay**      | Ebbinghaus decay × TF-IDF + confirm/flag signals | 4-tier hot/warm/cold                                              | None                                                                        | —                                                             | Human review + endorsements                       |
+| **Org Sync**          | Git-synced, privacy filter                       | DB connectors (Jira, Confluence)                                  | None                                                                        | None                                                          | Reviewed shared store (7 hosts)                   |
+| **Context injection** | ✅ Native (Claude Code hooks)                    | —                                                                 | —                                                                           | ✅ SessionStart signpost + per-prompt retrieval               | ❌ agent must query explicitly                    |
+| **Target**            | Bounded local memory                             | Large team deployments                                            | Zero dependencies                                                           | Mining past sessions of many CLIs                             | Cross-agent shared learning                       |

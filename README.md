@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.6.1, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.0, stable: 962 tests pass, 96.9% statement coverage, ≈78% mutation score.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -24,13 +24,13 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 Several techniques from the [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar)
 ([Vol. 34, 2026 — PDF](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)) are already implemented here, as design decisions taken independently:
 
-| Technique | Ring | How Total Recall does it |
-|---|---|---|
-| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand |
-| Mutation testing | Trial | Stryker gate in CI (see [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | git-based distribution, no version drift; the only channel, fed by a `release` branch that GitHub Actions builds from `main` |
-| Structured output from LLMs | Adopt | the capture hook asks the model for JSON lines, not free text |
-| MCP by default | Hold | system operations (git, indexing) stay in plain scripts, not MCP tools |
+| Technique                                            | Ring          | How Total Recall does it                                                                                                     |
+| ---------------------------------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injects only the memory index; full content is read on demand                                                   |
+| Mutation testing                                     | Trial         | Stryker gate in CI (see [Status](#-status))                                                                                  |
+| Claude Code plugin marketplace                       | Trial         | git-based distribution, no version drift; the only channel, fed by a `release` branch that GitHub Actions builds from `main` |
+| Structured output from LLMs                          | Adopt         | the capture hook asks the model for JSON lines, not free text                                                                |
+| MCP by default                                       | Hold          | system operations (git, indexing) stay in plain scripts, not MCP tools                                                       |
 
 **Three future directions**, each tracked in [BACKLOG.md](BACKLOG.md) with a trigger:
 a context graph over memories (the `supersededAt` chain already stores temporal edges);
@@ -38,12 +38,12 @@ source-grounded extraction for the capture hook; an evaluation set for `recall_m
 
 ## ⚙️ How it works
 
-| | |
-|---|---|
-| **22 MCP tools** | store, recall, hybrid search, semantic rerank, bulk export/import, and 5 architecture tools for ADL projects |
-| **Hybrid search** | TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings |
-| **Lifecycle hooks** | context injected at session start, memories captured as you work |
-| **Two vaults** | personal stays local; `org`-tagged syncs to a shared Git repo |
+|                     |                                                                                                              |
+| ------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **22 MCP tools**    | store, recall, hybrid search, semantic rerank, bulk export/import, and 5 architecture tools for ADL projects |
+| **Hybrid search**   | TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings                                |
+| **Lifecycle hooks** | context injected at session start, memories captured as you work                                             |
+| **Two vaults**      | personal stays local; `org`-tagged syncs to a shared Git repo                                                |
 
 - **Headline feature:** at SessionStart only the memory index is injected; full memories are fetched on demand through `get_memories_by_keys`.
 - **PreCompact capture:** 0–3 lessons are extracted from the conversation before context compaction and saved.
@@ -58,14 +58,14 @@ write path, server lifecycle, persistence and hook lifecycle are drawn in
 
 ## 🛠️ The 22 tools
 
-| Group | Tools |
-|---|---|
-| **Store** | `store_memory` |
-| **Search** | `recall_memory`, `search_index` |
-| **Read** | `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories` |
-| **Modify** | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories` |
-| **Re-rank** | `rerank_memories` |
-| **Bulk** | `export_memories`, `import_memories`, `delete_memories` |
+| Group                                               | Tools                                                                                                          |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Store**                                           | `store_memory`                                                                                                 |
+| **Search**                                          | `recall_memory`, `search_index`                                                                                |
+| **Read**                                            | `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories`                   |
+| **Modify**                                          | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories`                          |
+| **Re-rank**                                         | `rerank_memories`                                                                                              |
+| **Bulk**                                            | `export_memories`, `import_memories`, `delete_memories`                                                        |
 | **Architecture** (spec-driven, can be switched off) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
 
 ### 📐 Spec-driven work with ADL
@@ -131,7 +131,9 @@ single source of truth, say so in your **global** `~/.claude/CLAUDE.md`:
 
 ```markdown
 ## Memory
+
 Use total-recall exclusively for all memories, in every project.
+
 - Store via `store_memory` / `update_memory`; recall via `recall_memory` / `search_index`.
 - NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
 - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
@@ -171,9 +173,9 @@ Two production dependencies — the MCP SDK and Zod. Three optional ones power
 semantic search (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec`)
 and are only pulled in if you enable it.
 
-| | |
-|---|---|
-| **Plugin** | ~1–2 MB |
+|                    |                                  |
+| ------------------ | -------------------------------- |
+| **Plugin**         | ~1–2 MB                          |
 | **Optional model** | ~200 MB, downloaded on first use |
 
 ## 🧭 Design principles
@@ -187,15 +189,15 @@ and are only pulled in if you enable it.
 
 ## 📊 Status
 
-| | |
-|---|---|
-| **Version** | 1.6.1 — stable |
-| **Tests** | 962 unit + 24 integration passing · 73 files · ~16k lines of test code |
-| **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
-| **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65% |
-| **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
-| **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes |
-| **Audit** | 0 critical in production deps |
+|              |                                                                                                                                                                                                       |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Version**  | 1.6.0 — stable                                                                                                                                                                                        |
+| **Tests**    | 962 unit + 24 integration passing · 73 files · ~16k lines of test code                                                                                                                                |
+| **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                       |
+| **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65%                                                                                                                     |
+| **CI**       | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
+| **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes                               |
+| **Audit**    | 0 critical in production deps                                                                                                                                                                         |
 
 Mutation testing checks whether the tests are actually any good: Stryker deliberately changes small things in the code (`>` becomes `<`, `true` becomes `false`), and a test suite that doesn't fail when that happens isn't strict enough.
 

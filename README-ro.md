@@ -15,7 +15,7 @@ O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity ș
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
 - **Instalare** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, apoi `./install.sh` o singură dată. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Amprentă** — ~1–2 MB, două dependențe de producție (SDK-ul MCP și Zod). Modelul semantic de ~200 MB se descarcă doar dacă activezi căutarea semantică.
-- **Status** — v1.6.1, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
+- **Status** — v1.6.0, stabilă: 962 teste trec, Test Coverage 96.9% statements, Mutation tests ≈78%.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
@@ -24,13 +24,13 @@ O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity ș
 Mai multe tehnici din [Thoughtworks Technology Radar](https://www.thoughtworks.com/radar)
 ([Vol. 34, 2026 — PDF](https://www.thoughtworks.com/content/dam/thoughtworks/documents/radar/2026/04/tr_technology_radar_vol_34_en_1.pdf)) sunt deja implementate aici, ca decizii de design luate independent:
 
-| Tehnică | Inel | Cum o face Total Recall |
-|---|---|---|
-| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injectează doar indexul memoriilor; conținutul complet se citește la cerere |
-| Mutation testing | Trial | Poartă Stryker în CI (vezi [Status](#-status)) |
-| Claude Code plugin marketplace | Trial | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de branch-ul `release`, construit de GitHub Actions din `main` |
-| Structured output from LLMs | Adopt | hook-ul de captură cere modelului linii JSON, nu text liber |
-| MCP by default | Hold | operațiile de sistem (git, indexare) rămân în scripturi simple, nu în unelte MCP |
+| Tehnică                                              | Inel          | Cum o face Total Recall                                                                                                                                 |
+| ---------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Progressive context disclosure + Context engineering | Trial + Adopt | SessionStart injectează doar indexul memoriilor; conținutul complet se citește la cerere                                                                |
+| Mutation testing                                     | Trial         | Poartă Stryker în CI (vezi [Status](#-status))                                                                                                          |
+| Claude Code plugin marketplace                       | Trial         | distribuție bazată pe git, fără drift de versiune; singurul canal din v1.1.19, alimentat de branch-ul `release`, construit de GitHub Actions din `main` |
+| Structured output from LLMs                          | Adopt         | hook-ul de captură cere modelului linii JSON, nu text liber                                                                                             |
+| MCP by default                                       | Hold          | operațiile de sistem (git, indexare) rămân în scripturi simple, nu în unelte MCP                                                                        |
 
 **Trei direcții viitoare**, fiecare în [BACKLOG.md](BACKLOG.md) cu declanșator:
 un graf de context peste memorii (lanțul `supersededAt` stochează deja muchii temporale);
@@ -38,12 +38,12 @@ extracție ancorată în sursă pentru hook-ul de captură; un set de evaluare p
 
 ## ⚙️ Cum funcționează
 
-| | |
-|---|---|
-| **22 de unelte MCP** | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă și 5 unelte de arhitectură pentru proiecte cu ADL |
-| **Căutare hibridă** | TF-IDF × curba uitării Ebbinghaus, combinată opțional cu embeddings vectoriale |
-| **Hook-uri de ciclu de viață** | context injectat la începutul sesiunii, memorii capturate pe măsură ce lucrezi |
-| **Două vault-uri** | cel personal rămâne local; cel etichetat `org` se sincronizează cu un repo Git comun |
+|                                |                                                                                                                                   |
+| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| **22 de unelte MCP**           | stocare, recuperare, căutare hibridă, reranking semantic, export/import în masă și 5 unelte de arhitectură pentru proiecte cu ADL |
+| **Căutare hibridă**            | TF-IDF × curba uitării Ebbinghaus, combinată opțional cu embeddings vectoriale                                                    |
+| **Hook-uri de ciclu de viață** | context injectat la începutul sesiunii, memorii capturate pe măsură ce lucrezi                                                    |
+| **Două vault-uri**             | cel personal rămâne local; cel etichetat `org` se sincronizează cu un repo Git comun                                              |
 
 - **Caracteristica principală:** la SessionStart se injectează doar indexul memoriilor; memoriile complete se citesc la cerere prin `get_memories_by_keys`.
 - **Captură PreCompact:** 0–3 lecții sunt extrase din conversație înainte de compactarea contextului și salvate.
@@ -58,14 +58,14 @@ calea de scriere, ciclul de viață al serverului, persistența și hook-urile s
 
 ## 🛠️ Cele 22 de unelte
 
-| Grup | Unelte |
-|---|---|
-| **Salvare** | `store_memory` |
-| **Căutare** | `recall_memory`, `search_index` |
-| **Citire** | `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories` |
-| **Modificare** | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories` |
-| **Reordonare** | `rerank_memories` |
-| **Operații în masă** | `export_memories`, `import_memories`, `delete_memories` |
+| Grup                                              | Unelte                                                                                                         |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| **Salvare**                                       | `store_memory`                                                                                                 |
+| **Căutare**                                       | `recall_memory`, `search_index`                                                                                |
+| **Citire**                                        | `list_memories`, `get_memories_by_keys`, `get_stats`, `get_timeline`, `get_related_memories`                   |
+| **Modificare**                                    | `update_memory`, `delete_memory`, `confirm_memory`, `rebuild_index`, `prune_memories`                          |
+| **Reordonare**                                    | `rerank_memories`                                                                                              |
+| **Operații în masă**                              | `export_memories`, `import_memories`, `delete_memories`                                                        |
 | **Arhitectură** (spec-driven, se poate dezactiva) | `index_architecture`, `get_architecture_context`, `trace`, `get_architecture_history`, `validate_architecture` |
 
 ### 📐 Lucru spec-driven cu ADL
@@ -131,7 +131,9 @@ să fie singura sursă de adevăr, spune-o în `~/.claude/CLAUDE.md` **global**:
 
 ```markdown
 ## Memory
+
 Use total-recall exclusively for all memories, in every project.
+
 - Store via `store_memory` / `update_memory`; recall via `recall_memory` / `search_index`.
 - NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
 - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
@@ -171,9 +173,9 @@ Două dependențe de producție — SDK-ul MCP și Zod. Trei opționale alimente
 căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec`)
 și sunt aduse doar dacă o activezi.
 
-| | |
-|---|---|
-| **Plugin** | ~1–2 MB |
+|                                        |                                       |
+| -------------------------------------- | ------------------------------------- |
+| **Plugin**                             | ~1–2 MB                               |
 | **Model opțional (căutare semantică)** | ~200 MB, descărcat la prima utilizare |
 
 ## 🧭 Principii de design
@@ -187,15 +189,15 @@ căutarea semantică (`@huggingface/transformers`, `better-sqlite3`, `sqlite-vec
 
 ## 📊 Status
 
-| | |
-|---|---|
-| **Versiune** | 1.6.1 — stabilă |
-| **Teste** | 962 unitare + 24 de integrare, toate trec · 73 fișiere · ~16k linii de cod de test |
-| **Test Coverage** | 96.9% statements · 90.9% branches · 98.1% lines |
-| **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65% |
-| **CI** | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
-| **Release-uri** | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă |
-| **Audit** | 0 critice în dependențele de producție |
+|                    |                                                                                                                                                                                                                           |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Versiune**       | 1.6.0 — stabilă                                                                                                                                                                                                           |
+| **Teste**          | 962 unitare + 24 de integrare, toate trec · 73 fișiere · ~16k linii de cod de test                                                                                                                                        |
+| **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                           |
+| **Mutation tests** | ≈78% (Stryker, 15 module de bază) · variază ~±1 pt de la o rulare la alta · poarta eșuează sub 65%                                                                                                                        |
+| **CI**             | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + suitele complete unitare și de integrare + Stryker la fiecare push/PR pe `main`. Singurul pipeline de build; nimic nu este verificat local |
+| **Release-uri**    | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă                                        |
+| **Audit**          | 0 critice în dependențele de producție                                                                                                                                                                                    |
 
 Mutation testing verifică dacă testele sunt într-adevăr bune: Stryker schimbă deliberat lucruri mici în cod (`>` devine `<`, `true` devine `false`), iar o suită de teste care nu pică atunci nu este suficient de strictă.
 
