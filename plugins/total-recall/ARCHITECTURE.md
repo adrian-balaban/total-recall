@@ -1,681 +1,107 @@
 # 🏗️ Total-Recall — Architecture
 
-## 📦 What it is
+An MCP stdio server (`dist/index.js`, TypeScript in `src/`) plus lifecycle hooks that give Claude Code and Gemini CLI persistent, searchable memory.
 
-Total-recall is a plugin that gives the AI persistent, searchable memory across sessions. It runs as an MCP stdio server. The compiled entry point is `dist/index.js`; the source is TypeScript under `src/`.
-Is compatible with Claude Code and Gemini CLI.
+![Session loop](../../docs/diagrams/session-loop-en.svg)
+
 ---
 
 ## 🧭 C4 Model
 
-Four zoom levels over the same system, per Simon Brown's C4 model: context → containers → components → code.
+### C1 — System context
 
-### C1 — System Context
-
-Who uses total-recall and what it talks to. The plugin never calls a hosted inference API: the only outbound network traffic is git (org vault) and a one-time model download.
-
-```mermaid
-graph TB
-    dev["👤 Developer<br/><i>works in an AI coding session</i>"]
-    tr["🧠 Total Recall<br/><b>[Software System]</b><br/>Persistent, searchable memory<br/>across sessions"]
-    host["💻 Claude Code / Gemini CLI<br/><b>[External System]</b><br/>Host harness — spawns the MCP<br/>server and runs the hooks"]
-    orgrepo["🗂️ Org memory repo<br/><b>[External System]</b><br/>Git remote holding the<br/>team-shared vault branch"]
-    hub["🤗 HuggingFace Hub<br/><b>[External System]</b><br/>Serves all-MiniLM-L6-v2 once,<br/>then cached on disk"]
-    team["👥 Teammates"]
-
-    dev -->|"asks questions,<br/>stores decisions"| host
-    host -->|"MCP tool calls over stdio;<br/>hook events"| tr
-    tr -->|"injects the memory index<br/>at SessionStart"| host
-    tr -->|"push/pull filtered<br/>org memories"| orgrepo
-    tr -.->|"first run only,<br/>then offline"| hub
-    team -->|"pull/push shared memories"| orgrepo
-
-    classDef sys fill:#1168bd,stroke:#0b4884,color:#fff
-    classDef ext fill:#999,stroke:#6b6b6b,color:#fff
-    classDef person fill:#08427b,stroke:#052e56,color:#fff
-    class tr sys
-    class host,orgrepo,hub ext
-    class dev,team person
-```
+![C1 system context](architecture/diagrams/c1-context.svg)
 
 ### C2 — Containers
 
-The system is not one process. A short-lived Node process serves MCP tools; separate shell/Node scripts run on harness hook events; state lives in plain files. The MCP server is started by the plugin's own `.mcp.json` (a stdio entry that runs `${CLAUDE_PLUGIN_ROOT}/dist/index.js`); `install.sh` registers nothing at user scope for a plugin-managed install, so an empty `.mcp.json` means no tools at all (pinned by `plugin-manifest.test.ts`). Note the two writers of `.index-cache.txt`: the MCP server (debounced) and `build-memory-index.sh` (a standalone bash scan that needs no running server).
+![C2 containers](architecture/diagrams/c2-containers.svg)
 
-```mermaid
-graph TB
-    host["💻 Host harness<br/><b>[External]</b>"]
+### C3 — Components (MCP server)
 
-    subgraph TR["Total Recall"]
-        mcp["⚙️ MCP stdio server<br/><b>[Node · dist/index.js]</b><br/>22 tools (17 + 5 spec-driven),<br/>in-memory index,<br/>debounced persistence"]
-        hooks["🪝 Hook scripts<br/><b>[bash + Node · hooks/scripts]</b><br/>SessionStart · PostToolUse<br/>PreCompact · SessionEnd"]
-        emb["🔢 Embedder<br/><b>[in-process HF pipeline]</b><br/>all-MiniLM-L6-v2, 384-dim<br/>lazy-loaded, optional"]
+![C3 components](architecture/diagrams/c3-components.svg)
 
-        pv[("📁 Personal vault<br/><b>[Markdown + local git]</b><br/>~/.total-recall/personal-vault")]
-        ov[("📁 Org vault<br/><b>[Markdown + git branch]</b><br/>~/.total-recall/org/org-vault")]
-        idx[("🗃️ Index files<br/><b>[JSON + txt]</b><br/>index.json · invertedIndex.json<br/>.index-cache.txt")]
-        vdb[("🧮 vectors.db<br/><b>[SQLite + sqlite-vec]</b><br/>optional")]
-    end
+### C4 — Code: `recall_memory`
 
-    orgrepo["🗂️ Org git remote<br/><b>[External]</b>"]
-
-    host -->|"MCP / stdio"| mcp
-    host -->|"hook events + stdin JSON"| hooks
-    hooks -->|"injects .index-cache.txt<br/>as context"| host
-
-    mcp -->|"read/write .md"| pv
-    mcp -->|"read/write .md"| ov
-    mcp -->|"atomic write"| idx
-    mcp -->|"upsert / knn search"| vdb
-    mcp -->|"embed(text)"| emb
-    emb -->|"384-dim vectors"| vdb
-
-    hooks -->|"standalone frontmatter scan<br/>(no MCP)"| pv
-    hooks -->|"writes .index-cache.txt"| idx
-    hooks -->|"privacy filter → add/commit/push"| ov
-    hooks -->|"git pull / push"| orgrepo
-    hooks -->|"PreCompact: writes<br/>extracted learnings"| pv
-
-    classDef c fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef d fill:#438dd5,stroke:#2e6295,color:#fff
-    classDef ext fill:#999,stroke:#6b6b6b,color:#fff
-    class mcp,hooks,emb c
-    class pv,ov,idx,vdb d
-    class host,orgrepo ext
-```
-
-### C3 — Components (inside the MCP stdio server)
-
-`server.ts` owns no schemas and no dispatch table: each `tools/*.ts` module co-locates its Zod shape, handler and `register(server)`, and `registry.ts`'s `wrapHandler` adds the result envelope plus perf/error instrumentation, and redacts filesystem paths in the error text it returns (`[TR-S6]`: the registry depends only on State and Paths). Everything reads the index through the single `state.ts` singleton.
-
-```mermaid
-graph TB
-    idxts["index.ts<br/><i>boot stub · signal handlers<br/>· shutdown() latch</i>"]
-    srv["server.ts<br/><i>McpServer · seven register() calls · main()</i>"]
-    reg["tools/registry.ts<br/><i>wrapHandler · CallToolResult<br/>envelope · perf + error samples</i>"]
-
-    subgraph Tools["tools/ — the 22 tools"]
-        direction LR
-        t1["store.ts"]
-        t2["recall.ts"]
-        t3["query.ts"]
-        t4["mutate.ts"]
-        t5["rerank.ts"]
-        t6["bulk.ts"]
-        t7["architecture.ts"]
-    end
-
-    subgraph Search["retrieval"]
-        direction LR
-        tf["tfidf.ts<br/><i>tokenize · inverted index<br/>· bilingual expansion</i>"]
-        eb["ebbinghaus.ts<br/><i>retention decay</i>"]
-        rrf["rrf.ts<br/><i>reciprocal rank fusion, k=60</i>"]
-        embc["embeddings.ts<br/><i>lazy HF pipeline<br/>· depsInstalled() probe</i>"]
-        vs["vectorStore.ts<br/><i>sqlite-vec wrapper<br/>· binding self-heal</i>"]
-    end
-
-    subgraph Core["state + storage"]
-        direction LR
-        st["state.ts<br/><i>memIndex · invertedIndex<br/>· errors · perfSamples</i>"]
-        pers["persistence.ts<br/><i>debounced save · atomicWrite<br/>· buildIndexCache</i>"]
-        scan["vault-scan.ts<br/><i>reconcileIndex · indexFile<br/>· slugify · keyFromPath</i>"]
-        fm["frontmatter.ts<br/><i>minimal YAML parse/serialize</i>"]
-        lru["lru-cache.ts<br/><i>contentCache · 100 · 30 min</i>"]
-        paths["paths.ts<br/><i>vault paths · EXCLUDED_DIRS</i>"]
-        jr["journal.ts · dates.ts"]
-    end
-
-    ar["auto-reconcile.ts<br/><i>polls .reconcile-requested</i>"]
-
-    idxts --> srv
-    srv -->|"register(server)"| Tools
-    Tools -->|"every handler is wrapped"| reg
-    reg -->|"records into"| st
-
-    t1 --> fm
-    t1 --> lru
-    t1 --> jr
-    t2 --> tf
-    t2 --> rrf
-    t2 --> embc
-    t2 --> lru
-    t3 --> eb
-    t4 --> lru
-    t5 --> embc
-    t6 --> pers
-    t7 -->|"parse · index · trace · validate"| spec["spec/*<br/><i>ADL parser · element index<br/>· exec (git)</i>"]
-
-    tf --> st
-    tf --> eb
-    embc --> vs
-    rrf -.->|"fuses the two<br/>ranked lists"| tf
-
-    scan --> fm
-    scan --> paths
-    scan --> st
-    pers --> st
-    ar --> scan
-    Tools --> pers
-
-    classDef comp fill:#85bbf0,stroke:#5d82a8,color:#000
-    class idxts,srv,reg,t1,t2,t3,t4,t5,t6,t7,spec,tf,eb,rrf,embc,vs,st,pers,scan,fm,lru,paths,ar,jr comp
-```
-
-### C4 — Code: `recall_memory` hybrid path
-
-The lowest zoom level, showing the actual call order for one tool. The vector branch is best-effort: any failure there (embed, sqlite-vec, fusion) is recorded via `recordError` and the result degrades to the TF-IDF ranking instead of throwing.
-
-```mermaid
-sequenceDiagram
-    autonumber
-    participant C as Host (Claude Code)
-    participant R as registry.wrapHandler
-    participant H as recall.ts handler
-    participant T as tfidf.tfidfSearch
-    participant E as ebbinghaus
-    participant V as embeddings + vectorStore
-    participant F as rrf
-    participant L as lru-cache + fs
-    participant P as persistence
-
-    C->>R: CallTool recall_memory{query, hybrid, full, limit}
-    R->>R: Zod safeParse (rejects malformed args here)
-    R->>H: handler(args)
-    H->>T: tfidfSearch(query)
-    T->>T: tokenize → Set (dedupe bilingual expansion)
-    T->>T: per token: invertedIndex lookup, TF×IDF<br/>×2 title, ×1.5 tag (memoized per doc)
-    T->>E: computeRetentionStrength(importance, days, accessCount)
-    E-->>T: decay factor
-    T-->>H: ranked candidates
-
-    alt hybrid = true and optional deps loadable
-        H->>V: embed(query) → 384-dim vector
-        V->>V: searchVector(db, qvec, 50)
-        V-->>H: vector candidates
-        H->>F: reciprocalRankFusion([tfidf, vector], k=60)
-        F-->>H: fused ranking
-    else vector path unavailable or throws
-        V-->>H: recordError(...) → TF-IDF ranking kept
-    end
-
-    H->>H: excludeJournal re-filter · since/before · minScore · elements filter · slice(limit)
-    loop each result
-        opt full = true
-            H->>P: bumpAccess(meta) → accessCount++, lastAccessed = now
-            H->>L: read body through contentCache (miss → readFileSync)
-        end
-    end
-    P-->>P: scheduleAccessSave() (debounced 1s → index.json, no IDF rebuild)
-    H-->>R: results
-    R->>R: recordPerfSample + wrap in CallToolResult
-    R-->>C: memories + scores
-```
+![C4 recall_memory](architecture/diagrams/c4-recall.svg)
 
 ---
 
-## 🗺️ Module Map
+## 🛠️ The 22 MCP tools
 
-```
-src/
-├── index.ts          boot stub — signal handlers + calls main()
-├── server.ts         McpServer construction; register() calls wire the 17 core tools plus the spec-driven tools listed in specDriven.tools (schemas co-located in tools/*.ts); main()
-├── state.ts          shared in-memory singletons (memIndex, invertedIndex, errors, perfSamples)
-├── paths.ts          vault/DB/index file paths, EXCLUDED_DIRS, DEFAULT_CATEGORIES, ensureDir
-├── types.ts          MemoryFrontmatter, MemoryMetadata, Index, InvertedIndex
-├── errors.ts         typed errors (e.g. MemoryExistsError) so import_memories branches on type, not message text
-├── lru-cache.ts      LRUCache class + shared contentCache instance (100 entries, 30 min TTL)
-├── persistence.ts    loadIndexes, debounced scheduleSave/scheduleIdfRecalc, bumpAccess, saveNow, flushPending, buildIndexCache
-├── frontmatter.ts    minimal YAML frontmatter parser/serializer (replaces gray-matter)
-├── vault-scan.ts     reconcileIndex, indexFile, deriveCategory, slugify, keyFromPath, tokenEstimate
-├── tfidf.ts          tokenize, rebuildInvertedIndex, tfidfSearch
-├── ebbinghaus.ts     computeRetentionStrength, daysSince
-├── rrf.ts            reciprocalRankFusion (k=60)
-├── embeddings.ts     embeddings: in-process HuggingFace pipeline (all-MiniLM-L6-v2, 384-dim); lazy-loaded + no-op if deps absent; failed load is not cached (retried next call); depsInstalled() capability probe (are @huggingface/transformers + sqlite-vec + the better-sqlite3 native binding all loadable) so get_stats reports vector search enabled on a fresh session before the lazy load fires
-├── vectorStore.ts    sqlite-vec upsert/search/delete wrapper
-├── dates.ts          parseRelativeDate
-├── journal.ts        appendJournal
-├── auto-reconcile.ts polls the .reconcile-requested marker (dropped by pull-org-vault.sh) → reconcileIndex
-├── privacy-filter.ts SECRET_TOKEN_RE + email + validated CC (Luhn) / IBAN (mod-97) / formatted-phone checks — fail-closed gate for org sync
-├── spec/             spec-driven architecture support
-│   ├── config.ts     specDriven block of config.json + defaults (leaf; also bundled as dist/spec-config.mjs for hooks)
-│   ├── fields.ts     optional frontmatter fields (system, artifact, elements, …) + their sanitiser (leaf; dist/spec-fields.mjs)
-│   ├── elements.ts   element-ID matching (adl:/assert:, parent matches children) (leaf)
-│   ├── adl-parse.ts  tolerant ADL reader: DEFINE nesting, definitions, FOREACH scope, ASSERT + [ID] tags (leaf)
-│   ├── schema.ts     Zod shapes of the spec fields, shared by store_memory / update_memory
-│   ├── indexer.ts    project scan → one model per system, with relationships from DEFINE COMMUNICATION (+ tests tagged with assertion IDs); render/parse of the index memory
-│   ├── context.ts    get_architecture_context / trace / get_architecture_history over the in-memory index
-│   ├── validate.ts   ADL coverage check (pure function, no external tool)
-│   ├── org-guard.ts  hosts / credentials / blocked terms check for org spec memories
-│   └── exec.ts       the only spec module that starts processes (git) — no shell ([TR-R4])
-└── tools/
-    ├── store.ts      store_memory
-    ├── recall.ts     recall_memory, search_index
-    ├── rerank.ts     rerank_memories
-    ├── query.ts      list_memories, get_memories_by_keys, get_stats, get_timeline, get_related_memories, prune_memories
-    ├── mutate.ts     update_memory, delete_memory, rebuild_index, confirm_memory
-    ├── bulk.ts       export_memories, import_memories, delete_memories
-    └── architecture.ts index_architecture, get_architecture_context, trace, get_architecture_history, validate_architecture
-```
+![The 22 MCP tools](architecture/diagrams/tools.svg)
+
+With `specDriven.enabled: false` the 5 architecture tools and the spec fields are not registered: `tools/list` is the 17-tool golden (`schema-parity.integration.test.ts`).
 
 ---
 
-## 🧬 Data Model
+## 🧬 Data model
 
-### On-disk format
-
-Each memory is a Markdown file with a YAML frontmatter block:
-
-```
-~/.total-recall/
-├── index.json               — flat Record<key, MemoryMetadata> (primary index)
-├── invertedIndex.json       — TF-IDF inverted index Record<token, {docs, idf}>
-├── .index-cache.txt         — shell-readable summary injected at SessionStart
-├── personal-vault/
-│   ├── <category>/
-│   │   └── <slug>.md        — personal memory files
-│   └── vectors.db           — sqlite-vec embeddings (optional)
-└── org/
-    └── org-vault/
-        └── <category>/
-            └── <slug>.md    — shared/org memory files
-```
-
-### Frontmatter schema (`MemoryFrontmatter`)
-
-| Field | Type | Notes |
-|---|---|---|
-| `title` | string | required |
-| `tags` | string[] | `org` routes to org vault |
-| `author` | string | OS username; org writes are author-protected |
-| `sessions` | string[] | session IDs, capped at 50 |
-| `created` | ISO string | preserved across `force` overwrites |
-| `updated` | ISO string | set on every write |
-| `importanceScore` | 0–1 | 0.5 default; drives Ebbinghaus decay rate |
-| `schemaVersion` | number | absent = 1; written as 2 on a memory that carries any spec field |
-| `system`, `artifact`, `elements`, `requirements`, `sourcePath`, `sourceRev`, `status`, `supersedes` | optional | spec-driven links, sanitised by `spec/fields.ts` on every write and read path (store, update, indexFile, index.json load, import, PreCompact) |
-
-### In-memory index (`MemoryMetadata`)
-
-Extends frontmatter with runtime stats: `key`, `filePath`, `category`, `contentPreview` (first 500 chars of body), `accessCount`, `lastAccessed`, `tokenEstimate`, `isOrg`, `mtimeMs`/`size` (filesystem identity of the last-indexed body — `reconcileIndex` compares these against the current `lstatSync` to skip `readFileSync`+`parseFrontmatter` for unchanged files; filesystem-local, so the skip helps same-machine session-to-session boots, not after a `git pull` which changes mtime).
-
-### Key derivation
-
-```
-personal: path relative to PERSONAL_VAULT, extension stripped
-          e.g.  knowledge/my-decision.md  →  knowledge/my-decision
-org:      same but prefixed with "org/"
-          e.g.  org/architecture/db-choice.md  →  org/architecture/db-choice
-```
+![Data model](architecture/diagrams/data-model.svg)
 
 ---
 
-## 🚀 Boot Sequence
+## 🔀 Write path
 
-```
-main()
- ├─ ensureDir(PERSONAL_VAULT, ORG_VAULT)
- ├─ ensureDir(<PERSONAL_VAULT>/<each DEFAULT_CATEGORIES> and each specDriven category)
- ├─ loadIndexes()        ← reads index.json ONLY into memIndex (#18: invertedIndex.json
- │                        is no longer loaded — a dead read, since the immediately-
- │                        following recalcIdfNow rebuilds it from memIndex and main()
- │                        is synchronous until server.connect, so nothing can read it
- │                        in between)
- ├─ reconcileIndex()     ← always; full vault scan, preserves accessCount/lastAccessed;
- │                        skips readFileSync+parseFrontmatter for files whose
- │                        mtimeMs+size match the cached entry (#19)
- ├─ recalcIdfNow()       ← synchronous rebuild + persist of invertedIndex.json + .index-cache.txt
- ├─ scheduleSave()       ← debounced 1s → index.json write
- ├─ markIndexFresh()     ← clear dirtyTokens so the boot timer skips the +2s IDF recalc
- │                        (recalcIdfNow already did it; tokens did not change in between)
- ├─ server.connect(StdioServerTransport)
- └─ startAutoReconcile()  ← polls the .reconcile-requested marker dropped by pull-org-vault.sh
-```
+![store_memory routing](../../docs/diagrams/store-routing-en.svg)
 
-On `SIGTERM` / `SIGINT` / stdin `end`/`close` / `beforeExit`: `shutdown()` runs `flushPending()` (synchronous index write) → `await flushEmbeddings()` (drain in-flight embed→upsert) → `process.exit(0)`. `shutdown()` is **idempotent via a module-level `shuttingDown` latch** — the four triggers can fire concurrently (SIGTERM-while-stdin-closing, a double signal), and the latch makes the second-and-later call a no-op so the flush completes exactly once. `beforeExit` only calls `flushPending()` (no embedding drain, no exit). Pinned structurally by `index-stdin-end.test.ts` and dynamically by `src/__tests__/integration/shutdown-sigterm.integration.test.ts` (spawns real `dist/index.js`, SIGTERMs mid-session before the 1s debounce, asserts the stored key lands in `index.json` on disk before exit).
+![store_memory write path](architecture/diagrams/write-path.svg)
 
 ---
 
-## 🛠️ The 22 MCP Tools
+## 🚀 Lifecycle and persistence
 
-### Write
-| Tool | Description |
-|---|---|
-| `store_memory` | Create a new memory; routes to org vault if tagged `org`; `force=true` overwrites |
-| `update_memory` | Patch title/content/tags/importanceScore; author-protected for org |
-| `delete_memory` | Remove file + index entry + vector; invalidates LRU |
-| `confirm_memory` | Increment confirmations/flags to guide retention |
+![Server lifecycle](architecture/diagrams/lifecycle.svg)
 
-### Bulk
-| Tool | Description |
-|---|---|
-| `export_memories` | Dump selected memories (with full content) for backup/transfer. Returns `{count, memories, errors}`; an unreadable body becomes an `{key, error}` entry in `errors` (never a silent `content: ''`, which a `force` import would clobber real content with) |
-| `import_memories` | Restore memories from an export archive; preserves key/timestamps/sessions. Skips any entry carrying an `error` field so a failed export read can't overwrite a live memory |
-| `delete_memories` | Batch delete; `confirm=true` required (no default — required + `true`). A reserved (`no-prune` without `force`) key is recorded as a per-key error, not a batch reject — the rest of the batch proceeds |
-
-### Search / Read
-| Tool | Description |
-|---|---|
-| `recall_memory` | TF-IDF + Ebbinghaus, optionally fused with vector search via RRF; optional `elements` filter (spec-driven) |
-| `search_index` | Metadata-only TF-IDF (no file reads, no accessCount bump); optional `elements` filter (spec-driven) |
-| `get_memories_by_keys` | Direct key lookup; reads through LRU cache |
-| `rerank_memories` | Re-rank a candidate list by cosine similarity to a query, using local embeddings (no LLM call) |
-
-### List / Query
-| Tool | Description |
-|---|---|
-| `list_memories` | Paginated metadata listing with category/tag filter |
-| `get_related_memories` | Jaccard tag similarity + same-category boost (0.2); requires ≥1 shared tag. With the spec-driven fields, shared `elements` also relate two memories |
-| `get_timeline` | Memories in date range, ordered by `updated` |
-| `get_stats` | Total + by-category counts, cache stats, perf percentiles, recent errors, and a `vector` block (`enabled` / `depsPresent` / live `model` / stored model+dim); `enabled` defaults to true when the optional deps are loadable (via `depsInstalled()`), so a fresh session reports vector search on before the lazy embedder load fires — back-compat `vectorSearchEnabled` alias mirrors `enabled` |
-
-### Maintenance
-| Tool | Description |
-|---|---|
-| `rebuild_index` | `reconcileIndex()` + rebuild TF-IDF; preserves `accessCount`/`lastAccessed` |
-| `prune_memories` | **List** low-retention candidates (Ebbinghaus strength < threshold); does NOT delete |
-
-### Architecture (spec-driven; `specDriven.tools`)
-| Tool | Description |
-|---|---|
-| `index_architecture` | Scan a project for ADL files; store one `architecture/arch-index-<system>` memory per system (summary + JSON model). Fingerprinted: unchanged files → no write. Uses `store_memory(force)`, so each rebuild archives the previous index under `.superseded/` |
-| `get_architecture_context` | System summary, or an element's rules, controls, definitions, decisions (current and superseded), failures, open questions, guardrails |
-| `trace` | Requirement / assertion / element → assertions + controls → tagged tests → fitness results + decisions |
-| `get_architecture_history` | `architecture-changes` memories oldest-first, plus index rebuild times |
-| `validate_architecture` | ADL coverage; records `fitness-result` memories (`failed` → `resolved`) |
-
-With `specDriven.enabled: false` none of these are registered and the spec fields are left out of the `store_memory`, `update_memory`, `recall_memory` and `search_index` schemas, so `tools/list` is exactly the 17-tool golden (`schema-parity.integration.test.ts`).
+![Persistence and debounce](architecture/diagrams/persistence.svg)
 
 ---
 
-## 🔀 Dual Vault Routing
+## 🪝 Hooks
 
-```
-store_memory(tags=[...])
-       │
-       ├── contains "org"  ──►  ORG_VAULT  (~/.total-recall/org/org-vault/)
-       │                        key prefix: "org/"
-       │                        author-protected writes
-       │                        synced to git repo via PostToolUse hook
-       │
-       └── otherwise       ──►  PERSONAL_VAULT  (~/.total-recall/personal-vault/)
-                                key: plain relative path
-                                journal entry appended on store
-```
-
-`personal` and `org` tags are mutually exclusive — `store_memory` throws if both are present.
+![Hook lifecycle](architecture/diagrams/hooks.svg)
 
 ---
 
-## ✍️ Write Path (`store_memory`)
+## 🔐 Org sync
 
-```
-store_memory(title, content, tags, category, importanceScore, ...)
- │
- ├─ slugify(title) → slug
- ├─ resolve filePath: <vault>/<category>/<slug>.md
- ├─ if file exists:
- │    ├─ author-guard (org only)
- │    └─ if !force → throw duplicate error
- ├─ withExecutiveSummary(content)   ← idempotent header injection
- ├─ stringifyFrontmatter(body, fm)  ← custom YAML serializer
- ├─ fs.writeFileSync(filePath)      ← synchronous, always durable
- ├─ memIndex[key] = { ...meta }
- ├─ contentCache.set(key, body)
- ├─ if !isOrg → appendJournal('store', key, title)
- ├─ scheduleSave()                  ← debounced 1s
- └─ embedAndUpsert(key, body)       ← async, fire-and-forget, tracked in pendingEmbeds so shutdown can drain it
-```
+![Runtime landscape](architecture/diagrams/landscape.svg)
 
----
+![Org sync saga](architecture/diagrams/org-sync.svg)
 
-## 🔍 Search Pipeline (`recall_memory`)
-
-```
-query
-  │
-  ├─ tfidfSearch(query)
-  │    ├─ tokenize(query) → tokens
-  │    ├─ for each token: invertedIndex lookup
-  │    ├─ score = TF × IDF × title-boost(2×) × tag-boost(1.5×)
-  │    └─ × computeRetentionStrength(importance, daysSince, accessCount)
-  │              └─ strength = min(1, importance × exp(-λ×days) × (1 + accessCount×0.2))
-  │                            where λ = 0.16 × (1 − importance×0.8)
-  │
-  ├─ [optional hybrid path, if hybrid=true and deps installed]
-  │    ├─ embed(query) → query vector
-  │    ├─ searchVector(db, qvec, 50) → vector results
-  │    └─ reciprocalRankFusion([tfidfResults, vecResults], k=60)
-  │              └─ score(d) = Σ 1/(60 + rank(d))  across both lists
-  │
-  ├─ if excludeJournal → re-filter journal entries
-  │    (hybrid fusion can surface them via the vector rank even when tfidfSearch excluded them)
-  ├─ filter by `since` / `before` date (optional; `before` is an exclusive upper bound,
-  │    combinable with `since` for a date range)
-  ├─ filter by `minScore` (optional floor; default 0 = no filtering. Scores are NOT
-  │    comparable across hybrid modes — RRF-fused scores are tiny, raw TF-IDF larger;
-  │    use hybrid=false for a predictable threshold scale)
-  ├─ filter by `elements` (optional; spec-driven, only advertised when specDriven is on)
-  ├─ slice to `limit`
-  └─ for each result:
-       ├─ if full=true  → bumpAccess(meta): accessCount++, lastAccessed = now,
-       │                  scheduleAccessSave() (read path: index.json only, no IDF rebuild)
-       │                  then read the body through the LRU cache
-       └─ else          → return metadata + score only. A metadata-only recall is NOT an
-                          access, otherwise every search would refresh lastAccessed, nothing
-                          would ever decay and prune_memories could never nominate anything
-
-### Ebbinghaus Decay
-
-The retention strength formula models the forgetting curve:
-
-```
-λ     = 0.16 × (1 − importance × 0.8)     # high-importance memories decay slower
-decay = clamp(importance × exp(−λ × daysSince)
-              × (1 + accessCount × 0.2 + confirmations × 0.1 − flags × 0.1), 0, 1)
-```
-
-A memory with `importanceScore=1.0` has `λ=0.032` (slow decay); one with `importanceScore=0.3` has `λ=0.122` (fast decay). Each access adds 20% strength on top; each `confirm_memory` confirmation adds 10% and each flag subtracts 10% — a frequently accessed memory that was flagged as wrong no longer stays on top.
-
----
-
-## 💾 Persistence & Debounce
-
-All writes go to disk synchronously for the `.md` file but debounce the index. There are two entry points that share one 1 s index write:
-
-```
-any write operation
-       │
-       └─ scheduleSave()
-              └─ setTimeout(1s) → writeFileSync(index.json)
-                     └─ scheduleIdfRecalc()
-                            └─ setTimeout(2s) → rebuildInvertedIndex()
-                                              → writeFileSync(invertedIndex.json)
-                                              → buildIndexCache()  (.index-cache.txt)
-```
-
-```
-read path: bumpAccess(meta)  (persistence.ts; used by recall_memory(full) and get_memories_by_keys)
-       └─ scheduleAccessSave()
-              └─ setTimeout(1s) → writeFileSync(index.json)      ← no dirtyTokens, no IDF rebuild
-```
-
-A read changes zero tokens, so it never triggers the inverted-index rebuild; only `scheduleSave()` sets the `dirtyTokens` flag that arms it. `bumpAccess` lives in `persistence.ts`, not `state.ts`, so `state.ts` keeps no runtime imports (`[TR-S9]`) and the import graph has no cycles (`[TR-S7]`).
-
-`flushPending()` (called on SIGTERM/exit) cancels pending timers and writes the index synchronously, so no debounced write is lost when the MCP client disconnects. It runs the O(N) inverted-index rebuild only when `dirtyTokens` is set or an IDF recalc was already queued, so a read-only session exits without one.
-
-**Single-writer assumption (cross-process caveat).** `index.json` is file-backed shared state with no file lock / CAS. Each Claude Code window spawns its own total-recall stdio process; both load `memIndex` at boot, mutate in memory, and `flushPending` via `atomicWrite` (write-`.tmp` + rename) on exit. Last rename wins; an earlier process's flush is silently discarded. The disk-durable fields (`title`, `tags`, `content`, `sessions` — `sessions` is written to frontmatter by `mutate.ts` and read back by `reconcileIndex`) are re-derived from the `.md` files on the next boot, so a clobbered `index.json` does not lose them. The fields genuinely at risk are the runtime-only `accessCount` / `lastAccessed` (soft Ebbinghaus-retention signals not stored in frontmatter) — a concurrent-session clobber resets those to whatever the last writer had in memory. Impact is limited to retention-decay accuracy, not memory content. A real fix would persist `accessCount`/`lastAccessed` into `.md` frontmatter on flush or guard `index.json` writes with a `flock`; neither is implemented today.
-
----
-
-## ⚡ LRU Content Cache
-
-`contentCache` (in `lru-cache.ts`) keeps the last 100 memory bodies in memory for 30 minutes, keyed by memory key. It is:
-
-- **Populated** by `store_memory` (after a write) and on first cache-miss in `recall_memory(full=true)` / `get_memories_by_keys`
-- **Invalidated** by `update_memory` and `delete_memory`
-- **Not consulted** by `search_index` (metadata-only, never reads files)
-
-The LRU eviction is O(1) via a `Map` whose insertion order tracks recency.
-
----
-
-## 📄 Frontmatter Parser
-
-`src/frontmatter.ts` is a purpose-built replacement for `gray-matter` (which depended on EOL `js-yaml 3.x`, CVE GHSA-h67p-54hq-rp68). It handles only what total-recall writes:
-
-- Inline arrays: `tags: [a, b, "c d"]`
-- Block arrays: `tags:\n  - a\n  - b`
-- Quoted strings (single and double), bare strings, numbers, booleans
-- Immune to YAML merge-key DoS by design (no arbitrary YAML)
-
-`withExecutiveSummary(content)` is idempotent: it prepends `## Executive Summary` only if the body doesn't already start with it.
-
----
-
-## 🪝 Hook Lifecycle
-
-Hooks are declared in `hooks/hooks.json` (Claude Code) and `hooks/hooks.gemini.json` (Gemini CLI: `SessionStart`, `AfterTool`, `PreCompress`, `SessionEnd`) and executed by the host harness. The sections below describe the Claude Code events.
-
-### `SessionStart` (4 steps, sequential)
-
-```
-1. pull-org-vault.sh       — git pull on org vault branch (if configured)
-2. build-memory-index.sh   — standalone bash scan of frontmatter → .index-cache.txt (no MCP)
-3. load-memory-index.sh    — cat .index-cache.txt → injected into context
-                             (+ architecture-summary.mjs: ADL in cwd → short summary from index.json)
-4. check-sync-errors.sh    — warn if org-sync pushes failed since the last success marker
-```
-
-> **`hookEventName` is required.** Steps 1/3 that inject context emit
-> `{"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":…}}`.
-> Claude Code **drops** `additionalContext` whose `hookSpecificOutput` lacks
-> `hookEventName`, so omitting it silently breaks context injection. JSON-encoding
-> uses `node` (the plugin's hard dependency), not `python3`.
-
-### `PostToolUse` (matcher: `mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`)
-
-```
-sync-org-memory.sh  — fires on EVERY store/update/delete (the matcher triggers it
-                       unconditionally); delegates the `org`-tag gate to the .mjs:
-                       apply privacy filter → git add/commit/push org-vault branch
-                     — also re-runs build-memory-index.sh to refresh .index-cache.txt
-```
-
-> **Matcher must stay a regex.** Claude Code evaluates a matcher with only
-> `[a-zA-Z0-9_- ,|]` as an exact-string list compared against the full tool name
-> (`mcp__plugin_total-recall_total-recall__<tool>`); a bare
-> `store_memory|update_memory|delete_memory` never matches and the hook silently
-> never fires. The parens force the unanchored-regex path. Pinned by
-> `src/__tests__/hooks-matcher.test.ts`.
-
-### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
-
-```
-architecture-change.sh — edited file is .adl (specDriven extensions) and captureChanges on?
-  ├─ no  → {"continue":true}   (decided in bash for the default extensions: no Node start per edit)
-  └─ yes → additionalContext: run index_architecture, store an architecture-changes memory, run validate_architecture
-```
-
-### `PreCompact`
-
-```
-extract-and-store-memories.sh
-  ├─ reads transcript_path from the hook's stdin JSON (common hook input)
-  ├─ asks Claude to extract 0–3 key learnings as JSON lines
-  └─ pipes to store-learning.mjs
-       └─ writes .md files directly to personal-vault (no MCP round-trip)
-            └─ never overwrites existing files
-            └─ skips lines whose title/tags contain a newline (frontmatter-injection guard)
-```
-
-> **Note:** `transcript_path` comes from Claude Code's stdin JSON payload — it is **not** a `CLAUDE_TRANSCRIPT_PATH` env var. An earlier version read that (never-set) env var, making PreCompact a silent no-op.
-
-### `SessionEnd`
-
-```
-session-end.sh  — logs the session
-                  — SIGTERMs the MCP child (backup to the stdio-end handler) so pending index and
-                    embedding writes flush before exit
-                  — auto-commits the personal vault if it is a local git repo (H1 durability;
-                    never git-inits, never touches a remote)
-                  — emits {"continue":true}, not an additionalContext envelope
-```
-
----
-
-## 🔐 Org Vault Sync & Privacy Filter
-
-`scripts/sync-org-memory.mjs` runs after every org write. Before pushing it applies a fail-closed privacy filter that blocks:
-
-- Secret-looking tokens (high-entropy strings, `key=value` patterns)
-- All email addresses (unless the domain is in `allowedEmailDomains` in `~/.total-recall/config.json`)
-- Credit cards (13–19 digit runs passing the Luhn checksum), IBANs (ISO 13616 mod-97), and formatted phone numbers — re-added in 7.3 in validated, low-FP form after the naive regexes were removed
-
-Personal pronouns were intentionally removed from the filter: they had a false-positive rate high enough to block legitimate org memories (pronoun titles like "We are migrating…"). Phone numbers, credit cards, and IBANs were also removed initially — a bare 10-digit phone regex tripped on unix timestamps, AWS account ids, and git SHA fragments — but were RE-ADDED in 7.3 with validated detectors (Luhn for CC, mod-97 for IBAN, formatted-only shape for phone) that reject ~90% of random digit runs. The real "this is personal, don't sync" guard remains the mutual-exclusion of the `personal` and `org` tags enforced in the sync script.
-
-Configuration in `~/.total-recall/config.json`:
-
-```json
-{
-  "orgRepo": "git@github.com:org/memories.git",
-  "allowedEmailDomains": ["mycompany.com"]
-}
-```
+The fail-closed filter blocks secret tokens, emails (except `allowedEmailDomains`), Luhn-valid cards, mod-97 IBANs and formatted phone numbers. The "don't sync" guard is the `personal`/`org` tag exclusion.
 
 ---
 
 ## 📐 Architecture as code
 
-The rules in this document are also written as code and checked on every `npm test`.
-
-| What | Where | Checked by |
-|---|---|---|
-| Code-level rules in ADL (structure, runtime safety, data governance, code quality) | `architecture/adl/*.adl` | ArchUnitTS and behavioural tests, one test per assertion |
-| Boundary contracts in ADL (`DEFINE CONTRACT`: strict MCP tools, tolerant hook envelope and memory file) | `architecture/adl/contracts.adl` | schema-parity, boundary, redaction and hook tests |
-| Workflows and crash safety in ADL (`DEFINE SAGA`: session shutdown, org sync) | `architecture/adl/workflows.adl` | atomic-write, shutdown, org-sync and bulk tests |
-| Operational capabilities in ADL (`TYPE operational`, `DEFINE CAPABILITY … FOR`) | `architecture/adl/capabilities.adl` | rerank, session-history and read-only-flush tests |
-| Style, capabilities and stressors in ADL (descriptive, no tagged assertions) | `architecture/adl/architecture-style.adl` | indexed only |
-| System-level model in ADL (actors, services, `DEFINE COMMUNICATION` connections) | `architecture/adl/system.adl` | `adl-consistency.test.ts` (unique elements, no dangling connection endpoints) |
-| Component → file mapping | `src/__tests__/architecture/components.ts` | imported by `fitness.test.ts` |
-
-![Runtime landscape](architecture/diagrams/landscape.svg)
-
 ![ADL files and tests](architecture/diagrams/adl-files.svg)
 
-![Org sync saga](architecture/diagrams/org-sync.svg)
+![Where the ADL assertions are checked](architecture/diagrams/fitness.svg)
 
-Diagram sources: `architecture/diagrams/*.puml`. Re-render: `java -jar plantuml.jar -tsvg architecture/diagrams/*.puml` (add `!pragma layout smetana` when `dot` is absent).
+Each `ASSERT` ends with a tag such as `# [TR-S2]`; the test that checks it carries the same tag. `adl-coverage.test.ts` fails on an untested assertion or an unknown ID.
 
-**ID convention.** Each `ASSERT` in an `.adl` file ends with a tag such as `# [TR-S2]` (`S` structure, `R` runtime safety, `D` data governance, `Q` quality, `C` contracts, `W` workflows, `P` operational capabilities). The test that checks it carries the same tag in its name, for example `it('[TR-S2] core modules never depend on the tools layer', …)`. `adl-coverage.test.ts` fails when an assertion has no test, or a test names an ID that no assertion has. The ADL itself has no runtime, so this test is what keeps the notation honest.
-
-**Spec-driven additions.** `[TR-S8]` keeps `src/spec/**` independent of the tools layer, `[TR-R4]` limits process starts to `vectorStore.ts` (native self-heal) and `spec/exec.ts`, `[TR-D5]` keeps unsafe specs out of the org vault. The spec leaves (`spec/config`, `fields`, `elements`, `adl-parse`) are in the `[TR-S1]` leaf set. `tools/architecture.ts` reuses `storeMemory`/`updateMemory` the way `bulk.ts` does, so it is not one of the `[TR-S5]` isolated tools.
-
-**Where the privacy filter sits.** `store_memory` writes an org-tagged memory to the org vault locally. The fail-closed filter gates the git sync (`scripts/sync-org-memory.mjs`), so `[TR-D3]` is checked on `privacyCheck` and by the sync end-to-end tests, not on the store call.
-
-CALM support (a JSON system model validated with `@finos/calm-cli`) was removed in 1.3.0; the system level is now `system.adl`.
+Sources: `architecture/diagrams/*.puml` and `../../docs/diagrams/*.puml`. Re-render: `java -jar plantuml.jar -tsvg architecture/diagrams/*.puml` (add `!pragma layout smetana` when `dot` is absent).
 
 ---
 
-## ⚖️ Key Invariants
+## ⚖️ Key invariants
 
-| Invariant | Where enforced |
+| Invariant | Enforced in |
 |---|---|
-| Exactly one `memIndex` object across the process | `state.ts` — all modules import from here |
-| `.md` file always written before index update `[TR-W3]` | `store.ts` — `writeFileSync` then `scheduleSave` |
-| `accessCount`/`lastAccessed` survive `rebuild_index` `[TR-W4]` | `vault-scan.ts` — `reconcileIndex` copies from existing entry |
-| `org` + `personal` tags are mutually exclusive `[TR-D7]` | `store.ts` — throws early |
-| Org writes are author-protected (even `force=true`) `[TR-D4]` | `store.ts` — checks `existingFm.author !== effectiveAuthor` |
-| `journal` entries written only on `store_memory`, personal only | `store.ts` — `if (!isOrg) appendJournal(...)` |
-| `sessions` capped at 50, deduplicated `[TR-P2]` | `mutate.ts` — `update_memory` |
-| Optional deps (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`) never bundled | `tsconfig.json` + esbuild `--external` |
-| `category` cannot escape its vault (path-traversal containment) `[TR-D6]` | `store.ts` — resolves `<vault>/<category>` and rejects if it falls outside the vault root; the guard runs **before** `ensureDir`, so a traversal `category` cannot even create a stray directory outside the vault |
-| Org-author guard ignores any caller-supplied `author` `[TR-D8]` | `store.ts` — `effectiveAuthor = os.userInfo().username` for org; the `author` arg is ignored for org memories, so `force=true` cannot impersonate another author |
-| Index files written atomically (write-`.tmp` + rename) `[TR-W1]` | `persistence.ts` — `atomicWrite()` for `index.json`, `invertedIndex.json`, `.index-cache.txt`; no partial/truncated index on crash |
-| Frontmatter scalars reject embedded newlines `[TR-D9]` | `frontmatter.ts` — `serializeArrayItem`/`serializeString` throw on `/[\r\n]/`; prevents a newline in `title`/`tags` from injecting a new frontmatter key |
-| `hookSpecificOutput.additionalContext` requires `hookEventName` `[TR-C5]` | `load-memory-index.sh` — Claude Code drops `additionalContext` whose `hookSpecificOutput` lacks `hookEventName:"SessionStart"` |
-| PreCompact reads `transcript_path` from stdin JSON, not an env var | `extract-and-store-memories.sh` — parses the hook's stdin JSON payload (Claude Code common hook input) |
-| Frontmatter keys escaped before RegExp interpolation | `frontmatter.ts` — `escapeRegExp(k)`/`escapeRegExp(key)` at both `new RegExp` sites; a key is a literal string (any `[^:\s]+`, incl. metacharacters from a crafted/teammate-pushed org-vault memory), so it must match literally — without escaping a key like `(a+)+` is mis-matched and an explicit `(a+)+: []` array is wrongly dropped |
-| `shutdown()` runs exactly once across concurrent exit triggers `[TR-W2]` | `index.ts` — module-level `shuttingDown` latch; SIGTERM/SIGINT/stdin-end/stdin-close all route to one `shutdown()` whose first line short-circuits a second call. `flushPending` → `flushEmbeddings` → `process.exit(0)` completes once |
-| `export_memories` never emits a silent `''` for an unreadable body `[TR-W7]` | `bulk.ts` — null read → `{key, error}` entry + `errors` count; `import_memories` skips `error` entries, so a failed read can't clobber real content on a `force` import |
-| `delete_memories` records a reserved key per-key, not batch-reject | `bulk.ts` — no up-front reserved-key throw; the per-key `deleteMemory` catch records it in `errors` and the batch continues |
-| `rerank_memories` keys capped at 200 `[TR-P1]` | `rerank.ts` — `MAX_KEYS=200` + schema `maxItems: 200`; extras sliced off the front (order preserved) before embed/score |
+| One `memIndex` per process | `state.ts` |
+| `.md` written before the index `[TR-W3]` | `store.ts` |
+| Index files written atomically `[TR-W1]` | `persistence.ts` `atomicWrite()` |
+| `accessCount`/`lastAccessed` survive `rebuild_index` `[TR-W4]` | `vault-scan.ts` |
+| `shutdown()` runs once `[TR-W2]` | `index.ts` `shuttingDown` latch |
+| `org` + `personal` exclusive `[TR-D7]` | `store.ts` |
+| Org writes author-protected, caller `author` ignored `[TR-D4]` `[TR-D8]` | `store.ts` |
+| `category` cannot escape the vault `[TR-D6]` | `store.ts`, before `ensureDir` |
+| Frontmatter values reject newlines `[TR-D9]`; keys escaped before `RegExp` | `frontmatter.ts` |
+| Journal only on personal `store_memory` | `store.ts` |
+| `sessions` ≤ 50, deduped `[TR-P2]` | `mutate.ts` |
+| `rerank_memories` ≤ 200 keys `[TR-P1]` | `rerank.ts` |
+| Unreadable export → `{key, error}`, skipped on import `[TR-W7]` | `bulk.ts` |
+| Optional deps never bundled | esbuild `--external` |
+| SessionStart output carries `hookEventName` `[TR-C5]` | `load-memory-index.sh` |
+| PostToolUse matcher stays a regex | `hooks-matcher.test.ts` |
+| PreCompact reads `transcript_path` from stdin JSON | `extract-and-store-memories.sh` |

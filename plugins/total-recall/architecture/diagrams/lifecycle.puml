@@ -1,0 +1,28 @@
+@startuml lifecycle
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Server lifecycle: boot and shutdown
+
+start
+:ensureDir(vaults, DEFAULT_CATEGORIES, spec categories);
+:loadIndexes() — index.json only
+(invertedIndex.json is rebuilt below);
+:reconcileIndex() — scan both vaults,
+keep accessCount/lastAccessed,
+skip unchanged mtimeMs+size;
+:recalcIdfNow() — invertedIndex.json + .index-cache.txt;
+:scheduleSave(); markIndexFresh();
+:server.connect(stdio);
+:startAutoReconcile() — 10 s poll of .reconcile-requested;
+:serve tool calls;
+:SIGTERM | SIGINT | stdin end/close;
+if (shuttingDown latch set? [TR-W2]) then (yes)
+  stop
+else (no)
+  :flushPending() — sync index write
+  (IDF rebuild only if tokens changed);
+  :await flushEmbeddings();
+  :process.exit(0);
+  stop
+endif
+@enduml

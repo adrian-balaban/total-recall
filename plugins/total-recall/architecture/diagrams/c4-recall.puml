@@ -1,0 +1,44 @@
+@startuml c4-recall
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+autonumber
+title C4 — recall_memory (hybrid path)
+
+participant "Host" as C
+participant "registry\nwrapHandler" as R
+participant "recall.ts" as H
+participant "tfidf" as T
+participant "ebbinghaus" as E
+participant "embeddings +\nvectorStore" as V
+participant "rrf" as F
+participant "persistence +\nlru-cache" as P
+
+C -> R : recall_memory{query, hybrid, full, limit}
+R -> R : Zod safeParse (malformed → error result)
+R -> H : handler(args)
+H -> T : tfidfSearch(query)
+T -> T : tokenize → Set (dedupe RO/EN)\nTF × IDF × 2 title × 1.5 tag
+T -> E : retention(importance, days, access)
+note right of E
+  λ = 0.16 × (1 − importance × 0.8)
+  s = clamp(importance × e^(−λ·days)
+      × (1 + 0.2·access + 0.1·confirm − 0.1·flag), 0, 1)
+end note
+T --> H : ranked
+alt hybrid and optional deps loadable
+  H -> V : embed(query) → knn 50
+  V --> H : vector ranked
+  H -> F : fuse(tfidf, vector), Σ 1/(60+rank)
+  F --> H : fused
+else vector path fails
+  V --> H : recordError → keep TF-IDF ranking
+end
+H -> H : excludeJournal · since/before · minScore\n· elements · slice(limit)
+opt full = true (per result)
+  H -> P : bumpAccess → scheduleAccessSave\nbody via contentCache (miss → fs)
+end
+note over H, P : full=false is not an access — otherwise nothing would ever decay
+H --> R : results
+R -> R : perf sample + CallToolResult
+R --> C : memories + scores
+@enduml

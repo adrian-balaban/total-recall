@@ -1,0 +1,58 @@
+@startuml c3-components
+!include <C4/C4_Component>
+skinparam defaultFontName Helvetica
+LAYOUT_TOP_DOWN()
+title C3 — Components of the MCP server (src/)
+
+Component(entry, "index.ts · server.ts", "entry", "boot stub, shutdown() latch; McpServer + register() calls")
+Component(reg, "tools/registry.ts", "registry", "wrapHandler: envelope, perf/error samples, path redaction [TR-S6]")
+Component(hc, "host-context.ts", "resources + prompts", "index + workflow rules for hookless hosts [TR-C7]")
+
+Container_Boundary(tools, "tools/ — 22 tools, schema + handler + register() co-located") {
+  Component(store, "store.ts", "", "store_memory")
+  Component(mutate, "mutate.ts", "", "update · delete · rebuild · confirm")
+  Component(query, "query.ts", "", "list · by_keys · stats · timeline · related · prune")
+  Component(recall, "recall.ts", "", "recall_memory · search_index")
+  Component(rerank, "rerank.ts", "", "rerank_memories")
+  Component(bulk, "bulk.ts", "", "export · import · delete_memories")
+  Component(arch, "architecture.ts", "", "5 spec-driven tools")
+}
+
+Container_Boundary(search, "search [TR-S10]") {
+  Component(tfidf, "tfidf.ts", "", "tokenize, inverted index, RO/EN expansion")
+  Component(ebb, "ebbinghaus.ts", "leaf", "retention decay")
+  Component(rrf, "rrf.ts", "leaf", "RRF k=60")
+}
+Container_Boundary(vec, "vectors — only owners of optional deps") {
+  Component(embc, "embeddings.ts", "", "lazy HF pipeline, depsInstalled()")
+  Component(vs, "vectorStore.ts", "", "sqlite-vec, binding self-heal")
+}
+Container_Boundary(core, "state + storage") {
+  Component(state, "state.ts", "singletons", "memIndex · invertedIndex · errors · perf")
+  Component(pers, "persistence.ts", "", "debounced save, atomicWrite, bumpAccess")
+  Component(scan, "vault-scan.ts", "", "reconcileIndex, indexFile, slugify")
+  Component(ar, "auto-reconcile.ts", "", "polls .reconcile-requested")
+  Component(leaves, "leaves", "no local imports [TR-S1]", "frontmatter · lru-cache · dates · errors · types · privacy-filter")
+  Component(misc, "paths.ts · journal.ts", "", "vault paths, EXCLUDED_DIRS; journal")
+}
+Component(spec, "spec/*", "[TR-S8]", "ADL parser, element index, validate, exec (git) [TR-R4]")
+
+Rel(entry, tools, "register(server)")
+Rel(entry, hc, "register")
+Rel(tools, reg, "wrapped by")
+Rel(recall, tfidf, "")
+Rel(recall, rrf, "")
+Rel(recall, embc, "")
+Rel(rerank, embc, "")
+Rel(query, ebb, "")
+Rel(arch, spec, "")
+Rel(bulk, store, "reuses [TR-S11]")
+Rel(arch, store, "reuses [TR-S11]")
+Rel(tfidf, ebb, "")
+Rel(embc, vs, "")
+Rel(tools, pers, "")
+Rel(scan, state, "")
+Rel(pers, state, "")
+Rel(ar, scan, "")
+Rel(reg, state, "records into")
+@enduml

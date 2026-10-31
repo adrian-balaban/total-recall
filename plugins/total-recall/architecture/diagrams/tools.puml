@@ -1,0 +1,34 @@
+@startmindmap tools
+skinparam defaultFontName Helvetica
+title The 22 MCP tools
+* total-recall
+** Write
+*** store_memory\norg tag → org vault · force = supersede
+*** update_memory\norg: author-guarded
+*** delete_memory\nno-prune needs force
+*** confirm_memory\n±10% retention
+** Bulk
+*** export_memories\nunreadable → {key, error} [TR-W7]
+*** import_memories\nskips error entries
+*** delete_memories\nconfirm=true · per-key errors
+** Search / read
+*** recall_memory\nTF-IDF × decay (+ vector RRF)
+*** search_index\nmetadata only, no access bump
+*** get_memories_by_keys\nthrough LRU cache
+*** rerank_memories\ncosine, ≤ 200 keys [TR-P1]
+left side
+** List / query
+*** list_memories
+*** get_related_memories\nJaccard tags (+ elements)
+*** get_timeline
+*** get_stats\nvector.enabled via depsInstalled()
+** Maintenance
+*** rebuild_index\nkeeps access stats · forceReembed
+*** prune_memories\nlists only, never deletes
+** Architecture (specDriven)
+*** index_architecture
+*** get_architecture_context
+*** trace
+*** get_architecture_history
+*** validate_architecture
+@endmindmap

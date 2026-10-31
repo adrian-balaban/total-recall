@@ -9,7 +9,7 @@ import {
 // Architecture fitness functions (ArchUnitTS) enforcing architecture/adl/*.adl.
 // Each test name starts with the ID of the ADL assertion it checks ([TR-S1] …);
 // adl-coverage.test.ts fails when an assertion has no test. File sets come from
-// ./components. They also encode the module map and C3 diagram in ARCHITECTURE.md,
+// ./components. They also encode the C3 diagram (architecture/diagrams/c3-components.puml),
 // so a drifting import fails `npm test` instead of surfacing in review.
 // Production code only: `src/__tests__/**` is excluded from every subject and target set.
 //

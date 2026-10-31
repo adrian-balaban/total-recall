@@ -1,0 +1,26 @@
+@startuml persistence
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Persistence and debounce
+
+participant "write tool" as W
+participant "read tool\n(recall full / by_keys)" as Rd
+participant "persistence" as P
+database "index.json" as IJ
+database "invertedIndex.json\n.index-cache.txt" as II
+participant "contentCache\nLRU 100 · 30 min" as L
+
+W -> L : set (store) / invalidate (update, delete)
+W -> P : scheduleSave() — sets dirtyTokens
+P -> IJ : +1 s atomicWrite [TR-W1]
+P -> II : +2 s rebuildInvertedIndex + buildIndexCache
+Rd -> L : get (miss → readFileSync)
+Rd -> P : bumpAccess → scheduleAccessSave()
+P -> IJ : +1 s atomicWrite (no IDF rebuild)
+note over P, II
+  flushPending() on exit: cancel timers, write sync;
+  IDF rebuild only if dirtyTokens or a recalc was queued.
+  Single writer: concurrent windows → last rename wins;
+  only accessCount/lastAccessed can be lost.
+end note
+@enduml

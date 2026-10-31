@@ -1,0 +1,31 @@
+@startuml c2-containers
+!include <C4/C4_Container>
+skinparam defaultFontName Helvetica
+LAYOUT_WITH_LEGEND()
+title C2 — Containers
+
+System_Ext(host, "Host harness", "Claude Code / Gemini CLI")
+System_Boundary(tr, "Total Recall") {
+  Container(mcp, "MCP stdio server", "Node · dist/index.js", "22 tools, in-memory index, debounced persistence; started by .mcp.json")
+  Container(hooks, "Hook scripts", "bash + Node · hooks/scripts", "SessionStart · PostToolUse · PreCompact · SessionEnd")
+  Container(emb, "Embedder", "in-process HF pipeline", "all-MiniLM-L6-v2, 384-dim, lazy, optional")
+  ContainerDb(pv, "Personal vault", "Markdown + local git", "$HOME/.total-recall/personal-vault")
+  ContainerDb(ov, "Org vault", "Markdown + git branch", "$HOME/.total-recall/org/org-vault")
+  ContainerDb(idx, "Index files", "JSON + txt", "index.json · invertedIndex.json · .index-cache.txt")
+  ContainerDb(vdb, "vectors.db", "SQLite + sqlite-vec", "optional")
+}
+System_Ext(repo, "Org git remote")
+
+Rel(host, mcp, "MCP", "stdio")
+Rel(host, hooks, "events", "stdin JSON")
+Rel(hooks, host, "injects .index-cache.txt")
+Rel(mcp, pv, "read/write .md")
+Rel(mcp, ov, "read/write .md")
+Rel(mcp, idx, "atomic write, debounced")
+Rel(mcp, emb, "embed(text)")
+Rel(mcp, vdb, "upsert / knn")
+Rel(hooks, idx, "writes .index-cache.txt (no MCP)")
+Rel(hooks, pv, "PreCompact learnings; SessionEnd commit")
+Rel(hooks, ov, "privacy filter → commit")
+Rel(hooks, repo, "pull / push", "git")
+@enduml

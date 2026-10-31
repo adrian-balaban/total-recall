@@ -1,0 +1,38 @@
+@startuml write-path
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title store_memory write path
+
+start
+if (tags has org AND personal?) then (yes)
+  :[TR-D7] throw; <<#pink>>
+  stop
+endif
+if (category escapes vault, or personal + org/ prefix?) then (yes)
+  :[TR-D6] throw; <<#pink>>
+  stop
+endif
+:slugify(title) → <vault>/<category>/<slug>.md;
+if (file exists?) then (yes)
+  if (org and author ≠ OS user? [TR-D4][TR-D8]) then (yes)
+    :throw; <<#pink>>
+    stop
+  elseif (no force, or tagged no-prune?) then (yes)
+    :throw duplicate; <<#pink>>
+    stop
+  else (force)
+    :archive old body → .superseded/
+    append supersededAt[];
+  endif
+endif
+:withExecutiveSummary (idempotent)
+stringifyFrontmatter (no newlines [TR-D9]);
+:writeFileSync(.md) — before index [TR-W3];
+:memIndex[key] = meta; contentCache.set;
+if (personal?) then (yes)
+  :appendJournal;
+endif
+:scheduleSave() — debounced;
+:embedAndUpsert() — async, drained on shutdown;
+stop
+@enduml

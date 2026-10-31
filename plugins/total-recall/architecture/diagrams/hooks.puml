@@ -1,0 +1,36 @@
+@startuml hooks
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+title Hook lifecycle (hooks.json · Gemini: hooks.gemini.json)
+
+participant "Host" as H
+participant "hook scripts" as S
+database "Org vault /\nremote" as O
+database "Personal vault" as P
+participant "MCP server" as M
+
+== SessionStart ==
+H -> S : pull-org-vault.sh
+S -> O : git pull → drop .reconcile-requested
+H -> S : build-memory-index.sh
+S -> S : bash frontmatter scan → .index-cache.txt (no MCP)
+H -> S : load-memory-index.sh
+S --> H : additionalContext: index, org part framed as data\n+ ADL summary (hookEventName required [TR-C5])
+H -> S : check-sync-errors.sh
+S --> H : warn if pushes failed
+== PostToolUse store|update|delete (regex matcher) ==
+H -> S : sync-org-memory.sh
+S -> O : org tag? → privacy filter → commit + push
+S -> S : rebuild .index-cache.txt
+== PostToolUse Write|Edit|MultiEdit ==
+H -> S : architecture-change.sh
+S --> H : .adl edited? → reindex / validate hint, else continue
+== PreCompact ==
+H -> S : extract-and-store-memories.sh (transcript_path from stdin)
+S -> P : store-learning.mjs: 0–3 .md, never overwrite
+== SessionEnd ==
+H -> S : session-end.sh
+S -> M : SIGTERM → flush
+S -> P : git commit (local repo only)
+S --> H : {"continue": true}
+@enduml

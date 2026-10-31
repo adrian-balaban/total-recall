@@ -1,0 +1,20 @@
+@startuml c1-context
+!include <C4/C4_Context>
+skinparam defaultFontName Helvetica
+LAYOUT_WITH_LEGEND()
+title C1 — System context
+
+Person(dev, "Developer", "works in an AI coding session")
+Person(team, "Teammates")
+System(tr, "Total Recall", "Persistent, searchable memory across sessions")
+System_Ext(host, "Claude Code / Gemini CLI", "spawns the MCP server, runs the hooks")
+System_Ext(repo, "Org memory repo", "git remote, team-shared vault branch")
+System_Ext(hub, "HuggingFace Hub", "serves all-MiniLM-L6-v2 once")
+
+Rel(dev, host, "asks, decides")
+Rel(host, tr, "MCP over stdio; hook events")
+Rel(tr, host, "memory index at SessionStart")
+Rel(tr, repo, "push/pull filtered org memories", "git")
+Rel(tr, hub, "first run only, then offline", "https")
+Rel(team, repo, "push/pull")
+@enduml

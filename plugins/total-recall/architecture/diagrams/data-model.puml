@@ -1,0 +1,49 @@
+@startuml data-model
+skinparam shadowing false
+skinparam defaultFontName Helvetica
+allowmixing
+set separator none
+hide empty methods
+title Data model
+
+package "$HOME/.total-recall" <<Folder>> {
+  file "index.json\nRecord<key, MemoryMetadata>" as ij
+  file "invertedIndex.json\nRecord<token, {docs, idf}>" as ii
+  file ".index-cache.txt\ninjected at SessionStart" as ic
+  package "personal-vault/" <<Folder>> {
+    file "<category>/<slug>.md\nkey = knowledge/my-decision" as pm
+    database "vectors.db (optional)" as vdb
+    folder ".superseded/ (not indexed)" as sup
+  }
+  package "org/org-vault/" <<Folder>> {
+    file "<category>/<slug>.md\nkey = org/architecture/db-choice" as om
+  }
+}
+
+class MemoryFrontmatter {
+  title : string
+  tags : string[]  «org → org vault»
+  author : string  «org: OS user, guarded»
+  sessions : string[]  «≤ 50, deduped»
+  created : ISO  «kept on force»
+  updated : ISO
+  importanceScore : 0..1 = 0.5
+  confirmations / flags : int
+  supersededAt : ISO[]
+  schemaVersion : 1 | 2
+  .. spec-driven (optional) ..
+  system, artifact, elements, requirements,
+  sourcePath, sourceRev, status, supersedes
+}
+class MemoryMetadata {
+  key, filePath, category, isOrg
+  contentPreview : first 500 chars
+  accessCount, lastAccessed  «runtime only»
+  tokenEstimate
+  mtimeMs, size  «skip re-parse if unchanged»
+}
+MemoryMetadata -up-|> MemoryFrontmatter
+pm ..> MemoryFrontmatter : YAML frontmatter
+om ..> MemoryFrontmatter
+ij ..> MemoryMetadata
+@enduml
