@@ -5,7 +5,7 @@ skinparam shadowing false
 skinparam defaultFontName Helvetica
 
 rectangle "Session starts" as A
-rectangle "Relevant memories\ninjected into context" as B
+rectangle "Memory index\ninjected into context" as B
 rectangle "You work" as C
 rectangle "Decisions & preferences\ncaptured automatically" as D
 database "~~/.total-recall\nMarkdown vault" as E

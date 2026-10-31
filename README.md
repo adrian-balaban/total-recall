@@ -9,7 +9,7 @@ A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories
 ## ⚡ TL;DR
 
 - **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
-- **What it does for you** — injects the relevant memories at the start of every session and captures decisions and preferences automatically as you work and before each context compaction.
+- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences automatically as you work and before each context compaction.
 - **Spec-driven too** — memories can be tied to a spec: tag any decision, requirement or failure with a `system`, the `elements` it concerns and a `requirements` ID, and recall by element or follow a requirement to its decisions. No ADL needed for that. If the project also keeps its architecture as code (ADL), the tools additionally link each rule to the tests that enforce it. See [Spec-driven work](#-spec-driven-work-with-adl).
 - **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.

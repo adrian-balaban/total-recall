@@ -2,12 +2,12 @@
 
 Persistent knowledge and memory management for Claude Code and Gemini/Antigravity.
 
-Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject relevant context automatically at session start.
+Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject the memory index automatically at session start (full memories are read on demand).
 
 ## ⚡ TL;DR
 
 - **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)), and memories can be tied to a spec with or without ADL over a vault of plain Markdown files under `~/.total-recall/`.
-- **What it does for you** — injects relevant memories at the start of every session and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
+- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
@@ -350,7 +350,7 @@ artifact can reach you. Working from a clone means building it yourself
 
 ### Client-Specific Integration Details
 
-*   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject memories at session start.
+*   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject the memory index at session start.
 *   **Gemini CLI (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
 *   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local/cloud model.
 *   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).

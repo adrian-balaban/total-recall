@@ -5,7 +5,7 @@ skinparam shadowing false
 skinparam defaultFontName Helvetica
 
 rectangle "Sesiunea începe" as A
-rectangle "Memoriile relevante\ninjectate în context" as B
+rectangle "Indexul memoriilor\ninjectat în context" as B
 rectangle "Lucrezi" as C
 rectangle "Deciziile & preferințele\ncapturate automat" as D
 database "~~/.total-recall\nvault Markdown" as E
