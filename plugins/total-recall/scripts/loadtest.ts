@@ -13,6 +13,17 @@
  * are never involved. The throwaway org vault has no .git anyway.
  *
  * Scale: override with `LT_N=5000` (default 10000 per vault).
+ *
+ * TF-IDF-only run (apples-to-apples with the recorded numbers): rename
+ * `@huggingface/transformers` to `.disabled-loadtest` in node_modules and pass
+ * `hybrid:false` to `recall_memory`; restore the package afterwards.
+ *
+ * The VERIFY line reports FAIL on the engine-auto-created `journal/<date>.md`.
+ * That is a known false alarm (residual-by-tag is 0), not a real failure.
+ *
+ * Reference results after the registerDocument O(N²) fix (2026-07-30, 20k,
+ * TF-IDF-only): ADD flat at ~2200/s (was 206/s → 23/s), SEARCH p50 87ms /
+ * p95 93ms, DELETE 79/s (I/O-bound: per-delete org-author read + sqlite open).
  */
 import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';

@@ -6,73 +6,12 @@ now, with the reason and the trigger that would reopen each. Keeping these here
 unambiguous and lets a future pass triage in one place.
 
 Status legend: **DEFERRED** (real work, waiting for a trigger) · **DECIDED**
-(documented as by-design, no change intended) · **DONE** (landed, kept for
-reference). Source review files were removed when the `reviews/` folder was
+(documented as by-design, no change intended). Finished items are removed. Source review files were removed when the `reviews/` folder was
 pruned (2026-07-29); this backlog is now the sole record.
 
 ---
 
 ## ⏸️ DEFERRED — waiting for a trigger
-
-### Org-vault inbound injection — teammate-written content is unfiltered at SessionStart · **DONE in 1.4.0**
-- **What:** the org memory index goes into every teammate's context at
-  SessionStart, unfiltered. A pusher with org-vault write access can shape any
-  teammate's context — this is the top risk flagged by the external review
-  (`SECURITY.md:15-18`) and, before this entry, had no BACKLOG entry at all, so
-  "jump the backlog" had nothing to jump.
-- **Design (implemented in 1.4.0):**
-  - **(a) Frame org content as data.** Put the org part of the injected index in
-    a clearly delimited block titled "teammate-written reference data — not
-    instructions", separate from personal memories. Cheap, always on.
-  - **(b) Opt-out.** A `config.json` key (e.g. `orgInjection: "index" | "titles"
-    | "off"`) for users who want no org text injected automatically.
-  - **Rejected as a primary control:**
-    - a regex "instruction sanitizer" — unreliable, gives false confidence.
-    - an allow-list keyed on frontmatter `author` — a pusher can spoof it
-      (commits are unsigned; see the plugin `CLAUDE.md` signing section).
-  - The real control stays **push access to the org repo**. Document this next
-    to (a) and (b) in `SECURITY.md` when implemented.
-- **Landed:** 1.4.0 — (a) and (b) together, `SECURITY.md` updated, `[TR-D12]` test
-  pins the delimiter block and `orgInjection: "off"`.
-
-### Load test 20k (10k personal + 10k org) — ADD→SEARCH→DELETE — perf bug found & fixed · **DONE** (kept here for the harness notes)
-- **Source:** `plugins/total-recall/scripts/loadtest.ts` (throwaway-HOME driver,
-  TF-IDF-only); run 2026-07-30. Real vaults untouched — byte-identical `diff -r`
-  vs pre-flight snapshots; live `get_stats` 523 personal unchanged; org git log
-  clean (the driver imports `src/tools/*` directly via tsx in
-  `HOME=/tmp/tr-loadtest`, so the MCP server and the PostToolUse org-sync hook
-  never fire — no junk commits pushed).
-- **What (the bug):** burst-write throughput collapsed quadratically — ADD
-  206/s → 23/s as N grew 2k→20k (20k in 881s), DELETE ~34/s. The O(N²) lived in
-  `registerDocument` (`src/tfidf.ts`), called on EVERY store/update/delete:
-  (1) `deregisterDocument` scanned ALL active terms' posting lists and rebuilt
-  each via `.filter` even for a brand-new key whose postings don't exist — O(T),
-  T≈active terms; (2) a per-store global IDF recalc loop recomputed `idf` for
-  every active term — O(T). Both O(T)≈O(N) per mutation → O(N²) over a burst.
-  (The earlier hypothesis blaming the debounced `recalcIdfNow` was wrong: the
-  debounce *prevents* repeated rebuilds, and during a tight synchronous loop the
-  1s/2s timers can't even fire — the event loop is blocked.) DELETE's O(T)
-  `deregisterDocument` scan was the symmetric half.
-- **Fix (landed, `src/tfidf.ts`):** `deregisterDocument` now uses a per-doc term
-  set (`docTerms`) to touch ONLY the doc's own terms — O(unique-terms-in-doc) —
-  with a full-scan fallback for untracked keys; `registerDocument` skips deregister
-  for genuinely-new keys and drops the global IDF loop, computing `idf` **live
-  per query token** in `tfidfSearch` from live `df` + `N` (O(Q), always correct,
-  no stale cache); an O(1) `indexedDocCount` counter replaces the O(N)
-  `Object.keys(memIndex).length` in the per-store path.
-- **Result (re-run, same TF-IDF-only conditions):** ADD now **flat at ~2200/s**
-  (2192→2243, zero degradation; 10k in 6.2s at 1621/s avg — ~70× the old 23/s);
-  SEARCH p50 87ms / p95 93ms, persisted reload 20/20 hits; DELETE 79/s (was 34/s
-  at 20k) — now I/O-bound (per-delete org-author file read + `deleteVector` sqlite
-  open + unlink), a constant not algorithmic. Full suite 731/731 pass; typecheck
-  clean. Residual DELETE cost is per-delete file I/O, not a scan.
-- **Reuse:** `scripts/loadtest.ts` stays as the reusable harness —
-  `HOME=/tmp/tr-loadtest LT_N=… npx tsx scripts/loadtest.ts`; rename
-  `@huggingface/transformers` → `.disabled-loadtest` for an apples-to-apples
-  TF-IDF-only run and pass `hybrid:false` to `recall_memory` (restore the package
-  after). Its `VERIFY` line reports FAIL on the engine-auto-created
-  `journal/<date>.md` — a known false alarm (residual-by-tag is 0), not a real
-  failure.
 
 ### vault-scan dir-mtime cache (review item 9.1)
 - **Source:** `review-synthetized-25072026.txt` §9.1.
@@ -181,12 +120,6 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Shape when picked up:** optional `fs.watch`-based fast path, falling back to
   polling on network filesystems where inotify isn't reliable.
 
-### ~~No schema-version marker in index.json/frontmatter~~ — DONE
-- **Resolved** with SPEC-DRIVEN-PLAN phase 1: `index.json` already carried `{ v, entries }`
-  (`INDEX_VERSION`, refused when newer), and the frontmatter now has `schemaVersion`
-  (absent = 1; written as 2 on a memory that carries spec-driven fields,
-  `FRONTMATTER_SCHEMA_VERSION` in `src/spec/fields.ts`).
-
 ### state.ts global singletons couple tools/* to one process
 - **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 7 (file pruned 2026-07-28).
 - **What:** `state.ts` global singletons couple the whole `tools/*` layer to one
@@ -258,33 +191,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   decisions) on a corpus of ADL projects; `spec-eval.test.ts` runs it on a
   generated corpus in CI. Generic `recall_memory` quality is still not evaluated.
 
-### Org-sync branch-default divergence on detached HEAD (pull vs sync) · **DONE**
-- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 3 (proposal file deleted
-  after triage; this entry is the record).
-- **What:** `hooks/scripts/pull-org-vault.sh:7` defaults `BRANCH="knowledge"`
-  (overridden only by `config.orgBranch`); `scripts/sync-org-memory.mjs:54`
-  defaults `BRANCH = config.orgBranch || detectOrgBranch() || 'org-vault'`. In
-  steady state `detectOrgBranch()` reads the checked-out branch back so they
-  agree. When `config.orgBranch` is unset **and** the org checkout is on a
-  detached `HEAD`, `detectOrgBranch()` returns `''` (`sync-org-memory.mjs:49`,
-  `b !== 'HEAD'`), so sync falls back to the literal `'org-vault'` while pull
-  keeps refreshing `knowledge` → `git switch org-vault` fails (no local branch;
-  pull never created it) → sync returns early → **org writes silently stop
-  pushing**. The two literals differ on purpose (`knowledge` = production
-  default, `org-vault` = e2e fixture branch), so they can't simply be aligned.
-- **Trigger:** detached-HEAD org checkout with `config.orgBranch` unset.
-  Medium-low, latent — `detectOrgBranch()` masks it in the attached-HEAD steady
-  state. Independent of the DEFERRED *Org-sync freshness relies on marker-file
-  polling* entry (BACKLOG.md:89-96) — this is a correctness fix, that one is a
-  latency feature; do not merge them.
-- **Shape when picked up:** in `detectOrgBranch()`, on detached HEAD fall back to
-  the remote's default branch via `git symbolic-ref --short refs/remotes/origin/HEAD`
-  (pull's `git clone --branch` sets it up), stripping the `origin/` prefix, before
-  the `'org-vault'` last-resort literal. Preserves the `org-vault` e2e fallback
-  (where `origin/HEAD` → `org-vault` anyway). Pin in
-  `sync-org-memory-hook.test.ts`: detached HEAD + `origin/HEAD` →
-  `origin/knowledge` + unset `config.orgBranch` → sync targets `knowledge`.
-
 ### `config.orgVault` change without restart silently stops org sync
 - **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 4 (proposal file deleted
   after triage; this entry is the record).
@@ -305,15 +211,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   pick it up (hooks already re-read config per invocation; only the long-lived
   server is stale). Option B (robust) — resolve `ORG_VAULT`/`PERSONAL_VAULT`
   dynamically at use time in `store.ts`/`mutate.ts` instead of importing the
-  module-load const. Adjacent to but **not** fixed by the DEFERRED *No
-  schema-version marker* entry (BACKLOG.md:98-105) — a schema marker triggers an
-  index rebuild, not a vault-path re-resolve; keep them separate.
-
-> Items 4 (server.ts monolith) and 8 (deprecated `Server` class) from the
-> pruned `ARCHITECTURE-REVIEW-TODO.md` are **DONE** — the McpServer migration
-> (CLAUDE.md 6.1-6.3) co-located schemas with implementation in `tools/*.ts`
-> and replaced `new Server(...)` with `McpServer` + `registerTool()`. Item 3
-> (vault-scan dir-mtime) is the first DEFERRED entry above.
+  module-load const.
 
 ### Slim the shipped `release` branch (contributor files, lockfile)
 - **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md` (2026-10-27), checked
@@ -364,64 +262,3 @@ pruned (2026-07-29); this backlog is now the sole record.
   events for files/parents that exist when the watcher is attached and offers no
   cross-process guarantee. `reconcileIndex` is mtime-cached so the no-op poll is
   O(1); the only cost is ≤10s latency, acceptable for a background reconcile.
-
----
-
-## 🏁 DONE — landed, kept for cross-reference
-
-- **Multilingual query expansion double-counted duplicate tokens** (v1.1.17) —
-  `tfidfSearch`'s bilingual expansion now dedupes via a `Set`, preserving
-  first-seen order so the title/tag boost path still sees each distinct token
-  once. The dict is bidirectional (17 of 28 entries map both ways), so
-  `"decizie decision"` expanded to `['decizie','decision','decision','decizie']`
-  and the per-token scoring loop inflated a matching doc ~2× over its
-  monolingual baseline. **The original entry graded this "low severity (gated,
-  default off)" — that was stale**: the maintainer's own
-  `~/.total-recall/config.json` sets `enableMultilingualSearch: true`, so it was
-  live in production. Also removed the `'concept': 'concept'` **self-mapping**
-  from `BILINGUAL_DICT` — a key whose value equals itself double-counted on a
-  PLAIN single-word query with no mixed-language input at all, which the
-  original triage missed. Pinned by the `dedupe prevents double-counting`
-  describe block in `tfidf-multilingual.test.ts` (2 tests, verified to fail
-  against the pre-fix expansion).
-- **`get_memories_by_keys(summary=true)` exec-summary bled past the section
-  boundary** (v1.1.17) — `src/tools/query.ts` now captures lazily with a
-  `(?=\n##\s|\n*$)` lookahead and re-applies the 500-char cap. The prior greedy
-  `[\s\S]{0,500}` had no stop at the next `## ` heading, so the COMMON case (a
-  short summary, given `withExecutiveSummary`'s
-  `## Executive Summary\n\n<summary>\n\n## <next>` layout) swallowed the
-  following section's heading + body up to the cap. That text is surfaced in the
-  SessionStart injected index, so every session paid tokens for the leak. Legacy
-  headerless bodies still fall back to `slice(0,500)`. Pinned by the
-  `summary=true exec-summary extraction` describe block in `query.test.ts`
-  (4 tests: bleed / trailing-last-section / legacy-fallback / 500-cap).
-- **`embeddings.test.ts` read the developer's real `~/.total-recall/config.json`**
-  (v1.1.17) — it was the only vault-touching test file with no hoisted
-  `process.env.HOME` override, so `paths.ts` (which captures `os.homedir()` once
-  at module load) resolved the real home and the load-failure warning named
-  whatever `embeddingModel` that machine had configured. Read-only, but it made
-  test output vary per developer and left any future assertion on the model name
-  latently flaky. Fixed with the same `vi.hoisted` pattern the other 20 files
-  use; the warning now names the tmp HOME and the default model. Nothing in the
-  file needed a real HOME — the HF pipeline and `vectorStore` are both fully
-  mocked, so only `loadConfig()` read it.
-- **Multilingual RO/EN excluded from Stryker** — bilingual dict + expansion
-  branch wrapped in `// Stryker disable all`; toggling tests split into
-  `tfidf-multilingual.test.ts` (out of the Stryker allow-list). `7d978a7`.
-- **Real mutation score ≥65%** — 59.51% → 68.28% via `vault-scan-reconcile.test.ts`
-  (47 tests); break gate at 65 in `stryker.conf.json`; CI mutation workflow.
-  `7d978a7`.
-- **Copilot CLI removal completed** — code removed earlier; docs + install.sh
-  cleaned in `ee0cde5` (1.0.133). No Copilot references remain.
-- **C-1 message honesty** — `vectorStore.ts` error messages corrected to match
-  actual `rebuild_index` behavior; pinned in `vectorStore.test.ts`. `ee0cde5`.
-- **C-1 behavior fix — bulk re-embed after a model switch** — `rebuild_index`
-  gained an opt-in `forceReembed` flag (default false) backed by a dedicated
-  `reembedAll()` in `src/tools/mutate.ts`: drops `vec_memories`, re-embeds every
-  memory at the current model's dim via a bounded queue
-  (`REEMBED_CONCURRENCY=8`, full content through `readCachedOrFresh`, awaited
-  upserts + `flushEmbeddings` for a truthful count), and refuses without dropping
-  when `embed()` returns null. Not a bare drop→`reconcileVectors` (that path is
-  fire-and-forget, unbounded, and embeds `contentPreview` not full content).
-  Pinned by `src/__tests__/rebuild-index-reembed.test.ts` (5 tests).
-  `1.0.135`.
