@@ -229,8 +229,8 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
 - **What:** `plugins/total-recall/GEMINI.md` repeats "always-true" rules from
   `CLAUDE.md` and install/compat text from the READMEs, so it can drift.
-- **Trigger:** the next edit to either file, or a Gemini-specific change.
-- **Shape when picked up:** reduce `GEMINI.md` to Gemini-only notes and link to
+- **Trigger:** the next edit to either file, or a Gemini/Antigravity-specific change.
+- **Shape when picked up:** reduce `GEMINI.md` to Gemini/Antigravity-only notes and link to
   `CLAUDE.md`, or fold it into the README compatibility notes.
 
 ### Two hook manifests kept in sync by hand
@@ -238,7 +238,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **What:** `hooks/hooks.json` and `hooks/hooks.gemini.json` must be edited
   together (`CLAUDE.md` says so). Nothing fails if they diverge.
 - **Trigger:** any new hook (the spec-driven plan adds three), or dropping
-  Gemini support.
+  Gemini/Antigravity support.
 - **Shape when picked up:** a unit test asserting the two list the same events
   and scripts, or generate one from the other.
 

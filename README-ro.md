@@ -1,15 +1,15 @@
 # 🧠 total-recall
 
-**Asistentul tău AI (Claude, Gemini, Antigravity) uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
+**Asistentul tău AI (Claude, Gemini, Antigravity, GitHub Copilot) uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-O memorie persistentă și căutabilă pentru Claude Code și Gemini/Antigravity. Memoriile sunt fișiere Markdown simple pe discul tău — pot fi căutate cu grep, versionate cu git, citibile în [Obsidian](https://obsidian.md/). Nimic nu părăsește mașina ta decât dacă îl etichetezi `org`.
+O memorie persistentă și căutabilă pentru Claude Code, Gemini/Antigravity și VS Code (GitHub Copilot agent mode). Memoriile sunt fișiere Markdown simple pe discul tău — pot fi căutate cu grep, versionate cu git, citibile în [Obsidian](https://obsidian.md/). Nimic nu părăsește mașina ta decât dacă îl etichetezi `org`.
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 ## ⚡ TL;DR
 
-- **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code și Gemini/Antigravity: 22 de unelte MCP (17 pentru memorie, 5 pentru lucrul spec-driven cu arhitectura) peste un vault de fișiere Markdown din `~/.total-recall`.
-- **Ce face pentru tine** — injectează indexul memoriilor la începutul fiecărei sesiuni (memoriile complete se citesc la cerere) și capturează automat deciziile și preferințele pe măsură ce lucrezi și înainte de fiecare compactare a contextului, ca să nu repeți același context.
+- **Ce este** — un plugin care dă asistentului AI o memorie persistentă: memoriile se salvează pe computerul tău și supraviețuiesc între sesiuni, deci nu mai reexplici aceleași lucruri. Pentru Claude Code, Gemini/Antigravity și VS Code (GitHub Copilot agent mode): 22 de unelte MCP (17 pentru memorie, 5 pentru lucrul spec-driven cu arhitectura) peste un vault de fișiere Markdown din `~/.total-recall`.
+- **Ce face pentru tine** — injectează indexul memoriilor la începutul fiecărei sesiuni (memoriile complete se citesc la cerere) și capturează automat deciziile și preferințele pe măsură ce lucrezi și înainte de fiecare compactare a contextului, ca să nu repeți același context. Gazdele care nu afișează ieșirea hook-urilor (Gemini/Antigravity, VS Code cu `--vscode`) citesc indexul din resursa MCP `total-recall://index`; fără niciun hook (`--vscode`) nu există nici captură automată.
 - **Și spec-driven** — memoriile pot fi legate de o specificație: etichetezi orice decizie, cerință sau eșec cu un `system`, `elements` la care se referă și un ID în `requirements`, apoi cauți după element sau urmărești o cerință până la deciziile ei. Pentru asta nu ai nevoie de ADL. Dacă proiectul își ține și arhitectura ca cod (ADL), uneltele leagă în plus fiecare regulă de testele care o impun. Vezi [Lucru spec-driven](#-lucru-spec-driven-cu-adl).
 - **Cum caută** — hibrid: TF-IDF × curba uitării Ebbinghaus, plus căutare semantică opțională; degradează curat la căutare de text dacă căutarea semantică nu e activată.
 - **Confidențialitate** — local-first. Vault-ul personal nu părăsește mașina; doar ce etichetezi `org` trece printr-un filtru fail-closed spre un repo Git comun.
@@ -158,8 +158,8 @@ Dintr-o sesiune Claude Code:
 apoi rulează `./install.sh` o singură dată, din directorul plugin-ului instalat, pentru a crea
 vault-urile și a înregistra serverul MCP.
 
-Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini/Antigravity, clone locale și profilul
-minimal (fără vectori): **[INSTALL.md](plugins/total-recall/INSTALL.md)**
+Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini/Antigravity, VS Code (GitHub Copilot agent mode),
+clone locale și profilul minimal (fără vectori): **[INSTALL.md](plugins/total-recall/INSTALL.md)**
 
 **Marketplace-ul este singurul canal de distribuție** — fără zip, fără pachet npm. Se
 instalează branch-ul `release`, al cărui bundle este construit de GitHub Actions după ce poarta CI devine verde; `dist/` este ignorat pe `main`, deci niciun artefact construit manual nu poate fi livrat.

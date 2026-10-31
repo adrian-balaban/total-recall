@@ -1,32 +1,32 @@
-# ♊ Total Recall — Gemini CLI working notes
+# ♊ Total Recall — Gemini/Antigravity working notes
 
-This plugin runs in Gemini CLI. The 22 tools (17 memory + 5 spec-driven architecture tools, see `README.md` → *Spec-driven architecture*) are exposed as
+This plugin runs in Gemini/Antigravity. The 22 tools (17 memory + 5 spec-driven architecture tools, see `README.md` → *Spec-driven architecture*) are exposed as
 `mcp_total-recall_<tool>` and invoked in plain English ("recall X",
 "store a memory about Y", "list memories tagged Z") — same surface as
 Claude Code.
 
 > **Install, client-compatibility, and the full gotchas list live in one place
-> now.** See `README.md` → *💻 Client Compatibility* for Gemini install +
+> now.** See `README.md` → *💻 Client Compatibility* for Gemini/Antigravity install +
 > event renames (`PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress`),
 > and `CLAUDE.md` → *Key Gotchas* for the tag-routing / author /
 > duplicates / date-filter / frontmatter rules that apply to *both* clients.
-> The notes below are only the Gemini-specific deltas not covered there.
+> The notes below are only the Gemini/Antigravity-specific deltas not covered there.
 
-## 🔀 Gemini-specific deltas
+## 🔀 Gemini/Antigravity-specific deltas
 
 - **Tool namespace:** `mcp_total-recall_<tool>` (single underscore). The full
   matcher is wired in `hooks/hooks.gemini.json`.
-- **Event renames:** Gemini's `AfterTool` / `PreCompress` map to Claude Code's
+- **Event renames:** Gemini/Antigravity's `AfterTool` / `PreCompress` map to Claude Code's
   `PostToolUse` / `PreCompact`. Both hook manifests (`hooks/hooks.json` and
   `hooks/hooks.gemini.json`) must stay in sync — see `CLAUDE.md` gotcha 8.5.
-- **No `Skill` tool in Gemini.** The Claude-specific skills
-  (`memory-workflow`, `spec-driven-workflow`) ship in `skills/` but are **not loadable** in Gemini —
-  Gemini silently drops it. If a task needs the retrieval tree or the
+- **No `Skill` tool in Gemini/Antigravity.** The Claude-specific skills
+  (`memory-workflow`, `spec-driven-workflow`) ship in `skills/` but are **not loadable** in Gemini/Antigravity —
+  Gemini/Antigravity silently drops it. If a task needs the retrieval tree or the
   "memorize more proactively" loop, or the spec-driven loop, ask the user to paste the `SKILL.md`
   body and proceed as a one-shot knowledge injection.
 - **Spec-driven hooks are wired but silent.** `architecture-change.sh` runs on
   `AfterTool` (`write_file|replace`) and the SessionStart summary is built, but
-  Gemini drops `additionalContext`, so neither reaches the model. Call
+  Gemini/Antigravity drops `additionalContext`, so neither reaches the model. Call
   `index_architecture` / `get_architecture_context` yourself after editing
   an `.adl` file.
 - **MCP-only registration (no hooks):** `agy plugin install "$(pwd)"`

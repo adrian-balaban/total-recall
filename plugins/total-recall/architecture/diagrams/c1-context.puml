@@ -7,7 +7,7 @@ title C1 — System context
 Person(dev, "Developer", "works in an AI coding session")
 Person(team, "Teammates")
 System(tr, "Total Recall", "Persistent, searchable memory across sessions")
-System_Ext(host, "Claude Code / Gemini CLI", "spawns the MCP server, runs the hooks")
+System_Ext(host, "Claude Code / Gemini/Antigravity", "spawns the MCP server, runs the hooks")
 System_Ext(repo, "Org memory repo", "git remote, team-shared vault branch")
 System_Ext(hub, "HuggingFace Hub", "serves all-MiniLM-L6-v2 once")
 

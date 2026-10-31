@@ -1,13 +1,13 @@
 # 🧠 Total Recall
 
-Persistent knowledge and memory management for Claude Code and Gemini/Antigravity.
+Persistent knowledge and memory management for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode).
 
-Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject the memory index automatically at session start (full memories are read on demand).
+Stores memories locally as Markdown files with YAML frontmatter, indexes them for fast hybrid search (TF-IDF × Ebbinghaus forgetting curve, optionally fused with vector embeddings), and uses per-client lifecycle hooks to inject the memory index automatically at session start (full memories are read on demand). Hosts that don't show hook output read the index from the `total-recall://index` MCP resource.
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent-memory plugin for Claude Code and Gemini/Antigravity: 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)), and memories can be tied to a spec with or without ADL over a vault of plain Markdown files under `~/.total-recall/`.
-- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context.
+- **What it is** — a persistent-memory plugin for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode): 22 MCP tools (17 for memory, 5 for [spec-driven architecture work](#-spec-driven-architecture-adl)), and memories can be tied to a spec with or without ADL over a vault of plain Markdown files under `~/.total-recall/`.
+- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences as you work, and before every context compaction, so you stop re-explaining the same context. Hosts that don't show hook output (Gemini/Antigravity, VS Code with `--vscode`) read the index from the `total-recall://index` MCP resource instead; with no hooks at all (`--vscode`) there is no automatic capture.
 - **How it searches** — hybrid: TF-IDF × the Ebbinghaus forgetting curve, plus optional semantic search; degrades cleanly to text search when the semantic path is unavailable.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
@@ -215,7 +215,7 @@ Effect: every new Claude session automatically receives a summary of all your me
 
 > **Why the matcher is a regex, not a bare tool list.** Claude Code treats a matcher containing only letters/digits/`_`/`-`/spaces/`,`/`|` as an **exact string list** compared verbatim against the full tool name. Plugin MCP tools are named `mcp__plugin_total-recall_total-recall__<tool>`, so a bare `store_memory|update_memory|delete_memory` never matched and the org-sync hook silently never fired. The parens force the **regex** path so it matches the `__<tool>` suffix.
 
-### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini `AfterTool`: `write_file|replace`)
+### `PostToolUse` (matcher: `Write|Edit|MultiEdit`; Gemini/Antigravity `AfterTool`: `write_file|replace`)
 
 `architecture-change.sh` — when the edited file is an `.adl` file (`specDriven.captureChanges`), asks the model to run `index_architecture`, store an `architecture-changes` memory with the reason, and run `validate_architecture`. Any other file returns at once, without starting Node for the default extensions.
 
@@ -310,7 +310,7 @@ Every key is optional; a missing or wrongly typed value falls back to its defaul
 
 > **Upgrading from 1.2.x:** CALM support was removed in 1.3.0. `.calm.json` files are no longer indexed, and the `calm` and `calmExtensions` keys are ignored. Describe the system level in an `.adl` file with `DEFINE COMMUNICATION` instead.
 
-> **Gemini CLI:** the five tools and the field filters work. The two hooks are registered in `hooks.gemini.json` too, but Gemini drops `additionalContext` (see below), so the session summary and the change prompt are not shown there.
+> **Gemini/Antigravity:** the five tools and the field filters work. The two hooks are registered in `hooks.gemini.json` too, but Gemini/Antigravity drops `additionalContext` (see below), so the session summary and the change prompt are not shown there.
 
 ---
 
@@ -327,7 +327,8 @@ The marketplace is the **only** distribution channel — no zip, no npm package.
 
 ```bash
 ./install.sh                         # vaults, MCP registration, index (run once)
-./install.sh --gemini                # Gemini CLI (agy)
+./install.sh --gemini                # Gemini/Antigravity (agy)
+./install.sh --vscode                # VS Code user mcp.json (Copilot, when agent plugins are off; tools only)
 ```
 
 Hooks auto-load from `hooks/hooks.json` — nothing to wire. What the marketplace
@@ -345,13 +346,15 @@ artifact can reach you. Working from a clone means building it yourself
 | Client | MCP Tools | Hook Side Effects (Sync/Index) | Context Injection (`additionalContext`) | Playbook Skills |
 |---|---|---|---|---|
 | **Claude Code** | ✅ Yes | ✅ Yes | ✅ Yes (SessionStart/PostToolUse) | ✅ Yes |
-| **Gemini CLI (agy)** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini) | ❌ No |
+| **Gemini/Antigravity (agy)** | ✅ Yes | ✅ Yes | ❌ No (silently dropped by Gemini/Antigravity) | ❌ No |
+| **VS Code (Copilot agent mode)** | ✅ Yes | ⚠️ Agent plugins (Preview, unverified) · ❌ `--vscode` | ⚠️ Agent plugins (unverified) · ❌ `--vscode`: index via the `total-recall://index` resource | ⚠️ Unverified |
 
 
 ### Client-Specific Integration Details
 
 *   **Claude Code**: zero-touch. Hooks automatically pull git changes, rebuild the local cache, and inject the memory index at session start.
-*   **Gemini CLI (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
+*   **Gemini/Antigravity (agy)**: registers through `gemini-extension.json` using the `agy` CLI. Tool namespace is `mcp_total-recall_<tool>` (single underscore); Gemini/Antigravity renames the hook events (PostToolUse→AfterTool, PreCompact→PreCompress) — handled by `hooks/hooks.gemini.json`.
+*   **VS Code (GitHub Copilot agent mode)**: with VS Code agent plugins on (Preview), the plugin's own `.mcp.json` and hooks load — expected to work, not yet verified. With them off, `./install.sh --vscode` adds the server to VS Code's user `mcp.json` (tools only, no hooks); the memory index and workflow rules then come from the `total-recall://index` resource and the `memory-workflow` prompt. Details in [INSTALL.md](INSTALL.md).
 *   **Ollama backends**: total-recall works as persistent memory for `ollama launch claude` too — same vault regardless of whether Claude Code talks to Anthropic or a local/cloud model.
 *   **Windows**: supported via Git Bash — keys and git paths are `/`-normalized internally; see [INSTALL.md](INSTALL.md#windows).
 

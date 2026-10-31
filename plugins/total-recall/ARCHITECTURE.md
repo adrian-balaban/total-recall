@@ -1,6 +1,6 @@
 # 🏗️ Total-Recall — Architecture
 
-An MCP stdio server (`dist/index.js`, TypeScript in `src/`) plus lifecycle hooks that give Claude Code and Gemini CLI persistent, searchable memory.
+An MCP stdio server (`dist/index.js`, TypeScript in `src/`) plus lifecycle hooks that give Claude Code and Gemini/Antigravity persistent, searchable memory.
 
 ![Session loop](../../docs/diagrams/session-loop-en.svg)
 

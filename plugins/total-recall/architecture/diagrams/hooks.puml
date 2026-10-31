@@ -1,7 +1,7 @@
 @startuml hooks
 skinparam shadowing false
 skinparam defaultFontName Helvetica
-title Hook lifecycle (hooks.json · Gemini: hooks.gemini.json)
+title Hook lifecycle (hooks.json · Gemini/Antigravity: hooks.gemini.json)
 
 participant "Host" as H
 participant "hook scripts" as S

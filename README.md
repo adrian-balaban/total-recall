@@ -2,14 +2,14 @@
 
 **Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
-A persistent, searchable memory for Claude Code and Gemini/Antigravity. Memories are plain Markdown files on your disk — greppable, git-versionable, [Obsidian](https://obsidian.md/)-readable. Nothing leaves your machine unless you tag it `org`.
+A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode). Memories are plain Markdown files on your disk — greppable, git-versionable, [Obsidian](https://obsidian.md/)-readable. Nothing leaves your machine unless you tag it `org`.
 
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 ## ⚡ TL;DR
 
-- **What it is** — a persistent memory plugin for Claude Code and Gemini/Antigravity: memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
-- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences automatically as you work and before each context compaction.
+- **What it is** — a persistent memory plugin for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode): memories are saved on your computer and survive across sessions, so you don't re-explain the same things every time. 22 MCP tools (17 for memory, 5 for spec-driven architecture work) over a vault of Markdown files in `~/.total-recall`.
+- **What it does for you** — injects the memory index at the start of every session (full memories are read on demand) and captures decisions and preferences automatically as you work and before each context compaction. Hosts that don't show hook output (Gemini/Antigravity, VS Code with `--vscode`) read the index from the `total-recall://index` MCP resource instead; with no hooks at all (`--vscode`) there is no automatic capture.
 - **Spec-driven too** — memories can be tied to a spec: tag any decision, requirement or failure with a `system`, the `elements` it concerns and a `requirements` ID, and recall by element or follow a requirement to its decisions. No ADL needed for that. If the project also keeps its architecture as code (ADL), the tools additionally link each rule to the tests that enforce it. See [Spec-driven work](#-spec-driven-work-with-adl).
 - **How it searches** — hybrid: TF-IDF × Ebbinghaus forgetting curve, plus optional semantic search; falls back cleanly to text search when semantic search is off.
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
@@ -90,7 +90,7 @@ Total Recall describes its own architecture in ADL, for the code level (modules,
 
 ### ADL: Architecture Definition Language
 
-ADL is the notation used in the masterclass [**"How to Teach Your Agents About Architecture"**](https://codecamp.ro/masterclasses/how-to-teach-your-agents-about-architecture-iasi-2026/), which Neal Ford taught at Codecamp Iași (27–28 October 2026).
+ADL is the notation used in the masterclass [**"How to Teach Your Agents About Architecture"**](https://codecamp.ro/masterclasses/how-to-teach-your-agents-about-architecture-iasi-2026/), which Neal Ford taught at Codecamp Iași, Romania (27–28 October 2026).
 
 - **What it is.** A light, pseudocode-like way to write an architecture down, with no formal grammar. `DEFINE` lines name the system, its domains and its components. `ASSERT(…)` lines state the rules the code must keep, in plain English where that is clearer.
 - **Who reads it.** People read it as short documentation that is harder to let go stale than a diagram. AI agents read it as context when they write code, and as a specification to check the code against.
@@ -158,8 +158,8 @@ From inside a Claude Code session:
 then `./install.sh` once, from the installed plugin directory, to create the
 vaults and register the MCP server.
 
-Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini/Antigravity, local clones, and the
-minimal (no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
+Linux · macOS · Windows (Git Bash) · Node.js 18+. Gemini/Antigravity, VS Code (GitHub Copilot agent mode),
+local clones, and the minimal (no-vector) profile: **[INSTALL.md](plugins/total-recall/INSTALL.md)**
 
 **The marketplace is the only distribution channel** — no zip, no npm package. It
 installs the `release` branch, whose bundle is built by GitHub Actions after the CI

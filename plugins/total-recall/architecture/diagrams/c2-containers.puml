@@ -4,7 +4,7 @@ skinparam defaultFontName Helvetica
 LAYOUT_WITH_LEGEND()
 title C2 — Containers
 
-System_Ext(host, "Host harness", "Claude Code / Gemini CLI")
+System_Ext(host, "Host harness", "Claude Code / Gemini/Antigravity")
 System_Boundary(tr, "Total Recall") {
   Container(mcp, "MCP stdio server", "Node · dist/index.js", "22 tools, in-memory index, debounced persistence; started by .mcp.json")
   Container(hooks, "Hook scripts", "bash + Node · hooks/scripts", "SessionStart · PostToolUse · PreCompact · SessionEnd")

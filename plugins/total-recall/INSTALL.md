@@ -53,7 +53,7 @@ Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.
 
 **What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact can reach you. There is deliberately no zip download and no npm package — one channel, one thing to trust.
 
-### Gemini CLI
+### Gemini/Antigravity
 
 ```bash
 ./install.sh --gemini    # MCP + hooks/hooks.gemini.json (requires the `agy` CLI)
@@ -96,7 +96,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 2. Create vault directories under `~/.total-recall/` (and one-time local-only `git init` of the personal vault for durability snapshots)
 3. Register the MCP server (`claude mcp add-json`, user scope) — skipped (and any stale user-scope duplicate removed) when total-recall is already plugin-managed
 4. Build the initial index
-5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini (`--gemini`), VS Code MCP entry (`--vscode`)
+5. Hooks — auto-load from `hooks/hooks.json` (no wiring step); optional statusline (`--statusline`), Gemini/Antigravity (`--gemini`), VS Code MCP entry (`--vscode`)
 6. Org vault (optional — `--org-repo URL`, `--allowed-email-domain D`)
 7. Vector search (per the chosen profile)
 8. Verify + summary
