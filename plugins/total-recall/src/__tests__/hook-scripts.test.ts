@@ -101,6 +101,36 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     return JSON.parse(r.stdout).hookSpecificOutput.additionalContext as string;
   }
 
+  // The plugin's .mcp.json is the only thing that starts the MCP server of a
+  // plugin-managed install. When it exists but no longer declares the server
+  // (emptied three times so far: 7c1407c, 7ab8545, and install.sh's unscoped
+  // `claude mcp remove` on an installed 1.6.1), the hooks keep injecting the index
+  // while every tool is gone. The SessionStart context must say so.
+  function loadWithMcpJson(mcpJson: string | null) {
+    const home = fs.mkdtempSync(path.join(tmpHome, 'mcpdecl-'));
+    const pluginRoot = path.join(home, 'plug');
+    fs.mkdirSync(pluginRoot, { recursive: true });
+    fs.writeFileSync(path.join(pluginRoot, 'package.json'), '{"version":"9.9.9"}');
+    if (mcpJson !== null) fs.writeFileSync(path.join(pluginRoot, '.mcp.json'), mcpJson);
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    fs.writeFileSync(path.join(home, '.total-recall', '.index-cache.txt'), '0\n');
+    const r = spawnSync('bash', [LOAD_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe',
+      env: { ...process.env, HOME: home, CLAUDE_PLUGIN_ROOT: pluginRoot },
+    });
+    expect(r.status).toBe(0);
+    return JSON.parse(r.stdout).hookSpecificOutput.additionalContext as string;
+  }
+
+  it('load-memory-index.sh: warns when the plugin .mcp.json no longer declares the total-recall server', () => {
+    const warning = 'MCP server not declared';
+    expect(loadWithMcpJson('{\n  "mcpServers": {}\n}')).toContain(warning);
+    expect(loadWithMcpJson('not json')).toContain(warning);
+    expect(loadWithMcpJson(JSON.stringify({ mcpServers: { 'total-recall': { type: 'stdio', command: 'node' } } }))).not.toContain(warning);
+    // No .mcp.json at all (a host that registers the server elsewhere): no false alarm.
+    expect(loadWithMcpJson(null)).not.toContain(warning);
+  });
+
   it('[TR-D12] org memories are injected only inside a delimited teammate-written reference data block; orgInjection off injects none', () => {
     const ctx = runLoad();
     const block = ctx.match(/teammate-written reference data[\s\S]*$/i)?.[0] ?? '';
@@ -394,6 +424,86 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     } finally {
       fs.rmSync(home, { recursive: true, force: true });
     }
+  });
+
+  // install.sh must never touch a .mcp.json in the folder it is run from. The
+  // plugin root ships a .mcp.json that declares the server, and RELEASE-SMOKE-TEST /
+  // INSTALL tell users to run ./install.sh from there. From that folder
+  // `claude mcp get total-recall` resolves the PROJECT-scope server declared in it,
+  // and the old fallback `claude mcp remove total-recall` (no -s) removed it from
+  // project scope — rewriting the plugin's own .mcp.json to {"mcpServers": {}} and
+  // silently killing every MCP tool (found 2026-11-01 on an installed 1.6.1). The
+  // stub below mimics the real CLI's scoping rules; the test asserts the cwd's
+  // .mcp.json survives and that every `mcp` call ran from a folder without one.
+  function installWithRealisticClaude(pluginManaged: boolean) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-scope-'));
+    const binDir = path.join(home, 'bin');
+    const cwd = path.join(home, 'plugin-like-cwd');
+    const log = path.join(home, 'claude.log');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.mkdirSync(cwd, { recursive: true });
+    const mcpJson = '{\n  "mcpServers": {\n    "total-recall": {\n      "type": "stdio",\n      "command": "node",\n      "args": ["${CLAUDE_PLUGIN_ROOT}/dist/index.js"]\n    }\n  }\n}\n';
+    fs.writeFileSync(path.join(cwd, '.mcp.json'), mcpJson);
+    if (pluginManaged) {
+      fs.mkdirSync(path.join(home, '.claude', 'plugins'), { recursive: true });
+      fs.writeFileSync(path.join(home, '.claude', 'plugins', 'installed_plugins.json'),
+        JSON.stringify({ plugins: { 'total-recall@my-claude-plugins': [{ scope: 'user' }] } }));
+    } else {
+      fs.writeFileSync(path.join(home, 'user-registered'), '');
+    }
+    fs.writeFileSync(path.join(binDir, 'claude'), [
+      '#!/usr/bin/env bash',
+      'echo "$PWD|$*" >> "$CLAUDE_LOG"',
+      'scoped=0; for a in "$@"; do case "$a" in -s|--scope|--scope=*) scoped=1;; esac; done',
+      'in_project() { [ -f .mcp.json ] && grep -q \'"total-recall"\' .mcp.json; }',
+      'if [ "$1" = "mcp" ]; then case "$2" in',
+      '  get)',
+      '    [ "$3" = "plugin:total-recall:total-recall" ] && exit 0',
+      '    in_project && { echo "Scope: Project config (shared via .mcp.json)"; exit 0; }',
+      '    [ -f "$HOME/user-registered" ] && exit 0; exit 1;;',
+      '  remove)',
+      '    if [ $scoped -eq 0 ] && in_project; then printf \'{\\n  "mcpServers": {}\\n}\' > .mcp.json; exit 0; fi',
+      '    case " $* " in *" -s user "*|*" --scope user "*) [ -f "$HOME/user-registered" ] && { rm -f "$HOME/user-registered"; exit 0; };; esac',
+      '    exit 1;;',
+      '  add-json) touch "$HOME/user-registered"; exit 0;;',
+      'esac; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'claude'), 0o755);
+    try {
+      const r = spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector'], {
+        cwd,
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home, CLAUDE_LOG: log, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      const calls = fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').filter(Boolean) : [];
+      return { r, calls, cwd, mcpAfter: fs.readFileSync(path.join(cwd, '.mcp.json'), 'utf8'), mcpJson };
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  for (const pluginManaged of [true, false]) {
+    it(`install.sh (${pluginManaged ? 'plugin-managed' : 'user-scope'}): never rewrites the .mcp.json in its working folder`, () => {
+      const { r, calls, cwd, mcpAfter, mcpJson } = installWithRealisticClaude(pluginManaged);
+      expect(r.status).toBe(0);
+      expect(mcpAfter).toBe(mcpJson);
+      const mcpCalls = calls.filter((c) => c.split('|')[1]?.startsWith('mcp '));
+      expect(mcpCalls.length).toBeGreaterThan(0);
+      for (const c of mcpCalls) {
+        const [dir, args = ''] = c.split('|');
+        expect(dir).not.toBe(cwd);
+        if (args.startsWith('mcp remove')) expect(args).toMatch(/ (-s|--scope) user\b/);
+      }
+    });
+  }
+
+  it('install.sh (plugin-managed): Step 8 verifies the plugin server, not a project-scope look-alike', () => {
+    const { r } = installWithRealisticClaude(true);
+    const out = r.stdout + r.stderr;
+    expect(out).toContain("MCP server 'plugin:total-recall:total-recall' is registered");
+    expect(out).not.toContain("MCP server 'total-recall' not registered");
   });
 
   // #9: install.sh --vector installs the optional vector deps. A bare `npm install

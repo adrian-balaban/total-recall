@@ -151,6 +151,15 @@ die()  { err "$1"; exit 1; }
 SUMMARY=()
 note() { SUMMARY+=("$1"); }
 
+# Run `claude mcp …` from an empty folder. From a folder holding a .mcp.json —
+# the plugin root ships one, and users run ./install.sh from there — `claude mcp
+# get total-recall` resolves the PROJECT-scope server declared in it, and an
+# unscoped `claude mcp remove total-recall` rewrote that file to
+# {"mcpServers": {}}, silently removing every MCP tool of the installed plugin.
+MCP_CWD=$(mktemp -d)
+trap 'rm -rf "$MCP_CWD"' EXIT
+claude_mcp() { ( cd "$MCP_CWD" && claude mcp "$@" ); }
+
 usage() { sed -n '2,/^set -uo/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//; s/^#$//; /^set -uo/d'; }
 
 # Ask a yes/no question. Honors --yes (returns the supplied default).
@@ -258,7 +267,7 @@ if [ -z "$PLUGIN_ROOT" ]; then
   # (install.sh ships at the plugin root).
   PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$SCRIPT_DIR}"
   if [ ! -f "$PLUGIN_ROOT/$PLUGIN_MARKER" ] && command -v claude >/dev/null 2>&1; then
-    FROM_MCP=$(claude mcp get total-recall 2>/dev/null \
+    FROM_MCP=$(claude_mcp get total-recall 2>/dev/null \
       | grep -o '"[^"]*dist/index.js"' | sed 's|/dist/index.js"||; s|^"||')
     [ -n "$FROM_MCP" ] && PLUGIN_ROOT="$FROM_MCP"
   fi
@@ -388,20 +397,18 @@ elif [ "$PLUGIN_MANAGED" -eq 1 ]; then
   # The plugin manager already provides the server via the plugin's .mcp.json —
   # a user-scope registration on top of it would start a second server and
   # inject the memory index twice per session. Clean up any stale one instead.
-  if claude mcp get total-recall >/dev/null 2>&1; then
+  # Always -s user: an unscoped remove deletes whichever scope matches first,
+  # including a project-scope .mcp.json.
+  if claude_mcp get total-recall >/dev/null 2>&1; then
     info "Removing user-scope MCP registration (duplicate of the plugin-managed server)."
-    claude mcp remove total-recall -s user 2>/dev/null \
-      || claude mcp remove total-recall 2>/dev/null \
-      || true
+    claude_mcp remove total-recall -s user 2>/dev/null || true
   fi
   ok "Plugin-managed install — MCP server comes from the plugin's .mcp.json; skipping user-scope registration."
   note "MCP registration skipped (plugin-managed)."
 else
-  if claude mcp get total-recall >/dev/null 2>&1; then
+  if claude_mcp get total-recall >/dev/null 2>&1; then
     info "MCP server 'total-recall' already registered — removing for clean re-install."
-    claude mcp remove total-recall -s user 2>/dev/null \
-      || claude mcp remove total-recall 2>/dev/null \
-      || true
+    claude_mcp remove total-recall -s user 2>/dev/null || true
     ok "Removed existing registration."
   fi
   # Pick the highest-versioned nvm node, else whatever is on PATH.
@@ -418,7 +425,7 @@ else
   # guarantees valid JSON regardless of path content; env-pass avoids any
   # shell/JS injection from the path (mirrors load-memory-index.sh).
   MCP_JSON=$(NODE_BIN="$NODE_BIN" PLUGIN_ROOT="$PLUGIN_ROOT" node -e 'process.stdout.write(JSON.stringify({type:"stdio",command:process.env.NODE_BIN,args:[process.env.PLUGIN_ROOT+"/dist/index.js"]}))')
-  if claude mcp add-json total-recall "$MCP_JSON" --scope user; then
+  if claude_mcp add-json total-recall "$MCP_JSON" --scope user; then
     # Capture `claude mcp get` output BEFORE grepping. This script runs under
     # `set -o pipefail` (line 78), and in the real failure case this guard is
     # meant to catch (wrong node path → stdio server unreachable) `claude mcp get`
@@ -431,10 +438,10 @@ else
     # Capturing first (with `|| true` so a non-zero claude doesn't trip set -e
     # elsewhere) and grepping the captured string makes the match independent of
     # claude's exit status.
-    MCP_GET_OUT=$(claude mcp get total-recall 2>&1 || true)
+    MCP_GET_OUT=$(claude_mcp get total-recall 2>&1 || true)
     if printf '%s' "$MCP_GET_OUT" | grep -qi 'failed to connect'; then
       warn "MCP server shows 'Failed to connect' — the node path may be wrong: $NODE_BIN"
-      warn "Re-run with the correct node, or fix via 'claude mcp remove total-recall' + 'claude mcp add-json ...'."
+      warn "Re-run with the correct node, or fix via 'claude mcp remove total-recall -s user' + 'claude mcp add-json ...'."
     else
       ok "Registered MCP server 'total-recall' (user scope)."
     fi
@@ -707,10 +714,12 @@ fi
 step "Step 8 — Verify"
 [ -f "$PLUGIN_ROOT/dist/index.js" ] && ok "dist/index.js present" || warn "dist/index.js missing — run 'npm run build' in $PLUGIN_ROOT"
 if command -v claude >/dev/null 2>&1; then
-  if claude mcp get total-recall >/dev/null 2>&1; then
-    ok "MCP server 'total-recall' is registered"
+  # A plugin-managed install's server is named plugin:total-recall:total-recall.
+  if [ "$PLUGIN_MANAGED" -eq 1 ]; then MCP_NAME="plugin:total-recall:total-recall"; else MCP_NAME="total-recall"; fi
+  if claude_mcp get "$MCP_NAME" >/dev/null 2>&1; then
+    ok "MCP server '$MCP_NAME' is registered"
   else
-    warn "MCP server 'total-recall' not registered"
+    warn "MCP server '$MCP_NAME' not registered"
   fi
 fi
 
