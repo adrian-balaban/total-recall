@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { TOTAL_RECALL_DIR, INDEX_CACHE_PATH, loadConfig } from './paths.js';
+import { TOTAL_RECALL_DIR, loadConfig } from './paths.js';
+import { renderIndexCache } from './persistence.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 
 // Context for hosts that run no SessionStart hook (Copilot in Visual Studio, Cline
@@ -53,12 +54,7 @@ export function frameOrgIndex(text: string, mode: string): string {
 }
 
 export function readIndexResource(): string {
-  let raw: string;
-  try {
-    raw = fs.readFileSync(INDEX_CACHE_PATH, 'utf8');
-  } catch {
-    return '(memory index not built yet — run rebuild_index)';
-  }
+  const raw = renderIndexCache();
   const mode = loadConfig().orgInjection ?? 'index';
   return frameOrgIndex(raw, mode);
 }

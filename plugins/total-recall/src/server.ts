@@ -94,7 +94,7 @@ export async function main() {
   // loadIndexes no longer reads invertedIndex.json (a dead load — JSON.parse +
   // populate that the immediately-following rebuild discards), so this is the
   // single source that materializes the inverted index from the reconciled
-  // memIndex. Persists invertedIndex.json + .index-cache.txt now, before any
+  // memIndex. Persists invertedIndex.json now, before any
   // tool call can arrive.
   recalcIdfNow();
   // Flush the reconciled memIndex to index.json (debounced 1s). The +2s

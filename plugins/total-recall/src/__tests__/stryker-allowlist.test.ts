@@ -21,6 +21,7 @@ const allow = new Set(
 // Files deliberately kept out of the Stryker run. Add a one-line reason.
 const EXCLUDED: Record<string, string> = {
   'index.test.ts': 'boots the server; Stryker perturbs module init order (see vitest.stryker.config.ts header)',
+  'host-context.test.ts': 'connects an in-memory MCP client; host-context.ts is not a mutated module and only touches state.ts for seeding',
 };
 
 const testFiles = fs.readdirSync(TESTS).filter((f) => f.endsWith('.test.ts'));

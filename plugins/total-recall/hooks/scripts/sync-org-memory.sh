@@ -99,8 +99,20 @@ SYNC_LOG="$HOME/.total-recall/org/.sync.log"
 mkdir -p "$(dirname "$QUEUE_DIR")"
 mkdir -p "$QUEUE_DIR"
 
+# F4: every line in .sync.log carries a UTC timestamp (MTBF/MTTR need it), and the
+# log is capped to its last 1,000 lines so it cannot grow without bound.
+ts() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+stamp_log() {
+  local l
+  while IFS= read -r l; do printf '%s %s\n' "$(ts)" "$l" >>"$SYNC_LOG"; done
+}
+if [ -f "$SYNC_LOG" ] && [ "$(wc -l <"$SYNC_LOG")" -gt 1000 ]; then
+  _LOG_TMP=$(mktemp "${SYNC_LOG}.tmp.XXXXXXXXXX")
+  tail -n 1000 "$SYNC_LOG" >"$_LOG_TMP" && mv -f "$_LOG_TMP" "$SYNC_LOG" || rm -f "$_LOG_TMP"
+fi
+
 log_warn() {
-  echo "warning: $1" >>"$SYNC_LOG"
+  printf '%s warning: %s\n' "$(ts)" "$1" >>"$SYNC_LOG"
 }
 
 # Run the mjs git sync for a single queued org key.
@@ -149,7 +161,7 @@ drain_queue() {
     if run_queued_sync "$q_key" "${q_delete:-0}" "${q_force:-0}"; then
       rm -f "$job"
     else
-      echo "sync failed for $q_key (job left for retry: $(basename "$job"))" >>"$SYNC_LOG"
+      printf '%s sync failed for %s (job left for retry: %s)\n' "$(ts)" "$q_key" "$(basename "$job")" >>"$SYNC_LOG"
       return 1
     fi
   done
@@ -182,7 +194,7 @@ start_worker() {
     done
     # Release the inherited lock before exiting.
     flock -u 9
-  ) >>"$SYNC_LOG" 2>&1 &
+  ) 2>&1 | stamp_log &
 }
 
 case "$KEY" in
@@ -212,13 +224,13 @@ case "$KEY" in
     else
       log_warn "'flock' not found; org sync running without coalescing lock"
       run_queued_sync "$KEY" "$DELETE_FLAG" "$FORCE_FLAG" || true
-      bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
+      bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" 2>&1 | stamp_log &
     fi
     ;;
   *)
     # Personal memory store/update/delete: no org-vault git sync, but rebuild
     # the local injected index so the new/deleted memory reflects immediately.
-    bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" >>"$SYNC_LOG" 2>&1 &
+    bash "$PLUGIN_ROOT/hooks/scripts/build-memory-index.sh" 2>&1 | stamp_log &
     ;;
 esac
 

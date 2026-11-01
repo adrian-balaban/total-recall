@@ -17,7 +17,7 @@ vi.mock('../tfidf.js', async () => {
 
 import {
   saveNow, loadIndexes, scheduleSave, scheduleAccessSave, scheduleIdfRecalc, flushPending,
-  markIndexFresh, buildIndexCache, deriveFilePathFromKey,
+  markIndexFresh, renderIndexCache, deriveFilePathFromKey,
 } from '../persistence.js';
 import { rebuildInvertedIndex } from '../tfidf.js';
 import { memIndex, invertedIndex, errors } from '../state.js';
@@ -209,14 +209,14 @@ describe('atomicWrite when the target cannot be replaced', () => {
 describe('debounced save timers', () => {
   beforeEach(() => { vi.useFakeTimers(); seed('k/a'); });
 
-  it('scheduleSave writes index.json at +1s, then the inverted index and cache at +3s', () => {
+  it('scheduleSave writes index.json at +1s, then the inverted index at +3s (never the hook-owned cache)', () => {
     scheduleSave();
     vi.advanceTimersByTime(1000);
     expect(fs.existsSync(INDEX_PATH)).toBe(true);
     expect(fs.existsSync(INVERTED_INDEX_PATH)).toBe(false);
     vi.advanceTimersByTime(2000);
     expect(fs.existsSync(INVERTED_INDEX_PATH)).toBe(true);
-    expect(fs.existsSync(INDEX_CACHE_PATH)).toBe(true);
+    expect(fs.existsSync(INDEX_CACHE_PATH)).toBe(false);
   });
 
   it('markIndexFresh cancels the follow-up inverted-index write', () => {
@@ -300,15 +300,14 @@ describe('flushPending', () => {
   });
 });
 
-// ─── buildIndexCache line format ─────────────────────────────────────────────
+// ─── renderIndexCache line format ─────────────────────────────────────────────
 
-describe('buildIndexCache', () => {
-  it('writes a count line, then one line per memory with a 40-char title and at most 3 tags', () => {
+describe('renderIndexCache', () => {
+  it('renders a count line, then one line per memory with a 40-char title and at most 3 tags', () => {
     seed('k/long', { title: 'x'.repeat(50), tags: ['a', 'b', 'c', 'd'], category: 'decisions' });
     seed('k/three', { title: 'short', tags: ['a', 'b', 'c'] });
     seed('k/none', { title: 'bare', tags: [] });
-    buildIndexCache();
-    expect(fs.readFileSync(INDEX_CACHE_PATH, 'utf8').split('\n')).toEqual([
+    expect(renderIndexCache().split('\n')).toEqual([
       '3',
       `- k/long: ${'x'.repeat(40)} [a, b, c, ...] (decisions)`,
       '- k/three: short [a, b, c] (knowledge)',
@@ -316,8 +315,7 @@ describe('buildIndexCache', () => {
     ]);
   });
 
-  it('writes just "0" for an empty index', () => {
-    buildIndexCache();
-    expect(fs.readFileSync(INDEX_CACHE_PATH, 'utf8')).toBe('0');
+  it('renders just "0" for an empty index', () => {
+    expect(renderIndexCache()).toBe('0');
   });
 });

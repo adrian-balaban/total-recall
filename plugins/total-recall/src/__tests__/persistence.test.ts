@@ -387,22 +387,3 @@ describe('unwrapIndexEntries forward-incompatible version', () => {
     expect(Object.keys(memIndex).length).toBe(0);
   });
 });
-
-describe('buildIndexCache — shell-readable index cache', () => {
-  it('does not throw when atomicWrite fails (records error, best-effort)', async () => {
-    const { buildIndexCache } = await import('../persistence.js');
-    const { memIndex } = await import('../state.js');
-    // Seed one entry so buildIndexCache has content to serialize.
-    (memIndex as any)['knowledge/cache-probe'] = {
-      key: 'knowledge/cache-probe',
-      title: 'cache probe',
-      tags: ['t1', 't2', 't3', 't4'],
-      contentPreview: 'body',
-      category: 'knowledge',
-    };
-    // Under the fs mock, atomicWrite's writeFileSync throws → recordError.
-    expect(() => buildIndexCache()).not.toThrow();
-    expect(errors.some((e) => /atomicWrite/.test(e.msg))).toBe(true);
-    delete (memIndex as any)['knowledge/cache-probe'];
-  });
-});
