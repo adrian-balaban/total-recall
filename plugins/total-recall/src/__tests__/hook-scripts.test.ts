@@ -492,7 +492,7 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
       const mcpCalls = calls.filter((c) => c.split('|')[1]?.startsWith('mcp '));
       expect(mcpCalls.length).toBeGreaterThan(0);
       for (const c of mcpCalls) {
-        const [dir, args] = c.split('|');
+        const [dir, args = ''] = c.split('|');
         expect(dir).not.toBe(cwd);
         if (args.startsWith('mcp remove')) expect(args).toMatch(/ (-s|--scope) user\b/);
       }
