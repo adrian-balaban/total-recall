@@ -506,6 +506,44 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     expect(out).not.toContain("MCP server 'total-recall' not registered");
   });
 
+  // E4 / [TR-P5]: a persistent PreCompact extraction failure must be visible at session start.
+  const CHECK_EXTRACT = path.join(REPO_ROOT, 'hooks', 'scripts', 'check-extract-outcomes.sh');
+  function checkExtract(outcomes: string[] | null) {
+    const home = fs.mkdtempSync(path.join(tmpHome, 'chk-extract-'));
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    if (outcomes !== null) {
+      fs.writeFileSync(path.join(home, '.total-recall', '.extract.log'),
+        outcomes.map((o) => o.startsWith('raw:') ? o.slice(4) : `2026-11-02T10:00:00Z v1.6.6 session=s outcome=${o} written=0 skipped=0 errors=0 dropped=0 claude_rc=0`).join('\n') + '\n');
+    }
+    const r = spawnSync('bash', [CHECK_EXTRACT], { encoding: 'utf8', stdio: 'pipe', env: { ...process.env, HOME: home } });
+    expect(r.status).toBe(0);
+    return JSON.parse(r.stdout) as { continue: boolean; hookSpecificOutput?: { hookEventName: string; additionalContext: string } };
+  }
+
+  it('[TR-P5] check-extract-outcomes.sh warns when 3 of the last 5 PreCompact runs failed', () => {
+    const out = checkExtract(['wrote', 'cli-error', 'nothing', 'dropped', 'cli-error']);
+    expect(out.continue).toBe(true);
+    expect(out.hookSpecificOutput?.hookEventName).toBe('SessionStart');
+    expect(out.hookSpecificOutput?.additionalContext).toContain('extraction has failed');
+    expect(checkExtract(['store-error', 'store-error', 'dropped']).hookSpecificOutput).toBeDefined();
+  });
+
+  it('[TR-P5] check-extract-outcomes.sh stays silent for healthy, sparse, old-format or missing logs', () => {
+    expect(checkExtract(['wrote', 'nothing', 'nothing', 'dropped', 'nothing']).hookSpecificOutput).toBeUndefined();
+    expect(checkExtract(['cli-error', 'dropped']).hookSpecificOutput).toBeUndefined();
+    // Only the LAST 5 runs count: old failures followed by healthy runs are not an alarm.
+    expect(checkExtract(['cli-error', 'cli-error', 'cli-error', 'nothing', 'wrote', 'nothing', 'nothing', 'nothing']).hookSpecificOutput).toBeUndefined();
+    // Pre-1.6.4 logs carry no outcome= lines.
+    expect(checkExtract(['raw:store-learning: 0 written, 0 skipped (existing), 1 errors', 'raw:store-learning: 0 written, 0 skipped (existing), 1 errors', 'raw:store-learning: 0 written, 0 skipped (existing), 1 errors']).hookSpecificOutput).toBeUndefined();
+    expect(checkExtract(null)).toEqual({ continue: true });
+  });
+
+  it('[TR-P5] the hook is registered in both SessionStart manifests', () => {
+    for (const f of ['hooks.json', 'hooks.gemini.json']) {
+      expect(fs.readFileSync(path.join(REPO_ROOT, 'hooks', f), 'utf8')).toContain('check-extract-outcomes.sh');
+    }
+  });
+
   // #9: install.sh --vector installs the optional vector deps. A bare `npm install
   // <pkg>` (npm 7+) defaults to --save, which would duplicate them into
   // `dependencies` and break graceful degradation if the mutated package.json were
