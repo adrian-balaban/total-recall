@@ -3,7 +3,6 @@ import * as path from 'path';
 import {
   INDEX_PATH,
   INVERTED_INDEX_PATH,
-  INDEX_CACHE_PATH,
   ORG_VAULT,
   PERSONAL_VAULT,
   ensureDir,
@@ -395,7 +394,6 @@ export function scheduleIdfRecalc() {
     try {
       // Inverted index is already updated incrementally in-memory during mutations
       atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-      buildIndexCache();
     } catch (e) {
       recordError(`scheduleIdfRecalc: ${(e as Error).message}`);
       try { console.error(e); } catch { /* stderr closed — ignore */ }
@@ -417,7 +415,6 @@ export function saveNow() {
 export function recalcIdfNow() {
   rebuildInvertedIndex();
   atomicWrite(INVERTED_INDEX_PATH, JSON.stringify(invertedIndex, null, 2));
-  buildIndexCache();
 }
 
 // #18: Clear the dirtyTokens flag after the boot sync-rebuild. main() calls
@@ -474,9 +471,13 @@ export function flushPending() {
   }
 }
 
-// ─── Index cache (shell-readable) ────────────────────────────────────────────
+// ─── Index cache text ─────────────────────────────────────────────────────────
+// `.index-cache.txt` is written ONLY by the SessionStart hook (build-memory-index.sh):
+// one writer, so the hooks<->server shared-file channel shrinks. The server keeps the
+// same text for hosts that run no hooks (the total-recall://index resource), rendered
+// from memory instead of from a file.
 
-export function buildIndexCache() {
+export function renderIndexCache(): string {
   const entries = Object.values(memIndex);
   const lines = [`${entries.length}`];
   for (const m of entries) {
@@ -484,6 +485,5 @@ export function buildIndexCache() {
     const tags = m.tags.slice(0, 3).join(', ') + (m.tags.length > 3 ? ', ...' : '');
     lines.push(`- ${m.key}: ${shortTitle} [${tags}] (${m.category})`);
   }
-  ensureDir(path.dirname(INDEX_CACHE_PATH));
-  atomicWrite(INDEX_CACHE_PATH, lines.join('\n'));
+  return lines.join('\n');
 }

@@ -1950,8 +1950,8 @@ describe('LRU cache TTL expiry (#8)', () => {
   });
 });
 
-describe('debounced timer callbacks — buildIndexCache and scheduleIdfRecalc', () => {
-  it('buildIndexCache writes .index-cache.txt after timers fire', async () => {
+describe('debounced timer callbacks — scheduleIdfRecalc', () => {
+  it('the server never writes .index-cache.txt (the SessionStart hook is its only writer)', async () => {
     vi.useFakeTimers();
     await callTool('store_memory', {
       title: 'Timer Cache Test',
@@ -1963,10 +1963,9 @@ describe('debounced timer callbacks — buildIndexCache and scheduleIdfRecalc', 
     await vi.runAllTimersAsync();
     vi.useRealTimers();
     const cacheFile = path.join(VAULT, '.index-cache.txt');
-    expect(fs.existsSync(cacheFile)).toBe(true);
-    const content = fs.readFileSync(cacheFile, 'utf8');
-    expect(content).toContain('Timer Cache Test');
-    expect(content).toContain('...'); // truncated tag list
+    expect(fs.existsSync(cacheFile)).toBe(false);
+    // …but the invertedIndex write of the same timer still happened.
+    expect(fs.existsSync(path.join(VAULT, 'invertedIndex.json'))).toBe(true);
   });
 });
 

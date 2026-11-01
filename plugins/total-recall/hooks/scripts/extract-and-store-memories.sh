@@ -80,7 +80,43 @@ EXTRACT_LOG="$HOME/.total-recall/.extract.log"
 # mid-line, but the transcript is JSONL and claude -p reads it as free-form context
 # (not strict JSON), so a truncated first line is harmless.
 MAX_BYTES=1048576
+MAX_LOG_LINES=1000
+
+# Observability (E1): the run must leave ONE line saying what happened. A run that
+# writes nothing is otherwise ambiguous — the model had nothing worth storing, its
+# output was dropped (a JSON array, prose), or `claude -p` failed (its exit code
+# used to be swallowed by `|| true`). store-learning's stderr goes to a temp file so
+# its summary can be parsed; it is appended to the log afterwards, so crash text
+# (e.g. ERR_MODULE_NOT_FOUND) still lands there. set +e only around the pipeline so
+# PIPESTATUS can be read; the hook still always ends with {"continue":true}.
+STORE_ERR=$(mktemp)
+trap 'rm -f "$STORE_ERR"' EXIT
+set +e
 "$CLAUDE_BIN" -p "$EXTRACT_PROMPT" < <(tail -c "$MAX_BYTES" "$TRANSCRIPT") 2>>"$EXTRACT_LOG" \
-  | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>>"$EXTRACT_LOG" || true
+  | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>"$STORE_ERR"
+CLAUDE_RC=${PIPESTATUS[0]}
+set -e
+cat "$STORE_ERR" >>"$EXTRACT_LOG" 2>/dev/null || true
+
+SUMMARY=$(grep -o 'store-learning: .*' "$STORE_ERR" 2>/dev/null | tail -1 || true)
+field() { printf '%s' "$SUMMARY" | sed -nE "s/.*[:,] ([0-9]+) $1.*/\1/p"; }
+N_WRITTEN=$(field written); N_SKIPPED=$(field skipped); N_ERRORS=$(field errors); N_DROPPED=$(field dropped)
+N_WRITTEN=${N_WRITTEN:-0}; N_SKIPPED=${N_SKIPPED:-0}; N_ERRORS=${N_ERRORS:-0}; N_DROPPED=${N_DROPPED:-0}
+if [ "$N_WRITTEN" -gt 0 ]; then OUTCOME=wrote
+elif [ "${CLAUDE_RC:-0}" -ne 0 ]; then OUTCOME=cli-error
+elif [ -z "$SUMMARY" ]; then OUTCOME=store-error
+elif [ "$N_DROPPED" -gt 0 ] || [ "$N_ERRORS" -gt 0 ]; then OUTCOME=dropped
+else OUTCOME=nothing; fi
+VERSION=$(PKG="$SCRIPT_DIR/../../package.json" "$NODE_BIN" -e 'try{process.stdout.write(String(require(process.env.PKG).version||"unknown"))}catch{process.stdout.write("unknown")}' 2>/dev/null || echo unknown)
+SESSION=$(printf '%s' "$HOOK_INPUT" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).session_id||"").replace(/[^A-Za-z0-9_-]/g,""))}catch{}})' 2>/dev/null || true)
+printf '%s v%s session=%s outcome=%s written=%s skipped=%s errors=%s dropped=%s claude_rc=%s\n' \
+  "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$VERSION" "${SESSION:-unknown}" "$OUTCOME" \
+  "$N_WRITTEN" "$N_SKIPPED" "$N_ERRORS" "$N_DROPPED" "${CLAUDE_RC:-0}" >>"$EXTRACT_LOG" 2>/dev/null || true
+
+# E5: keep the log bounded — only the last MAX_LOG_LINES lines survive.
+if [ "$(wc -l <"$EXTRACT_LOG" 2>/dev/null || echo 0)" -gt "$MAX_LOG_LINES" ]; then
+  LOG_TMP=$(mktemp "${EXTRACT_LOG}.tmp.XXXXXXXXXX")
+  tail -n "$MAX_LOG_LINES" "$EXTRACT_LOG" >"$LOG_TMP" && mv -f "$LOG_TMP" "$EXTRACT_LOG" || rm -f "$LOG_TMP"
+fi
 
 echo '{"continue":true}'

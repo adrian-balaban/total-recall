@@ -29,6 +29,7 @@ if (argsFile) {
   fs.mkdirSync(path.dirname(argsFile), { recursive: true });
   fs.writeFileSync(argsFile, process.argv.slice(2).join('\\n'));
 }
+console.log('stub-synced ' + process.argv[2]);
 process.exit(0);
 `;
 
@@ -100,6 +101,29 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
   afterAll(() => {
     process.env.HOME = prevHome;
     if (tmpHome) fs.rmSync(tmpHome, { recursive: true, force: true });
+  });
+
+  // F4: .sync.log lines carry a UTC timestamp and the log stays bounded.
+  it('F4: worker output in .sync.log is timestamped, and the log is capped at 1,000 lines', async () => {
+    const logPath = path.join(tmpHome, '.total-recall', 'org', '.sync.log');
+    fs.mkdirSync(path.dirname(logPath), { recursive: true });
+    fs.writeFileSync(logPath, Array.from({ length: 1500 }, (_, i) => `old ${i}`).join('\n') + '\n');
+    const r = runHook(JSON.stringify({
+      tool_name: 'mcp__total-recall__store_memory',
+      tool_input: { title: 'X', content: '...', tags: ['org'] },
+      tool_response: [{ type: 'text', text: JSON.stringify({ key: 'org/architecture/f4' }) }],
+    }));
+    expect(r.status).toBe(0);
+    const deadline = Date.now() + 4000;
+    let lines: string[] = [];
+    while (Date.now() < deadline) {
+      lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+      if (lines.some((l) => l.includes('stub-synced'))) break;
+      await new Promise((res) => setTimeout(res, 30));
+    }
+    expect(lines.length).toBeLessThanOrEqual(1001);
+    expect(lines.find((l) => l.includes('stub-synced'))).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ stub-synced org\/architecture\/f4$/);
+    expect(lines).not.toContain('old 0');
   });
 
   it('extracts key from an MCP-envelope tool_response and syncs without --delete', async () => {

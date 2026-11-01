@@ -15,7 +15,7 @@ A persistent, searchable memory for Claude Code, Gemini/Antigravity and VS Code 
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` goes, through a fail-closed filter, to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable semantic search.
-- **Status** — v1.6.3, stable: 966 tests pass, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.4, stable: 974 tests pass, 96.9% statement coverage, ≈78% mutation score.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -191,8 +191,8 @@ and are only pulled in if you enable it.
 
 |              |                                                                                                                                                                                                       |
 | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**  | 1.6.3 — stable                                                                                                                                                                                        |
-| **Tests**    | 966 unit + 24 integration passing · 73 files · ~16k lines of test code                                                                                                                                |
+| **Version**  | 1.6.4 — stable                                                                                                                                                                                        |
+| **Tests**    | 974 unit + 24 integration passing · 73 files · ~16k lines of test code                                                                                                                                |
 | **Coverage** | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                       |
 | **Mutation** | ≈78% (Stryker, 15 core modules) · drifts ~±1 pt run-to-run · gate fails below 65%                                                                                                                     |
 | **CI**       | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |

@@ -174,6 +174,60 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
     expect(log).toMatch(/store-learning: \d+ written, \d+ skipped \(existing\), \d+ errors/);
   });
 
+  // E1: every run leaves one line telling WHY it did or didn't write.
+  const outcomeLine = () => {
+    const lines = fs.readFileSync(extractLog(), 'utf8').split('\n').filter((l) => / outcome=/.test(l));
+    return lines[lines.length - 1] ?? '';
+  };
+  const run = (opts: Parameters<typeof runHook>[1]) =>
+    runHook(JSON.stringify({ transcript_path: transcript, session_id: 'sess-123' }), opts);
+
+  it('E1: a run that writes records outcome=wrote with ISO time, version and session', () => {
+    run({ claudeLines: learningLine('Outcome Wrote') + '\n' });
+    expect(outcomeLine()).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ v\S+ session=sess-123 outcome=wrote written=1 skipped=0 errors=0 dropped=0 claude_rc=0$/);
+  });
+
+  it('E1: empty model output is outcome=nothing', () => {
+    run({ claudeLines: '' });
+    expect(outcomeLine()).toMatch(/outcome=nothing written=0 skipped=0 errors=0 dropped=0 claude_rc=0$/);
+  });
+
+  it('E1: prose only, or a JSON array, is outcome=dropped (not silently "nothing")', () => {
+    run({ claudeLines: 'I found nothing worth storing.\n' });
+    expect(outcomeLine()).toMatch(/outcome=dropped .*dropped=1 /);
+    run({ claudeLines: '[' + learningLine('In An Array') + ']\n' });
+    expect(outcomeLine()).toMatch(/outcome=dropped .*dropped=1 /);
+    expect(fs.existsSync(path.join(vault(), 'knowledge', 'in-an-array.md'))).toBe(false);
+  });
+
+  it('E1: a pretty-printed object is dropped line by line, never half-stored', () => {
+    run({ claudeLines: '{\n  "title": "Pretty",\n  "content": "x"\n}\n' });
+    expect(outcomeLine()).toMatch(/outcome=(dropped|nothing)/);
+    expect(outcomeLine()).not.toMatch(/outcome=wrote/);
+  });
+
+  it('E1: a failing `claude -p` is outcome=cli-error with its exit code', () => {
+    run({ claudeLines: '', claudeExit: 7 });
+    expect(outcomeLine()).toMatch(/outcome=cli-error .*claude_rc=7$/);
+  });
+
+  it('E1: the hook still ends with {"continue":true} when claude fails', () => {
+    const r = run({ claudeLines: '', claudeExit: 7 });
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+  });
+
+  it('E5: .extract.log is capped at 1,000 lines, keeping the newest', () => {
+    const lines = Array.from({ length: 1500 }, (_, i) => `old line ${i}`).join('\n') + '\n';
+    fs.writeFileSync(extractLog(), lines);
+    run({ claudeLines: '' });
+    const kept = fs.readFileSync(extractLog(), 'utf8').split('\n').filter(Boolean);
+    expect(kept.length).toBeLessThanOrEqual(1000);
+    expect(kept[kept.length - 1]).toMatch(/ outcome=nothing /);
+    expect(kept).not.toContain('old line 0');
+    expect(kept).toContain('old line 1499');
+  });
+
   it('A9: repeated compaction never overwrites — second run skips the existing memory', () => {
     const line = learningLine('Idempotent Learning') + '\n';
     runHook(JSON.stringify({ transcript_path: transcript }), { claudeLines: line });

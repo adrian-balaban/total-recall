@@ -76,7 +76,7 @@ let input = '';
 process.stdin.on('data', (d) => { input += d; });
 process.stdin.on('end', () => {
   const now = new Date().toISOString();
-  let written = 0, skipped = 0, errors = 0;
+  let written = 0, skipped = 0, errors = 0, dropped = 0;
   for (const line of input.split('\n')) {
     const trimmed = line.trim();
     if (!trimmed) continue;
@@ -88,7 +88,10 @@ process.stdin.on('end', () => {
     // "0 written, 0 skipped, 1 errors" that made every clean-but-chatty run look
     // failed. Only a line that LOOKS like JSON (starts with `{`) but fails to
     // parse or lacks title/content is a genuine error worth surfacing.
-    if (trimmed[0] !== '{') continue;
+    // Counted as `dropped` (not an error) so the PreCompact wrapper can tell
+    // "the model had nothing" from "the model answered but nothing was parseable"
+    // (a JSON array, prose): see the per-run outcome line in .extract.log.
+    if (trimmed[0] !== '{') { dropped++; continue; }
     let obj;
     try { obj = JSON.parse(trimmed); } catch { errors++; continue; }
     if (!obj || !obj.title || !obj.content) { errors++; continue; }
@@ -169,5 +172,5 @@ process.stdin.on('end', () => {
     } catch { /* marker is best-effort; the next boot still reconciles */ }
   }
   // Keep stdout clean (hooks must not spam it). Summary goes to stderr for debugging.
-  process.stderr.write(`store-learning: ${written} written, ${skipped} skipped (existing), ${errors} errors\n`);
+  process.stderr.write(`store-learning: ${written} written, ${skipped} skipped (existing), ${errors} errors, ${dropped} dropped\n`);
 });

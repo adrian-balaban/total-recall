@@ -13,7 +13,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { z } from 'zod';
-import { register, frameOrgIndex, readSyncStatus, WORKFLOW_RULES } from '../host-context.js';
+import { register, frameOrgIndex, readSyncStatus, readIndexResource, WORKFLOW_RULES } from '../host-context.js';
 
 const INDEX = [
   '## Index',
@@ -41,6 +41,16 @@ describe('host context (resources + prompts)', () => {
     expect(res).toEqual(['total-recall://index', 'total-recall://sync-status']);
     const prompts = (await client.listPrompts()).prompts.map((p) => p.name).sort();
     expect(prompts).toEqual(['extract-session-learnings', 'memory-workflow']);
+  });
+
+  it('[TR-C7] the index resource is rendered from the in-memory index, with no cache file (hookless hosts)', async () => {
+    const { memIndex } = await import('../state.js');
+    (memIndex as any)['knowledge/hookless'] = { key: 'knowledge/hookless', title: 'Hookless host', tags: ['a'], category: 'knowledge' };
+    try {
+      expect(readIndexResource()).toContain('- knowledge/hookless: Hookless host [a] (knowledge)');
+    } finally {
+      delete (memIndex as any)['knowledge/hookless'];
+    }
   });
 
   it('[TR-C7] the index resource frames org entries as untrusted data', () => {
