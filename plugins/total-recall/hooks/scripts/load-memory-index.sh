@@ -54,8 +54,22 @@ FRAMED=$(printf '%s\n' "$INDEX_CONTENT" | CONFIG_FILE="$HOME/.total-recall/confi
 # see exactly the output below. Best-effort: a failure adds nothing.
 ARCH_SUMMARY=$(printf '%s' "${HOOK_STDIN:-}" | "$NODE_BIN" "$SCRIPT_DIR/architecture-summary.mjs" 2>/dev/null || true)
 
-INSTRUCTIONS="## Total Recall v$VERSION — Active Memory Index
+# The plugin's .mcp.json is the only thing that starts the MCP server of a
+# plugin-managed install. If it exists but no longer declares `total-recall`
+# (it has been emptied to {"mcpServers": {}} three times), the hooks keep
+# injecting this index while every tool is gone. Say so instead of failing
+# silently. No .mcp.json at all means another host registers the server: no alarm.
+MCP_WARNING=""
+if [ -f "$PLUGIN_ROOT/.mcp.json" ] \
+  && ! MCP_JSON_PATH="$PLUGIN_ROOT/.mcp.json" "$NODE_BIN" -e 'try{const d=JSON.parse(require("fs").readFileSync(process.env.MCP_JSON_PATH,"utf8"));process.exit(d&&d.mcpServers&&d.mcpServers["total-recall"]?0:1)}catch{process.exit(1)}' 2>/dev/null; then
+  MCP_WARNING="
+### ⚠ MCP server not declared
+$PLUGIN_ROOT/.mcp.json does not declare the total-recall server, so no total-recall MCP tools are available in this session (store, recall, search, org sync). Tell the user. Fix: run 'claude plugin update total-recall', or restore .mcp.json from the plugin's release branch, then start a new session.
+"
+fi
 
+INSTRUCTIONS="## Total Recall v$VERSION — Active Memory Index
+$MCP_WARNING
 Total Recall v$VERSION active. The following memories are already in context. Use keys with get_memories_by_keys before searching.
 
 ### Retrieval Decision Tree
