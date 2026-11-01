@@ -40,7 +40,27 @@ export const MAX_LINES_PER_FILE = 600; // code-quality.adl: MAX_LINES_PER_FILE
 
 // ADL [TR-S10]: lexical search (tfidf, ebbinghaus, rrf) and the optional vector / persistence stack.
 export const SEARCH = /^src\/(tfidf|ebbinghaus|rrf)\.ts$/;
-export const VECTORS_AND_PERSISTENCE = /^src\/(embeddings|vectorStore|persistence)\.ts$/;
+// Persistence is persistence.ts plus the vault walk, reconcile and journal modules that write through it.
+export const PERSISTENCE = /^src\/(persistence|vault-scan|auto-reconcile|journal)\.ts$/;
+export const VECTORS_AND_PERSISTENCE = /^src\/(embeddings|vectorStore|persistence|vault-scan|auto-reconcile|journal)\.ts$/;
 
 // ADL [TR-S11]: the tools that reuse store/mutate on purpose.
 export const REUSING_TOOLS = ['bulk', 'architecture'];
+
+// [TR-S12]: the partition. Every production file belongs to exactly ONE component, so a
+// new file cannot fall outside the rules (before this, vault-scan, auto-reconcile and
+// journal matched no component, and ebbinghaus/rrf and the spec leaves matched two).
+// Ownership: ebbinghaus and rrf are Search (their LEAF status is checked separately by
+// [TR-S1]); spec/{config,fields,elements,adl-parse} are Pure Helpers (structure.adl).
+export const COMPONENT_FILES: Record<string, RegExp> = {
+  helpers: /^src\/(dates|lru-cache|frontmatter|errors|types|privacy-filter|spec\/(config|fields|elements|adl-parse))\.ts$/,
+  paths: /^src\/paths\.ts$/,
+  state: /^src\/state\.ts$/,
+  persistence: PERSISTENCE,
+  search: /^src\/(tfidf|ebbinghaus|rrf)\.ts$/,
+  vectors: /^src\/(embeddings|vectorStore)\.ts$/,
+  registry: REGISTRY,
+  tools: /^src\/tools\/(?!registry\.ts$)/,
+  server: /^src\/(index|server|host-context)\.ts$/,
+  spec: /^src\/spec\/(?!(config|fields|elements|adl-parse)\.ts$)/,
+};

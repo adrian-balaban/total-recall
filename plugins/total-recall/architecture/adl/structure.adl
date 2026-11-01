@@ -33,5 +33,8 @@ ASSERT(State has no dependency on any other component) # [TR-S9]
 
 # Lexical search works without the optional vector stack and without the persistence layer
 ASSERT(Search has no dependency on Vectors or Persistence) # [TR-S10]
+# Persistence is persistence.ts, vault-scan.ts, auto-reconcile.ts and journal.ts. ebbinghaus and rrf are owned by Search
+# (they are also leaves, which TR-S1 checks), the four spec leaves by Pure Helpers.
+ASSERT(Every production file belongs to exactly one component) # [TR-S12]
 # S5 covers the five isolated tools; bulk and architecture reuse store and mutate on purpose
 ASSERT(The bulk and architecture tools depend on no tool other than store, mutate and Tool Registry) # [TR-S11]
