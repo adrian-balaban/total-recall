@@ -2,6 +2,9 @@ DESCRIPTION Code-quality limits for Total Recall
 CATEGORY Engineering Practices
 NAMESPACE TrQualityNS
 DEFINE CONST MAX_LINES_PER_FILE = 600
+DEFINE CONST MAX_CC = 10
+DEFINE CONST MAX_DUP_LINES = 10
+DEFINE CONST MAX_SHARED_CHANGES = 2
 DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Pure Helpers AS helpers
     DEFINE COMPONENT State AS state
@@ -25,3 +28,9 @@ ASSERT(No test asserts a tautology) # [TR-Q5]
 ASSERT(The Stryker break threshold is at least 65) # [TR-Q6]
 ASSERT(The mutation workflow runs the dependency audit before the build) # [TR-Q7]
 ASSERT(The release workflow publishes only after a successful mutation run) # [TR-Q8]
+
+# Complexity may only go down: the functions already at MAX_CC are frozen in a baseline that can only shrink
+ASSERT(No function has a cyclomatic complexity of MAX_CC or more, except those frozen in the shrinking baseline) # [TR-Q9]
+ASSERT(No production file has more than MAX_DUP_LINES identical lines in a row with any other file) # [TR-Q10]
+# Warning only: a trailing-window git metric must not block a legitimate burst of changes
+ASSERT(The pure helpers change no more than MAX_SHARED_CHANGES times per month) # [TR-Q11]
