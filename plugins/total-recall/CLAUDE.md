@@ -134,7 +134,7 @@ This is an MCP server that exposes 22 tools: 17 for persistent memory management
 - `src/rrf.ts` — Reciprocal Rank Fusion (k=60)
 
 **Hooks** (`hooks/hooks.json`):
-- `SessionStart`: pull org vault → rebuild index cache → inject memory index → check org-sync errors (`check-sync-errors.sh` warns if pushes failed since the last success)
+- `SessionStart`: pull org vault → rebuild index cache → inject memory index → check extraction outcomes (`check-extract-outcomes.sh` `[TR-P5]`: warns when ≥3 of the last 5 `.extract.log` outcomes are `cli-error`/`store-error`/`dropped`) → check org-sync errors (`check-sync-errors.sh` warns if pushes failed since the last success)
 - `PostToolUse` (store/update/delete): sync to org vault if tagged `org`
 - `PostToolUse` (`Write|Edit|MultiEdit`): `architecture-change.sh` asks for a reindex + change memory when an `.adl` file is edited
 - `PreCompact`: (every run appends one line to `~/.total-recall/.extract.log`: `<ISO time> v<version> session=<id> outcome=wrote|nothing|dropped|cli-error|store-error written= skipped= errors= dropped= claude_rc=`; the log keeps its last 1,000 lines. `org/.sync.log` is timestamped and capped the same way.) Extract 0–3 learnings from transcript via `extract-and-store-memories.sh` (reads `transcript_path` from the hook's stdin JSON — Claude Code's common hook input, *not* an env var) → pipes JSON lines to `hooks/scripts/store-learning.mjs` which writes them directly as frontmatter `.md` files to the personal vault (no MCP round-trip; never overwrites existing files)

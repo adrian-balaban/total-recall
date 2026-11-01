@@ -12,7 +12,7 @@ Stores memories locally as Markdown files with YAML frontmatter, indexes them fo
 - **Privacy** — local-first. The personal vault never leaves your machine; only what you tag `org` passes through a fail-closed privacy filter on its way to a shared Git repo.
 - **Install** — `/plugin marketplace add adrian-balaban/total-recall`, `/plugin install total-recall`, then `./install.sh` once. Node.js 18+, Linux · macOS · Windows (Git Bash).
 - **Footprint** — ~1–2 MB, two production dependencies (the MCP SDK and Zod). The ~200 MB semantic model downloads only if you enable vector search.
-- **Status** — v1.6.5, stable: 978 tests passing, 96.9% statement coverage, ≈78% mutation score.
+- **Status** — v1.6.6, stable: 981 tests passing, 96.9% statement coverage, ≈78% mutation score.
 
 > **Installation:** see [INSTALL.md](INSTALL.md) — profiles (minimal / complete, complete is the default), per-client setup, Windows notes, org vault.
 > **Internals:** see [ARCHITECTURE.md](ARCHITECTURE.md).
@@ -205,6 +205,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 2. build-memory-index.sh   — frontmatter scan → .index-cache.txt
 3. load-memory-index.sh    — inject the memory index into context (Claude Code only)
 4. check-sync-errors.sh    — warn if org-sync pushes failed since last success
+5. check-extract-outcomes.sh — warn if most recent PreCompact extraction runs failed
 ```
 
 Effect: every new Claude session automatically receives a summary of all your memories — without asking. In a project with ADL files, step 3 also adds a short architecture summary (`specDriven.sessionSummary`, capped at `sessionSummaryMaxChars`).
@@ -386,8 +387,8 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 
 |                    |                                                                                                                                                                                                                |
 | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Version**        | 1.6.5 — stable                                                                                                                                                                                                 |
-| **Tests**          | 978 unit + 24 integration, all passing · 73 files · ~16k lines of test code                                                                                                                                    |
+| **Version**        | 1.6.6 — stable                                                                                                                                                                                                 |
+| **Tests**          | 981 unit + 24 integration, all passing · 73 files · ~16k lines of test code                                                                                                                                    |
 | **Test Coverage**  | 96.9% statements · 90.9% branches · 98.1% lines                                                                                                                                                                |
 | **Mutation tests** | ≈78% (Stryker, 15 core modules) · varies ~±1 pt run to run · the gate fails below 65%                                                                                                                          |
 | **CI**             | [`mutation.yml`](../../.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is verified locally |
