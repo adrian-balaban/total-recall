@@ -316,6 +316,22 @@ bundleSuite('dist/build-index-cache.mjs', () => {
   });
 });
 
+describe('default error sinks', () => {
+  it('atomicWrite, listVaultFiles and readCacheEntries run without a sink and swallow errors', () => {
+    const d = tmp();
+    const blocked = path.join(d, 'is-a-dir');
+    fs.mkdirSync(path.join(blocked, 'inner'), { recursive: true });
+    expect(() => atomicWrite(blocked, 'x')).not.toThrow();
+    const file = put(d, 'plain-file', 'x');
+    expect(listVaultFiles(file, false)).toEqual([]);
+    expect(readCacheEntries(file, false)).toEqual([]);
+    const v = tmp();
+    put(v, 'knowledge/a.md', '---\ntitle: A\n---\n');
+    fs.chmodSync(path.join(v, 'knowledge', 'a.md'), 0o000);
+    try { expect(() => readCacheEntries(v, false)).not.toThrow(); } finally { fs.chmodSync(path.join(v, 'knowledge', 'a.md'), 0o600); }
+  });
+});
+
 // The entry point run in-process (the spawn tests above cover the built bundle).
 describe('hooks/build-index-cache entry (in-process)', () => {
   const logPath = path.join(path.dirname(INDEX_CACHE_PATH), '.index-cache.log');
