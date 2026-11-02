@@ -6,7 +6,7 @@ import { projectFiles } from 'archunit';
 import {
   PROD, TOOLS, ENTRY, TESTS, LEAVES, NON_LEAVES, OPTIONAL_DEP_OWNERS, OPTIONAL_DEP_IMPORT,
   CORE, NOT_ENTRY, REGISTRY, TOOL_NAMES, MAX_LINES_PER_FILE, PROCESS_OWNERS, PROCESS_IMPORT, SPEC,
-  SEARCH, VECTORS_AND_PERSISTENCE, REUSING_TOOLS, COMPONENT_FILES,
+  SEARCH, VECTORS_AND_PERSISTENCE, VAULT_WALK, INDEX_CACHE, STATE_VECTORS_PERSISTENCE, REUSING_TOOLS, COMPONENT_FILES,
 } from './components.js';
 import { measureComplexity } from './complexity.js';
 
@@ -108,6 +108,16 @@ describe('architecture fitness functions', () => {
   describe('search and tool reuse', () => {
     it('[TR-S10] lexical search never depends on vectors or persistence', async () => {
       const rule = projectFiles().inPath(SEARCH).shouldNot().dependOnFiles().inPath(VECTORS_AND_PERSISTENCE);
+      await expect(rule).toPassAsync();
+    });
+
+    it('[TR-S13] the vault walk never depends on state, vectors or persistence', async () => {
+      const rule = projectFiles().inPath(VAULT_WALK).shouldNot().dependOnFiles().inPath(STATE_VECTORS_PERSISTENCE);
+      await expect(rule).toPassAsync();
+    });
+
+    it('[TR-S14] the index cache never depends on state, vectors or persistence', async () => {
+      const rule = projectFiles().inPath(INDEX_CACHE).shouldNot().dependOnFiles().inPath(STATE_VECTORS_PERSISTENCE);
       await expect(rule).toPassAsync();
     });
 

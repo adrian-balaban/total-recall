@@ -41,6 +41,7 @@ export default defineConfig({
       'src/__tests__/journal.test.ts',
       'src/__tests__/vault-scan.test.ts',
       'src/__tests__/vault-scan-reconcile.test.ts',
+      'src/__tests__/index-cache.test.ts',
       'src/__tests__/state.test.ts',
       'src/__tests__/lru-cache.test.ts',
       'src/__tests__/errors.test.ts',

@@ -18,9 +18,11 @@ DEFINE SYSTEM Total Recall AS tr
         DEFINE CONSISTENCY Eventual
 
 # Crash safety
-ASSERT(Persistence writes index.json, invertedIndex.json and .index-cache.txt atomically, via a temporary file and rename) # [TR-W1]
+ASSERT(index.json, invertedIndex.json and .index-cache.txt are each written atomically, via a temporary file and rename) # [TR-W1]
 ASSERT(Session Shutdown runs exactly once across concurrent exit triggers and flushes the index before exit) # [TR-W2]
 ASSERT(accessCount and lastAccessed survive rebuild_index) # [TR-W4]
+# The SessionStart index cache has one writer, and a failed build leaves the previous cache in place and says so in .index-cache.log
+ASSERT(.index-cache.txt has exactly one writer, the build-index-cache bundle run by the SessionStart hook) # [TR-W8]
 # Org Sync Saga: compensation is block, keep, record (the privacy filter itself is TR-D3)
 ASSERT(When the org push fails, the queued sync job stays for a retry) # [TR-W5]
 ASSERT(Org Sync aborts, without wiping Org Vault, on a corrupt committed index or a branch switch that empties the working tree) # [TR-W6]

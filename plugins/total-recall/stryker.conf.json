@@ -24,6 +24,9 @@
     "src/auto-reconcile.ts",
     "src/journal.ts",
     "src/vault-scan.ts",
+    "src/vault-walk.ts",
+    "src/index-cache.ts",
+    "src/atomic-write.ts",
     "src/state.ts",
     "src/embeddings.ts",
     "src/errors.ts"
