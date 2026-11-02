@@ -77,7 +77,7 @@ Toate proiectele folosesc același vault. Pomenește proiectul în memorie („�
 Căutarea are două părți, iar ele tratează limbile diferit:
 
 - **Căutarea de text** merge în orice limbă scrisă cu alfabet latin (engleză, română, franceză, germană, spaniolă, poloneză, …), fără să țină cont de diacritice, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte. Nu indexează alte alfabete: textul în chirilică, greacă, arabă, chineză sau japoneză îi e invizibil.
-- **Orice pereche de limbi** trece prin căutarea semantică, inclusiv alfabetele non-latine pe care căutarea de text nu le poate vedea. Din 1.6.8 modelul de embeddings implicit e multilingv (50+ limbi), deci o întrebare în germană găsește o memorie scrisă în engleză, română sau orice altă limbă suportată.
+- **Căutarea semantică** (opțională, activă implicit în profilul „complet") acoperă orice pereche de limbi, inclusiv alfabetele non-latine pe care căutarea de text nu le poate vedea. Din 1.6.8 modelul de embeddings implicit e multilingv (50+ limbi), deci o întrebare în germană găsește o memorie scrisă în engleză, română sau orice altă limbă suportată.
 
 Dacă lucrezi doar în engleză și vrei o descărcare mai mică (87 MB față de 449 MB), setează modelul doar pentru engleză în `~/.total-recall/config.json` și repornește asistentul:
 
