@@ -480,6 +480,23 @@ Ambele vault-uri se deschid direct ca vault-uri Obsidian (fișiere `.md` simple 
 | **Release-uri**    | [`release.yml`](.github/workflows/release.yml) — construiește `dist/` și publică branch-ul `release` de pe care instalează marketplace-ul; taguri + note când versiunea se schimbă                                        |
 | **Audit**          | 0 critice în dependențele de producție                                                                                                                                                                                    |
 
+### 📏 Metrici de calitate a codului (masterclass Neal Ford, Codecamp Iași, oct. 2026)
+
+Măsurate pe v1.6.2 (commit `9940240`, 2026-11-01), aplicând formulele de fitness arhitectural din masterclass (complexitate ciclomatică, cuplaj A/I/D, Maintainability Level, cuplaj de cuante NDQMS) pe acest codebase. 
+
+| Metrică                                               | Valoare                                 | Prag                   | Verdict                               |
+| ------------------------------------------------------ | ----------------------------------------- | ------------------------ | --------------------------------------- |
+| Complexitate ciclomatică medie (415 funcții)           | 3.50                                      | < 4                        | ✅                                       |
+| Complexitate ciclomatică maximă                        | 58 (`storeMemory`) — 27 funcții ≥ 10      | < 10                       | ❌ (ratchet de complexitate planificat) |
+| Distanța medie de la secvența principală (A/I/D)       | 0.43                                      | < 0.6                      | ✅                                       |
+| Maintainability Level (von Zitzewitz, pe componentă)   | 68.9%                                     | > 60%                      | ✅                                       |
+| Cuplaj de cuantă NDQMS — `srv` (serverul MCP)          | 0.64                                      | ≤ 0.30 (țintă internă)    | ⚠️ cuplaj prin fișiere partajate cu hooks |
+| Cuplaj de cuantă NDQMS — `hooks`                       | 0.10                                      | ≤ 0.30 (țintă internă)    | ✅                                       |
+| Frecvența de deploy (tag-uri)                          | ≈ 7,9/lună                                | > 1/săptămână              | ✅ DORA elite                            |
+| Rata de eșec a schimbărilor                            | 27,8% (11% vizibil pentru utilizator)     | < 15% (țintă internă)      | ⚠️                                       |
+
+Cele două lacune deschise urmărite de plan: `storeMemory`/`parseAdl` și câteva alte funcții stau mult peste pragul de complexitate ciclomatică (un ratchet de complexitate este planificat, dar nu încă aplicat), iar serverul MCP și hook-urile de ciclu de viață partajează fișiere simple (`.index-cache.txt`, `index.json`) în loc de un contract versionat — ceea ce explică valoarea NDQMS a lui `srv` peste țintă.
+
 Mutation testing verifică dacă testele sunt într-adevăr bune: Stryker schimbă deliberat lucruri mici în cod (`>` devine `<`, `true` devine `false`), iar o suită de teste care nu pică atunci nu este suficient de strictă.
 
 Reproducere: `npm test` · `npm run test:coverage` · `npm run test:integration` · `npm run mutation`

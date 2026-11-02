@@ -234,7 +234,7 @@ Why hybrid: TF-IDF is exact-token ("k8s pod OOM" misses "workload killed for mem
 
 ```
 1. pull-org-vault.sh         — git pull on the org-sync branch (config.orgBranch, default knowledge; if configured)
-2. build-memory-index.sh     — frontmatter scan → .index-cache.txt
+2. build-memory-index.sh     — runs dist/build-index-cache.mjs (same walk + parser as the server) → .index-cache.txt
 3. load-memory-index.sh      — inject the memory index into context (Claude Code only)
 4. check-sync-errors.sh      — warn if org-sync pushes failed since last success
 5. check-extract-outcomes.sh — warn if most recent PreCompact extraction runs failed
@@ -479,6 +479,23 @@ Both vaults open directly as Obsidian vaults (plain `.md` + YAML frontmatter).
 | **CI**       | [`mutation.yml`](.github/workflows/mutation.yml) — audit + typecheck + build + full unit & integration suites + Stryker on every push/PR to `main`. The only build pipeline; nothing is gated locally |
 | **Releases** | [`release.yml`](.github/workflows/release.yml) — builds `dist/` and publishes the `release` branch the marketplace installs from; tags + notes when the version changes                               |
 | **Audit**    | 0 critical in production deps                                                                                                                                                                         |
+
+### 📏 Code-quality metrics (Neal Ford masterclass, Codecamp Iași Oct 2026)
+
+Measured against v1.6.2 (commit `9940240`, 2026-11-01) by applying the architecture-fitness formulas from the masterclass (cyclomatic complexity, A/I/D coupling, Maintainability Level, NDQMS quantum coupling) to this codebase. 
+
+| Metric                                               | Value                                 | Gate                | Verdict                              |
+| ----------------------------------------------------- | -------------------------------------- | -------------------- | ------------------------------------- |
+| Average cyclomatic complexity (415 functions)         | 3.50                                    | < 4                   | ✅                                     |
+| Max cyclomatic complexity                              | 58 (`storeMemory`) — 27 functions ≥ 10 | < 10                  | ❌ (complexity ratchet planned)       |
+| Mean distance from the main sequence (A/I/D)           | 0.43                                    | < 0.6                 | ✅                                     |
+| Maintainability Level (von Zitzewitz, by component)    | 68.9%                                   | > 60%                 | ✅                                     |
+| NDQMS quantum coupling — `srv` (MCP server)            | 0.64                                    | ≤ 0.30 (house target) | ⚠️ shared-file coupling with hooks    |
+| NDQMS quantum coupling — `hooks`                       | 0.10                                    | ≤ 0.30 (house target) | ✅                                     |
+| Deployment frequency (tags)                            | ≈ 7.9/month                             | > 1/week              | ✅ DORA elite                          |
+| Change failure rate                                    | 27.8% (11% user-facing)                 | < 15% (house target)  | ⚠️                                     |
+
+The two open gaps the plan tracks: `storeMemory`/`parseAdl` and a handful of other functions sit well above the CC gate (a complexity ratchet is planned but not yet enforced), and the MCP server and lifecycle hooks share plain files (`.index-cache.txt`, `index.json`) instead of a versioned contract — which is what drives the `srv` NDQMS figure above its target.
 
 Mutation testing checks whether the tests are actually any good: Stryker deliberately changes small things in the code (`>` becomes `<`, `true` becomes `false`), and a test suite that doesn't fail when that happens isn't strict enough.
 
