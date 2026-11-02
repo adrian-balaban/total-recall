@@ -1,5 +1,4 @@
 @startuml session-loop-en
-!pragma layout smetana
 left to right direction
 skinparam shadowing false
 skinparam defaultFontName Helvetica
@@ -8,7 +7,8 @@ rectangle "Session starts" as A
 rectangle "Memory index\ninjected into context" as B
 rectangle "You work" as C
 rectangle "Decisions & preferences\ncaptured automatically" as D
-database "<U+007E>/.total-recall\nMarkdown vault" as E
+database "<U+007E>/.total-recall\nPersonal Markdown vault\n(local)" as E
+database "Team Markdown vault\n(remote Git repo, e.g. GitHub)" as R
 rectangle "Spec-driven memories:\ndecisions, failures, changes\nlinked to the spec" as G
 rectangle "ADL files, optional" as Hh
 A --> B
@@ -18,5 +18,7 @@ D --> E
 E ..> A
 C ..> G : tagged with system,\nelements, requirements
 G --> E
+C ..> R : tagged org,\nafter the privacy filter
+R ..> A : pulled at session start
 Hh ..> G : index_architecture
 @enduml
