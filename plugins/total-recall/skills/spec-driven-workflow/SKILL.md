@@ -7,7 +7,7 @@ description: Use when building or changing a system from a spec with ADL archite
 
 The repository holds the spec, and the `.adl` files. Total Recall holds what the files do not: why each rule exists, what was rejected, which checks failed and how they were fixed. Never store a spec or an ADL file as the only copy in a memory.
 
-All of this can be switched off in `~/.total-recall/config.json` under `specDriven` (see the plugin README). If the architecture tools are missing, they are off; use plain `store_memory` with the same fields.
+All of this can be switched off in `~/.total-recall/config.json` under `specDriven` (see the root `README.md`). If the architecture tools are missing, they are off; use plain `store_memory` with the same fields.
 
 ## 🔁 The loop
 

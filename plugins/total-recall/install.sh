@@ -520,7 +520,7 @@ NODE
       ok "Wired statusLine into $SETTINGS_FILE"
       note "Statusline installed (shows total-recall version in the bottom bar)."
     else
-      warn "settings.json wiring failed — add statusLine manually (see README)."
+      warn "settings.json wiring failed — add statusLine manually (see INSTALL.md)."
       note "Statusline launcher installed but settings wiring failed."
     fi
   fi

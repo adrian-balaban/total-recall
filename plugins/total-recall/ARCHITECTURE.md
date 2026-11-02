@@ -2,7 +2,7 @@
 
 An MCP stdio server (`dist/index.js`, TypeScript in `src/`) plus lifecycle hooks that give Claude Code and Gemini/Antigravity persistent, searchable memory.
 
-![Session loop](../../docs/diagrams/session-loop-en.svg)
+![Session loop](https://raw.githubusercontent.com/adrian-balaban/total-recall/main/docs/diagrams/session-loop-en.svg)
 
 ---
 
@@ -42,7 +42,7 @@ With `specDriven.enabled: false` the 5 architecture tools and the spec fields ar
 
 ## 🔀 Write path
 
-![store_memory routing](../../docs/diagrams/store-routing-en.svg)
+![store_memory routing](https://raw.githubusercontent.com/adrian-balaban/total-recall/main/docs/diagrams/store-routing-en.svg)
 
 ![store_memory write path](architecture/diagrams/write-path.svg)
 

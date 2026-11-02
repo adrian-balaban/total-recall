@@ -1,12 +1,12 @@
 # ♊ Total Recall — Gemini/Antigravity working notes
 
-This plugin runs in Gemini/Antigravity. The 22 tools (17 memory + 5 spec-driven architecture tools, see `README.md` → *Spec-driven architecture*) are exposed as
+This plugin runs in Gemini/Antigravity. The 22 tools (17 memory + 5 spec-driven architecture tools, see `../../README.md` → *Architecture as code & Spec-driven work*) are exposed as
 `mcp_total-recall_<tool>` and invoked in plain English ("recall X",
 "store a memory about Y", "list memories tagged Z") — same surface as
 Claude Code.
 
 > **Install, client-compatibility, and the full gotchas list live in one place
-> now.** See `README.md` → *💻 Client Compatibility* for Gemini/Antigravity install +
+> now.** See `../../README.md` → *💻 Client Compatibility* for Gemini/Antigravity install +
 > event renames (`PostToolUse` → `AfterTool`, `PreCompact` → `PreCompress`),
 > and `CLAUDE.md` → *Key Gotchas* for the tag-routing / author /
 > duplicates / date-filter / frontmatter rules that apply to *both* clients.
