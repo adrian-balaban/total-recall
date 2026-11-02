@@ -26,3 +26,6 @@ ASSERT(Only Vectors (native binding self-heal) and the Spec exec module start ex
 
 # Hooks run without the server bundle, except SessionEnd, which signals the MCP child
 ASSERT(Lifecycle Hooks load server code only through the standalone dist mjs bundles; session-end.sh is the one hook that names dist/index.js) # [TR-R5]
+
+# Two embedding models produce vectors in different spaces, even at the same dimension
+ASSERT(Vectors never ranks a query against vectors made by a different embedding model: on a model change the vector index is rebuilt) # [TR-R6]

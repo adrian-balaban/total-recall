@@ -8,11 +8,12 @@ import {
   ORG_VAULT,
   VECTORS_DB,
   ensureDir,
+  embeddingModel,
 } from './paths.js';
 import { memIndex, recordError } from './state.js';
 import { keyFromPath, deriveCategory, isReservedKey, RESERVED_KEY_SEGMENTS, listVaultFiles } from './vault-walk.js';
 import { contentCache } from './lru-cache.js';
-import { deleteVector, listVectorKeys } from './vectorStore.js';
+import { deleteVector, listVectorKeys, getVecMeta, dropVectorTable } from './vectorStore.js';
 import { embedAndUpsert } from './embeddings.js';
 import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
 
@@ -256,7 +257,27 @@ export function reconcileIndex() {
 // same key self-heals (INSERT OR REPLACE), but a deleted key is never rewritten,
 // so the row bloats vec_memories forever and wastes search work. Sweep keys that
 // exist in vec_memories but not in memIndex and delete them.
+//
+// [TR-R6] Model switch: vectors from two models live in different spaces, and both
+// the old default (all-MiniLM-L6-v2) and the new one are 384-dim, so the dim guard
+// in vectorStore.ts never fires and a query from the new model would be ranked
+// against the old model's vectors — silently wrong results. When the vec_meta
+// fingerprint names a different model than the one configured now, drop the table
+// so the loop below re-embeds every memory with the live model. A missing
+// fingerprint (pre-3.7 DB, or deps absent) is left alone: nothing to compare.
+async function dropVectorsFromOtherModel(): Promise<void> {
+  const stored = await getVecMeta(VECTORS_DB);
+  const live = embeddingModel();
+  if (!stored?.model || stored.model === live) return;
+  await dropVectorTable(VECTORS_DB);
+  recordError(
+    `vector index rebuilt: stored vectors came from ${stored.model}, the configured model is ${live} — ` +
+    're-embedding every memory in the background',
+  );
+}
+
 async function reconcileVectors(): Promise<void> {
+  await dropVectorsFromOtherModel();
   const existing = await listVectorKeys(VECTORS_DB);
   if (existing === null) return;
   const have = new Set(existing);

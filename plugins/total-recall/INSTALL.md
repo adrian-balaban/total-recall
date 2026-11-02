@@ -24,7 +24,7 @@ On start, `install.sh` asks which profile you want (skip the prompt with a flag)
 | Profile | Flag | What you get |
 |---|---|---|
 | **a. Minimal** | `--no-vector` | No optional dependencies, no local LLM. TF-IDF + Ebbinghaus search only. Smallest footprint, works air-gapped. |
-| **b. Complete** (default) | `--complete` (aliases `--vector`, `--default`) | Hybrid vector search. Embeddings come from a local in-process HuggingFace MiniLM via `@huggingface/transformers` (~200 MB downloaded on first use), backed by `sqlite-vec` + `better-sqlite3`. No external service or daemon to run. |
+| **b. Complete** (default) | `--complete` (aliases `--vector`, `--default`) | Hybrid vector search. Embeddings come from a local in-process multilingual MiniLM (`Xenova/paraphrase-multilingual-MiniLM-L12-v2`, 50+ languages) via `@huggingface/transformers` (~450 MB downloaded on first use), backed by `sqlite-vec` + `better-sqlite3`. No external service or daemon to run. |
 
 Either profile can later be upgraded/downgraded — vector search degrades gracefully to TF-IDF when its optional dependencies are missing.
 

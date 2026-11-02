@@ -9,7 +9,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…"), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
 - **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server, fără bază de date, fără cont.
 - **Memorie de echipă (opțional):** memoriile etichetate `org` ajung într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email, numere de card, IBAN-uri și numere de telefon.
-- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; căutarea semantică opțională descarcă un model local (87 MB implicit). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
+- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; căutarea semantică opțională descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
@@ -105,21 +105,23 @@ Căutarea are două părți, iar ele tratează limbile diferit:
 
 - **Căutarea de text** merge în orice limbă scrisă cu alfabet latin (engleză, română, franceză, germană, spaniolă, poloneză, …), fără să țină cont de diacritice, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte. Nu indexează alte alfabete: textul în chirilică, greacă, arabă, chineză sau japoneză îi e invizibil.
 - **Română ↔ engleză** e inclusă: cu `"enableMultilingualSearch": true`, un dicționar fix de circa 28 de cuvinte uzuale (decizie/decision, baza de date/database, …) traduce întrebarea, deci și căutarea de text găsește o memorie în engleză pornind de la o întrebare în română, și invers.
-- **Orice altă pereche de limbi** trece prin căutarea semantică și depinde de modelul local de embeddings. Modelul implicit înțelege doar engleza. Treci pe un model multilingv ca să cauți între limbi, inclusiv în alfabete non-latine.
+- **Orice altă pereche de limbi**, inclusiv în alfabete non-latine, trece prin căutarea semantică. Din 1.6.8 modelul de embeddings implicit e multilingv (50+ limbi), deci o întrebare în germană găsește o memorie scrisă în engleză, japoneză sau română.
 
 Măsurat cu pipeline-ul pluginului: o memorie în engleză, o memorie-momeală în engleză și aceeași întrebare pusă în 11 limbi.
 
 | `embeddingModel` | Mărime | Limbi | A găsit memoria corectă |
 |---|---|---|---|
-| `Xenova/all-MiniLM-L6-v2` (implicit) | 87 MB | engleză | engleza clar; în rest abia, și greșit în 2 din 10 limbi |
-| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (recomandat) | 449 MB | 50+ | toate 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), cu marje ca în engleză |
+| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (implicit din 1.6.8) | 449 MB | 50+ | toate 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), cu marje ca în engleză |
+| `Xenova/all-MiniLM-L6-v2` (implicit până la 1.6.7) | 87 MB | engleză | engleza clar; în rest abia, și greșit în 2 din 10 limbi |
 | `Xenova/multilingual-e5-small` | 449 MB | ~100 | toate 11, dar cu marje mici: pluginul nu adaugă prefixele `query:`/`passage:` pe care le așteaptă modelul |
 
-Ca să schimbi modelul, setează-l în `~/.total-recall/config.json`, repornește asistentul și cere-i *„reconstruiește indexul cu re-embedding"* (`rebuild_index` cu `forceReembed: true`), ca memoriile existente să fie recalculate cu noul model:
+Dacă lucrezi doar în engleză și vrei o descărcare mai mică, setează modelul doar pentru engleză în `~/.total-recall/config.json` și repornește asistentul:
 
 ```json
-{ "embeddingModel": "Xenova/paraphrase-multilingual-MiniLM-L12-v2" }
+{ "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
+
+La fiecare pornire, pluginul compară modelul care a creat vectorii salvați cu cel configurat. Dacă diferă (după această setare sau după actualizarea de la 1.6.7 sau mai vechi), reconstruiește indexul vectorial și recalculează în fundal toate memoriile; căutarea de text funcționează în continuare între timp. `get_stats` arată modelul folosit. Modelul multilingv are de două ori mai multe straturi, deci fiecare embedding durează cam de două ori mai mult; se simte doar la prima recalculare a unui vault mare.
 
 Merge orice model de feature extraction compatibil cu [`@huggingface/transformers`](https://huggingface.co/models?library=transformers.js) care folosește mean pooling. Modelele care așteaptă CLS pooling (LaBSE, bge-m3) se încarcă, dar ordonează mai slab rezultatele. Modelul se descarcă o singură dată de pe Hugging Face, apoi rulează local.
 
@@ -175,12 +177,11 @@ Opțional, în `~/.total-recall/config.json`:
   "orgBranch": "knowledge",
   "allowedEmailDomains": ["yourcompany.com"],
   "orgInjection": "index",
-  "enableMultilingualSearch": true,
-  "embeddingModel": "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+  "enableMultilingualSearch": true
 }
 ```
 
-`orgInjection` e `index` (implicit), `titles` sau `off`. Căile vault-urilor (`personalVault`, `orgVault`) și setările spec-driven: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) și [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md) (în engleză).
+`orgInjection` e `index` (implicit), `titles` sau `off`. Despre `embeddingModel` vezi [Limbi](#-limbi). Căile vault-urilor (`personalVault`, `orgVault`) și setările spec-driven: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) și [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md) (în engleză).
 
 ## 🔧 Actualizare, backup și depanare
 
@@ -212,4 +213,4 @@ Opțional, în `~/.total-recall/config.json`:
 
 ## 📊 Status
 
-**v1.6.7.** Release-uri cu tag din august 2026, cam zece pe lună; 30% dintre ele au avut nevoie de o corectură ulterioară ([detalii](docs/QUALITY.md)). 1.030 de teste, acoperire 97%, scor de mutație 80%. Release-urile se instalează din branch-ul `release`, construit de GitHub Actions doar după ce trec toate acestea; nu sunt semnate. [Licență MIT](LICENSE). Întreținut de o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate; issue-urile și pull request-urile sunt binevenite.
+**v1.6.8.** Release-uri cu tag din august 2026, cam zece pe lună; 30% dintre ele au avut nevoie de o corectură ulterioară ([detalii](docs/QUALITY.md)). 1.035 de teste, acoperire 97%, scor de mutație 80%. Release-urile se instalează din branch-ul `release`, construit de GitHub Actions doar după ce trec toate acestea; nu sunt semnate. [Licență MIT](LICENSE). Întreținut de o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate; issue-urile și pull request-urile sunt binevenite.

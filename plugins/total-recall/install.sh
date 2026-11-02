@@ -27,7 +27,7 @@
 #                 search only; smallest footprint, works air-gapped.
 #   b. Complete — DEFAULT. Hybrid vector search. Embeddings come from a local
 #                 in-process HuggingFace MiniLM via @huggingface/transformers
-#                 (~200 MB on first use); sqlite-vec + better-sqlite3 back the
+#                 (~450 MB multilingual model on first use); sqlite-vec + better-sqlite3 back the
 #                 vector store. No external service, no daemon to run.
 #
 # Options:
@@ -59,7 +59,7 @@
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
 #                             privacy filter (default blocks ALL emails)
 #   --vector                  Enable hybrid vector search (local HuggingFace
-#                             MiniLM embeddings, ~200 MB on first use)
+#                             multilingual MiniLM embeddings, ~450 MB on first use)
 #   --no-vector               Skip vector search without prompting
 #   -y, --yes                 Non-interactive: take defaults (Complete profile
 #                             with vector search), skip optional prompts (org
@@ -209,7 +209,7 @@ done
 if [ -z "$VECTOR" ] && [ "$ASSUME_YES" -ne 1 ] && [ -t 0 ]; then
   step "Install profile"
   info "a. Minimal  — no optional dependencies, no local LLM (TF-IDF search only)"
-  info "b. Complete — hybrid vector search; local HuggingFace MiniLM embeddings (~200 MB on first use, no external service)"
+  info "b. Complete — hybrid vector search; local multilingual MiniLM embeddings (~450 MB on first use, no external service)"
   read -rp "  Which profile? [a/B] " PROFILE_REPLY
   case "${PROFILE_REPLY:-b}" in
     [Aa]*) VECTOR="no";  ok "Profile: minimal (no optional dependencies)";;

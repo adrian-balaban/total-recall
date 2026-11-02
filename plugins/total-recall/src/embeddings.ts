@@ -10,7 +10,7 @@
  * silent: vector search silently off was the exact footgun a bad embeddingModel
  * (e.g. a bare "bge-m3" with no org/ prefix) produced before this.
  */
-import { VECTORS_DB, CONFIG_PATH, loadConfig } from './paths.js';
+import { VECTORS_DB, CONFIG_PATH, embeddingModel } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError, memIndex } from './state.js';
 
@@ -68,7 +68,7 @@ export function __testResetEmbedder(): void {
 //   - lazy-load the model once, cache the promise (loadPromise) so concurrent
 //     callers during the first load share one pipeline;
 //   - an advanced user may override the model via config.embeddingModel
-//     (default Xenova/all-MiniLM-L6-v2, 384-dim).
+//     (default DEFAULT_EMBEDDING_MODEL in paths.ts, 384-dim).
 // A load failure is NOT cached (3.9): loadPromise is cleared in the catch so
 // the next embed() retries — a first-run model-download hiccup no longer
 // permanently disables vectors for the session.
@@ -78,7 +78,7 @@ async function getEmbedder(): Promise<((text: string) => Promise<number[] | null
   // Hoisted out of the try so the catch can name the configured model in its
   // warning. loadConfig() never throws (paths.ts wraps stat+read+parse in
   // catch, returning defaults on any failure), so this can't escape getEmbedder.
-  const model = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+  const model = embeddingModel();
   loadPromise = (async () => {
     try {
       const { pipeline: hfPipeline } = await import('@huggingface/transformers');

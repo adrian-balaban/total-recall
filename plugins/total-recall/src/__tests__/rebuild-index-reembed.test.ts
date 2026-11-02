@@ -34,6 +34,8 @@ vi.mock('../embeddings.js', () => ({
 }));
 
 vi.mock('../vectorStore.js', () => ({
+  // reconcileVectors' model-switch check ([TR-R6]): null = no fingerprint, so nothing is dropped.
+  getVecMeta: async () => null,
   dropVectorTable: mocks.dropVectorTable,
   upsertVector: mocks.upsertVector,
   deleteVector: mocks.deleteVector,

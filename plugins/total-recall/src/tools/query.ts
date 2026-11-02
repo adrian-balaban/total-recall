@@ -6,7 +6,7 @@ import { contentCache } from '../lru-cache.js';
 import { isVectorAvailable, depsInstalled } from '../embeddings.js';
 import { getVecMeta } from '../vectorStore.js';
 import { readMemoryContent, readCachedOrFresh, isReservedKey } from '../vault-scan.js';
-import { NO_PRUNE_TAG, VECTORS_DB, loadConfig, redactPaths } from '../paths.js';
+import { NO_PRUNE_TAG, VECTORS_DB, embeddingModel, redactPaths } from '../paths.js';
 import type { MemoryMetadata } from '../types.js';
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -141,7 +141,7 @@ export async function getStats(): Promise<any> {
   // `claude plugin update` source-only footgun) honestly reports `false`.
   const depsPresent = await depsInstalled();
   const enabled = isVectorAvailable() || depsPresent;
-  const configuredModel = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+  const configuredModel = embeddingModel();
   let stored: { model: string; dim: number | null } | null = null;
   try { stored = await getVecMeta(VECTORS_DB); } catch { stored = null; }
   return {
