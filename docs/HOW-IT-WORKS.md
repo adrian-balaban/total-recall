@@ -136,7 +136,19 @@ npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or
 
 ### Languages
 
-Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). The measurements and how to switch are in the [README](../README.md#-languages).
+Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). How to switch models is in the [README](../README.md#languages).
+
+**Benchmark.** Measured with the plugin's own pipeline: one English memory, one English decoy, and the same question asked in 11 languages.
+
+| `embeddingModel` | Size | Languages | Found the right memory |
+|---|---|---|---|
+| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (default since 1.6.8) | 449 MB | 50+ | All 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), with English-level margins |
+| `Xenova/all-MiniLM-L6-v2` (default up to 1.6.7) | 87 MB | English | English clearly; elsewhere barely, and 2 of 10 languages wrong |
+| `Xenova/multilingual-e5-small` | 449 MB | ~100 | All 11, but with small margins: the plugin does not add the `query:`/`passage:` prefixes this model expects |
+
+On every start the plugin compares the model that made the stored vectors with the configured one. When they differ, it rebuilds the vector index and re-embeds every memory in the background; text search keeps working meanwhile. `get_stats` shows the model in use. The multilingual model has twice as many layers, so each embedding takes about twice as long; you only notice it on the first re-embed of a large vault.
+
+Models that expect CLS pooling (LaBSE, bge-m3) load but rank worse than mean-pooling models.
 
 ## 🪝 Hooks
 
