@@ -22,7 +22,6 @@
   "src/tools/architecture.ts::record": 12,
   "src/spec/fields.ts::pickSpecFields": 11,
   "src/tfidf.ts::rebuildInvertedIndex": 11,
-  "src/vault-scan.ts::walk": 11,
   "src/persistence.ts::loadMemIndex": 10,
   "src/spec/indexer.ts::walk": 10,
   "src/tools/mutate.ts::confirmMemory": 10

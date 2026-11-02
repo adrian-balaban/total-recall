@@ -5,15 +5,15 @@ import {
   INVERTED_INDEX_PATH,
   ORG_VAULT,
   PERSONAL_VAULT,
-  ensureDir,
 } from './paths.js';
 import { clampImportanceScore } from './ebbinghaus.js';
 import { memIndex, invertedIndex, recordError } from './state.js';
 import type { Index } from './types.js';
 import { rebuildInvertedIndex } from './tfidf.js';
-import { isReservedKey } from './vault-scan.js';
+import { isReservedKey } from './vault-walk.js';
 import { applySpecFields } from './spec/fields.js';
-import * as crypto from 'crypto';
+import { atomicWrite as atomicWriteFile } from './atomic-write.js';
+import { renderIndexCache as renderCache } from './index-cache.js';
 
 // Debounce timers live here (only this module touches them).
 let indexSaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -105,80 +105,12 @@ function unwrapIndexEntries(parsed: unknown): Record<string, unknown> | null {
   return obj;
 }
 
-// Write-then-rename so a SIGKILL / power loss mid-write can't leave index.json,
-// invertedIndex.json, or .index-cache.txt half-truncated (which would corrupt
-// the index and lose all metadata on the next boot). rename is atomic on POSIX.
-//
-// 2.3 (fsync): writeFileSync returns once the data is in the OS page cache, not
-// on disk — a power loss between write and rename can leave a zero-byte/stale
-// index despite a "successful" rename, and the rename dirent itself isn't
-// durable without a parent-dir fsync. We now fsync the tmp file's data before
-// rename and fsync the parent dir after, so the atomic-rename guarantee
-// actually survives a crash. Both fsyncs are best-effort (network FS / Windows
-// may not support them); the rename atomicity holds regardless — fsync only
-// adds crash durability on top.
-function fsyncDir(dir: string) {
-  try {
-    const fd = fs.openSync(dir, 'r');
-    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  } catch { /* Windows / network FS don't support dir fsync; best-effort */ }
-}
-
+// Write-then-rename so a SIGKILL / power loss mid-write can't leave index.json or
+// invertedIndex.json half-truncated. The implementation (tmp + fsync + rename) lives in
+// the atomic-write leaf, shared with the SessionStart index-cache bundle; here every
+// failure is routed to recordError so it shows up in get_stats.recentErrors.
 function atomicWrite(p: string, data: string) {
-  ensureDir(path.dirname(p));
-  // Random tmp suffix (not a predictable `${p}.tmp`): a local attacker who can
-  // write the vault dir could pre-plant a symlink at the predictable tmp path
-  // pointing at an outside file, and writeFileSync(tmp) would follow it and
-  // clobber the target. randomBytes makes the tmp path unguessable, closing the
-  // symlink-race escalation (write-to-vault → clobber-any-user-writable-file).
-  const tmp = `${p}.tmp.${crypto.randomBytes(6).toString('hex')}`;
-  try {
-    fs.writeFileSync(tmp, data);
-  } catch (e) {
-    // 4.1 (REVIEW 1.6): tmp write failed (ENOSPC / EACCES / EROFS / EISDIR).
-    // Leave the LAST-GOOD target untouched. A direct overwrite here would
-    // DEFEAT atomicWrite's whole purpose — a crash mid-fallback would corrupt
-    // the file atomic-write was meant to protect, trading a transient I/O error
-    // (which reconcileIndex rebuilds from on next boot) for permanent data
-    // corruption. The tmp lives in the same dir/fs as the target, so whatever
-    // blocked the tmp write (no space, no permission, read-only fs) blocks a
-    // direct write too — the overwrite only ever added corruption risk, never
-    // benefit. recordError (not throw): atomicWrite runs from debounced
-    // setTimeouts AND the SIGTERM/SIGINT/beforeExit path, where an uncaught
-    // throw escapes the timer → uncaughtException → the stdio server dies
-    // mid-session (index.ts registers no uncaughtException handler). The
-    // .md files stay durable; the last-good index survives for next boot.
-    recordError(`atomicWrite(${p}) tmp-write failed (last-good left intact): ${(e as Error).message}`);
-    return;
-  }
-  // fsync the tmp file's data so the page cache is flushed to disk before the
-  // rename — without this, a crash after writeFileSync can leave the tmp empty
-  // even though rename "succeeded", producing a zero-byte index. Best-effort:
-  // some FS don't support fsync; the rename atomicity below still holds.
-  try {
-    const fd = fs.openSync(tmp, 'r');
-    try { fs.fsyncSync(fd); } finally { fs.closeSync(fd); }
-  } catch { /* best-effort: fsync unsupported on this FS — rename still atomic */ }
-  try {
-    fs.renameSync(tmp, p);
-  } catch (renErr) {
-    // 4.1 (REVIEW 1.6): rename can fail on Windows (open handles / cross-volume).
-    // Fall back to a direct overwrite — loses POSIX atomicity but lands the data.
-    // The overwrite is GUARDED (try/recordError, not a bare throw) so a boot-time
-    // atomicWrite can't take the process down via an uncaught throw here; the
-    // orphaned tmp is cleaned up either way so it doesn't accumulate on disk.
-    try {
-      fs.writeFileSync(p, data);
-    } catch (e) {
-      recordError(`atomicWrite(${p}) rename-fallback: rename=${(renErr as Error).message}; write=${(e as Error).message}`);
-    }
-    try { fs.unlinkSync(tmp); } catch { /* best-effort cleanup of the orphaned tmp */ }
-    return;
-  }
-  // fsync the parent dir so the rename dirent is durable too — otherwise a
-  // crash after rename can leave the dir entry pointing at the old inode.
-  // Best-effort (dir fsync is unsupported on Windows / some network FS).
-  fsyncDir(path.dirname(p));
+  atomicWriteFile(p, data, recordError);
 }
 
 // Per-entry coercion on the memIndex restore path. A pre-v1.0.6 install may
@@ -478,12 +410,5 @@ export function flushPending() {
 // from memory instead of from a file.
 
 export function renderIndexCache(): string {
-  const entries = Object.values(memIndex);
-  const lines = [`${entries.length}`];
-  for (const m of entries) {
-    const shortTitle = m.title.slice(0, 40);
-    const tags = m.tags.slice(0, 3).join(', ') + (m.tags.length > 3 ? ', ...' : '');
-    lines.push(`- ${m.key}: ${shortTitle} [${tags}] (${m.category})`);
-  }
-  return lines.join('\n');
+  return renderCache(Object.values(memIndex));
 }

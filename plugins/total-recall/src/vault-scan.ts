@@ -6,15 +6,18 @@ import { clampImportanceScore } from './ebbinghaus.js';
 import {
   PERSONAL_VAULT,
   ORG_VAULT,
-  EXCLUDED_DIRS,
   VECTORS_DB,
   ensureDir,
 } from './paths.js';
 import { memIndex, recordError } from './state.js';
+import { keyFromPath, deriveCategory, isReservedKey, RESERVED_KEY_SEGMENTS, listVaultFiles } from './vault-walk.js';
 import { contentCache } from './lru-cache.js';
 import { deleteVector, listVectorKeys } from './vectorStore.js';
 import { embedAndUpsert } from './embeddings.js';
 import type { MemoryFrontmatter, MemoryMetadata } from './types.js';
+
+// Re-exported so existing importers keep working; the definitions live in the vault-walk leaf.
+export { keyFromPath, deriveCategory, isReservedKey, RESERVED_KEY_SEGMENTS };
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -74,39 +77,8 @@ export function slugify(title: string): string {
   return slug || 'untitled';
 }
 
-export function keyFromPath(filePath: string, isOrg: boolean): string {
-  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  // Keys always use `/` separators regardless of platform: on Windows
-  // path.relative returns `\`-separated segments, which would produce keys like
-  // `architecture\foo` that deriveFilePathFromKey rejects (it treats `\` as a
-  // path-escape attempt), making every memory invisible to the index.
-  const rel = path
-    .relative(base, filePath)
-    .split(path.sep)
-    .join('/')
-    .replace(/\.md$/, '');
-  return isOrg ? `org/${rel}` : rel;
-}
-
 export function tokenEstimate(text: string): number {
   return Math.ceil(text.length / 4);
-}
-
-// Prototype-pollution guard: memory keys are used as plain-object property
-// names in memIndex and the org index.json. A key like `__proto__`,
-// `constructor`, or `prototype` — or any path segment containing one — would
-// either set the object's prototype/constructor or, on delete, mutate the
-// prototype chain of every object. Reject these segments everywhere keys are
-// accepted (deriveFilePathFromKey, indexFile, store.ts explicit keys, and
-// sync-org-memory.mjs).
-export const RESERVED_KEY_SEGMENTS = new Set(['__proto__', 'constructor', 'prototype']);
-
-export function isReservedKey(key: string): boolean {
-  if (typeof key !== 'string' || !key) return true;
-  const isOrg = key.startsWith('org/');
-  const rel = isOrg ? key.slice('org/'.length) : key;
-  if (!rel) return true;
-  return rel.split('/').some((s) => RESERVED_KEY_SEGMENTS.has(s));
 }
 
 // Assert the on-disk entry at `filePath` is a regular file, not a symlink or
@@ -227,56 +199,16 @@ export function readCachedOrFresh(
 export function reconcileIndex() {
   const before = new Set(Object.keys(memIndex));
   const seen = new Set<string>();
-  const walk = (dir: string, isOrg: boolean) => {
-    let entries: fs.Dirent[];
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch (e) {
-      // ENOENT (dir gone since walk scheduled) is fine — skip silently. A NON-ENOENT
-      // error (EACCES on a chmod'd subdir, EMFILE on fd exhaustion) silently pruned
-      // the whole subtree from the index with no signal, so memories "vanished" from
-      // search with no recordError. Surface those so the condition is observable in
-      // get_stats.recentErrors; the subtree is still skipped (return) either way.
-      if (e && (e as NodeJS.ErrnoException).code !== 'ENOENT') {
-        recordError(`reconcile readdirSync(${dir}): ${(e as Error).message}`);
-      }
-      return;
-    }
-    for (const e of entries) {
-      // Skip symlinks entirely. `git pull` preserves symlinks, so a teammate
-      // with push access to the shared org vault can plant a symlink named
-      // `*.md` → `~/.ssh/id_rsa` (or any victim-readable file), or a symlinked
-      // directory pointing outside the vault. Without this guard, a
-      // symlink-to-a-directory is treated as a directory (recursing outside the
-      // vault) and a symlink-to-a-file ending in `.md` is indexed — and
-      // indexFile's readFileSync follows it, dumping the target's contents into
-      // contentPreview (surfaced via search_index / get_memories_by_keys /
-      // recall_memory(full)). Dirent.isSymbolicLink() detects the link itself
-      // (not the target), so this fires before the isDirectory/endsWith branches
-      // below. The privacy filter never runs on pulled content, so this
-      // index-time skip is the only barrier against the read-side leak.
-      if (e.isSymbolicLink()) continue;
-      // `e.name` is a filesystem-discovered entry from readdirSync (excludes
-      // `.`/`..`; filenames can't contain `/`), and `dir` is vault-rooted by the
-      // walk. Not caller-supplied. Reviewed path-traversal finding; suppressed inline.
-      const fp = path.join(dir, e.name); // nosemgrep: path-join-resolve-traversal — filesystem-discovered name, vault-rooted walk.
-      if (e.isDirectory()) {
-        // Reserve the `org/` key prefix for the ORG vault. A personal-vault
-        // subdir literally named `org` would index files to keys like `org/x`,
-        // colliding with (and shadowing) org-vault keys (`org/<rel>`). Skip it
-        // on the personal walk so the org namespace stays unambiguous.
-        const reservedOrgPrefix = !isOrg && e.name === 'org';
-        if (!EXCLUDED_DIRS.has(e.name.toLowerCase()) && !reservedOrgPrefix) walk(fp, isOrg);
-      } else if (e.name.endsWith('.md')) {
-        indexFile(fp, isOrg);
-        seen.add(keyFromPath(fp, isOrg));
-      }
+  const scan = (base: string, isOrg: boolean) => {
+    for (const fp of listVaultFiles(base, isOrg, recordError)) {
+      indexFile(fp, isOrg);
+      seen.add(keyFromPath(fp, isOrg));
     }
   };
   ensureDir(PERSONAL_VAULT);
   ensureDir(ORG_VAULT);
-  walk(PERSONAL_VAULT, false);
-  walk(ORG_VAULT, true);
+  scan(PERSONAL_VAULT, false);
+  scan(ORG_VAULT, true);
   // Drop index entries whose file vanished since the last scan, AND purge their
   // cached content + vector embedding so a deleted/orphaned memory can't resurface
   // through the vector search path (searchVector reads vec_memories directly and
@@ -496,11 +428,4 @@ export function indexFile(filePath: string, isOrg: boolean) {
   } catch (e: any) {
     recordError(`indexFile ${filePath}: ${e.message}`);
   }
-}
-
-export function deriveCategory(filePath: string, isOrg: boolean): string {
-  const base = isOrg ? ORG_VAULT : PERSONAL_VAULT;
-  const rel = path.relative(base, filePath);
-  const parts = rel.split(path.sep);
-  return parts.length > 1 ? (parts[0] ?? 'knowledge') : 'knowledge';
 }

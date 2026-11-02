@@ -5,6 +5,8 @@ DEFINE SYSTEM Total Recall AS tr
     DEFINE COMPONENT Pure Helpers AS helpers
     DEFINE COMPONENT State AS state
     DEFINE COMPONENT Paths AS paths
+    DEFINE COMPONENT Vault Walk AS walk
+    DEFINE COMPONENT Index Cache AS indexcache
     DEFINE COMPONENT Persistence AS persistence
     DEFINE COMPONENT Search AS search
     DEFINE COMPONENT Vectors AS vectors
@@ -36,5 +38,10 @@ ASSERT(Search has no dependency on Vectors or Persistence) # [TR-S10]
 # Persistence is persistence.ts, vault-scan.ts, auto-reconcile.ts and journal.ts. ebbinghaus and rrf are owned by Search
 # (they are also leaves, which TR-S1 checks), the four spec leaves by Pure Helpers.
 ASSERT(Every production file belongs to exactly one component) # [TR-S12]
+# One walk, one parser for the SessionStart index cache. The hook bundle starts on every session, so it must not drag in
+# the server's state, the optional vector stack or the persistence layer. Vault Walk is vault-walk.ts; Index Cache is
+# index-cache.ts and the hooks/build-index-cache.ts entry; atomic-write.ts is a Pure Helper.
+ASSERT(Vault Walk has no dependency on State, Vectors or Persistence) # [TR-S13]
+ASSERT(Index Cache has no dependency on State, Vectors or Persistence) # [TR-S14]
 # S5 covers the five isolated tools; bulk and architecture reuse store and mutate on purpose
 ASSERT(The bulk and architecture tools depend on no tool other than store, mutate and Tool Registry) # [TR-S11]
