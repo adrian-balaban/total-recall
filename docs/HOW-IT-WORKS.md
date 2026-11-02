@@ -128,7 +128,7 @@ The `no-prune` tag keeps a memory out of `prune_memories` and blocks its deletio
 
 ### Semantic search (optional)
 
-Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (`Xenova/all-MiniLM-L6-v2`, 384 dimensions) handles paraphrase. RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
+Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2` by default, 384 dimensions, 50+ languages) handles paraphrase and other languages. RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
 
 ```bash
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or ./install.sh --complete
@@ -136,7 +136,7 @@ npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or
 
 ### Languages
 
-Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/all-MiniLM-L6-v2` handles English only; `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages. The measurements and how to switch models are in the [README](../README.md#-languages).
+Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). The measurements and how to switch are in the [README](../README.md#-languages).
 
 ## 🪝 Hooks
 

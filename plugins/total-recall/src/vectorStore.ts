@@ -8,7 +8,7 @@ import * as path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { recordError } from './state.js';
-import { loadConfig } from './paths.js';
+import { embeddingModel } from './paths.js';
 
 let dbPromise: Promise<any> | null = null;
 let cachedDbPath: string | null = null;
@@ -237,7 +237,7 @@ function ensureVecTable(d: any, dim: number): void {
 function writeVecMeta(d: any, dim: number): void {
   try {
     d.exec('CREATE TABLE IF NOT EXISTS vec_meta (key TEXT PRIMARY KEY, value TEXT)');
-    const model = loadConfig().embeddingModel || 'Xenova/all-MiniLM-L6-v2';
+    const model = embeddingModel();
     d.prepare("INSERT OR REPLACE INTO vec_meta(key, value) VALUES ('model', ?), ('dim', ?)")
       .run(model, String(dim));
   } catch {

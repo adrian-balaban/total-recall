@@ -40,6 +40,18 @@ export interface TotalRecallConfig {
 // valid write re-reads. No test toggles config in-process within a sub-second
 // same-mtime window (index.test.ts writes/removes config.json once per setup,
 // each advancing mtime), so the cache is test-safe.
+// The embedding model used when config.json sets none. Multilingual since 1.6.8:
+// all-MiniLM-L6-v2 (the earlier default, 87 MB) only matched English reliably,
+// while this one (449 MB, same 384 dimensions, mean pooling) ranks a question in
+// 50+ languages against memories written in any of them. Single source for
+// embeddings.ts (what new vectors use), vectorStore.ts (the vec_meta fingerprint)
+// and get_stats, so the three can never name different defaults.
+export const DEFAULT_EMBEDDING_MODEL = 'Xenova/paraphrase-multilingual-MiniLM-L12-v2';
+
+export function embeddingModel(): string {
+  return loadConfig().embeddingModel || DEFAULT_EMBEDDING_MODEL;
+}
+
 let cachedConfig: TotalRecallConfig | null = null;
 let cachedMtime = -1;
 

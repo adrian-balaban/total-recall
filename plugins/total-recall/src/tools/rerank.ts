@@ -46,6 +46,14 @@ const MAX_KEYS = 200;
 // so the caller's key set isn't truncated.
 const MAX_FRESH_EMBEDS_PER_CALL = 50;
 
+// Clamp `limit` to a sensible page. Default = all provided keys.
+function clampLimit(raw: unknown, fallback: number): number {
+  const requested = Number(raw);
+  return Number.isFinite(requested) && requested > 0
+    ? Math.min(MAX_KEYS, Math.floor(requested))
+    : fallback;
+}
+
 export async function rerankMemories(args: any): Promise<any> {
   const { query, keys, full = false } = args;
   if (typeof query !== 'string' || query.trim().length === 0) {
@@ -55,16 +63,15 @@ export async function rerankMemories(args: any): Promise<any> {
     throw new Error('keys must be a non-empty array');
   }
 
-  // Clamp `limit` to a sensible page. Default = all provided keys.
-  const requestedLimit = Number(args.limit);
-  const limit = Number.isFinite(requestedLimit) && requestedLimit > 0
-    ? Math.min(MAX_KEYS, Math.floor(requestedLimit))
-    : keys.length;
+  const limit = clampLimit(args.limit, keys.length);
 
   // Cap the candidate set itself so a huge `keys` array can't spam the embedder.
   // Drop reserved-key segments: they cannot be own properties in memIndex and
   // would otherwise resolve to Object.prototype when looked up.
   const candidateKeys = keys.slice(0, MAX_KEYS).map(String).filter(k => !isReservedKey(k));
+  // Nothing left to rank: return before embed(), so an all-reserved key set never
+  // loads the embedding model (a ~450 MB download on a machine without the cache).
+  if (candidateKeys.length === 0) return [];
 
   const qvec = await embed(query);
   if (!qvec) {

@@ -9,7 +9,7 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
 - **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server, no database, no account.
 - **Team memory (optional):** memories you tag `org` go to a shared Git repo, after a privacy filter that blocks secrets, emails, card numbers, IBANs and phone numbers.
-- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; optional semantic search downloads a local model (87 MB by default). The index shown at session start costs 30–40 tokens per memory.
+- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; optional semantic search downloads a local multilingual model once (449 MB; 87 MB for the English-only one). The index shown at session start costs 30–40 tokens per memory.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -105,21 +105,23 @@ Search has two parts, and they handle languages differently:
 
 - **Text search** works in any language written in the Latin alphabet (English, Romanian, French, German, Spanish, Polish, …), with accents ignored, as long as the question and the memory use the same words. It does not index other scripts: Cyrillic, Greek, Arabic, Chinese or Japanese text is invisible to it.
 - **Romanian ↔ English** is built in: with `"enableMultilingualSearch": true`, a fixed dictionary of about 28 common words (decision/decizie, database/baza de date, …) translates the question, so text search alone finds an English memory from a Romanian question and the other way round.
-- **Any other language pair** goes through semantic search, and depends on the local embedding model. The default model handles English only. Switch to a multilingual model to search across languages, including non-Latin scripts.
+- **Any other language pair**, including non-Latin scripts, goes through semantic search. Since 1.6.8 the default embedding model is multilingual (50+ languages), so a question in German finds a memory written in English, Japanese or Romanian.
 
 Measured with the plugin's own pipeline: one English memory, one English decoy, and the same question asked in 11 languages.
 
 | `embeddingModel` | Size | Languages | Found the right memory |
 |---|---|---|---|
-| `Xenova/all-MiniLM-L6-v2` (default) | 87 MB | English | English clearly; elsewhere barely, and 2 of 10 languages wrong |
-| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (recommended) | 449 MB | 50+ | All 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), with English-level margins |
+| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (default since 1.6.8) | 449 MB | 50+ | All 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), with English-level margins |
+| `Xenova/all-MiniLM-L6-v2` (default up to 1.6.7) | 87 MB | English | English clearly; elsewhere barely, and 2 of 10 languages wrong |
 | `Xenova/multilingual-e5-small` | 449 MB | ~100 | All 11, but with small margins: the plugin does not add the `query:`/`passage:` prefixes this model expects |
 
-To switch, set the model in `~/.total-recall/config.json`, restart the assistant, and ask it to *"rebuild the index with re-embedding"* (`rebuild_index` with `forceReembed: true`), so existing memories are embedded again with the new model:
+If you only work in English and want the smaller download, set the English-only model in `~/.total-recall/config.json` and restart the assistant:
 
 ```json
-{ "embeddingModel": "Xenova/paraphrase-multilingual-MiniLM-L12-v2" }
+{ "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
+
+On every start the plugin compares the model that made the stored vectors with the configured one. When they differ (after this setting, or after upgrading from 1.6.7 or earlier), it rebuilds the vector index and re-embeds every memory in the background; text search keeps working meanwhile. `get_stats` shows the model in use. The multilingual model has twice as many layers, so each embedding takes about twice as long; you only notice it on the first re-embed of a large vault.
 
 Any [`@huggingface/transformers`](https://huggingface.co/models?library=transformers.js) feature-extraction model with mean pooling works. Models that expect CLS pooling (LaBSE, bge-m3) load but rank worse. The model downloads from Hugging Face once, then runs locally.
 
@@ -175,12 +177,11 @@ Optional, in `~/.total-recall/config.json`:
   "orgBranch": "knowledge",
   "allowedEmailDomains": ["yourcompany.com"],
   "orgInjection": "index",
-  "enableMultilingualSearch": true,
-  "embeddingModel": "Xenova/paraphrase-multilingual-MiniLM-L12-v2"
+  "enableMultilingualSearch": true
 }
 ```
 
-`orgInjection` is `index` (default), `titles` or `off`. Vault paths (`personalVault`, `orgVault`) and the spec-driven settings: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) and [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
+`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#-languages). Vault paths (`personalVault`, `orgVault`) and the spec-driven settings: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) and [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
 
 ## 🔧 Upgrade, backup and troubleshooting
 
@@ -208,8 +209,7 @@ Optional, in `~/.total-recall/config.json`:
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
 - [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md)
-- [Talk: Claude vs Ollama & Total Recall](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026) (Romanian, July 2026)
 
 ## 📊 Status
 
-**v1.6.7.** Tagged releases since August 2026, about ten a month; 30% of them needed a follow-up fix ([details](docs/QUALITY.md)). 1,030 tests, 97% coverage, 80% mutation score. Releases install from the `release` branch, which GitHub Actions builds only after all of that passes; they are not signed. [MIT licence](LICENSE). Maintained by one person, [Adrian Balaban](https://github.com/adrian-balaban), on a best-effort basis; issues and pull requests are welcome.
+**v1.6.8.** Tagged releases since August 2026, about ten a month; 30% of them needed a follow-up fix ([details](docs/QUALITY.md)). 1,035 tests, 97% coverage, 80% mutation score. Releases install from the `release` branch, which GitHub Actions builds only after all of that passes; they are not signed. [MIT licence](LICENSE). Maintained by one person, [Adrian Balaban](https://github.com/adrian-balaban), on a best-effort basis; issues and pull requests are welcome.

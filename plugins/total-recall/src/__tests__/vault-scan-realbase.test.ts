@@ -47,6 +47,9 @@ vi.mock('fs', async (importOriginal) => {
 });
 
 vi.mock('../vectorStore.js', () => ({
+  // reconcileVectors' model-switch check ([TR-R6]): null = no fingerprint, so nothing is dropped.
+  getVecMeta: async () => null,
+  dropVectorTable: async () => {},
   listVectorKeys: async () => null,
   deleteVector: async () => {},
 }));

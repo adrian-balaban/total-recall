@@ -12,6 +12,9 @@ vi.hoisted(() => {
 });
 
 vi.mock('../vectorStore.js', () => ({
+  // reconcileVectors' model-switch check ([TR-R6]): null = no fingerprint, so nothing is dropped.
+  getVecMeta: async () => null,
+  dropVectorTable: async () => {},
   listVectorKeys: async () => null,
   deleteVector: async () => {},
 }));
@@ -310,6 +313,22 @@ bundleSuite('dist/build-index-cache.mjs', () => {
     expect(log).toHaveLength(1000);
     expect(log[0]).toBe('old 201');
     expect(log[999]).toContain('index-cache error');
+  });
+});
+
+describe('default error sinks', () => {
+  it('atomicWrite, listVaultFiles and readCacheEntries run without a sink and swallow errors', () => {
+    const d = tmp();
+    const blocked = path.join(d, 'is-a-dir');
+    fs.mkdirSync(path.join(blocked, 'inner'), { recursive: true });
+    expect(() => atomicWrite(blocked, 'x')).not.toThrow();
+    const file = put(d, 'plain-file', 'x');
+    expect(listVaultFiles(file, false)).toEqual([]);
+    expect(readCacheEntries(file, false)).toEqual([]);
+    const v = tmp();
+    put(v, 'knowledge/a.md', '---\ntitle: A\n---\n');
+    fs.chmodSync(path.join(v, 'knowledge', 'a.md'), 0o000);
+    try { expect(() => readCacheEntries(v, false)).not.toThrow(); } finally { fs.chmodSync(path.join(v, 'knowledge', 'a.md'), 0o600); }
   });
 });
 

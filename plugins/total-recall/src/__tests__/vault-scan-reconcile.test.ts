@@ -18,6 +18,9 @@ vi.hoisted(() => {
 });
 
 vi.mock('../vectorStore.js', () => ({
+  // reconcileVectors' model-switch check ([TR-R6]): null = no fingerprint, so nothing is dropped.
+  getVecMeta: async () => null,
+  dropVectorTable: async () => {},
   // null => reconcileVectors returns immediately (no native sqlite-vec touch).
   listVectorKeys: async () => null,
   deleteVector: async () => {},
