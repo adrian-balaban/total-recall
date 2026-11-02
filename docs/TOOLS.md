@@ -1,6 +1,6 @@
 # 🛠️ The 22 MCP tools
 
-You rarely call these by name: say *"remember that…"*, *"what did we decide about…"*, *"forget …"* and the model picks the tool. All reads and searches run against an in-memory index, so they do not touch the disk.
+You rarely call these by name: say *"remember that…"*, *"what did we decide about…"*, *"forget …"* and the model picks the tool. Searches run against an in-memory index; only the tools that return a full body (`get_memories_by_keys`, `recall_memory` with `full=true`) read the files.
 
 [← README](../README.md)
 
@@ -33,7 +33,7 @@ The five architecture tools are on by default. Switch them off one by one (`spec
 
 ## Export format
 
-`export_memories` returns:
+`export_memories` returns the archive in its answer (there is no file argument, so a large vault passes through the model's context):
 
 ```json
 {
@@ -57,4 +57,4 @@ The five architecture tools are on by default. Switch them off one by one (`spec
 }
 ```
 
-Spec-driven fields (`system`, `elements`, …) are added when the memory has them. It is plain JSON, so `jq '.memories[] | {key, title}'` or DuckDB's `read_json` work on it directly.
+Spec-driven fields (`system`, `elements`, …) are added when the memory has them. Not exported: `accessCount`, `lastAccessed`, `confirmations`, `flags`, `supersededAt` and the archived versions in `.superseded/`, so retention scoring starts again after an import. It is plain JSON, so `jq '.memories[] | {key, title}'` or DuckDB's `read_json` work on it directly.

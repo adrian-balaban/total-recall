@@ -1,14 +1,15 @@
 # 📦 Installing Total Recall
 
-One plugin, three hosts — Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode) — all set up by a single state-aware `install.sh`.
+One plugin for Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode) and any other MCP client (Codex CLI, Cursor, Windsurf, Claude Desktop), set up by a single state-aware `install.sh`.
 
 ## 📋 Prerequisites
 
 - **Node.js v18+** on PATH
-- `claude` CLI — **only** for MCP registration (skipped with a warning if absent). The Claude Code VS Code extension ships its own `claude` binary under its extension directory, which is not on `PATH`; if `install.sh` reports the CLI as missing on such a machine, MCP registration is the only step skipped — the plugin and its hooks still load.
+- `git`
+- `claude` CLI — **only** for Claude Code: MCP registration and automatic capture before compaction (skipped with a warning if absent). The Claude Code VS Code extension ships its own `claude` binary under its extension directory, which is not on `PATH`; if `install.sh` reports the CLI as missing on such a machine, MCP registration is the only step skipped — the plugin and its hooks still load.
 - `gh` CLI authenticated — **only** if you enable the shared org vault
 - `agy` CLI — **only** for `--gemini`
-- **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#windows))
+- **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#-windows))
 
 ## 🪟 Windows
 
@@ -29,29 +30,41 @@ Either profile can later be upgraded/downgraded — vector search degrades grace
 
 ## ⚡ Install (marketplace)
 
-The plugin is distributed **only through the marketplace**. From inside a Claude Code session:
+Claude Code installs from the marketplace. Use the full ID: other plugins are also called `total-recall`. From inside a Claude Code session:
 
 ```
 /plugin marketplace add adrian-balaban/total-recall
-/plugin install total-recall
+/plugin install total-recall@my-claude-plugins
 ```
 
 or from the shell:
 
 ```bash
 claude plugin marketplace add adrian-balaban/total-recall
-claude plugin install total-recall
+claude plugin install total-recall@my-claude-plugins
 ```
 
-Then run the setup script once, from the installed plugin directory, to create the vaults, register the MCP server, and build the index:
+Then run the setup script once, from the installed plugin directory (`~/.claude/plugins/cache/my-claude-plugins/total-recall/<VERSION>/`), to create the vaults, register the MCP server, and build the index:
 
 ```bash
-./install.sh
+bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
 ```
 
 Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.json`.
 
 **What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact can reach you. There is deliberately no zip download and no npm package — one channel, one thing to trust.
+
+## 🧩 Install without Claude Code
+
+Every other assistant uses the same files from the `release` branch, which CI builds after the gate passes (the marketplace installs the same branch):
+
+```bash
+git clone --depth 1 -b release https://github.com/adrian-balaban/total-recall.git ~/total-recall-plugin
+cd ~/total-recall-plugin/plugins/total-recall
+./install.sh -y            # add --gemini or --vscode to register the server for those hosts
+```
+
+Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file; the README's [Quick start → Other assistants](../../README.md#other-assistants) has a snippet for each host. To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`.
 
 ### Gemini/Antigravity
 
@@ -71,7 +84,7 @@ The entry points at `scripts/start-server.sh`, which finds `node` even when VS C
 
 ### Developing from a clone
 
-Only for working on the plugin — not a supported install path for users:
+Only for working on the plugin. Users without Claude Code should clone the `release` branch instead (see above), which has `dist/` prebuilt:
 
 ```bash
 git clone https://github.com/adrian-balaban/total-recall.git
@@ -144,7 +157,15 @@ Or just re-run `./install.sh --complete`.
 
 Codex CLI speaks MCP but does **not** run Claude Code lifecycle hooks, so the SessionStart memory-index injection, PostToolUse org-vault sync, and PreCompact learning capture do not fire. You get the 22 MCP tools (read/write/search via `recall_memory`, `search_index`, `store_memory`, …) but no automatic capture or proactive injection — call the tools explicitly.
 
-To wire it, point Codex at the plugin's MCP server (the compiled `dist/index.js`); hooks are simply ignored. Memory is fully usable on demand; only the auto-capture hooks are absent. If the client reads MCP resources and prompts, `total-recall://index` and the `memory-workflow` / `extract-session-learnings` prompts stand in for the hooks.
+To wire it, add the server to `~/.codex/config.toml` (hooks are simply ignored):
+
+```toml
+[mcp_servers.total-recall]
+command = "bash"
+args = ["/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"]
+```
+
+Then put the memory instructions from the README in `AGENTS.md`. Memory is fully usable on demand; only the auto-capture hooks are absent. If the client reads MCP resources and prompts, `total-recall://index` and the `memory-workflow` / `extract-session-learnings` prompts stand in for the hooks.
 
 ## ✅ Verify
 

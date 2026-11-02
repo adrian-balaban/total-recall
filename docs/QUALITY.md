@@ -102,7 +102,7 @@ Counted over the 24 tags from v1.1.18 (2026-08-20) to v1.6.7 (2026-11-02). Befor
 | Index injected at SessionStart | ~4.4k tokens | ~32k tokens | ~162k tokens |
 | SessionStart index build | 0.05 s | — | 0.14 s (the old bash builder: 14.3 s) |
 
-The injected index costs about 32 tokens per memory and has **no size cap** today. Beyond a few hundred memories, prune with `prune_memories`, or set `orgInjection` to `titles` or `off` to shrink the org part.
+The injected index costs 30–40 tokens per memory (about 32 with short titles, about 40 on a real vault), plus a fixed header of roughly 250 tokens, and has **no size cap** today. Beyond a few hundred memories, prune with `prune_memories`, or set `orgInjection` to `titles` or `off` to shrink the org part.
 
 ## Reproduce
 

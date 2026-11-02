@@ -22,7 +22,7 @@ Total Recall can tie memories to a spec, and, when a project keeps its architect
 
    The `# [ORD-S1]` tag is the assertion ID. Give every assertion one.
 
-2. **Write a test that carries the ID.** Any framework works: a line containing `[ORD-S1]` in a test file links that test to the assertion, so put the ID in the test name. The indexer looks in `*.test.*` / `*.spec.*` (JS/TS), `*Test.java`, `*Tests.kt`, `*Test.cs`, `*_test.go`, `*_test.py` and `test_*.py`:
+2. **Write a test that carries the ID.** Any framework works: a line containing `[ORD-S1]` in a test file links that test to the assertion, so put the ID in the test name. The indexer looks in `*.test.*` / `*.spec.*` (JS/TS), `*Test` / `*Tests` `.java` `.kt` `.cs`, `*_test.go`, `*_test.py` and `test_*.py`. It does not look at `*IT.java`, Spock or Kotest `*Spec` files, or Scala:
 
    ```java
    @Test
@@ -31,14 +31,14 @@ Total Recall can tie memories to a spec, and, when a project keeps its architect
    ```
 
 3. **Ask Claude**, in a session opened in that project:
-   - *"index the architecture of this repo"* → `index_architecture(path=".")` stores one summary memory for the system.
+   - *"index the architecture of this repo"* → `index_architecture(path="/abs/path/to/repo")` stores one summary memory for the system. Use an absolute path: a relative one is resolved against the MCP server's working directory, which differs between assistants. The scan reads at most 5,000 files and skips `node_modules`, `.git`, `dist`, `build` and `coverage`; add `target`, `out` or `vendor` to `specDriven.excludeDirs` if you have them.
    - *"validate the architecture"* → `validate_architecture(path=".")` lists any tagged assertion with no test and stores it as a `fitness-result` memory; a later pass marks it resolved.
    - *"trace ORD-S1"* → `trace("ORD-S1")` shows the assertion, its tests, past failures and the decisions linked to it.
-   - Before you change a component: *"what do we know about adl:ord.domain?"* → `get_architecture_context`.
+   - Before you change a component: *"what do we know about the Domain component of ord?"* → `get_architecture_context(system="ord", element="adl:domain")`. The system is named by its `AS` id (`ord`) and is a namespace, not part of the element ID. Element IDs are `adl:<component>`, or `adl:<domain>.<component>` when the component sits inside a `DEFINE DOMAIN`.
 
 4. **Record decisions** as you go: *"store the decision to split Domain from Api, linked to ORD-S1"*. The `spec-driven-workflow` skill describes the whole loop (spec → requirement IDs → ADL → tagged tests → code → validation → captured decisions) and ships a [spec template](../plugins/total-recall/skills/spec-driven-workflow/templates/spec.md).
 
-**What `validate_architecture` checks and what it doesn't.** It checks **coverage**: every tagged assertion has at least one test carrying its ID. It does not run your tests or read their results. The rules are enforced by your own tests running in your CI.
+**What `validate_architecture` checks and what it doesn't.** It checks **coverage**: every tagged assertion has at least one test file line containing its ID. That match is purely textual, so a comment or a disabled test counts too. It does not run your tests or read their results; the rules are enforced by your own tests running in your CI. Untagged assertions are skipped, an ID found in tests with no matching assertion is not reported, and results (`fitness-result` memories) go to your personal vault, so teammates do not see each other's failures.
 
 ## ADL in one paragraph
 
@@ -62,7 +62,7 @@ Total Recall describes itself in nine ADL files under [plugins/total-recall/arch
 
 ## Org guardrails
 
-Org memories tagged `guardrail` (a reusable ADL assertion, the reason, and the incident behind it) are returned by `get_architecture_context` for every system. An org memory with `artifact: "spec"` is refused when it names a host, a credential or a term in `orgBlockedTerms`, so specs stay personal. Guardrails are reviewed the same way as any org memory: through who can push to the org repo.
+Memories tagged `guardrail` (a reusable ADL assertion, the reason, and the incident behind it) are returned by `get_architecture_context` for every system. Store them with the `org` tag to share them with the team. Their bodies reach the model as written, not framed as teammate data (see [SECURITY.md](../SECURITY.md)), so they are only as trustworthy as the people who can push to the team repo. An org memory with `artifact: "spec"` is refused when it names a credential, a term in `orgBlockedTerms`, or a host name on a common top-level domain, so specs stay personal; the host check is a fixed list, not a guarantee.
 
 ## ⚙️ Configuration (`specDriven`)
 

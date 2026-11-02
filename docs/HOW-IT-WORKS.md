@@ -15,7 +15,7 @@ Two separate vaults live under `~/.total-recall/`:
 
 ```
 ~/.total-recall/
-├── index.json               ← flat index: key → metadata (derived, rebuilt from the .md files)
+├── index.json               ← {v: 1, entries: key → metadata} (derived, rebuilt from the .md files)
 ├── invertedIndex.json       ← TF-IDF inverted index: token → {docs, idf} (derived)
 ├── .index-cache.txt         ← the text injected at SessionStart (written only by the SessionStart hook)
 ├── config.json              ← optional configuration
@@ -27,7 +27,10 @@ Two separate vaults live under `~/.total-recall/`:
 │   └── vectors.db           ← sqlite-vec embeddings (optional, derived, git-ignored)
 └── org/
     └── org-vault/           ← team memories, git-synced (branch from `orgBranch`)
+        └── index.json       ← the team index, committed to the repo — NOT rebuilt locally, do not edit
 ```
+
+The personal vault's local git repo ignores `.superseded/`, `*.tmp.*` and `vectors.db*`, so archived versions are not in its history. It is committed by the `SessionEnd` hook (Claude Code, Gemini/Antigravity); with other assistants, commit it yourself.
 
 The key of a memory is its path relative to the vault root, without `.md`; org keys get the prefix `org/`. The category is the first folder under the vault root (`knowledge` for files at the root).
 
@@ -101,6 +104,10 @@ recall_memory(query)
 
 TF-IDF indexes the title, the tags and the first 500 characters of the body, not the whole file. A word scores high when it is frequent in one memory and rare across the vault.
 
+**Tokenizer** (`tfidf.ts`): lowercase, accents stripped (`întâlnire` → `intalnire`), and every character outside `a–z` and `0–9` becomes a separator. So `dim_customer` is two words, `dim` and `customer`. There is no stemming and no stop-word list. Text in non-Latin scripts (Cyrillic, Greek, Arabic, Chinese, Japanese) produces no tokens at all, so only semantic search can find it.
+
+**Decay in hybrid mode:** the forgetting curve weights the TF-IDF ranking only. RRF then merges it with the vector ranking, which is not decayed, so with semantic search on an old memory fades more slowly than with text search alone.
+
 ### The forgetting curve
 
 Unimportant, unused memories fade out of results; every access refreshes them (Ebbinghaus, 1885).
@@ -127,9 +134,9 @@ Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or ./install.sh --complete
 ```
 
-### Multilingual search (EN↔RO)
+### Languages
 
-With `enableMultilingualSearch: true`, query words are expanded between English and Romanian, so "care a fost decizia noastră despre baza de date?" finds a memory stored in English about the database decision. The embedder does not do this; the expansion does.
+Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/all-MiniLM-L6-v2` handles English only; `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages. The measurements and how to switch models are in the [README](../README.md#-languages).
 
 ## 🪝 Hooks
 
@@ -145,11 +152,9 @@ With `enableMultilingualSearch: true`, query words are expanded between English 
 | `PreCompact` | `extract-and-store-memories.sh` | See below |
 | `SessionEnd` | `session-end.sh` | Flushes pending writes and commits the personal vault's local git repo |
 
-The org-sync matcher is a regex (`mcp__plugin_total-recall_total-recall__(store_memory|update_memory|delete_memory)`), not a plain list: Claude Code compares a matcher made only of letters, digits, `_`, `-`, `,` and `|` as an exact string against the full tool name, so a bare list never matched.
-
 ### PreCompact capture
 
-Before each context compaction, `extract-and-store-memories.sh` sends the last 1 MiB of the session transcript to `claude -p` (your Claude Code login and default model, one call per compaction) and asks for 0–3 learnings as JSON lines. `store-learning.mjs` writes them to the personal vault and never overwrites a file. Each run appends one line to `~/.total-recall/.extract.log` (`outcome=wrote|nothing|dropped|cli-error|store-error`).
+Before each context compaction (Claude Code; Gemini/Antigravity when the `claude` CLI is installed), `extract-and-store-memories.sh` sends the last 1 MiB of the session transcript to `claude -p` (your Claude Code login and default model, one call per compaction) and asks for 0–3 learnings as JSON lines. `store-learning.mjs` writes them to the personal vault and never overwrites a file. Each run appends one line to `~/.total-recall/.extract.log` (`outcome=wrote|nothing|dropped|cli-error|store-error`).
 
 - **Saved:** what worked and what didn't, and project context that is not obvious from the code (motivations, constraints, decisions).
 - **Not saved:** code, file paths, git history. All of it can be read from the workspace.
