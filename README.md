@@ -77,8 +77,7 @@ All projects share one vault. Name the project in the memory ("in the billing se
 Search has two parts, and they handle languages differently:
 
 - **Text search** works in any language written in the Latin alphabet (English, Romanian, French, German, Spanish, Polish, …), with accents ignored, as long as the question and the memory use the same words. It does not index other scripts: Cyrillic, Greek, Arabic, Chinese or Japanese text is invisible to it.
-- **Romanian ↔ English** is built in: with `"enableMultilingualSearch": true`, a fixed dictionary of about 28 common words (decision/decizie, database/baza de date, …) translates the question, so text search alone finds an English memory from a Romanian question and the other way round.
-- **Any other language pair**, including non-Latin scripts, goes through semantic search. Since 1.6.8 the default embedding model is multilingual (50+ languages), so a question in German finds a memory written in English, Japanese or Romanian.
+- **Any language pair**, including non-Latin scripts, goes through semantic search. Since 1.6.8 the default embedding model is multilingual (50+ languages), so a question in German finds a memory written in English, Japanese or Romanian.
 
 If you only work in English and want the smaller download (87 MB vs. 449 MB), set the English-only model in `~/.total-recall/config.json` and restart the assistant:
 
