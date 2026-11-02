@@ -16,7 +16,7 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month, 30% needed a follow-up fix). 1,035 tests, 97% coverage, 80% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
+- **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month, 29% needed a follow-up fix). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Data stays local** by default; nothing is sent anywhere except an optional one-time model download and, if you opt in, your own team's git repo.
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.

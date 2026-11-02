@@ -1,6 +1,6 @@
 # 📏 Quality metrics
 
-Measured on **v1.6.7** (commit `d0ace52`, 2026-11-02). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history with the formulas from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
+Measured on **v1.6.8** (commit `0625d95`, 2026-11-02). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history with the formulas from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
 
 [← README](../README.md)
 
@@ -8,43 +8,41 @@ Measured on **v1.6.7** (commit `d0ace52`, 2026-11-02). Test, coverage and mutati
 
 | Metric | Value | Gate | |
 |---|---|---|---|
-| Unit / integration tests | 1,006 / 24, all passing | — | ✅ |
-| Coverage (statements · branches · functions · lines) | 97.1% · 90.9% · 95.1% · 98.3% | 95 · 90 · 95 · 95 | ✅ |
-| Mutation score (Stryker, 18 modules) | **80.4%** | ≥ 65% `[TR-Q6]` | ✅ |
-| Average cyclomatic complexity (430 functions) | 3.44 | < 4 | ✅ |
+| Unit / integration tests | 1,012 / 24, all passing | — | ✅ |
+| Coverage (statements · branches · functions · lines) | 96.9% · 91.0% · 95.6% · 98.2% | 95 · 90 · 95 · 95 | ✅ |
+| Mutation score (Stryker, 18 modules) | **81.1%** | ≥ 65% `[TR-Q6]` | ✅ |
+| Average cyclomatic complexity (433 functions) | 3.42 | < 4 | ✅ |
 | Functions with complexity ≥ 10 | 26 (max 58, `storeMemory`) | 0; frozen by a ratchet `[TR-Q9]` | ⚠️ |
 | Mean distance from the main sequence | 0.44 | < 0.6 | ✅ |
 | Maintainability Level (12 components) | 74.2% | > 60% | ✅ |
 | Longest identical run between two files | 6 lines | ≤ 10 `[TR-Q10]` | ✅ |
 | Largest file | 471 lines | ≤ 600 `[TR-Q1]` | ✅ |
-| Quantum coupling, MCP server (NDQMS, estimated) | 0.46 (was 0.64) | ≤ 0.30 *(house)* | ⚠️ |
-| Deployment frequency | 9.9 releases / month | > 1 / week *(house)* | ✅ |
-| Change failure rate | 30.4% (17.4% user-facing) | < 15% *(house)* | ❌ |
+| Deployment frequency | 10.3 releases / month | > 1 / week *(house)* | ✅ |
 | MCP server start time | 99 ms median | < 500 ms *(house)* | ✅ |
 
 ## Tests and mutation
 
 | | |
 |---|---|
-| Test files | 74, with 2,363 assertions (2.35 per test, house target ≥ 1.5) |
+| Test files | 75, with 2,373 assertions (2.34 per test, house target ≥ 1.5) |
 | Assertion-free tests, tautologies | 0, 0 (`[TR-Q4]`, `[TR-Q5]`) |
-| Mutants | 1,567 killed, 1 timeout, 314 survived, 68 without coverage |
-| Weakest modules | `paths.ts` 31.8%, `embeddings.ts` 51.2%, `atomic-write.ts` 60.9% |
+| Mutants | 1,586 killed, 1 timeout, 310 survived, 60 without coverage |
+| Weakest modules | `paths.ts` 36.6%, `embeddings.ts` 51.9%, `atomic-write.ts` 60.9% |
 | Strongest modules | `ebbinghaus.ts`, `journal.ts`, `rrf.ts`, `errors.ts` 100% |
 
 Mutation testing checks whether the tests would notice a bug: Stryker changes small things in the code (`>` becomes `<`, `true` becomes `false`), and a test suite that still passes is not strict enough. Coverage alone cannot show this: `embeddings.ts` is covered well but half its mutants survive, partly because the native and model-loading code is mocked in the tests.
 
-The score drifts about ±1 point between runs with no source change (mutants that time out under varying CI load), so do not read the decimal as exact. The gate is 65%, about 15 points below today's score.
+The score drifts about ±1 point between runs with no source change (mutants that time out under varying CI load), so do not read the decimal as exact. The gate is 65%, about 16 points below today's score.
 
 ## Complexity
 
 | | |
 |---|---|
-| Functions | 430; median complexity 2 |
+| Functions | 433; median complexity 2 |
 | ≥ 5 | 91 (advisory gate for agent-written code) |
 | ≥ 10 | 26, listed in `complexity-baseline.json` |
 | > 15 | 12 |
-| Highest | `storeMemory` 58 · `parseAdl` 52 · `indexFile` 29 · `buildModels` 22 · `parseYamlish` 21 · `rerankMemories` 21 |
+| Highest | `storeMemory` 58 · `parseAdl` 52 · `indexFile` 29 · `buildModels` 22 · `parseYamlish` 21 · `rerankMemories` 20 |
 
 The ratchet test fails when a function not on the baseline reaches 10, or when a listed function gets worse. A function that improves must leave the list, so the list only shrinks.
 
@@ -84,14 +82,12 @@ The earlier figure of 68.9% for ML was computed over 10 components; 1.6.7 added 
 
 ## Delivery (DORA)
 
-Counted over the 24 tags from v1.1.18 (2026-08-20) to v1.6.7 (2026-11-02). Before v1.1.18 versions were bumped on almost every commit and not tagged, so that period is left out.
+Counted over the 25 tags from v1.1.18 (2026-08-20) to v1.6.8 (2026-11-02). Before v1.1.18 versions were bumped on almost every commit and not tagged, so that period is left out.
 
 | | |
 |---|---|
-| Deployment frequency | 9.9 tags per month; 20 in the last 30 days |
+| Deployment frequency | 10.3 tags per month; 21 in the last 30 days |
 | Lead time (commit → tag) | median 0.26 h, p90 15.2 h |
-| Change failure rate | 7 of 23 releases needed a production `fix:` in the next patch release = **30.4%** |
-| User-facing failures | 4 of 23 = 17.4%: v1.3.1 (`.mcp.json` emptied), v1.3.3 (vector upsert), v1.6.0 (org branch default), v1.6.2 (`install.sh` emptied `.mcp.json`) |
 | Time to restore (failed release → fix release) | median 8.1 h |
 | Rollbacks | 0 reverts |
 

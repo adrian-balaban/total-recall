@@ -16,7 +16,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 ## Dintr-o privire
 
 - **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună, 30% au avut nevoie de o corectură ulterioară). 1.035 de teste, acoperire 97%, scor de mutație 80%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
+- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună, 29% au avut nevoie de o corectură ulterioară). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Datele rămân locale** implicit; nimic nu e trimis nicăieri, cu excepția unei descărcări unice opționale a modelului și, dacă optezi pentru asta, a repo-ului git al propriei echipe.
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) mai jos.
