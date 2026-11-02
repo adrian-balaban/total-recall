@@ -209,7 +209,6 @@ Optional, in `~/.total-recall/config.json`:
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
 - [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md)
-- [Talk: Claude vs Ollama & Total Recall](https://github.com/adrian-balaban/presentation-claude-vs-ollama-and-total-recall-plugin-21-07-2026) (Romanian, July 2026)
 
 ## 📊 Status
 
