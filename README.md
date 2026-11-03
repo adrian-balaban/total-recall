@@ -141,7 +141,7 @@ More: [How it works → Languages](docs/HOW-IT-WORKS.md).
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 
-All 22 tools work everywhere. "Through the instruction file" means the assistant reads `total-recall://index` or calls `search_index` because step 3 tells it to. **Tested** means the install was run end to end.
+All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end.
 
 ## How it's built
 

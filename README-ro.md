@@ -138,7 +138,7 @@ Mai mult: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 
-Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 3. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă.
+Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că adaugi blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului tău, iar asistentul citește `total-recall://index` sau apelează `search_index`, așa cum îi spune blocul. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă.
 
 ## Cum e construit
 
