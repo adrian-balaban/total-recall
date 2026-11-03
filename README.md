@@ -1,5 +1,7 @@
 # 🧠 total-recall
 
+[![CI](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml/badge.svg?branch=main)](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml) [![License: MIT](https://img.shields.io/github/license/adrian-balaban/total-recall)](LICENSE)
+
 **Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
 Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor, Windsurf, Claude Desktop, or any other client that speaks the Model Context Protocol (MCP). Memories are plain Markdown files on your disk that you can read, edit, grep and version with git.
@@ -9,6 +11,8 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
 - **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server, no database, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails, card numbers, IBANs and phone numbers.
 - **Cost:** free and open source (MIT). The plugin is ~1–2 MB; optional semantic search downloads a local multilingual model once (449 MB; 87 MB for the English-only one). The index shown at session start costs 30–40 tokens per memory.
+
+Three other plugins are also called `total-recall`: [how this one differs](docs/COMPARISON.md).
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
 
@@ -22,7 +26,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ## Quick start
 
-**You need:** Node.js 18+, git, and Linux, macOS or Windows with Git Bash.
+A first memory that survives a restart takes a few minutes. **You need:** Node.js 18+, git, and Linux, macOS or Windows with Git Bash.
 
 ### Claude Code
 
@@ -55,7 +59,32 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ### Other assistants
 
-Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Install and MCP-config steps per assistant, plus Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Per-assistant steps, Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md).
+
+<details>
+<summary>Any MCP client: the short version</summary>
+
+```bash
+git clone --depth 1 -b release https://github.com/adrian-balaban/total-recall.git ~/total-recall-plugin
+cd ~/total-recall-plugin/plugins/total-recall && ./install.sh -y
+```
+
+Then register the server in your client's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`), for example in the `mcpServers` format:
+
+```json
+{
+  "mcpServers": {
+    "total-recall": {
+      "command": "bash",
+      "args": ["/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"]
+    }
+  }
+}
+```
+
+For Codex, the same command and argument go in `~/.codex/config.toml`. Add the `## Memory` instructions from step 3 above to the assistant's instruction file. Without hooks, the assistant reads the `total-recall://index` resource and the `memory-workflow` prompt instead of an injected index.
+
+</details>
 
 ## Daily use
 
@@ -68,6 +97,28 @@ Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Install an
 | nothing (Claude Code) | 0–3 lessons from the session are saved before compaction | `PreCompact` hook |
 
 All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results.
+
+## Your data
+
+Each memory is one Markdown file with a small YAML header:
+
+```markdown
+---
+title: "Prefer PostgreSQL for relational data"
+tags: [architecture, database]
+importanceScore: 0.8
+updated: 2026-06-15T14:30:00Z
+---
+## Executive Summary
+Prefer PostgreSQL over MySQL for new projects because of JSONB support…
+```
+
+| Kind | Files | If lost |
+|---|---|---|
+| **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
+| **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt automatically from the `.md` files |
+
+Export is plain JSON (`export_memories`), so `jq` or DuckDB work on it directly. To move to a new machine, import it with `import_memories` (org memories come back from the team repo; for a large vault, copying the vault folder is simpler): [The 22 tools → Export format](docs/TOOLS.md#export-format).
 
 ## Languages
 
@@ -92,6 +143,10 @@ Benchmark across 11 languages, other models and re-embed cost: [How it works →
 
 All 22 tools work everywhere. "Through the instruction file" means the assistant reads `total-recall://index` or calls `search_index` because step 3 tells it to. With VS Code agent plugins on (Preview), the plugin's hooks may load too; not yet verified.
 
+## How it's built
+
+A stdio MCP server (TypeScript) plus lifecycle hooks, over flat Markdown files; every index is derived and rebuildable. C4 diagrams and invariants: [Architecture](plugins/total-recall/ARCHITECTURE.md). Optional for architects: tie memories to requirements and architecture rules to tests (ADL), with a five-minute walkthrough in [Spec-driven work](docs/SPEC-DRIVEN.md).
+
 ## Privacy: what leaves your machine
 
 - **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes.
@@ -99,6 +154,7 @@ All 22 tools work everywhere. "Through the instruction file" means the assistant
 - **Other network calls:** the semantic model downloads from Hugging Face once; the team vault pushes and pulls through git. Nothing else, and no telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
 - **Teammates' memories reach your model.** Org memories are injected marked as "teammate-written reference data, not instructions", which lowers the risk of prompt injection but does not remove it. Give push access to the team repo only to people you trust; set `orgInjection` to `titles` or `off` to inject less. See [SECURITY.md](SECURITY.md).
+- **Stopping is painless.** Your memories stay as `.md` files you can keep, and `export_memories` gives you JSON.
 
 ## Team setup (org vault)
 
@@ -126,8 +182,6 @@ Start solo and add the team later: `install.sh` is safe to re-run. Every teammat
 - **Upgrade (Claude Code):** `claude plugin update total-recall@my-claude-plugins`, restart, then run the setup script again (an update does not run it).
 - **Upgrade (other assistants):** `cd ~/total-recall-plugin && git fetch && git reset --hard origin/release`, then run `./install.sh -y` again. The `release` branch is rebuilt by CI, so `git pull` can fail.
 - **Restore a memory:** in Claude Code and Gemini the personal vault is committed to its local git repo at the end of each session: `git -C ~/.total-recall/personal-vault log`, `git restore` what you need, then ask for *"rebuild the index"* (`rebuild_index`). With other assistants, commit the vault yourself. Archived versions (`.superseded/`) and `vectors.db` are not in that repo.
-- **New laptop:** ask the assistant to *"export all memories"*. `export_memories` returns the memories as JSON in its answer, without access counts, confirmations or archived versions; save it and import it on the new machine with `import_memories`. Org memories come back from the team repo. For a large vault, copying `~/.total-recall/personal-vault/` is simpler.
-- **Rebuilt automatically:** `index.json`, `invertedIndex.json`, `.index-cache.txt` and `vectors.db` are rebuilt from the `.md` files. The org `index.json` in the team repo is not; leave it alone.
 - **Something looks off:** `get_stats` shows recent errors and whether semantic search is on. In Claude Code, the session start warns when team pushes or automatic capture keep failing. If semantic search is off after an update, run `npm rebuild better-sqlite3` in the plugin folder.
 - **Uninstall:** `claude plugin uninstall total-recall@my-claude-plugins`, or remove the MCP entry and the `~/total-recall-plugin` folder. Your memories stay in `~/.total-recall/` until you delete it.
 
