@@ -118,7 +118,7 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
 | **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt automatically from the `.md` files (access counts reset). The org `index.json` in the team repo is not rebuilt: leave it alone |
 
-Export is plain JSON (`export_memories`, returned in the assistant's answer), so `jq` or DuckDB work on it once you save it. To move to a new machine, import it with `import_memories` (org memories come back from the team repo; for a large vault, copying the vault folder is simpler). For an off-machine backup, copy `personal-vault/`: its local git repo sits on the same disk: [The 22 tools → Export format](docs/TOOLS.md#export-format).
+Export is plain JSON (`export_memories`, returned in the assistant's answer), so `jq` or DuckDB work on it once you save it. To move to a new machine, import it with `import_memories` (org memories come back from the team repo; for a large vault, copying the vault folder is simpler). For an off-machine backup, copy `personal-vault/`: its local git repo sits on the same disk. Export format: [The 22 tools](docs/TOOLS.md#export-format).
 
 ## Languages
 
