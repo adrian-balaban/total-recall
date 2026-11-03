@@ -35,7 +35,7 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**complet**, implicit, adaugă căutare semantică locală; **minimal**, sau `--no-vector`, doar căutare de text, funcționează offline) și dacă vrei un vault de echipă (implicit nu, sari peste pentru utilizare solo). Cu `-y` accepți valorile implicite și sari peste ambele întrebări. Comanda de mai jos găsește versiunea curentă a pluginului în cache (glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe) și rulează `install.sh`-ul ei:
+2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**complet**, implicit, adaugă căutare semantică locală; **minimal**, sau `--no-vector`, doar căutare de text, funcționează offline) și dacă vrei un vault de echipă (implicit nu). `-y` acceptă ambele valori implicite. Comanda de mai jos găsește versiunea curentă a pluginului în cache (glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe) și rulează `install.sh`-ul ei:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
@@ -143,7 +143,11 @@ Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" îns
 
 ## Cum e construit
 
-Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișiere Markdown simple; toate indexurile sunt derivate și se pot reconstrui. Diagrame C4 și invarianți: [Arhitectura](plugins/total-recall/ARCHITECTURE.md). Opțional, pentru arhitecți: legi memoriile de cerințe și regulile de arhitectură de teste (ADL), cu un exemplu de cinci minute în [lucrul spec-driven](docs/SPEC-DRIVEN.md) (în engleză).
+- Fișierele Markdown simple sunt sursa de adevăr; toate indexurile sunt derivate din ele și se reconstruiesc.
+- Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață; pornește în aproximativ 0,1 s (mediană 99 ms, [Calitate](docs/QUALITY.md), în engleză).
+- Căutarea e TF-IDF cu o curbă a uitării, opțional combinată cu vectori locali. Nu există niciun apel LLM în calea căutării.
+- Filtrul de confidențialitate se oprește în caz de dubiu, înainte de orice push.
+- Diagrame C4 și invarianți: [Arhitectura](plugins/total-recall/ARCHITECTURE.md). Pentru arhitecți: legi memoriile de cerințe și regulile de arhitectură de teste (ADL), cu un exemplu de cinci minute în [lucrul spec-driven](docs/SPEC-DRIVEN.md) (în engleză).
 
 ## Confidențialitate: ce pleacă de pe mașina ta
 
@@ -152,7 +156,7 @@ Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișie
 - **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă folosește git. Fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Dacă filtrul nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
 - **Memoriile colegilor ajung la modelul tău**, marcate ca date de referință, nu ca instrucțiuni. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md).
-- **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă JSON.
+- **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă JSON. Dezinstalare în Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memoriile rămân în `~/.total-recall/`).
 
 ## Configurare pentru echipă (vault org)
 
@@ -183,7 +187,6 @@ Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișie
 - **Alți asistenți:** pașii de actualizare și dezinstalare sunt în [INSTALL.md → Install without Claude Code](plugins/total-recall/INSTALL.md#-install-without-claude-code) (în engleză).
 - **Recuperezi o memorie:** în Claude Code și Gemini, vault-ul personal primește un commit în repo-ul git local la finalul fiecărei sesiuni: `git -C ~/.total-recall/personal-vault log`, `git restore` pe ce îți trebuie, apoi ceri *„reconstruiește indexul"* (`rebuild_index`). Cu alți asistenți, fă tu commit-ul. Versiunile arhivate (`.superseded/`) și `vectors.db` nu sunt în acel repo.
 - **Ceva pare în neregulă:** `get_stats` arată erorile recente și dacă e pornită căutarea semantică. În Claude Code, pornirea sesiunii te avertizează când push-urile de echipă sau captura automată eșuează repetat. Dacă după o actualizare căutarea semantică e oprită, rulează `npm rebuild better-sqlite3` în folderul pluginului.
-- **Dezinstalare (Claude Code):** `claude plugin uninstall total-recall@my-claude-plugins`. Memoriile rămân în `~/.total-recall/` până ștergi folderul.
 
 ## Limite
 

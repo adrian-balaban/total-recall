@@ -31,6 +31,16 @@ You rarely call these by name: say *"remember that…"*, *"what did we decide ab
 
 The five architecture tools are on by default. Switch them off one by one (`specDriven.tools`) or all together (`specDriven.enabled: false`, which also removes the optional spec fields from the other tools).
 
+## Retrieval order (cheapest first)
+
+1. Read the index injected at session start (already in context, free).
+2. `get_memories_by_keys(summary=true)` for a key you found there.
+3. `get_memories_by_keys(summary=false)` when you need the full text.
+4. `search_index` when the key is not in the index (metadata only, no file reads).
+5. `recall_memory(full=false)`, then `full=true` if you need content.
+
+The source is [the memory-workflow skill](../plugins/total-recall/skills/memory-workflow/SKILL.md).
+
 ## Export format
 
 `export_memories` returns the archive in its answer (there is no file argument, so a large vault passes through the model's context):
