@@ -64,7 +64,7 @@ cd ~/total-recall-plugin/plugins/total-recall
 ./install.sh -y            # add --gemini or --vscode to register the server for those hosts
 ```
 
-Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file; the README's [Quick start → Other assistants](../../README.md#other-assistants) has a snippet for each host. To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`.
+Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file (the `## Memory` block from the README's [Quick start, step 3](../../README.md#claude-code)). Host-specific notes follow below: [Gemini/Antigravity](#geminiantigravity), [VS Code](#vs-code-copilot-agent-mode--manual-mcpjson), [Codex CLI](#-codex-cli-mcp-only-no-hooks). To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`.
 
 ### Gemini/Antigravity
 

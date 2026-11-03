@@ -16,7 +16,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 ## Dintr-o privire
 
 - **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună, 29% au avut nevoie de o corectură ulterioară). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
+- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Datele rămân locale** implicit; nimic nu e trimis nicăieri, cu excepția unei descărcări unice opționale a modelului și, dacă optezi pentru asta, a repo-ului git al propriei echipe.
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) mai jos.
@@ -56,9 +56,9 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) 
 
 4. Repornește Claude Code și verifică: spune *„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"*. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă *„ce build tool folosește proiectul?"*.
 
-### Alți asistenți (Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop)
+### Alți asistenți
 
-Pașii de instalare și configurare MCP pentru fiecare asistent, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Pașii de instalare și configurare MCP pentru fiecare asistent, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză).
 
 ## Utilizare zilnică
 
