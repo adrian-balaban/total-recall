@@ -4,17 +4,16 @@
 
 **Asistentul tău AI uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor, Windsurf, Claude Desktop sau orice alt client care vorbește Model Context Protocol (MCP). Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git.
+Memorie persistentă și 'căutabilă' pentru asistenții AI: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor, Windsurf, Claude Desktop sau orice alt client care respecta Model Context Protocol (MCP). Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git.
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…"), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
-- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server de rulat, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email din afara domeniilor tale permise, numere de card, IBAN-uri și numere de telefon. Alte trei pluginuri se numesc tot `total-recall`: [prin ce diferă acesta](docs/COMPARISON.md) (în engleză).
-- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
-
+- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server de rulat, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email din afara domeniilor tale permise, numere de card, IBAN-uri și numere de telefon. 
+- **Cost:** 'free' și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite). 
 ## Dintr-o privire
 
-- **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
+- **Licență:** MIT, 'free'. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
 - **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din transcript la `claude -p` pentru captura automată. Singurul alt trafic spre exterior este o descărcare unică a modelului și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)).
@@ -35,7 +34,7 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**Complete**, implicit, adaugă căutare semantică locală; **Minimal**, sau `--no-vector`, doar căutare de text, funcționează offline) și dacă vrei un vault de echipă (implicit nu). `-y` acceptă ambele valori implicite. Comanda de mai jos găsește versiunea curentă a pluginului în cache (glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe) și rulează `install.sh`-ul ei:
+2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**Complete**, implicit, adaugă căutare semantică locală; **Minimal**, sau `--no-vector`, doar căutare de text) și dacă vrei un vault de echipă (implicit nu). `-y` acceptă ambele valori implicite. Comanda de mai jos găsește versiunea curentă a pluginului în cache (glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe) și rulează `install.sh`-ul ei:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
@@ -93,8 +92,6 @@ Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.
 | *„ce am decis despre baza de date?"* | Asistentul caută și citește memoriile potrivite | `search_index`, `recall_memory` |
 | *„memoria asta e depășită, actualizeaz-o"* / *„șterge-o"* | Fișierul e editat sau șters | `update_memory`, `delete_memory` |
 | nimic (Claude Code) | Înainte de compactare se salvează 0–3 lecții din sesiune | hook-ul `PreCompact` |
-
-Toate proiectele folosesc același vault. Pomenește proiectul în memorie („în serviciul de facturare, …") ca să le poți deosebi la căutare.
 
 ## Datele tale
 

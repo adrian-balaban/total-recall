@@ -9,8 +9,8 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
-- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails outside your allowed domains, card numbers, IBANs and phone numbers. Three other plugins are also called `total-recall`: [how this one differs](docs/COMPARISON.md).
-- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model once (449 MB; 87 MB for the English-only one; `--no-vector` skips it). The index shown at session start costs 30–40 tokens per memory.
+- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails outside your allowed domains, card numbers, IBANs and phone numbers. 
+- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model once (449 MB; 87 MB for the English-only one; `--no-vector` skips it). 
 
 ## At a glance
 
@@ -37,7 +37,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only and works offline) and whether to set up a team vault (default no). `-y` accepts both defaults. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
+2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only) and whether to set up a team vault (default no). `-y` accepts both defaults. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
@@ -95,8 +95,6 @@ For Codex, the same command and argument go in `~/.codex/config.toml`. Add the `
 | *"what did we decide about the database?"* | The assistant searches and reads the matching memories | `search_index`, `recall_memory` |
 | *"that memory is outdated, update it"* / *"delete it"* | The file is edited or deleted | `update_memory`, `delete_memory` |
 | nothing (Claude Code) | 0–3 lessons from the session are saved before compaction | `PreCompact` hook |
-
-All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results.
 
 ## Your data
 
