@@ -106,7 +106,7 @@ The only required dependencies are `@modelcontextprotocol/sdk` and `zod`. TF-IDF
 recall_memory(query)
   │
   ├─ tfidfSearch(query)
-  │    ├─ tokenize(query) → tokens (EN↔RO expansion if enableMultilingualSearch)
+  │    ├─ tokenize(query) → tokens (small built-in word-pair dictionary if enableMultilingualSearch)
   │    ├─ per token: look up the inverted index
   │    ├─ score = TF × IDF × title-boost(2×) × tag-boost(1.5×)
   │    └─ × retention strength (importance, days since update, accessCount, confirmations, flags)
@@ -152,13 +152,13 @@ npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or
 
 ### Languages
 
-Romanian ↔ English questions are expanded through a fixed dictionary of about 28 word pairs (`enableMultilingualSearch`). Every other language pair depends on the embedding model: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). How to switch models is in the [README](../README.md#languages).
+Cross-language search is done by the embedding model, so it works for any language pair the model covers. Text search alone matches only the words you typed; the one extra is a small built-in dictionary of about 28 Romanian ↔ English word pairs (`enableMultilingualSearch`), and no other language has one. With semantic search on: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). How to switch models is in the [README](../README.md#languages).
 
 **Benchmark.** Measured with the plugin's own pipeline: one English memory, one English decoy, and the same question asked in 11 languages.
 
 | `embeddingModel` | Size | Languages | Found the right memory |
 |---|---|---|---|
-| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (default since 1.6.8) | 449 MB | 50+ | All 11 (en, ro, fr, de, es, it, pl, ru, ja, zh, ar), with English-level margins |
+| **`Xenova/paraphrase-multilingual-MiniLM-L12-v2`** (default since 1.6.8) | 449 MB | 50+ | All 11 (English, Chinese, Spanish, French, German, Japanese, Arabic, Russian, Italian, Polish, Romanian), with English-level margins |
 | `Xenova/all-MiniLM-L6-v2` (default up to 1.6.7) | 87 MB | English | English clearly; elsewhere barely, and 2 of 10 languages wrong |
 | `Xenova/multilingual-e5-small` | 449 MB | ~100 | All 11, but with small margins: the plugin does not add the `query:`/`passage:` prefixes this model expects |
 
