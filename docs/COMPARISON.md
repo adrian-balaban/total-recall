@@ -21,6 +21,10 @@ Three other projects are also called `total-recall`. Install this one by its ful
 - **`remember@claude-plugins-official`**, the official session-handoff plugin, writes `.remember/*.md` into every project and uses the same hooks for the same job. Run only one of the two.
 - **mozilla-ai/cq** is complementary: it shares operational lessons between agents through a reviewed store; total-recall is your own context memory in files and git. cq's endorsement signal inspired `confirm_memory`.
 
+## Versus a shared `MEMORY.md` in git
+
+A plain file kept in a repository is the simplest team memory. This plugin adds search ranked by TF-IDF and a forgetting curve (optionally with local vectors), a privacy filter that runs before anything is pushed, and an author check on org memories. The trust model is the same: anyone with push access can edit the file or the org vault, and nothing is reviewed first. If you only need a handful of stable notes, the plain file costs nothing and has no moving parts.
+
 ## Ideas this plugin builds on
 
 - **Hermann Ebbinghaus (1885)**: the forgetting curve behind retention scoring.

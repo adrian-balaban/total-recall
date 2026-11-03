@@ -37,7 +37,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only and works offline) and whether to set up a team vault (default no, skip it for solo use). Add `-y` to accept the defaults and skip both questions. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
+2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only and works offline) and whether to set up a team vault (default no). `-y` accepts both defaults. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
@@ -145,7 +145,11 @@ All 22 tools work everywhere. "Through the instruction file" means the assistant
 
 ## How it's built
 
-A stdio MCP server (TypeScript) plus lifecycle hooks, over flat Markdown files; every index is derived and rebuildable. C4 diagrams and invariants: [Architecture](plugins/total-recall/ARCHITECTURE.md). Optional for architects: tie memories to requirements and architecture rules to tests (ADL), with a five-minute walkthrough in [Spec-driven work](docs/SPEC-DRIVEN.md).
+- Flat Markdown files are the source of truth; every index is derived and rebuilt from them.
+- A stdio MCP server (TypeScript) plus lifecycle hooks; it starts in about 0.1 s (median 99 ms, [Quality](docs/QUALITY.md)).
+- Search is TF-IDF with a forgetting curve, optionally fused with local vectors. No LLM call is in the search path.
+- The privacy filter fails closed before anything is pushed.
+- C4 diagrams and invariants: [Architecture](plugins/total-recall/ARCHITECTURE.md). For architects: tie memories to requirements and architecture rules to tests (ADL), with a five-minute walkthrough in [Spec-driven work](docs/SPEC-DRIVEN.md).
 
 ## Privacy: what leaves your machine
 
@@ -154,7 +158,7 @@ A stdio MCP server (TypeScript) plus lifecycle hooks, over flat Markdown files; 
 - **Other network calls:** the semantic model downloads from Hugging Face once; the team vault uses git. No telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
 - **Teammates' memories reach your model**, marked as reference data, not instructions. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
-- **Stopping is painless.** Your memories stay as `.md` files you can keep, and `export_memories` gives you JSON.
+- **Stopping is painless.** Your memories stay as `.md` files you keep, and `export_memories` gives you JSON. To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`).
 
 ## Team setup (org vault)
 
@@ -185,7 +189,6 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - **Other assistants:** upgrade and uninstall steps are in [INSTALL.md → Install without Claude Code](plugins/total-recall/INSTALL.md#-install-without-claude-code).
 - **Restore a memory:** in Claude Code and Gemini the personal vault is committed to its local git repo at the end of each session: `git -C ~/.total-recall/personal-vault log`, `git restore` what you need, then ask for *"rebuild the index"* (`rebuild_index`). With other assistants, commit the vault yourself. Archived versions (`.superseded/`) and `vectors.db` are not in that repo.
 - **Something looks off:** `get_stats` shows recent errors and whether semantic search is on. In Claude Code, the session start warns when team pushes or automatic capture keep failing. If semantic search is off after an update, run `npm rebuild better-sqlite3` in the plugin folder.
-- **Uninstall (Claude Code):** `claude plugin uninstall total-recall@my-claude-plugins`. Your memories stay in `~/.total-recall/` until you delete it.
 
 ## Limits
 

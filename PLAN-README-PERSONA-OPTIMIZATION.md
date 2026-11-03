@@ -127,7 +127,7 @@ That frees about six lines, so the three risk bullets land inside the first 25.
 
 **Kept on purpose:** the closing line under Daily use ("Name the project in the memory…") exists only in the README and is practical advice for multi-project users.
 
-**Actual after PR A and PR B:** EN 2,015, RO 2,028 (PR A: 1,986 / 1,998; PR B: +29 / +30 after its own cuts). The estimate of +330 was too low: the verify steps (1.1, 1.2, 1.4–1.8) cost about +165 on their own, and several planned cuts could not be taken because the removed text exists only in the README. Both figures are above N. **Decision needed (§7 item 1):** raise N to about 2,050 (EN) / 2,075 (RO), or accept further cuts of README-only content.
+**Actual after PR A and PR B:** EN 2,015, RO 2,028 (PR A: 1,986 / 1,998; PR B: +29 / +30 after its own cuts). The estimate of +330 was too low: the verify steps (1.1, 1.2, 1.4–1.8) cost about +165 on their own, and several planned cuts could not be taken because the removed text exists only in the README. Both figures are above N. After PR D (hooks): EN 2,037, RO 2,058 (+22 / +30; the plan asked for net ≤ 0, but the five-line design block and the uninstall move cost more than the trimmed step 2 saved). Hooks 3.3 and 3.5 were already met by existing text (the exit line now carries the uninstall command; step 4 already is a store-then-recall session). **Decision needed (§7 item 1):** raise N to about 2,050 (EN) / 2,075 (RO), or accept further cuts of README-only content.
 
 **Original estimate (kept for the record):** about 1,924 + 330 − 315 ≈ 1,940 EN, inside 1,950. **Per-PR rule:** PR A and PR B each land at net ≤ +10 words with their own cuts; PR D (hooks) must be net ≤ 0 — 3.1 replaces "How it's built", 3.3 moves the uninstall line rather than duplicating it, 3.5 rewrites step 4 rather than adding to it.
 
@@ -161,3 +161,15 @@ Reviewers found no structural difference between the two READMEs (same sections,
 3. **BACKLOG.md:** refresh the numbers in place, or mark the section dated?
 4. **Badge:** keep "CI" or rename it to describe the mutation gate?
 5. **Org index.json warning:** I removed it in #30 by mistake; confirm that restoring it in PR A is wanted (recommended).
+
+## §8 Open work after PRs A, B and D
+
+| # | Item | Status | How |
+|---|---|---|---|
+| T1 | Verify installs on **Cursor** and **Windsurf** (item 1.3) | **TODO** (needs real clients) | On each client: clone, `./install.sh -y`, add the server to the client's MCP configuration, restart, ask for `get_stats` and store/recall a memory. Record the config path and the instruction-file name in `INSTALL.md`; flip the row in the README **Tested** column only after this passes |
+| T2 | Test the README `mcpServers` snippet | **Protocol level done, client level TODO** | *Done 2026-11-03:* `bash <clone>/plugins/total-recall/scripts/start-server.sh` over stdio with a temporary `HOME`: `initialize` OK, `tools/list` returns 22 tools, `get_stats` returns without error (server 1.6.8). This proves the command, the argument and the server; it does not prove where a given client reads its configuration. *TODO:* the same steps as T1 on at least one client that uses the `mcpServers` format (Claude Desktop first), then document its config path in `INSTALL.md` |
+| T3 | Romanian quality pass on `README-ro.md` | **TODO** | A Romanian reader goes through it next to the English file with this checklist: consistent technical terms (vault, hook, index, memorie, token), calques from English, diacritics, number format (1.036 vs 1,036), the "(în engleză)" marks, anchors into English headings. Output: a list of proposed edits, applied in one PR. A model-run draft is fine as a starting point; the maintainer signs off |
+| T4 | Re-run the six persona reviews | **TODO, last** | On the final text, after T3 (T1/T2 do not block it if the reviewer is told that ❌ in **Tested** means "not tested"). Same personas, plus the required reading list: each reviewer lists the files it opened and the run is rejected if one of the 12 is missing. Pass condition as in §6 |
+| T5 | Word budget N | **Decision** | Shipped: EN 2,037, RO 2,058 (§4). Accept about 2,050 / 2,075 or choose cuts of README-only content |
+
+Order: T3 → T4 can proceed now; T1 and T2 (client level) run whenever a client is at hand and feed the **Tested** column.
