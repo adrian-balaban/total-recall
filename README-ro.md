@@ -108,6 +108,8 @@ updated: 2026-06-15T14:30:00Z
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
+`## Executive Summary` este partea pe care asistentul o citește prima; spune de ce contează memoria.
+
 | Fel | Fișiere | Dacă se pierd |
 |---|---|---|
 | **Sursă** | fișierele `.md` din `~/.total-recall/personal-vault/` | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului |

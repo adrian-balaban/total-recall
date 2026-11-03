@@ -111,6 +111,8 @@ updated: 2026-06-15T14:30:00Z
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
+`## Executive Summary` is the part the assistant reads first; it says why the memory matters.
+
 | Kind | Files | If lost |
 |---|---|---|
 | **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
