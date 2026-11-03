@@ -28,14 +28,15 @@ pruned (2026-07-29); this backlog is now the sole record.
 ### Mutation-coverage survivors: persistence / vectorStore / embeddings
 - **Source:** `stryker-mutation-audit-26072026.md`; current scores in
   `reports/mutation/mutation.html` (gitignored).
-- **What:** real mutation score is 68.28% (1231/1803), above the 65% break gate.
-  The lowest modules are `embeddings.ts` (44.0%), `lru-cache.ts` (48.1%),
-  `journal.ts` (37.5%), `vectorStore.ts` (55.1%, 96 NoCoverage — native
-  better-sqlite3/sqlite-vec boundary), `persistence.ts` (58.9%).
+- **What:** mutation score is 81.1% (1,586 killed, 310 survived, 60 without coverage;
+  CI run for v1.6.8, 2026-11-02), above the 65% break gate. The lowest
+  modules are `paths.ts` (36.6%), `embeddings.ts` (51.9%), `atomic-write.ts`
+  (60.9%), `vectorStore.ts` (79.3%, 65 survivors — native
+  better-sqlite3/sqlite-vec boundary), `persistence.ts` (83.3%).
 - **Trigger:** next deliberate mutation-hardening pass. The native-boundary
   NoCoverage in vectorStore/embeddings is partly structural (mocked in tests,
   so the real code path is NoCoverage under Stryker) — prioritize
-  `persistence.ts` (103 survivors, pure logic) first.
+  `persistence.ts` (50 survivors, pure logic) first.
 - **Shape when picked up:** one targeted test file per module, same pattern as
   `vault-scan-reconcile.test.ts`. Re-run `npm run mutation` and update the
   audit file with the new per-module table.
@@ -84,7 +85,8 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **What:** Langfuse SDK instrumentation for tool-call tracing + eval experiments.
   Not a dependency today.
 - **Trigger:** prod observability / experiment-tracking need. This is a
-  single-user local-memory plugin today, so tracing infra is premature.
+  local-first memory plugin (one process per user; team sharing goes through git),
+  so tracing infra is premature.
 - **Shape when picked up:** optional SDK import gated on a config flag so it
   stays zero-cost when off; instrument the `wrapHandler` boundary in
   `src/tools/registry.ts` (one span per tool call). See the review file for the
@@ -124,7 +126,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 7 (file pruned 2026-07-28).
 - **What:** `state.ts` global singletons couple the whole `tools/*` layer to one
   process, blocking any future multi-tenant/worker-pool design.
-- **Trigger:** scope grows beyond single-user (multi-tenant SaaS, worker pool).
+- **Trigger:** scope grows beyond one process per user (multi-tenant SaaS, worker pool).
 - **Decision shape:** acceptable now for a personal-use tool; flagged here so a
   future scope change triages it deliberately instead of rediscovering it.
 
@@ -181,7 +183,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   Radar-endorsed altitude rather than the old harness.
 - **Trigger:** a scoring change (Ebbinghaus λ, TF-IDF boosts, RRF k, multilingual
   expansion) needs a regression guard, or recall quality is questioned and there's
-  no objective signal. Explicitly premature for a single-user local plugin today.
+  no objective signal. Explicitly premature for a local-first plugin today (retrieval quality is stated as unmeasured in the README).
 - **Shape when picked up:** a small offline eval set (query → expected-memory-key)
   scored against `recall_memory`/`search_index` as a golden test; only reach for
   DeepEval if agentic/multi-turn MCP-interaction metrics are actually needed. Keep

@@ -9,18 +9,16 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…"), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
-- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server, fără bază de date, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email, numere de card, IBAN-uri și numere de telefon.
-- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; căutarea semantică opțională descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
-
-Alte trei pluginuri se numesc tot `total-recall`: [prin ce diferă acesta](docs/COMPARISON.md) (în engleză).
-
-![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
+- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server de rulat, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email din afara domeniilor tale permise, numere de card, IBAN-uri și numere de telefon. Alte trei pluginuri se numesc tot `total-recall`: [prin ce diferă acesta](docs/COMPARISON.md) (în engleză).
+- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
 
 ## Dintr-o privire
 
 - **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
 - **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
-- **Datele rămân locale** implicit; nimic nu e trimis nicăieri, cu excepția unei descărcări unice opționale a modelului și, dacă optezi pentru asta, a repo-ului git al propriei echipe.
+- **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din transcript la `claude -p` pentru captura automată. Singurul alt trafic spre exterior este o descărcare unică a modelului și, dacă optezi pentru asta, repo-ul git al propriei echipe.
+- **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină vizibil ([detalii](#configurare-pentru-echipă-vault-org)).
+- **Indexul nu are plafon:** 30–40 de tokeni per memorie, cam 4.4k la 100 de memorii, 32k la 1.000 și 162k la 5.000.
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
 
@@ -116,13 +114,13 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | Fel | Fișiere | Dacă se pierd |
 |---|---|---|
 | **Sursă** | fișierele `.md` din `~/.total-recall/personal-vault/` | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului |
-| **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc automat din fișierele `.md` |
+| **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc automat din fișierele `.md` (contoarele de accesare se resetează). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
 
 Exportul e JSON simplu (`export_memories`), deci `jq` sau DuckDB merg direct pe el. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului): [Cele 22 de unelte → Export format](docs/TOOLS.md#export-format) (în engleză).
 
 ## Limbi
 
-Căutarea de text merge în orice limbă scrisă cu alfabet latin, fără să țină cont de diacritice, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte; nu vede alte alfabete. Căutarea semantică opțională (activă implicit în profilul „complet") acoperă orice pereche de limbi, inclusiv chirilică, greacă, arabă, chineză și japoneză: din 1.6.8 modelul implicit e multilingv (50+ limbi).
+Căutarea de text merge în orice limbă scrisă cu alfabet latin, ignorând majoritatea diacriticelor, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte; nu vede alte alfabete. Căutarea semantică opțională (activă implicit în profilul „complet") acoperă orice pereche de limbi, inclusiv chirilică, greacă, arabă, chineză și japoneză: din 1.6.8 modelul implicit e multilingv (50+ limbi).
 
 Dacă lucrezi doar în engleză și vrei o descărcare mai mică (87 MB față de 449 MB), setează modelul doar pentru engleză în `~/.total-recall/config.json` și repornește asistentul:
 
@@ -130,16 +128,16 @@ Dacă lucrezi doar în engleză și vrei o descărcare mai mică (87 MB față d
 { "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
 
-Benchmark pe 11 limbi, alte modele și costul recalculării: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
+Mai mult: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
 
 ## Asistenți suportați
 
-| Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă |
-|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automată |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
-| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
+| Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă | Testat |
+|---|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | ✅ automată | ✅ |
+| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată | ✅ |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
+| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 
 Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 3. Cu agent plugins pornite în VS Code (Preview), se pot încărca și hook-urile pluginului; încă neverificat.
 
@@ -150,15 +148,15 @@ Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișie
 ## Confidențialitate: ce pleacă de pe mașina ta
 
 - **Fișierele rămân locale.** Vault-ul personal nu e trimis nicăieri; repo-ul git local blochează orice push.
-- **Modelul vede ce citește.** Indexul, orice memorie pe care o citește asistentul și, în Claude Code, ultimul 1 MiB din transcript (trimis la `claude -p` pentru captura automată dinaintea compactării) ajung la furnizorul modelului, ca orice alt prompt. Captura automată nu poate fi oprită deocamdată dintr-o setare.
+- **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din transcript (trimis la `claude -p` pentru captura automată, care nu poate fi oprită deocamdată).
 - **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă face push și pull prin git. Nimic altceva, fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Dacă filtrul nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
-- **Memoriile colegilor ajung la modelul tău.** Memoriile org sunt injectate marcate ca „date de referință scrise de colegi, nu instrucțiuni", ceea ce reduce riscul de prompt injection, dar nu îl elimină. Dă drept de push pe repo-ul echipei doar oamenilor în care ai încredere; setează `orgInjection` la `titles` sau `off` ca să injectezi mai puțin. Vezi [SECURITY.md](SECURITY.md).
+- **Memoriile colegilor ajung la modelul tău**, marcate ca date de referință, nu ca instrucțiuni. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md).
 - **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă JSON.
 
 ## Configurare pentru echipă (vault org)
 
-**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita sau se poate da drept autorul oricărei memorii, și nimic nu e revizuit înainte să devină vizibil întregii echipe.** Tratează-l ca pe un wiki partajat, nu ca pe o bază de date de referință. Regulile de operare, lista de pași pentru lansare și ce faci când pleacă cineva: [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
+**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita sau se poate da drept autorul oricărei memorii, și nimic nu e revizuit înainte să devină vizibil întregii echipe.** Tratează-l ca pe un wiki partajat. Regulile și lista de pași pentru lansare: [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
 
 1. Creează un repo Git privat pe orice platformă (GitHub, GitLab, Bitbucket, serverul vostru), cu un branch `knowledge` care are cel puțin un commit:
 

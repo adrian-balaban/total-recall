@@ -1,6 +1,6 @@
 # 📏 Quality metrics
 
-Measured on **v1.6.8** (commit `0625d95`, 2026-11-02). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history with the formulas from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
+Measured on **v1.6.8** at commit `0625d95` (2026-11-02; only documentation has changed since). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history with the formulas from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
 
 [← README](../README.md)
 

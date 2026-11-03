@@ -9,20 +9,20 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
-- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server, no database, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails, card numbers, IBANs and phone numbers.
-- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; optional semantic search downloads a local multilingual model once (449 MB; 87 MB for the English-only one). The index shown at session start costs 30–40 tokens per memory.
-
-Three other plugins are also called `total-recall`: [how this one differs](docs/COMPARISON.md).
-
-![Session loop](docs/diagrams/session-loop-en.svg)
+- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails outside your allowed domains, card numbers, IBANs and phone numbers. Three other plugins are also called `total-recall`: [how this one differs](docs/COMPARISON.md).
+- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model once (449 MB; 87 MB for the English-only one; `--no-vector` skips it). The index shown at session start costs 30–40 tokens per memory.
 
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
 - **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
-- **Data stays local** by default; nothing is sent anywhere except an optional one-time model download and, if you opt in, your own team's git repo.
+- **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture. The only other outbound traffic is a one-time model download and, if you opt in, your own team's git repo.
+- **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)).
+- **The index has no size cap:** 30–40 tokens per memory, about 4.4k at 100 memories, 32k at 1,000 and 162k at 5,000.
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
+
+![Session loop](docs/diagrams/session-loop-en.svg)
 
 ## Quick start
 
@@ -116,13 +116,13 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | Kind | Files | If lost |
 |---|---|---|
 | **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
-| **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt automatically from the `.md` files |
+| **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt automatically from the `.md` files (access counts reset). The org `index.json` in the team repo is not rebuilt: leave it alone |
 
 Export is plain JSON (`export_memories`), so `jq` or DuckDB work on it directly. To move to a new machine, import it with `import_memories` (org memories come back from the team repo; for a large vault, copying the vault folder is simpler): [The 22 tools → Export format](docs/TOOLS.md#export-format).
 
 ## Languages
 
-Text search works in any language written in the Latin alphabet, accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) covers every language pair, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 the default model is multilingual (50+ languages).
+Text search works in any language written in the Latin alphabet, with most accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) covers every language pair, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 the default model is multilingual (50+ languages).
 
 If you only work in English and want the smaller download (87 MB vs. 449 MB), set the English-only model in `~/.total-recall/config.json` and restart the assistant:
 
@@ -130,16 +130,16 @@ If you only work in English and want the smaller download (87 MB vs. 449 MB), se
 { "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
 
-Benchmark across 11 languages, other models and re-embed cost: [How it works → Languages](docs/HOW-IT-WORKS.md).
+More: [How it works → Languages](docs/HOW-IT-WORKS.md).
 
 ## Supported assistants
 
-| Assistant | Tools | Index at session start | Automatic capture | Team sync |
-|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
-| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
+| Assistant | Tools | Index at session start | Automatic capture | Team sync | Tested |
+|---|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
+| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic | ✅ |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
+| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 
 All 22 tools work everywhere. "Through the instruction file" means the assistant reads `total-recall://index` or calls `search_index` because step 3 tells it to. With VS Code agent plugins on (Preview), the plugin's hooks may load too; not yet verified.
 
@@ -150,15 +150,15 @@ A stdio MCP server (TypeScript) plus lifecycle hooks, over flat Markdown files; 
 ## Privacy: what leaves your machine
 
 - **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes.
-- **The model sees what it reads.** The index, any memory the assistant recalls, and in Claude Code the last 1 MiB of the transcript (sent to `claude -p` for automatic capture before compaction) reach your model provider like any other prompt. There is no switch to turn automatic capture off yet.
+- **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture, which cannot be switched off yet).
 - **Other network calls:** the semantic model downloads from Hugging Face once; the team vault pushes and pulls through git. Nothing else, and no telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
-- **Teammates' memories reach your model.** Org memories are injected marked as "teammate-written reference data, not instructions", which lowers the risk of prompt injection but does not remove it. Give push access to the team repo only to people you trust; set `orgInjection` to `titles` or `off` to inject less. See [SECURITY.md](SECURITY.md).
+- **Teammates' memories reach your model**, marked as reference data, not instructions. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
 - **Stopping is painless.** Your memories stay as `.md` files you can keep, and `export_memories` gives you JSON.
 
 ## Team setup (org vault)
 
-**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki, not a database of record. Operating rules, the rollout checklist and offboarding: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
+**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki. Rules and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
 
 1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit:
 
