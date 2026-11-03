@@ -22,8 +22,8 @@ pruned (2026-07-29); this backlog is now the sole record.
   scale — sub-ms walks; the win is negligible and the correctness risk of a
   missed subdir is real).
 - **Shape when picked up:** cache dir mtime alongside the file index in
-  `src/vault-scan.ts`; invalidate on any write. Re-run Stryker — vault-scan is
-  the highest-coverage file (82.3%), a regression there is visible.
+  `src/vault-scan.ts`; invalidate on any write. Re-run Stryker — vault-scan has a
+  high mutation score (85.6% in the v1.6.8 run), so a regression there is visible.
 
 ### Mutation-coverage survivors: persistence / vectorStore / embeddings
 - **Source:** `stryker-mutation-audit-26072026.md`; current scores in
@@ -97,8 +97,8 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **What:** `index.json` is written under a single-writer assumption. Concurrent
   Claude Code windows can clobber runtime-only fields (`accessCount`,
   `lastAccessed`).
-- **Trigger:** multi-window concurrent use becomes routine (today the process is
-  single-instance per user session).
+- **Trigger:** multi-window concurrent use becomes routine (each assistant window already starts its own server process, so this happens
+  whenever several windows are open).
 - **Shape when picked up:** advisory lock or merge-on-read for the runtime-only
   fields, so a stale writer can't overwrite a fresher access record.
 

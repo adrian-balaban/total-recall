@@ -6,9 +6,9 @@ One plugin for Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mo
 
 - **Node.js v18+** on PATH
 - `git`
-- `claude` CLI — **only** for Claude Code: MCP registration and automatic capture before compaction (skipped with a warning if absent). The Claude Code VS Code extension ships its own `claude` binary under its extension directory, which is not on `PATH`; if `install.sh` reports the CLI as missing on such a machine, MCP registration is the only step skipped — the plugin and its hooks still load.
-- `gh` CLI authenticated — **only** if you enable the shared org vault
-- `agy` CLI — **only** for `--gemini`
+- `claude` CLI — for Claude Code: MCP registration and automatic capture before compaction (skipped with a warning if absent). Optional for Gemini/Antigravity, where it is used only for automatic capture. The Claude Code VS Code extension ships its own `claude` binary under its extension directory, which is not on `PATH`; if `install.sh` reports the CLI as missing on such a machine, MCP registration is the only step skipped — the plugin and its hooks still load.
+- `gh` CLI authenticated — **only** for a shared org vault on GitHub (other hosts need git credentials that work without a prompt)
+- `agy` CLI — **required** for Gemini/Antigravity (`--gemini` installs the extension with it)
 - **Git Bash** — **only** on Windows, to run `install.sh` (see [Windows](#-windows))
 
 ## 🪟 Windows
@@ -74,7 +74,7 @@ Without the `claude` CLI, `install.sh` skips MCP registration with a warning and
 
 ### VS Code (Copilot agent mode) — manual `mcp.json`
 
-Only needed when VS Code agent plugins are off (with them on, the plugin's own `.mcp.json` and hooks load).
+Only needed when VS Code agent plugins are off (with them on, the plugin's own `.mcp.json` and hooks should load; not yet verified end to end).
 
 ```bash
 ./install.sh --vscode    # adds total-recall to VS Code's user mcp.json (tools only; no hooks)
@@ -149,7 +149,7 @@ Starting solo and adding the team later needs no migration: re-run `./install.sh
 Two layers, with different threat models:
 
 - **Org vault (shared repo) — hard block.** The org-sync hook runs a fail-closed privacy filter *before* `git add`: it refuses to push any memory containing a secret token / API key (known-prefix `sk-`, `ghp_`, `AKIA`…, PEM headers; labeled-generic `api_key:` / `Authorization: Bearer` / `password =` forms; high-entropy mixed-class blobs), a credit card (Luhn-validated), an IBAN (ISO 13616 mod-97-validated), a formatted phone number, or a personal email outside your `--allowed-email-domain`. Nothing in those categories ever reaches the shared repo.
-- **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process; nothing leaves the host), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
+- **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process and the vault itself is never pushed; the model provider still sees any memory the assistant reads), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
 
 
 ## 🏷️ Same name, other plugins

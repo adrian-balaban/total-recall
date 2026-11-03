@@ -25,6 +25,7 @@ model can still be influenced by text it reads.
   `get_memories_by_keys`, `get_architecture_context` guardrails). `orgInjection` does not
   apply to them; they are read only when the model asks for them.
 - The real control is **push access to the org repo**. Restrict it to trusted people and
-  protect its default branch. The privacy filter (`src/privacy-filter.ts`) guards outbound
+  protect its default branch. The sync branch (`orgBranch`, default `knowledge`)
+  takes direct pushes, so control it through push access, not required reviews. The privacy filter (`src/privacy-filter.ts`) guards outbound
   pushes only.
 - Personal-vault-only installs are not affected.

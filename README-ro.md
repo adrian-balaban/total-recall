@@ -9,15 +9,16 @@ Memorie persistentă și 'căutabilă' pentru asistenții AI: Claude Code, Gemin
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…"), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
-- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server de rulat, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email din afara domeniilor tale permise, numere de card, IBAN-uri și numere de telefon. 
-- **Cost:** 'free' și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite). 
+- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server de rulat, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email din afara domeniilor tale permise, numere de card, IBAN-uri și numere de telefon.
+- **Cost:** 'free' și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite).
+
 ## Dintr-o privire
 
-- **Licență:** MIT, 'free'. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
+- **Licență:** MIT, 'free'ă. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
 - **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată. Singurul alt trafic spre exterior este o descărcare unică a modelului și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)).
-- **Indexul nu are plafon:** 30–40 de tokeni per memorie, cam 4,4k la 100 de memorii, 32k la 1.000 și 162k la 5.000.
+- **Indexul nu are plafon:** 30–40 de tokeni per memorie, cam 4,4k la 105 memorii, 32–40k la 1.000 și 162–200k la 5.000.
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
 
@@ -46,7 +47,9 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
    ```markdown
    ## Memory
+
    Use total-recall exclusively for all memories, in every project.
+
    - Store via `store_memory` / `update_memory`; recall via `search_index` / `recall_memory` / `get_memories_by_keys`.
    - NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
    - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
@@ -54,11 +57,11 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
    Acest pas e necesar: fără el, Claude Code continuă să-și folosească propria memorie bazată pe fișiere alături de total-recall; ca să anulezi, șterge blocul. Dacă folosești și pluginul oficial `remember`, dezactivează-l: amândouă fac același lucru.
 
-4. Repornește Claude Code și verifică: spune *„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"*. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă *„ce build tool folosește proiectul?"*. Apoi cere asistentului să apeleze `get_stats`: îți arată totalurile, erorile recente și dacă căutarea semantică e pornită.
+4. Repornește Claude Code și verifică: spune _„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"_. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă _„ce build tool folosește proiectul?"_. Apoi cere asistentului să apeleze `get_stats`: îți arată totalurile, erorile recente și dacă căutarea semantică e pornită.
 
 ### Alți asistenți
 
-Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Pașii pentru fiecare asistent, notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. INSTALL.md are pași pentru Gemini/Antigravity, VS Code și Codex, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză). Pentru ceilalți clienți, folosește blocul de mai jos.
 
 <details>
 <summary>Orice client MCP: varianta scurtă</summary>
@@ -75,7 +78,9 @@ Apoi înregistrează serverul în configurarea MCP a clientului (comanda `bash`,
   "mcpServers": {
     "total-recall": {
       "command": "bash",
-      "args": ["/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"]
+      "args": [
+        "/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"
+      ]
     }
   }
 }
@@ -87,13 +92,13 @@ Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.
 
 ## Utilizare zilnică
 
-| Spui | Ce se întâmplă | Unealtă |
-|---|---|---|
-| *„ține minte că am ales PostgreSQL pentru JSONB"* | Se scrie o memorie în `~/.total-recall/personal-vault/` | `store_memory` |
-| *„ține minte pentru echipă că facem deploy în eu-central-1"* | Etichetată `org`, filtrată și trimisă în repo-ul echipei | `store_memory` |
-| *„ce am decis despre baza de date?"* | Asistentul caută și citește memoriile potrivite | `search_index`, `recall_memory` |
-| *„memoria asta e depășită, actualizeaz-o"* / *„șterge-o"* | Fișierul e editat sau șters | `update_memory`, `delete_memory` |
-| nimic (Claude Code) | Înainte de compactare se salvează 0–3 lecții din sesiune | hook-ul `PreCompact` |
+| Spui                                                         | Ce se întâmplă                                           | Unealtă                          |
+| ------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------- |
+| _„ține minte că am ales PostgreSQL pentru JSONB"_            | Se scrie o memorie în `~/.total-recall/personal-vault/`  | `store_memory`                   |
+| _„ține minte pentru echipă că facem deploy în eu-central-1"_ | Etichetată `org`, filtrată și trimisă în repo-ul echipei | `store_memory`                   |
+| _„ce am decis despre baza de date?"_                         | Asistentul caută și citește memoriile potrivite          | `search_index`, `recall_memory`  |
+| _„memoria asta e depășită, actualizeaz-o"_ / _„șterge-o"_    | Fișierul e editat sau șters                              | `update_memory`, `delete_memory` |
+| nimic (Claude Code)                                          | Înainte de compactare se salvează 0–3 lecții din sesiune | hook-ul `PreCompact`             |
 
 ## Datele tale
 
@@ -106,18 +111,20 @@ tags: [architecture, database]
 importanceScore: 0.8
 updated: 2026-06-15T14:30:00Z
 ---
+
 ## Executive Summary
+
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
 `## Executive Summary` este partea pe care asistentul o citește prima; spune de ce contează memoria.
 
-| Fel | Fișiere | Dacă se pierd |
-|---|---|---|
-| **Sursă** | fișierele `.md` din `~/.total-recall/personal-vault/` | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului |
-| **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc automat din fișierele `.md` (contoarele de accesare se resetează). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
+| Fel          | Fișiere                                                              | Dacă se pierd                                                                                                                                                                                                           |
+| ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Sursă**    | fișierele `.md` din `~/.total-recall/personal-vault/`                | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului                                                                                                                                                       |
+| **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc din fișierele `.md` (contoarele de accesare se resetează; `.index-cache.txt` doar la pornirea sesiunii, în Claude Code și Gemini). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
 
-Exportul e JSON simplu (`export_memories`, întors în răspunsul asistentului), deci `jq` sau DuckDB merg pe el după ce îl salvezi. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului). Pentru un backup în afara mașinii, copiază `personal-vault/`: repo-ul lui git local e pe același disc. Formatul exportului: [Export format](docs/TOOLS.md#export-format) (în engleză).
+Exportul e JSON simplu (`export_memories`). Vine în răspunsul asistentului, deci trece prin contextul modelului, și lasă deoparte contoarele de accesare, confirmările, marcajele și versiunile arhivate. Salvează răspunsul într-un fișier și `jq` sau DuckDB merg pe el; `import_memories` îl încarcă pe altă mașină. Pentru backup sau mutare, copiază în schimb `personal-vault/` și `config.json` din `~/.total-recall/`: așa păstrezi toate câmpurile din fișiere. Repo-ul git local al vault-ului e pe același disc, deci nu e un backup în sine. Memoriile org revin din repo-ul echipei. Formatul exportului: [Export format](docs/TOOLS.md#export-format) (în engleză).
 
 ## Limbi
 
@@ -133,12 +140,12 @@ Mai mult: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
 
 ## Asistenți suportați
 
-| Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă | Testat |
-|---|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automată | ✅ |
-| **Gemini/Antigravity** (`--gemini`, necesită CLI-ul `agy`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată | ✅ |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
-| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
+| Asistent                                                      | Unelte | Index la pornirea sesiunii                                           | Captură automată                                                           | Sincronizare echipă | Testat |
+| ------------------------------------------------------------- | ------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------- | ------ |
+| **Claude Code**                                               | ✅     | ✅                                                                   | ✅                                                                         | ✅ automată         | ✅     |
+| **Gemini/Antigravity** (`--gemini`, necesită CLI-ul `agy`)    | ✅     | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` (captura rulează atunci pe Claude) | ✅ automată         | ✅     |
+| **VS Code, Copilot** (`--vscode`)                             | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul                                                      | ❌ manuală          | ❌     |
+| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul                                                      | ❌ manuală          | ❌     |
 
 Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că adaugi blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului tău, iar asistentul citește `total-recall://index` sau apelează `search_index`, așa cum îi spune blocul. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă.
 
@@ -157,7 +164,7 @@ Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" îns
 - **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă folosește git. Fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Filtrul blochează în caz de dubiu: dacă nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
 - **Memoriile colegilor ajung la modelul tău**, marcate ca date de referință, nu ca instrucțiuni. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md) (în engleză).
-- **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă JSON. Dezinstalare în Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memoriile rămân în `~/.total-recall/`).
+- **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă și JSON, cu mai puține câmpuri. Dezinstalare în Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memoriile rămân în `~/.total-recall/`).
 
 ## Configurare pentru echipă (vault org)
 
@@ -178,7 +185,7 @@ Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" îns
 
 3. De aici înainte, în Claude Code și Gemini/Antigravity, o memorie etichetată `org` e trimisă după salvare, iar fiecare sesiune aduce la pornire memoriile colegilor. Ceilalți asistenți nu au hook-uri pentru asta: vezi [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
 
-4. Verifică: pe o mașină spune *„ține minte pentru echipă că …"*; pe alta, pornește o sesiune nouă și întreabă despre asta. Dacă nu ajunge, cere `get_stats` (erori recente); în Claude Code, pornirea sesiunii te avertizează și când push-urile de echipă eșuează repetat.
+4. Verifică: pe o mașină spune _„ține minte pentru echipă că …"_; pe alta, pornește o sesiune nouă și întreabă despre asta. Dacă nu ajunge, cere `get_stats` (erori recente); în Claude Code, pornirea sesiunii te avertizează și când push-urile de echipă eșuează repetat.
 
 Începe singur și adaugă echipa mai târziu: `install.sh` poate fi rulat din nou fără probleme. Setările (`orgBranch`, `allowedEmailDomains`, `orgInjection`, căile vault-urilor): [Cum funcționează → Configurare](docs/HOW-IT-WORKS.md#configuration) (în engleză).
 
@@ -186,14 +193,14 @@ Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" îns
 
 - **Actualizare (Claude Code):** `claude plugin update total-recall@my-claude-plugins`, repornește, apoi rulează din nou scriptul de instalare (actualizarea nu îl rulează).
 - **Alți asistenți:** pașii de actualizare și dezinstalare sunt în [INSTALL.md → Install without Claude Code](plugins/total-recall/INSTALL.md#-install-without-claude-code) (în engleză).
-- **Recuperezi o memorie:** în Claude Code și Gemini, vault-ul personal primește un commit în repo-ul git local la finalul fiecărei sesiuni: `git -C ~/.total-recall/personal-vault log`, `git restore` pe ce îți trebuie, apoi ceri *„reconstruiește indexul"* (`rebuild_index`). Cu alți asistenți, fă tu commit-ul. Versiunile arhivate (`.superseded/`) și `vectors.db` nu sunt în acel repo.
+- **Recuperezi o memorie:** în Claude Code și Gemini, vault-ul personal primește un commit în repo-ul git local la finalul fiecărei sesiuni: `git -C ~/.total-recall/personal-vault log`, `git restore` pe ce îți trebuie, apoi ceri _„reconstruiește indexul"_ (`rebuild_index`). Cu alți asistenți, fă tu commit-ul. Versiunile arhivate (`.superseded/`) și `vectors.db` nu sunt în acel repo.
 - **Ceva pare în neregulă:** `get_stats` arată erorile recente și dacă e pornită căutarea semantică. În Claude Code, pornirea sesiunii te avertizează când push-urile de echipă sau captura automată eșuează repetat. Dacă după o actualizare căutarea semantică e oprită, rulează `npm rebuild better-sqlite3` în folderul pluginului.
 
 ## Limite
 
 - **Indexul de la pornirea sesiunii nu are plafon** (costul e în [Dintr-o privire](#dintr-o-privire)). Curăță cu `prune_memories`: îți arată candidații și nu șterge nimic.
 - **Căutarea de text citește titlul, etichetele și primele 500 de caractere** ale fiecărei memorii, nu tot textul. Pune informația cheie la început.
-- **Mai multe sesiuni în paralel** nu pot strica fișierele, dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
+- **Mai multe sesiuni în paralel** scriu fișiere separate (câte unul pe memorie), dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
 - **Captura automată** rulează doar unde e instalat CLI-ul `claude` și nu poate fi oprită deocamdată.
 - **Calitatea căutării nu e încă măsurată** pe un set de evaluare; e în [backlog](BACKLOG.md) (în engleză).
 

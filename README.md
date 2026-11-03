@@ -18,7 +18,7 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 - **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture. The only other outbound traffic is a one-time model download and, if you opt in, your own team's git repo.
 - **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)).
-- **The index has no size cap:** 30–40 tokens per memory, about 4.4k at 100 memories, 32k at 1,000 and 162k at 5,000.
+- **The index has no size cap:** 30–40 tokens per memory: about 4.4k at 105 memories, 32–40k at 1,000 and 162–200k at 5,000.
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
@@ -59,7 +59,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ### Other assistants
 
-Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Per-assistant steps, Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. INSTALL.md has steps for Gemini/Antigravity, VS Code and Codex, plus Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md). For the other clients, use the block below.
 
 <details>
 <summary>Any MCP client: the short version</summary>
@@ -116,9 +116,9 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | Kind | Files | If lost |
 |---|---|---|
 | **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
-| **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt automatically from the `.md` files (access counts reset). The org `index.json` in the team repo is not rebuilt: leave it alone |
+| **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt from the `.md` files (access counts reset; `.index-cache.txt` only at session start, in Claude Code and Gemini). The org `index.json` in the team repo is not rebuilt: leave it alone |
 
-Export is plain JSON (`export_memories`, returned in the assistant's answer), so `jq` or DuckDB work on it once you save it. To move to a new machine, import it with `import_memories` (org memories come back from the team repo; for a large vault, copying the vault folder is simpler). For an off-machine backup, copy `personal-vault/`: its local git repo sits on the same disk. Export format: [Export format](docs/TOOLS.md#export-format).
+Export is plain JSON (`export_memories`). It comes back in the assistant's answer, so it passes through the model's context, and it leaves out access counts, confirmations, flags and archived versions. Save the answer to a file and `jq` or DuckDB work on it; `import_memories` loads it on another machine. For a backup or a move, copy `personal-vault/` and `config.json` from `~/.total-recall/` instead: that keeps every field stored in the files. The vault's local git repo sits on the same disk, so it is not a backup by itself. Org memories come back from the team repo. Export format: [Export format](docs/TOOLS.md#export-format).
 
 ## Languages
 
@@ -137,7 +137,7 @@ More: [How it works → Languages](docs/HOW-IT-WORKS.md).
 | Assistant | Tools | Index at session start | Automatic capture | Team sync | Tested |
 |---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
-| **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic | ✅ |
+| **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed (capture then runs on Claude) | ✅ automatic | ✅ |
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 
@@ -158,7 +158,7 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 - **Other network calls:** the semantic model downloads from Hugging Face once; the team vault uses git. No telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
 - **Teammates' memories reach your model**, marked as reference data, not instructions. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
-- **Stopping is painless.** Your memories stay as `.md` files you keep, and `export_memories` gives you JSON. To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`).
+- **Stopping is painless.** Your memories stay as `.md` files you keep (`export_memories` also gives you JSON, with fewer fields). To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`).
 
 ## Team setup (org vault)
 
@@ -194,7 +194,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 
 - **The index at session start has no cap** (cost in [At a glance](#at-a-glance)). Clean up with `prune_memories`: it lists candidates and deletes nothing.
 - **Text search reads the title, the tags and the first 500 characters** of each memory, not the whole body. Put the key fact first.
-- **Several sessions at once** cannot damage memory files, but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
+- **Several sessions at once** write separate files (one per memory), but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
 - **Automatic capture** runs only where the `claude` CLI is installed, and cannot be switched off yet.
 - **Retrieval quality is not yet measured** against an evaluation set; it is on the [backlog](BACKLOG.md).
 

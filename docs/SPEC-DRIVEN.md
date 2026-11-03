@@ -32,7 +32,7 @@ Total Recall can tie memories to a spec, and, when a project keeps its architect
 
 3. **Ask Claude**, in a session opened in that project:
    - *"index the architecture of this repo"* → `index_architecture(path="/abs/path/to/repo")` stores one summary memory for the system. Use an absolute path: a relative one is resolved against the MCP server's working directory, which differs between assistants. The scan reads at most 5,000 files and skips `node_modules`, `.git`, `dist`, `build` and `coverage`; add `target`, `out` or `vendor` to `specDriven.excludeDirs` if you have them.
-   - *"validate the architecture"* → `validate_architecture(path=".")` lists any tagged assertion with no test and stores it as a `fitness-result` memory; a later pass marks it resolved.
+   - *"validate the architecture"* → `validate_architecture(path="/abs/path/to/repo")` lists any tagged assertion with no test and stores it as a `fitness-result` memory; a later pass marks it resolved.
    - *"trace ORD-S1"* → `trace("ORD-S1")` shows the assertion, its tests, past failures and the decisions linked to it.
    - Before you change a component: *"what do we know about the Domain component of ord?"* → `get_architecture_context(system="ord", element="adl:domain")`. The system is named by its `AS` id (`ord`) and is a namespace, not part of the element ID. Element IDs are `adl:<component>`, or `adl:<domain>.<component>` when the component sits inside a `DEFINE DOMAIN`.
 

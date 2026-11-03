@@ -81,7 +81,7 @@ Optional, in `~/.total-recall/config.json`:
 }
 ```
 
-`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#languages). Vault paths are `personalVault` and `orgVault`; the spec-driven settings are in [SPEC-DRIVEN.md](SPEC-DRIVEN.md).
+`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#languages). Vault paths are `personalVault` and `orgVault`; the server reads them once at start, so restart the assistant after changing them (a changed `orgVault` without a restart silently stops org sync); the spec-driven settings are in [SPEC-DRIVEN.md](SPEC-DRIVEN.md).
 
 ## 🧱 Design principles
 
@@ -90,7 +90,7 @@ Optional, in `~/.total-recall/config.json`:
 - **Versionable.** The team vault is git-backed. The personal vault is a local-only git repo (created by `install.sh`, with a `pre-push` hook that blocks any push), committed at the end of each session.
 - **Derived indexes.** `index.json`, `invertedIndex.json`, `.index-cache.txt` and `vectors.db` are all rebuilt from the `.md` files, so losing them loses no content.
 - **Fault-tolerant.** If the vector path fails, search falls back to text search.
-- **Several sessions at once.** Each memory is its own file, so sessions cannot damage each other's files. A memory stored in one session can be missing from another session's search until that session restarts, and `index.json` is written by whichever session writes last, which can reset `accessCount` and `lastAccessed` (a known limit, tracked in [BACKLOG.md](../BACKLOG.md)).
+- **Several sessions at once.** Each memory is its own file, so sessions do not overwrite each other's memories. Memory files are written in place, not atomically, so a crash in the middle of a write can truncate one (tracked in [BACKLOG.md](../BACKLOG.md)). A memory stored in one session can be missing from another session's search until that session restarts, and `index.json` is written by whichever session writes last, which can reset `accessCount` and `lastAccessed` (a known limit, tracked in [BACKLOG.md](../BACKLOG.md)).
 
 The only required dependencies are `@modelcontextprotocol/sdk` and `zod`. TF-IDF, the decay formula, RRF and the frontmatter parser are written from scratch:
 

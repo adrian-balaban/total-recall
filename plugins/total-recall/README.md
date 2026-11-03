@@ -1,10 +1,10 @@
 # 🧠 Total Recall
 
-Persistent knowledge management for Claude Code, Gemini/Antigravity and VS Code (GitHub Copilot agent mode).
+Persistent knowledge management for Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode) and any other MCP client (Codex, Cursor, Windsurf, Claude Desktop).
 
 The main documentation lives in the repository root to avoid duplication. Because the plugin is installed as a `git-subdir` (this directory only), the root documents are linked on GitHub rather than by relative path:
 
-- 📖 **[Main documentation (`README.md`)](https://github.com/adrian-balaban/total-recall#readme)** — overview, storage layout, the 22 MCP tools, search pipeline (TF-IDF × Ebbinghaus + vector fusion), lifecycle hooks, `config.json`, spec-driven architecture (ADL), client compatibility, Obsidian notes, status, and project comparison.
+- 📖 **[Main documentation (`README.md`)](https://github.com/adrian-balaban/total-recall#readme)** — what it does, quick start, daily use, supported assistants, privacy, team setup and limits. The details (storage, the 22 MCP tools, search, hooks, `config.json`, spec-driven architecture, Obsidian, comparison) live in the `docs/` pages it links to.
 - 🇷🇴 **[Documentația în română (`README-ro.md`)](https://github.com/adrian-balaban/total-recall/blob/main/README-ro.md)**
 - 🔒 **[Security policy (`SECURITY.md`)](https://github.com/adrian-balaban/total-recall/blob/main/SECURITY.md)** — privacy filter and org-vault trust model.
 
