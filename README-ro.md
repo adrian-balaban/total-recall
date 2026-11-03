@@ -21,6 +21,8 @@ Memorie persistentă și 'căutabilă' pentru asistenții AI: Claude Code, Gemin
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
 
+![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
+
 ## Pornire rapidă
 
 **Ai nevoie de:** Node.js 18+, git și Linux, macOS sau Windows cu Git Bash (plus un `node.exe` de Windows în PATH; Node instalat doar în WSL nu contează).
