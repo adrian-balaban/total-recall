@@ -115,7 +115,7 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | **Sursă** | fișierele `.md` din `~/.total-recall/personal-vault/` | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului |
 | **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc automat din fișierele `.md` (contoarele de accesare se resetează). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
 
-Exportul e JSON simplu (`export_memories`, întors în răspunsul asistentului), deci `jq` sau DuckDB merg pe el după ce îl salvezi. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului). Pentru un backup în afara mașinii, copiază `personal-vault/`: repo-ul lui git local e pe același disc. Formatul exportului: [Cele 22 de unelte](docs/TOOLS.md#export-format) (în engleză).
+Exportul e JSON simplu (`export_memories`, întors în răspunsul asistentului), deci `jq` sau DuckDB merg pe el după ce îl salvezi. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului). Pentru un backup în afara mașinii, copiază `personal-vault/`: repo-ul lui git local e pe același disc. Formatul exportului: [Export format](docs/TOOLS.md#export-format) (în engleză).
 
 ## Limbi
 
