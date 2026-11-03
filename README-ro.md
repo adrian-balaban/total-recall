@@ -24,7 +24,7 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
 ## Pornire rapidă
 
-O primă memorie care supraviețuiește unei reporniri durează câteva minute. **Ai nevoie de:** Node.js 18+, git și Linux, macOS sau Windows cu Git Bash (plus un `node.exe` de Windows în PATH; Node instalat doar în WSL nu contează).
+**Ai nevoie de:** Node.js 18+, git și Linux, macOS sau Windows cu Git Bash (plus un `node.exe` de Windows în PATH; Node instalat doar în WSL nu contează).
 
 ### Claude Code
 

@@ -26,7 +26,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ## Quick start
 
-A first memory that survives a restart takes a few minutes. **You need:** Node.js 18+, git, and Linux, macOS or Windows with Git Bash (plus a Windows `node.exe` on PATH; Node installed only inside WSL does not count).
+**You need:** Node.js 18+, git, and Linux, macOS or Windows with Git Bash (plus a Windows `node.exe` on PATH; Node installed only inside WSL does not count).
 
 ### Claude Code
 
