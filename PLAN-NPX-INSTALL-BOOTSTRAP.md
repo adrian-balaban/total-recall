@@ -1,6 +1,6 @@
 # PLAN — `npx @adrian-balaban/total-recall`: one-command install bootstrap
 
-**Status:** proposed (scope decision approved by maintainer) · **Date:** 2026-11-02 · **Branch:** `feat/release-1.6.8-multilingual-default`
+**Status:** proposed (scope decision approved by maintainer) · **Date:** 2026-11-02 · **Branch:** `main` (written on `feat/release-1.6.8-multilingual-default`, merged in #27)
 **Deliverable of this document:** the implementation plan for letting users install total-recall with `npx` / `npm` in addition to the current marketplace route.
 
 ## 1. Goal

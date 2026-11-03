@@ -67,6 +67,22 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 
 `accessCount` and `lastAccessed` are kept only in `index.json`, never in the file.
 
+### Configuration
+
+Optional, in `~/.total-recall/config.json`:
+
+```json
+{
+  "orgRepo": "https://github.com/you/your-vault.git",
+  "orgBranch": "knowledge",
+  "allowedEmailDomains": ["yourcompany.com"],
+  "orgInjection": "index",
+  "enableMultilingualSearch": true
+}
+```
+
+`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#languages). Vault paths are `personalVault` and `orgVault`; the spec-driven settings are in [SPEC-DRIVEN.md](SPEC-DRIVEN.md).
+
 ## 🧱 Design principles
 
 - **Local-first.** The vault files live on your machine. There is no external server or database.

@@ -7,8 +7,7 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
-- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server, no database, no account.
-- **Team memory (optional):** memories you tag `org` go to a shared Git repo, after a privacy filter that blocks secrets, emails, card numbers, IBANs and phone numbers.
+- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server, no database, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails, card numbers, IBANs and phone numbers.
 - **Cost:** free and open source (MIT). The plugin is ~1–2 MB; optional semantic search downloads a local multilingual model once (449 MB; 87 MB for the English-only one). The index shown at session start costs 30–40 tokens per memory.
 
 ![Session loop](docs/diagrams/session-loop-en.svg)
@@ -16,7 +15,7 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month, 29% needed a follow-up fix). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
+- **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Data stays local** by default; nothing is sent anywhere except an optional one-time model download and, if you opt in, your own team's git repo.
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
@@ -34,13 +33,11 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only and works offline) and whether to set up a team vault (default no, skip it for solo use). Add `-y` to accept the defaults and skip both questions.
+2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only and works offline) and whether to set up a team vault (default no, skip it for solo use). Add `-y` to accept the defaults and skip both questions. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
    ```
-
-   This finds wherever the plugin cache put the current version and runs its `install.sh`; the glob just picks the latest if more than one version is cached.
 
 3. Tell Claude to use total-recall instead of its built-in `MEMORY.md` files. Add this to `~/.claude/CLAUDE.md`:
 
@@ -56,9 +53,9 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 4. Restart Claude Code and check it works: say *"remember that this project uses Gradle 8 and JUnit 5"*. A new file appears under `~/.total-recall/personal-vault/`. In a new session, ask *"what build tool does this project use?"*.
 
-### Other assistants (Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop)
+### Other assistants
 
-Install and MCP-config steps per assistant, plus Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Install and MCP-config steps per assistant, plus Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md).
 
 ## Daily use
 
@@ -74,10 +71,7 @@ All projects share one vault. Name the project in the memory ("in the billing se
 
 ## Languages
 
-Search has two parts, and they handle languages differently:
-
-- **Text search** works in any language written in the Latin alphabet (English, Romanian, French, German, Spanish, Polish, …), with accents ignored, as long as the question and the memory use the same words. It does not index other scripts: Cyrillic, Greek, Arabic, Chinese or Japanese text is invisible to it.
-- **Semantic search** (optional, on by default in the "complete" profile) covers every language pair, including the non-Latin scripts text search can't see. Since 1.6.8 the default embedding model is multilingual (50+ languages), so a question in German finds a memory written in English, Romanian or any other supported language.
+Text search works in any language written in the Latin alphabet, accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) covers every language pair, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 the default model is multilingual (50+ languages).
 
 If you only work in English and want the smaller download (87 MB vs. 449 MB), set the English-only model in `~/.total-recall/config.json` and restart the assistant:
 
@@ -85,7 +79,18 @@ If you only work in English and want the smaller download (87 MB vs. 449 MB), se
 { "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
 
-Any [`@huggingface/transformers`](https://huggingface.co/models?library=transformers.js) feature-extraction model with mean pooling works; changing it triggers a background re-embed of the whole vault. Benchmark numbers across 11 languages and embedding models, and re-embed cost: [How it works → Languages](docs/HOW-IT-WORKS.md).
+Benchmark across 11 languages, other models and re-embed cost: [How it works → Languages](docs/HOW-IT-WORKS.md).
+
+## Supported assistants
+
+| Assistant | Tools | Index at session start | Automatic capture | Team sync |
+|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic |
+| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
+| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
+
+All 22 tools work everywhere. "Through the instruction file" means the assistant reads `total-recall://index` or calls `search_index` because step 3 tells it to. With VS Code agent plugins on (Preview), the plugin's hooks may load too; not yet verified.
 
 ## Privacy: what leaves your machine
 
@@ -97,7 +102,7 @@ Any [`@huggingface/transformers`](https://huggingface.co/models?library=transfor
 
 ## Team setup (org vault)
 
-**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki, not a database of record — see the three bullets below before rolling this out.
+**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki, not a database of record. Operating rules, the rollout checklist and offboarding: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
 
 1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit:
 
@@ -114,38 +119,7 @@ Any [`@huggingface/transformers`](https://huggingface.co/models?library=transfor
 
 3. From then on, in Claude Code and Gemini/Antigravity, a memory tagged `org` is pushed after it is stored, and each session pulls teammates' memories at start. Other assistants have no hooks to do this: run `bash hooks/scripts/pull-org-vault.sh` to pull and `node scripts/sync-org-memory.mjs <key>` to push one memory, from the plugin folder.
 
-- **Shared:** only memories explicitly tagged `org`. Automatic capture writes to the personal vault only.
-- **Protected, weakly:** the tools refuse to change an org memory written by someone else, compared by OS username. That is not access control: anyone with push access can edit the repo directly. Control who can push.
-- **Not reviewed:** an org memory is live for everyone as soon as it is pushed. Sync pushes straight to the branch, so do not require pull requests on it.
-- **Cost grows with the team:** every teammate's org memories are part of everyone's index. Use `orgInjection: "titles"` for a large team.
-- **Someone leaves:** remove their push access. Their memories stay in the repo; edit or delete them with ordinary git commits.
-
-## Supported assistants
-
-| Assistant | Tools | Index at session start | Automatic capture | Team sync |
-|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
-| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual |
-
-All 22 tools work everywhere. "Through the instruction file" means the assistant reads `total-recall://index` or calls `search_index` because step 4 tells it to. With VS Code agent plugins on (Preview), the plugin's hooks may load too; not yet verified.
-
-## Configuration
-
-Optional, in `~/.total-recall/config.json`:
-
-```json
-{
-  "orgRepo": "https://github.com/you/your-vault.git",
-  "orgBranch": "knowledge",
-  "allowedEmailDomains": ["yourcompany.com"],
-  "orgInjection": "index",
-  "enableMultilingualSearch": true
-}
-```
-
-`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#languages). Vault paths (`personalVault`, `orgVault`) and the spec-driven settings: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) and [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md).
+Start solo and add the team later: `install.sh` is safe to re-run. Every teammate's org memories become part of everyone's index; use `orgInjection: "titles"` for a large team. Settings (`orgBranch`, `allowedEmailDomains`, `orgInjection`, vault paths): [How it works → Configuration](docs/HOW-IT-WORKS.md#configuration).
 
 ## Upgrade, backup and troubleshooting
 
@@ -168,7 +142,7 @@ Optional, in `~/.total-recall/config.json`:
 
 ## More
 
-- [How it works](docs/HOW-IT-WORKS.md): storage, frontmatter fields, search and the forgetting curve, hooks, Obsidian
+- [How it works](docs/HOW-IT-WORKS.md): storage, frontmatter fields, configuration, search and the forgetting curve, hooks, Obsidian
 - [The 22 tools](docs/TOOLS.md) and the export format
 - [Spec-driven work and ADL](docs/SPEC-DRIVEN.md): link decisions to requirements and architecture rules to tests, with a five-minute walkthrough
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path

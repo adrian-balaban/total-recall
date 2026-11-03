@@ -7,8 +7,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…"), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
-- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server, fără bază de date, fără cont.
-- **Memorie de echipă (opțional):** memoriile etichetate `org` ajung într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email, numere de card, IBAN-uri și numere de telefon.
+- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Fără server, fără bază de date, fără cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete, adrese de email, numere de card, IBAN-uri și numere de telefon.
 - **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; căutarea semantică opțională descarcă o singură dată un model local multilingv (449 MB; 87 MB pentru cel doar în engleză). Indexul afișat la pornirea sesiunii costă 30–40 de tokeni per memorie.
 
 ![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
@@ -16,10 +15,10 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 ## Dintr-o privire
 
 - **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după disponibilitate — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună, 29% au avut nevoie de o corectură ulterioară). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
+- **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Datele rămân locale** implicit; nimic nu e trimis nicăieri, cu excepția unei descărcări unice opționale a modelului și, dacă optezi pentru asta, a repo-ului git al propriei echipe.
 
-Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) mai jos.
+Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
 
 ## Pornire rapidă
 
@@ -34,13 +33,11 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) 
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**complet**, implicit, adaugă căutare semantică locală; **minimal**, sau `--no-vector`, doar căutare de text, funcționează offline) și dacă vrei un vault de echipă (implicit nu, sari peste pentru utilizare solo). Cu `-y` accepți valorile implicite și sari peste ambele întrebări.
+2. Într-un terminal, rulează o singură dată scriptul de instalare. Creează vault-urile și construiește indexul. Pune două întrebări: profilul (**complet**, implicit, adaugă căutare semantică locală; **minimal**, sau `--no-vector`, doar căutare de text, funcționează offline) și dacă vrei un vault de echipă (implicit nu, sari peste pentru utilizare solo). Cu `-y` accepți valorile implicite și sari peste ambele întrebări. Comanda de mai jos găsește versiunea curentă a pluginului în cache (glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe) și rulează `install.sh`-ul ei:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
    ```
-
-   Comanda găsește versiunea curentă a pluginului în cache și rulează `install.sh`-ul ei; glob-ul alege pur și simplu cea mai recentă dacă sunt mai multe versiuni în cache.
 
 3. Spune-i lui Claude să folosească total-recall în locul fișierelor `MEMORY.md` proprii. Adaugă asta în `~/.claude/CLAUDE.md`:
 
@@ -56,9 +53,9 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#️-limite) 
 
 4. Repornește Claude Code și verifică: spune *„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"*. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă *„ce build tool folosește proiectul?"*.
 
-### Alți asistenți (Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop)
+### Alți asistenți
 
-Pașii de instalare și configurare MCP pentru fiecare asistent, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză).
+Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. Pașii de instalare și configurare MCP pentru fiecare asistent, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză).
 
 ## Utilizare zilnică
 
@@ -74,10 +71,7 @@ Toate proiectele folosesc același vault. Pomenește proiectul în memorie („�
 
 ## Limbi
 
-Căutarea are două părți, iar ele tratează limbile diferit:
-
-- **Căutarea de text** merge în orice limbă scrisă cu alfabet latin (engleză, română, franceză, germană, spaniolă, poloneză, …), fără să țină cont de diacritice, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte. Nu indexează alte alfabete: textul în chirilică, greacă, arabă, chineză sau japoneză îi e invizibil.
-- **Căutarea semantică** (opțională, activă implicit în profilul „complet") acoperă orice pereche de limbi, inclusiv alfabetele non-latine pe care căutarea de text nu le poate vedea. Din 1.6.8 modelul de embeddings implicit e multilingv (50+ limbi), deci o întrebare în germană găsește o memorie scrisă în engleză, română sau orice altă limbă suportată.
+Căutarea de text merge în orice limbă scrisă cu alfabet latin, fără să țină cont de diacritice, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte; nu vede alte alfabete. Căutarea semantică opțională (activă implicit în profilul „complet") acoperă orice pereche de limbi, inclusiv chirilică, greacă, arabă, chineză și japoneză: din 1.6.8 modelul implicit e multilingv (50+ limbi).
 
 Dacă lucrezi doar în engleză și vrei o descărcare mai mică (87 MB față de 449 MB), setează modelul doar pentru engleză în `~/.total-recall/config.json` și repornește asistentul:
 
@@ -85,7 +79,18 @@ Dacă lucrezi doar în engleză și vrei o descărcare mai mică (87 MB față d
 { "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
 ```
 
-Merge orice model de feature extraction compatibil cu [`@huggingface/transformers`](https://huggingface.co/models?library=transformers.js) care folosește mean pooling; schimbarea lui declanșează o recalculare în fundal a întregului vault. Cifre de benchmark pe 11 limbi și modele de embeddings, plus costul recalculării: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
+Benchmark pe 11 limbi, alte modele și costul recalculării: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
+
+## Asistenți suportați
+
+| Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă |
+|---|---|---|---|---|
+| **Claude Code** | ✅ | ✅ | ✅ | ✅ automată |
+| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
+| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
+
+Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 3. Cu agent plugins pornite în VS Code (Preview), se pot încărca și hook-urile pluginului; încă neverificat.
 
 ## Confidențialitate: ce pleacă de pe mașina ta
 
@@ -97,7 +102,7 @@ Merge orice model de feature extraction compatibil cu [`@huggingface/transformer
 
 ## Configurare pentru echipă (vault org)
 
-**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita sau se poate da drept autorul oricărei memorii, și nimic nu e revizuit înainte să devină vizibil întregii echipe.** Tratează-l ca pe un wiki partajat, nu ca pe o bază de date de referință — vezi cele trei puncte de mai jos înainte să-l implementezi.
+**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita sau se poate da drept autorul oricărei memorii, și nimic nu e revizuit înainte să devină vizibil întregii echipe.** Tratează-l ca pe un wiki partajat, nu ca pe o bază de date de referință. Regulile de operare, lista de pași pentru lansare și ce faci când pleacă cineva: [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
 
 1. Creează un repo Git privat pe orice platformă (GitHub, GitLab, Bitbucket, serverul vostru), cu un branch `knowledge` care are cel puțin un commit:
 
@@ -114,38 +119,7 @@ Merge orice model de feature extraction compatibil cu [`@huggingface/transformer
 
 3. De aici înainte, în Claude Code și Gemini/Antigravity, o memorie etichetată `org` e trimisă după salvare, iar fiecare sesiune aduce la pornire memoriile colegilor. Ceilalți asistenți nu au hook-uri pentru asta: din folderul pluginului, rulează `bash hooks/scripts/pull-org-vault.sh` ca să aduci memoriile și `node scripts/sync-org-memory.mjs <cheie>` ca să trimiți una.
 
-- **Ce se partajează:** doar memoriile etichetate explicit `org`. Captura automată scrie numai în vault-ul personal.
-- **Protecție slabă:** uneltele refuză să modifice o memorie org scrisă de altcineva, comparând numele de utilizator din sistem. Nu e control de acces: oricine are drept de push poate edita repo-ul direct. Controlează cine poate face push.
-- **Fără revizuire:** o memorie org e vizibilă tuturor imediat ce e trimisă. Sincronizarea face push direct pe branch, deci nu impune pull requests pe el.
-- **Costul crește cu echipa:** memoriile org ale tuturor colegilor intră în indexul fiecăruia. Pentru o echipă mare folosește `orgInjection: "titles"`.
-- **Când pleacă cineva:** îi scoți dreptul de push. Memoriile lui rămân în repo; le editezi sau le ștergi cu commit-uri git obișnuite.
-
-## Asistenți suportați
-
-| Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă |
-|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automată |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
-| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală |
-
-Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 4. Cu agent plugins pornite în VS Code (Preview), se pot încărca și hook-urile pluginului; încă neverificat.
-
-## Configurare
-
-Opțional, în `~/.total-recall/config.json`:
-
-```json
-{
-  "orgRepo": "https://github.com/you/your-vault.git",
-  "orgBranch": "knowledge",
-  "allowedEmailDomains": ["yourcompany.com"],
-  "orgInjection": "index",
-  "enableMultilingualSearch": true
-}
-```
-
-`orgInjection` e `index` (implicit), `titles` sau `off`. Despre `embeddingModel` vezi [Limbi](#limbi). Căile vault-urilor (`personalVault`, `orgVault`) și setările spec-driven: [docs/HOW-IT-WORKS.md](docs/HOW-IT-WORKS.md) și [docs/SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md) (în engleză).
+Începe singur și adaugă echipa mai târziu: `install.sh` poate fi rulat din nou fără probleme. Memoriile org ale tuturor colegilor intră în indexul fiecăruia; pentru o echipă mare folosește `orgInjection: "titles"`. Setările (`orgBranch`, `allowedEmailDomains`, `orgInjection`, căile vault-urilor): [Cum funcționează → Configurare](docs/HOW-IT-WORKS.md#configuration) (în engleză).
 
 ## Actualizare, backup și depanare
 
@@ -168,7 +142,7 @@ Opțional, în `~/.total-recall/config.json`:
 
 ## Mai mult (în engleză)
 
-- [Cum funcționează](docs/HOW-IT-WORKS.md): stocarea, câmpurile din frontmatter, căutarea și curba uitării, hook-urile, Obsidian
+- [Cum funcționează](docs/HOW-IT-WORKS.md): stocarea, câmpurile din frontmatter, configurarea, căutarea și curba uitării, hook-urile, Obsidian
 - [Cele 22 de unelte](docs/TOOLS.md) și formatul exportului
 - [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md): legi decizii de cerințe și reguli de arhitectură de teste, cu un exemplu de cinci minute
 - [Arhitectura](plugins/total-recall/ARCHITECTURE.md): diagrame C4, model de date, fluxul de scriere
