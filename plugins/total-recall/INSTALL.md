@@ -52,7 +52,7 @@ bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -
 
 Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.json`.
 
-**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact can reach you. There is deliberately no zip download and no npm package — one channel, one thing to trust.
+**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact is committed there. There is deliberately no zip download and no npm package — one channel, built by CI. Nothing is signed yet (commits, tags and the bundle), so what you trust is this repository and GitHub Actions.
 
 ## 🧩 Install without Claude Code
 
@@ -128,7 +128,7 @@ Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~
 **How it behaves**
 
 - **Shared:** only memories explicitly tagged `org`. Automatic capture writes to the personal vault only.
-- **Protected, weakly:** the tools refuse to change an org memory written by someone else, compared by OS username. That is not access control: anyone with push access can edit the repo directly. Control who can push.
+- **Protected, weakly:** the tools refuse to change an org memory written by someone else, compared by OS username (two teammates with the same username, for example `ubuntu`, count as the same author). That is not access control: anyone with push access can edit the repo directly. Control who can push.
 - **Not reviewed:** an org memory is live for everyone as soon as it is pushed. Sync pushes straight to the branch, so do not require pull requests on it.
 - **Cost grows with the team:** every teammate's org memories are part of everyone's index. Use `orgInjection: "titles"` (or `"off"`) for a large team.
 - **Someone leaves:** remove their push access. Their memories stay in the repo; edit or delete them with ordinary git commits.

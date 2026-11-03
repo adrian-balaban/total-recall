@@ -1,175 +1,161 @@
-# PLAN — README.md & README-ro.md: multi-persona review and essential-first redesign
+# PLAN — README.md & README-ro.md: persona-review round 2
 
-**Status:** proposed, revised after review · **Date:** 2026-11-03 · **Branch:** `main`
-**Goal:** make the README pair essential, trustworthy and install-ready for six user types — AI devs, devs who use AI for augmented development, team leads, architects, managers, data engineers — by keeping only essential information on the surface, routing deep content to the doc it already lives in, and adding attention hooks ("cârlige de atenție": first-screen elements that make a persona keep reading).
-**Priorities, in order:** (1) each persona can install and verify from the README alone; (2) honest trust/risk information on the first screen; (3) attention hooks. A hook that costs words a higher priority needs is dropped.
-**Accuracy rule:** every claim traces to code or an existing doc; no new numbers without a source.
-**Method note:** the persona findings in §2 come from one evaluation pass, not from independent agents, so they risk sharing one model's blind spots. Acceptance (§8) re-checks them with one agent per persona, each given only the new README and the files it links to.
+**Status:** proposed · **Date:** 2026-11-03 · **Branch:** `main` (HEAD `ddc33cc`)
+**Supersedes:** the round-1 plan of the same name. Its structure work shipped in #29 and its hooks in #30; this round is driven by evidence from six independent reviews of the shipped READMEs, not by a single-pass evaluation.
+**Priorities, in order:** (1) each persona can install and verify from the README alone; (2) honest trust/risk information on the first screen; (3) attention hooks.
+**Rules:** every claim traces to code or an existing doc; README ≤ N words (§4); EN and RO structurally identical; plan only, no file other than this one is edited by this round.
 
-## §1 Scope — audited documentation suite (13 files, ~14,200 words)
+## §1 Method and its limits
 
-| File | Lines | Words | Role |
-|---|---|---|---|
-| `README.md` / `README-ro.md` | 180 each | ~2,130 each | entry point, EN/RO symmetric |
-| `docs/HOW-IT-WORKS.md` | 185 | 1,819 | storage tree, frontmatter, search pipeline, hooks, Obsidian |
-| `docs/TOOLS.md` | 60 | 626 | the 22 tools, export JSON format (jq/DuckDB) |
-| `docs/SPEC-DRIVEN.md` | 103 | 1,208 | ADL walkthrough + `specDriven` config |
-| `docs/QUALITY.md` | 105 | 1,242 | metrics, delivery, scale |
-| `docs/COMPARISON.md` | 28 | 382 | alternatives table (3 same-name plugins + cq) |
-| `SECURITY.md` | 30 | 217 | policy, org-vault trust model |
-| `plugins/total-recall/INSTALL.md` | 183 | 1,728 | per-client install, Windows, org vault, privacy model |
-| `plugins/total-recall/ARCHITECTURE.md` | 107 | 405 | C4 diagrams + key invariants table |
-| `plugins/total-recall/README.md` | 14 | 156 | pointer stub (installed with the plugin) |
-| `BACKLOG.md` | 252 | 2,157 | roadmap with triggers |
+Six subagents, one per persona (AI developer, AI-augmented developer, team lead, architect, manager, data engineer), each told to read only the 12 docs (the two READMEs, `docs/*.md`, `SECURITY.md`, `BACKLOG.md`, `plugins/total-recall/{INSTALL,ARCHITECTURE,README}.md`), never source code, and to cite line numbers. Findings below were then **checked against the repo by the coordinator** (§2); claims that did not hold were dropped.
 
-## §2 Persona findings (what they perceive, where they stop, what hooks them)
-
-### 2.1 AI developer (builds agents / MCP integrations)
-- **Perceives positively:** "or any other client that speaks MCP" up front (README L5), honest Limits, ARCHITECTURE.md link.
-- **Blockers:** the MCP server registration (command `bash`, argument `scripts/start-server.sh`) is **never shown in README** — it is one sentence in INSTALL.md §"Install without Claude Code" (L67); MCP resources/prompts (`total-recall://index`, `memory-workflow`) appear only in INSTALL.md §VS Code / §Codex; the "Other assistants" path is one outbound link (README L59–61).
-- **Hooks for them:** collapsed `<details>` with the full non-Claude install (clone + `install.sh` + `mcpServers` JSON); one line naming the MCP resources & prompts; tool count surfaced.
-
-### 2.2 Developer using AI for augmented development (Cursor / Copilot / Claude Code, pragmatic)
-- **Perceives positively:** Quick start is correct; the Daily-use table ("You say → What happens → Tool", L63–71) is the strongest section in the file.
-- **Blockers:** the one-liner `bash "$(ls -d ~/.claude/plugins/cache/…)"` (L40, identical in README-ro and INSTALL.md) **looks fragile** — the explanation under it (L43) helps but is easy to skip; step 3 edits the global `~/.claude/CLAUDE.md` (L45) = real friction, but required; Cursor/Windsurf/Codex users must leave the README to install; no recording of a real session (only an abstract SVG, L14).
-- **Hooks for them:** "a memory that survives restart" framing on Quick start, backed by the existing verify step (L57); the glob's explanation moved directly above the command.
-
-### 2.3 Team lead (adopts for the team)
-- **Perceives positively:** bold honesty "Access control is weak…" (README L100) — trust through candor; the 5 operational bullets (shared / protected / not reviewed / cost / someone leaves, L117–121).
-- **Blockers:** **no rollout guidance anywhere in the suite** (no pilot → measure → team path); cost-per-teammate growth appears only at L120; team section sits mid-document and is long.
-- **Hooks for them:** a short rollout checklist (new content in INSTALL.md §Org vault, linked from README). A "start solo, add the team later" line **only if** §8 step 0 verifies that re-running `install.sh --org-repo` on an existing install works.
-
-### 2.4 Architect
-- **Perceives positively:** `ARCHITECTURE.md` (C4 diagrams + key-invariants table with rule IDs, L87–107); `SPEC-DRIVEN.md` ties decisions to requirements and architecture rules to tests — the major differentiator.
-- **Blockers:** **zero architecture teaser in README** — the first architecture mention is in "More" (L174); spec-driven/ADL is buried at L173 of 180; the token-growth limit (L163) has no pointer to mitigations.
-- **Hooks for them:** a 3-line architecture summary (stdio MCP server + lifecycle hooks + flat-file vault; indexes are derived and rebuildable) + C4 link; a 2-line spec-driven teaser with the five-minute walkthrough link.
-
-### 2.5 Manager (skims the first screen, decides)
-- **Perceives positively:** "At a glance" (L16–22): license, maintainer honesty, ~10 releases/month, tests/coverage/mutation numbers.
-- **Blockers:** it sits **below** 4 bullets + a diagram; no badges row; "releases are **not signed**" is honest but context-free; ~2,100 words is over their budget; `COMPARISON.md` and `QUALITY.md` are buried in "More".
-- **Hooks for them:** CI-status + license badges; one comparison line near the top linking `docs/COMPARISON.md`; key numbers in the first screen (1,036 tests · 97% coverage · 81% mutation score · ~10 releases/month, all from QUALITY.md).
-
-### 2.6 Data engineer (data ownership, formats, pipelines)
-- **Perceives positively:** "plain Markdown files … read, edit, grep, version with git" (L5); export/import; "derived indexes are rebuilt from the `.md` files" (L156).
-- **Blockers:** **no sample memory file in README** — the frontmatter example is in HOW-IT-WORKS.md L39–52 only; the source-vs-derived distinction exists only in the HOW-IT-WORKS tree (L16–31); export format and `jq`/DuckDB readiness are in TOOLS.md L34–60 only; the search caveat (first 500 chars, L164) is buried in Limits.
-- **Hooks for them:** a 6-line memory example; a source-vs-derived mini-table; one line "export is plain JSON — `jq` / DuckDB work on it directly".
-
-## §3 Doc-suite audit (the referenced files)
-
-### 3.1 Duplication map — drift risk
-| Content | README.md | README-ro.md | INSTALL.md | HOW-IT-WORKS.md |
-|---|---|---|---|---|
-| Marketplace install commands | L30–41 | L30–41 | L37–50 | — |
-| Glob one-liner (identical 3×) | L40 | L40 | L54 | — |
-| Languages / embedding model | L75–88 | same | — | L133–152 |
-| Team setup | L98–121 | same | L119–127 | — |
-| `config.json` example | L134–148 (**only copy**) | same | — | partial (`enableMultilingualSearch`) |
-
-**Single-source-of-truth rule:** README = teaser + minimal snippet + link; detail lives in exactly one file. The marketplace commands stay duplicated in README by design (primary path). Languages detail moves to HOW-IT-WORKS.md (README keeps 2 sentences + the English-only model snippet). Team operations consolidate in INSTALL.md. The `config.json` block **moves to HOW-IT-WORKS.md §Configuration in the same change** — it has no other home today.
-
-### 3.2 Routing gaps (content exists but is unreachable from the entry point)
-- Non-Claude install (clone + `install.sh` + server registration) → only INSTALL.md → surface in README `<details>`.
-- Memory file example → only HOW-IT-WORKS.md → surface a 6-line excerpt.
-- Source-vs-derived table → only HOW-IT-WORKS.md → surface mini-table.
-- Export format / jq / DuckDB → only TOOLS.md → one line + link.
-- MCP resources & prompts → only INSTALL.md → one line + link.
-
-### 3.3 Genuinely missing across the whole suite
-CI badges; a real-session recording (optional, §5); exit strategy ("what if I stop using it"); team rollout checklist. Everything else in the new README is moved, not written.
-
-### 3.4 Already fixed on `main` (2026-11-03, before this plan is implemented)
-- INSTALL.md L67 claimed the README "has a snippet for each host" and linked `README.md#other-assistants`, an anchor that did not exist. The heading is now `### Other assistants` (RO: `### Alți asistenți`) and INSTALL.md points to its own per-host sections instead.
-- README / README-ro "29% needed a follow-up fix" removed: QUALITY.md no longer reports change failure rate, so the figure had no source.
-
-## §4 New README structure (essential-first)
-
-**Word budget:** ≤ ~1,700 words of prose per README; code blocks and `<details>` bodies are not counted (they are copied, not read). Estimate: today ~2,130; moves out (Languages detail, Configuration, team bullets, Upgrade/Limits overlap) ≈ −650; additions (architecture summary, memory example, source/derived table, spec teaser, comparison line, exit line) ≈ +250 prose.
-
-Twelve sections, in this order. Every hook from §5 has a slot here.
-
-1. **Header block:** title + one-liner pitch (keep L3–5) + **badge row** (§5.1) + language switcher (L7) + session-loop SVG (L14).
-2. **Why — 3 bullets** (fuse today's 4 bullets, L9–12) + **comparison line** (§5.5).
-3. **At a glance** (moved up, directly after Why) — key numbers (§5.6) next to the "not signed" caveat.
-4. **Quick start — "a memory that survives restart":**
-   - *Claude Code:* the 4 steps kept (L28–57); the glob's one-sentence explanation moves **above** the command; step 3 (CLAUDE.md snippet) kept with its "why".
-   - *Other assistants* (short ASCII heading, stable anchor): collapsed `<details>` with the **complete** path — `git clone --depth 1 -b release …`, `cd …/plugins/total-recall && ./install.sh -y`, then the `mcpServers` JSON (command `bash`, args `[<abs path>/scripts/start-server.sh]`) + one line naming `total-recall://index` and the `memory-workflow` prompt. Per-host details stay in INSTALL.md.
-   - Ends with the verify step (L57).
-5. **Daily use** — table kept as-is (L63–73).
-6. **Your data** — 6-line memory excerpt (from HOW-IT-WORKS.md L39–52) + **source-vs-derived mini-table** (`.md` = source; `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` = derived, rebuilt automatically) + export line → TOOLS.md.
-7. **Supported assistants** — table moved up from L123–132, kept verbatim.
-8. **How it's built** — 3-line architecture summary + C4 link (§2.4) and the 2-line spec-driven teaser → SPEC-DRIVEN.md.
-9. **Privacy & trust** — 4 bullets condensed from L90–96 + **exit line** (§5.7) + SECURITY.md link.
-10. **For teams** — bold risk line kept verbatim (L100) + the setup commands (L102–113) + link to INSTALL.md §Org vault (operational bullets L117–121 and the rollout checklist live there).
-11. **Upgrade & troubleshooting** — kept as its own section, ≤ 6 bullets. **Must keep:** "`claude plugin update` does not re-run `install.sh` — run it again", the `git reset --hard origin/release` note, `npm rebuild better-sqlite3`, restore from the personal vault's git repo.
-12. **Limits** — kept as its own heading (managers and leads read it as a trust signal), then **More** + one-line **Status**.
-
-**What leaves the README:** the Languages deep-dive (→ HOW-IT-WORKS.md), team operational bullets (→ INSTALL.md), the Configuration block (→ HOW-IT-WORKS.md §Configuration, one line + link remains).
-
-### 4.1 Persona → hook → location (acceptance checklist)
-
-| Persona | Hook | Section (§4) | Must appear by line |
-|---|---|---|---|
-| AI dev | MCP-client `<details>` + resources/prompts line | 4 | ~60 |
-| AI-augmented dev | "memory that survives restart" + verify step | 4 | ~35 |
-| Team lead | bold risk line + rollout checklist link | 10 | (link in Why, ~15) |
-| Architect | architecture summary + spec-driven teaser | 8 | (comparison line, ~15) |
-| Manager | badges + key numbers + comparison line | 1–3 | ~25 |
-| Data engineer | "plain Markdown" pitch + memory excerpt | 1, 6 | ~5 |
-
-## §5 Attention hooks ("cârlige de atenție")
-
-1. **Badge row:** the GitHub Actions status badge of `mutation.yml` (live, cannot go stale) + MIT license badge. No hand-maintained number badges — numbers live in At a glance and QUALITY.md.
-2. **"A memory that survives restart"** framing on Quick start — testable via the verify step (L57).
-3. **Session recording — optional, not an acceptance criterion.** If made: record against a throwaway `HOME` (no real memory titles may appear), store as `docs/diagrams/demo.gif`, re-record when the Quick start flow changes. Fallback: the existing SVG loop.
-4. **Source-vs-derived mini-table** — answers "what is my data" at a glance.
-5. **Comparison line near the top:** "Three other plugins are also called `total-recall` — [how this one differs](docs/COMPARISON.md)"; it also restates the install-by-full-ID warning.
-6. **Key numbers in the first screen** (from QUALITY.md): 1,036 tests · 97% coverage · 81% mutation score · ~10 releases/month — next to the "not signed" caveat.
-7. **Exit line** (replaces the FAQ idea, which only repeated existing sections): "Stop using it any time: your memories stay as `.md` files, and `export_memories` gives JSON."
-8. **Team risk bold line** — kept verbatim; candor is itself a hook.
-
-Dropped from the first draft: a "social proof" line citing a public presentation (no doc links to one — it would break the accuracy rule); a forward note about `npx @adrian-balaban/total-recall` (it contradicts INSTALL.md L55 "no npm package" until [PLAN-NPX-INSTALL-BOOTSTRAP.md](PLAN-NPX-INSTALL-BOOTSTRAP.md) ships — add it in that PR); a `cd <newest-cache-dir>` alternative to the glob (a placeholder is less copy-pasteable than the glob it replaces).
-
-## §6 EN/RO sync
-
-- Same 12 sections, same order in `README.md` and `README-ro.md`; RO keeps its "(în engleză)" markers on deep-doc links (docs stay EN-only).
-- **Anchor policy:** headings that other files link to are short and ASCII-safe (`### Other assistants`, `### Claude Code`); renaming one requires `grep -rn '<old-anchor>' --include='*.md'` across the repo in the same change.
-- `session-loop-ro.svg` kept; new assets are language-neutral or get `-ro` twins only if they carry text.
-- Structural parity check: heading counts and order (`grep -c '^#'`, `grep '^#'`) must match 1:1.
-
-## §7 Changes to the referenced `.md` files (minimal, single-source respecting)
-
-- **`plugins/total-recall/INSTALL.md`** — adds a short **"Team rollout checklist"** in §Org vault: (1) pilot with 1–2 people → (2) watch `get_stats` and injected-index token growth (QUALITY.md §Scale) → (3) add the team, set `orgInjection` per team size → (4) offboarding = revoke push access. INSTALL.md becomes the single source for team operations (absorbs README L117–121).
-- **`docs/HOW-IT-WORKS.md`** — single source for Languages/embedding detail (already there) and gains a **§Configuration** with the `config.json` example moved from README L134–148 (`orgRepo`, `orgBranch`, `allowedEmailDomains`, `orgInjection`, `enableMultilingualSearch`, `embeddingModel`, vault paths).
-- **`plugins/total-recall/README.md`** — unchanged stub.
-- **`docs/QUALITY.md`, `docs/COMPARISON.md`, `docs/TOOLS.md`, `SECURITY.md`, `docs/SPEC-DRIVEN.md`, `plugins/total-recall/ARCHITECTURE.md`** — unchanged; new README links point at them.
-- **`BACKLOG.md`** — one line recording the README redesign decision.
-- **This file** — deleted after implementation (or moved to `docs/plans/` together with the other root `PLAN-*.md` files); decide once for all three.
-
-## §8 Implementation checklist & acceptance criteria
-
-0. **Verify before writing:** re-running `install.sh --org-repo …` on an existing solo install works without redoing anything. If yes, add "start solo, add the team later" to §10; if not, leave it out.
-1. **PR 1 — structure:** move/condense content per §4 and §7 (Configuration → HOW-IT-WORKS, team bullets → INSTALL.md, Languages trimmed), no new hooks. Facts verbatim from existing docs.
-2. Mirror to `README-ro.md` (§6).
-3. **PR 2 — hooks:** badges, comparison line, data section, architecture summary, exit line, `<details>` block.
-4. Link check: every relative link and `#anchor` in both READMEs and INSTALL.md resolves (grep target file + GitHub slug of target heading).
-5. Word count and duplication audit (§4 budget; §3.1 map shows each item exactly once outside the intentional marketplace duplicate).
-
-Splitting into two PRs means a rewrite that misses the criteria below can still ship its structural half.
-
-**Acceptance criteria (each checkable):**
-- **Install from README alone:** a fresh `HOME` + the README's Claude Code steps → the verify step passes; separately, the `<details>` steps alone → `get_stats` answers from a non-Claude MCP client (Codex CLI or VS Code).
-- **First screen:** What / Why / Cost / Trust / Risk all appear within the first ~25 rendered lines.
-- **Persona check:** §4.1 table satisfied; then one agent per persona, each given only the new README and its linked files, reports at least one hook and no install blocker.
-- **Budget:** ≤ ~1,700 prose words per README (code blocks and `<details>` excluded).
-- **Drift:** every `install.sh` flag named in README, README-ro and INSTALL.md appears in `./install.sh --help` (repo CLAUDE.md "Docs must track install.sh").
-- **Parity:** EN ≡ RO structurally (§6 check).
-
-**Risks & mitigations:**
-
-| Risk | Mitigation |
+| Reviewer | Docs it did **not** read (or only skimmed) |
 |---|---|
-| Link/anchor drift after restructure | §6 anchor policy + §8 step 4 link check |
-| EN/RO divergence over time | same-order sections + heading-parity check |
-| Numbers in README go stale | only the CI-status badge is a badge; numbers update with QUALITY.md each release |
-| Recording leaks private memory titles | throwaway `HOME`; recording is optional |
-| Content deleted from README with no other home | §3.1 map lists the only copy; moves happen in the same PR as the deletion |
+| AI developer | BACKLOG, SPEC-DRIVEN, ARCHITECTURE; HOW-IT-WORKS and COMPARISON partly |
+| AI-augmented dev | TOOLS, SPEC-DRIVEN, ARCHITECTURE; later parts of HOW-IT-WORKS, BACKLOG |
+| Team lead | TOOLS, ARCHITECTURE, SPEC-DRIVEN (grepped only) |
+| Architect | TOOLS, COMPARISON, INSTALL, BACKLOG, plugin README |
+| Manager | BACKLOG, HOW-IT-WORKS, TOOLS, SPEC-DRIVEN, ARCHITECTURE |
+| Data engineer | BACKLOG, SPEC-DRIVEN, COMPARISON |
+
+Consequences: the Romanian README was reviewed only structurally (all six say it mirrors the English one line for line); the architect and AI-dev views of ARCHITECTURE/SPEC-DRIVEN are thin. Two reviewers also saw the plugin's `CLAUDE.md` through context injection; findings that rest only on it are marked *outside the doc set* and not used. **Next round must make every reviewer list the files it opened and fail the review if a required file is missing** (§6).
+
+## §2 Coordinator verification of reviewer claims
+
+| Claim | Result | Evidence |
+|---|---|---|
+| "Three other plugins" is a miscount (manager) | **Rejected** | `docs/COMPARISON.md:7`: three same-name projects; `mozilla-ai/cq` is listed as inspiration, not as a same-name plugin |
+| MCP server reports v1.6.6 (four reviewers) | **Rejected as a doc defect** | that is the installed plugin's own banner, not a document |
+| BACKLOG says 68.28% mutation score | **Confirmed, stale** | `BACKLOG.md:31`; QUALITY.md says 81.1% |
+| BACKLOG calls the plugin "single-user" | **Confirmed, partly stale** | `BACKLOG.md:87,127,184` |
+| INSTALL.md overclaims trust | **Confirmed** | `INSTALL.md:55`: "no hand-built artifact can reach you … one thing to trust" while commits, tags and the bundle carry no signature or provenance ([PLAN-SIGNED-RELEASES.md](PLAN-SIGNED-RELEASES.md)) |
+| README omits "Windows needs a Windows Node.js" | **Confirmed** | `INSTALL.md:16-18`; README says only "Git Bash" |
+| README "emails" blocked is imprecise | **Confirmed** | `src/privacy-filter.ts:75-90` checks the email host against `allowedEmailDomains`; INSTALL.md:149 says "outside your allowed domain" |
+| "Accents ignored for any Latin alphabet" is overstated | **Confirmed** | `src/tfidf.ts:90-92`: `NFKD` then every character outside `a–z0–9` becomes a separator; letters with no decomposition (ß, ł, ø, æ) split words |
+| "No database" vs SQLite `vectors.db` | **Confirmed (wording)** | README L12 says "no database"; README L119 lists `vectors.db`; `HOW-IT-WORKS` names sqlite-vec |
+| Export passes through the model's context | **Confirmed, missing from README** | `docs/TOOLS.md:36` |
+| Rebuilding `index.json` resets access counts | **Confirmed, missing from README** | `docs/HOW-IT-WORKS.md:68` (kept only in `index.json`) |
+| The "Something looks off / get_stats" check is not on the quick-start path | **Confirmed** | README mentions `get_stats` once, in the troubleshooting list (L185) |
+| Cursor and Windsurf have no setup instructions | **Confirmed** | `INSTALL.md` mentions them only in its opening sentence (L3); no config path or instruction-file name exists in any doc |
+| **Regression introduced in #30** | **Confirmed** | the removed "Rebuilt automatically" bullet carried the warning that the **org** `index.json` is *not* rebuilt locally and must not be edited; README L119's Derived row now implies it is (`docs/HOW-IT-WORKS.md:30`) |
+| CI badge shows "CI" | **Confirmed (label)** | it links `mutation.yml`, which is the gate (audit, typecheck, build, tests, mutation) but is named for one step |
+| `gh` is required for the team setup but missing from the README prerequisites | **Partly** | README L170 says `gh auth login` inline; `INSTALL.md:10,126` and `install.sh` (L79, L248) require `gh` authenticated; README's "elsewhere, git credentials" is not reconciled with that |
+| Same OS username lets teammates edit each other's org memories | **Plausible, undocumented** | author guard compares OS username (`INSTALL.md:131`); no doc states the collision case |
+| Windows native deps are fragile (manager) | **Dropped** | speculation; no doc or code evidence read |
+
+## §3 Findings and changes, by priority
+
+Numbers in brackets are how many of the six personas raised it.
+
+### Priority 1 — install and verify from the README alone
+
+| # | Gap | Fix (source for the wording) | Placement |
+|---|---|---|---|
+| 1.1 | No verification beyond "a file appears"; `get_stats` is off the quick-start path [5/6] | Add to step 4: ask the assistant to call `get_stats`; it should list totals and recent errors, and `vector.enabled` (wording from `INSTALL.md:187-189`; do **not** invent exact output) | Quick start, Claude Code step 4 |
+| 1.2 | Generic-MCP route has no verify step and one relative path [3/6] | One verify line in the `<details>` block: call `get_stats`, or read `total-recall://index`; give the plugin-folder path for `pull-org-vault.sh` / `sync-org-memory.mjs` (`~/total-recall-plugin/plugins/total-recall`) | `<details>` and Team setup step 3 |
+| 1.3 | Cursor and Windsurf cannot be installed from any doc [2/6, and the support table lists them with ✅ tools] | **Requires a real test first.** Install on Cursor and on Windsurf, record the MCP config path and the instruction-file name, then document in `INSTALL.md` and link from README. The README support table now has a **Tested** column (✅ Claude Code and Gemini/Antigravity, ❌ VS Code/Copilot and the generic-MCP row); flip a row to ✅ only after its install has been run end to end | `INSTALL.md` (new section), README support table |
+| 1.4 | Team setup has no end-to-end verify [2/6] | Add 3 lines: A stores "remember for the team …", B starts a new session and asks. When it fails: in Claude Code the session start warns when team pushes keep failing (README L185, `check-sync-errors.sh` in `HOW-IT-WORKS.md:177`); `get_stats` shows recent errors. The sync log files are not documented anywhere, so they are not named | Team setup |
+| 1.5 | `gh`, `--allowed-email-domain` and the credential rule are unexplained or inconsistent [2/6] | **Open question, answered before PR B:** does org sync work against a non-GitHub host with plain git credentials? Facts so far: README L170 says "elsewhere, git credentials that can push"; `INSTALL.md:126` says `gh auth status` must be green; `install.sh` L248-252 only *warns* when `gh` is not authenticated ("required only for the org vault"). Read `sync-org-memory.mjs` and `pull-org-vault.sh` for `gh` calls, then make README and INSTALL.md say the same thing. Also add one sentence on what `--allowed-email-domain` lets through | Team setup step 2 |
+| 1.6 | Step 3 (global `CLAUDE.md` edit): nothing says what breaks if skipped or how to undo [2/6] | Two clauses: already says "required"; add the consequence (Claude keeps its own `MEMORY.md` alongside) and "remove the block to undo" | Quick start step 3 |
+| 1.7 | Windows Node note missing [1/6] | One clause: "a Windows `node.exe` on PATH, not WSL-only Node" (`INSTALL.md:18`) | Quick start "You need" |
+| 1.8 | Export goes through the model's context; off-machine backup absent [1/6] | One clause in Your data: "returned in the assistant's answer" (`TOOLS.md:36`); one line: copy `personal-vault/` for an off-machine backup (the local git repo is on the same disk) | Your data |
+
+### Priority 2 — honest trust and risk on the first screen
+
+The first screen (about 25 lines) is currently all reassuring; the three facts that block a team or regulated decision live 130–170 lines down [team lead, manager, architect].
+
+**Layout change required.** Lines 1–25 are already full (badges L3, pitch L5–7, language switch L9, three bullets L11–13, comparison line L15, session-loop SVG L17, At a glance from L19). Adding 2.1–2.3 there would push them to about L24–30. PR A therefore also:
+- moves the session-loop SVG below At a glance (it explains the loop; it does not decide anything);
+- folds the comparison line (L15) into the "Where it lives" bullet as one clause.
+
+That frees about six lines, so the three risk bullets land inside the first 25.
+
+| # | Gap | Fix | Source line |
+|---|---|---|---|
+| 2.1 | Weak org access control is first mentioned at README L161 | Add a "Risks" bullet to At a glance: org vault = anyone with push access can edit any memory, nothing reviewed | README L161 |
+| 2.2 | "Data stays local" omits the auto-capture transcript [2/6] | Reword the bullet: files stay local; **the model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of transcript to `claude -p`** | README L153 |
+| 2.3 | Uncapped index cost is shown only under Limits [4/6] | One bullet in At a glance: 30–40 tokens per memory, no cap (4.4k at 100, 32k at 1,000, 162k at 5,000) | README L191, `QUALITY.md:98-101` |
+| 2.4 | Cost bullet says semantic search is "optional" but the default profile installs it | Reword: "the default profile downloads a local multilingual model once (449 MB); `--no-vector` skips it" | `INSTALL.md:22` |
+| 2.5 | "Blocks … emails" is imprecise | "emails outside your allowed domains" | `privacy-filter.ts:75-90` |
+| 2.6 | "no database" vs SQLite | "no database to run; an optional SQLite file holds the vectors" | README L119 |
+| 2.7 | "Accents ignored" overstated | README: "most accents are ignored" (soften, no detail). HOW-IT-WORKS tokenizer paragraph: add that letters with no accent-free form (ß, ł, ø, æ) split a word | `tfidf.ts:90-92` |
+| 2.8 | "Releases not signed" understates: commits and tags are unsigned too, and `INSTALL.md:55` claims more than is proven | Keep "not signed"; align INSTALL.md:55 ("one thing to trust" → state that CI builds it and nothing is signed yet) until [PLAN-SIGNED-RELEASES.md](PLAN-SIGNED-RELEASES.md) ships | `INSTALL.md:55` |
+| 2.9 | **Regression:** the org `index.json` warning was dropped in #30 | Restore as one clause in the Derived row: "the org `index.json` in the team repo is not rebuilt; leave it alone"; add "access counts are reset" | `HOW-IT-WORKS.md:30,68` |
+| 2.10 | Badge label | Decided by the maintainer (§7 item 4) | `.github/workflows/mutation.yml` |
+| 2.11 | Same-OS-username collision | **In `INSTALL.md:131`, not the README:** add that two teammates with the same OS username (for example `ubuntu`) count as the same author | `INSTALL.md:131` |
+
+### Priority 3 — attention hooks
+
+| # | Hook | Raised by | Source line |
+|---|---|---|---|
+| 3.1 | "Design in five lines" under At a glance: flat files, derived indexes, fail-closed filter, no LLM in the search path, one-line link to the invariants | architect | `HOW-IT-WORKS.md:94-98`, `ARCHITECTURE.md:89-107` (replace, don't add to, "How it's built") |
+| 3.2 | Comparison against sharing a `MEMORY.md` in git | team lead | needs a new row in `docs/COMPARISON.md`; source facts: search/decay (README), privacy filter (README L12), author guard (`INSTALL.md:131`); **trust model is the same** (push access) — state that |
+| 3.3 | Uninstall one-liner near the top | AI-augmented dev, manager | README L186 |
+| 3.4 | Start latency number | AI dev | `QUALITY.md:21` (99 ms median) |
+| 3.5 | Sample session: store → new session → recall | AI-augmented dev | README step 4 text; optional recording stays out of scope |
+| 3.6 | Tool-call example and retrieval-order cheat sheet in `TOOLS.md` | AI dev | `skills/memory-workflow/SKILL.md` order, `TOOLS.md:9-30` |
+
+### Documentation fixes outside the READMEs (small, independent)
+
+| File | Fix |
+|---|---|
+| `BACKLOG.md:31` | Replace 68.28% with the current score or mark the line "as of <date>"; reword "single-user" at L87/L127/L184 where it contradicts the team feature |
+| `INSTALL.md:55` | See 2.8 |
+| `docs/QUALITY.md:3` | Say "last measured at commit 0625d95; source unchanged since" (only docs changed after it) |
+| `docs/HOW-IT-WORKS.md` | Tokenizer note (2.7) |
+| `docs/COMPARISON.md` | New row (3.2) |
+
+## §4 Word budget (N)
+
+`N` was left open in the request. **Proposal: N = 1,950 words of prose per README** (code blocks and the collapsed install block excluded; headings, tables and links counted), RO ≤ 2,000 because Romanian runs about 2% longer. 1,900 was the first proposal; the arithmetic below shows it cannot be reached without cutting content that has no other home.
+
+**Today:** EN 1,924, RO 1,960 (after #30).
+**Additions, estimated:** Priority 2 ≈ +130 (three At a glance bullets ≈ +70, rewordings 2.2/2.4/2.5/2.6/2.9 ≈ +60); Priority 1 ≈ +200 (eight items, 1.3 excluded). Total ≈ +330. These are estimates; each PR measures with the word-count script and reports the real figure.
+
+**Cuts** (each must leave the fact in exactly one other file, added there first if needed, checked with `grep` in the same PR):
+
+| Cut | Words | Where the fact lives afterwards |
+|---|---|---|
+| Merge "Upgrade (other assistants)" and "Uninstall" into one bullet pointing at `INSTALL.md` | −90 | `INSTALL.md:67` |
+| Privacy section: shorten the transcript and org-trust bullets to one line each, now that At a glance states them (2.1, 2.2) | −60 | At a glance + `SECURITY.md` |
+| Shorten the note under Supported assistants | −45 | `INSTALL.md` |
+| Team setup step 3: move the "other assistants have no hooks" sentence to `INSTALL.md` §Org vault | −45 | `INSTALL.md` (add first) |
+| Languages: drop the benchmark sentence | −30 | `HOW-IT-WORKS.md` §Languages |
+| "Several sessions at once" bullet shortened to one line | −25 | `HOW-IT-WORKS.md` (add the lock-free `index.json` note there first; BACKLOG is a roadmap, not user documentation) |
+| Team setup: shorten the bold risk line's second sentence (At a glance now carries the risk) | −20 | At a glance |
+| **Total** | **−315** | |
+
+**Kept on purpose:** the closing line under Daily use ("Name the project in the memory…") exists only in the README and is practical advice for multi-project users.
+
+**Result:** about 1,924 + 330 − 315 ≈ 1,940 EN, inside 1,950. **Per-PR rule:** PR A and PR B each land at net ≤ +10 words with their own cuts; PR D (hooks) must be net ≤ 0 — 3.1 replaces "How it's built", 3.3 moves the uninstall line rather than duplicating it, 3.5 rewrites step 4 rather than adding to it.
+
+## §5 EN / RO parity
+
+Reviewers found no structural difference between the two READMEs (same sections, order and line count). Keep it that way:
+- Same headings in the same order; heading count (`grep -c '^#'`) must match.
+- Every new anchor target stays ASCII and short (`### Other assistants`, not a long heading).
+- Code, the `## Memory` block and the MCP JSON stay English; links into English-only docs keep the "(în engleză)" mark.
+- Run `/tmp/linkcheck`-style link and anchor verification on both files and on every doc edited (the check used in #29/#30 is reproduced in the PR description).
+
+## §6 Delivery and acceptance
+
+**PRs (each merged after CI is green):**
+1. **A — facts and risk** (Priority 2, the §2 layout change, the §3 doc fixes including the restored org-`index.json` warning, and the Privacy/Team-setup cuts from §4).
+2. **B — verify paths** (Priority 1 except 1.3), with the remaining §4 cuts. **Pre-step:** answer the 1.5 question.
+3. **C — client verification**: a real install on Cursor and Windsurf (1.3) **and** a test of the generic `mcpServers` snippet in the README's `<details>` block on at least one client that uses that format (for example Claude Desktop). The snippet follows `INSTALL.md` but has never been run.
+4. **D — hooks** (Priority 3), net ≤ 0 words.
+5. **E — Romanian quality pass**: one reviewer reading README-ro.md as a Romanian speaker (wording, technical terms, anchors that point at English headings). Round 2 checked RO for structure only.
+
+**Acceptance (re-run this review):**
+- Re-run the six persona reviews on the merged READMEs with the prompt in the Appendix and the **required reading list**: each reviewer lists the files it opened, and the review is rejected if any of the 12 is missing.
+- Pass condition per persona: can install **and** verify (not just "a file appears"); the first 25 rendered lines state the weak org access control, the transcript flow and the uncapped index cost; at least one hook reaches them without leaving the README.
+- Budget: EN ≤ 1,950 and RO ≤ 2,000 prose words; headings identical; zero broken links or anchors.
+- Drift: every `install.sh` flag named in README, README-ro and INSTALL.md appears in `./install.sh --help` (repo `CLAUDE.md` rule "Docs must track install.sh").
+
+## §7 Decisions needed from the maintainer
+
+1. **N:** accept 1,950 (EN) / 2,000 (RO), or choose another figure (a lower one means cutting content that exists only in the README).
+2. **Cursor and Windsurf:** are you able to test an install on each? Without that, PR C cannot ship and the support table must say "not verified".
+3. **BACKLOG.md:** refresh the numbers in place, or mark the section dated?
+4. **Badge:** keep "CI" or rename it to describe the mutation gate?
+5. **Org index.json warning:** I removed it in #30 by mistake; confirm that restoring it in PR A is wanted (recommended).

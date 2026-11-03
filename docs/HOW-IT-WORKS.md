@@ -120,7 +120,7 @@ recall_memory(query)
 
 TF-IDF indexes the title, the tags and the first 500 characters of the body, not the whole file. A word scores high when it is frequent in one memory and rare across the vault.
 
-**Tokenizer** (`tfidf.ts`): lowercase, accents stripped (`întâlnire` → `intalnire`), and every character outside `a–z` and `0–9` becomes a separator. So `dim_customer` is two words, `dim` and `customer`. There is no stemming and no stop-word list. Text in non-Latin scripts (Cyrillic, Greek, Arabic, Chinese, Japanese) produces no tokens at all, so only semantic search can find it.
+**Tokenizer** (`tfidf.ts`): lowercase, accents stripped (`întâlnire` → `intalnire`), and every character outside `a–z` and `0–9` becomes a separator. Letters with no accent-free form (`ß`, `ł`, `ø`, `æ`) are not converted, so they split a word. So `dim_customer` is two words, `dim` and `customer`. There is no stemming and no stop-word list. Text in non-Latin scripts (Cyrillic, Greek, Arabic, Chinese, Japanese) produces no tokens at all, so only semantic search can find it.
 
 **Decay in hybrid mode:** the forgetting curve weights the TF-IDF ranking only. RRF then merges it with the vector ranking, which is not decayed, so with semantic search on an old memory fades more slowly than with text search alone.
 
