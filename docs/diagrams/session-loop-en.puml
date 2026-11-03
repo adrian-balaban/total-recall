@@ -9,16 +9,11 @@ rectangle "You work" as C
 rectangle "Decisions & preferences\ncaptured automatically" as D
 database "<U+007E>/.total-recall\nPersonal Markdown vault\n(local)" as E
 database "Team Markdown vault\n(remote Git repo, e.g. GitHub)" as R
-rectangle "Spec-driven memories:\ndecisions, failures, changes\nlinked to the spec" as G
-rectangle "ADL files, optional" as Hh
 A --> B
 B --> C
 C --> D
 D --> E
 E ..> A
-C ..> G : tagged with system,\nelements, requirements
-G --> E
 C ..> R : tagged org,\nafter the privacy filter
 R ..> A : pulled at session start
-Hh ..> G : index_architecture
 @enduml

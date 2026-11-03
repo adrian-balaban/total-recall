@@ -9,16 +9,11 @@ rectangle "Lucrezi" as C
 rectangle "Deciziile & preferințele\ncapturate automat" as D
 database "<U+007E>/.total-recall\nvault Markdown personal\n(local)" as E
 database "vault Markdown de echipă\n(repo Git remote, ex. GitHub)" as R
-rectangle "Memorii spec-driven:\ndecizii, eșecuri, schimbări\nlegate de specificație" as G
-rectangle "Fișiere ADL, opțional" as Hh
 A --> B
 B --> C
 C --> D
 D --> E
 E ..> A
-C ..> G : etichetate cu system,\nelements, requirements
-G --> E
 C ..> R : etichetate org,\ndupă filtrul de confidențialitate
 R ..> A : aduse la pornirea sesiunii
-Hh ..> G : index_architecture
 @enduml
