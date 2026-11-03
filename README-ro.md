@@ -15,7 +15,7 @@ Memorie persistentă și 'căutabilă' pentru asistenții AI: Claude Code, Gemin
 
 - **Licență:** MIT, 'free'. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
 - **Maturitate:** v1.6.8, release-uri cu tag din august 2026 (~10/lună). 1.036 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
-- **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din transcript la `claude -p` pentru captura automată. Singurul alt trafic spre exterior este o descărcare unică a modelului și, dacă optezi pentru asta, repo-ul git al propriei echipe.
+- **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată. Singurul alt trafic spre exterior este o descărcare unică a modelului și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)).
 - **Indexul nu are plafon:** 30–40 de tokeni per memorie, cam 4,4k la 100 de memorii, 32k la 1.000 și 162k la 5.000.
 
@@ -151,7 +151,7 @@ Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" îns
 ## Confidențialitate: ce pleacă de pe mașina ta
 
 - **Fișierele rămân locale.** Vault-ul personal nu e trimis nicăieri; repo-ul git local blochează orice push.
-- **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din transcript (trimis la `claude -p` pentru captura automată, care nu poate fi oprită deocamdată).
+- **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din istoricul sesiunii (transcript, trimis la `claude -p` pentru captura automată, care nu poate fi oprită deocamdată).
 - **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă folosește git. Fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Filtrul blochează în caz de dubiu: dacă nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
 - **Memoriile colegilor ajung la modelul tău**, marcate ca date de referință, nu ca instrucțiuni. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md) (în engleză).
