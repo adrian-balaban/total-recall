@@ -125,6 +125,23 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 
 Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
+**How it behaves**
+
+- **Shared:** only memories explicitly tagged `org`. Automatic capture writes to the personal vault only.
+- **Protected, weakly:** the tools refuse to change an org memory written by someone else, compared by OS username. That is not access control: anyone with push access can edit the repo directly. Control who can push.
+- **Not reviewed:** an org memory is live for everyone as soon as it is pushed. Sync pushes straight to the branch, so do not require pull requests on it.
+- **Cost grows with the team:** every teammate's org memories are part of everyone's index. Use `orgInjection: "titles"` (or `"off"`) for a large team.
+- **Someone leaves:** remove their push access. Their memories stay in the repo; edit or delete them with ordinary git commits.
+
+**Team rollout checklist**
+
+1. Pilot with one or two people on a private repo.
+2. Watch `get_stats` (errors, totals) and the size of the injected index; about 30–40 tokens per memory ([QUALITY.md → Scale](../../docs/QUALITY.md#scale)).
+3. Add the rest of the team and set `orgInjection` for the team size.
+4. Offboarding is revoking push access (see above).
+
+Starting solo and adding the team later needs no migration: re-run `./install.sh --org-repo …`.
+
 ## 🔐 Privacy model — what is blocked, what is only warned
 
 Two layers, with different threat models:
