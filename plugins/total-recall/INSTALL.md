@@ -64,7 +64,7 @@ cd ~/total-recall-plugin/plugins/total-recall
 ./install.sh -y            # add --gemini or --vscode to register the server for those hosts
 ```
 
-Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file (the `## Memory` block from the README's [Quick start, step 3](../../README.md#claude-code)). Host-specific notes follow below: [Gemini/Antigravity](#geminiantigravity), [VS Code](#vs-code-copilot-agent-mode--manual-mcpjson), [Codex CLI](#-codex-cli-mcp-only-no-hooks). To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`.
+Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file (the `## Memory` block from the README's [Quick start, step 3](../../README.md#claude-code)). Host-specific notes follow below: [Gemini/Antigravity](#geminiantigravity), [VS Code](#vs-code-copilot-agent-mode--manual-mcpjson), [Codex CLI](#-codex-cli-mcp-only-no-hooks). To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`. To uninstall: remove the `total-recall` entry from your assistant's MCP configuration and delete the clone (`~/total-recall-plugin`); your memories stay in `~/.total-recall/` until you delete that folder.
 
 ### Gemini/Antigravity
 
@@ -123,7 +123,9 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
              --allowed-email-domain yourcompany.com
 ```
 
-Requirements: `gh auth status` green, and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
+Requirements: for GitHub, `gh auth status` green (the scripts use `gh` when it is available and fall back to plain `git`, with prompts disabled, so other hosts need credentials that work without a prompt, such as a credential helper or an SSH key), and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
+
+Assistants without hooks (Codex, Cursor, Windsurf, Claude Desktop) do not pull or push on their own: from the plugin folder, run `bash hooks/scripts/pull-org-vault.sh` to pull teammates' memories and `node scripts/sync-org-memory.mjs <key>` to push one memory.
 
 **How it behaves**
 
