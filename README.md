@@ -137,7 +137,7 @@ More: [How it works → Languages](docs/HOW-IT-WORKS.md).
 | Assistant | Tools | Index at session start | Automatic capture | Team sync | Tested |
 |---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic | ✅ |
+| **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed | ✅ automatic | ✅ |
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
 

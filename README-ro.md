@@ -134,7 +134,7 @@ Mai mult: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
 | Asistent | Unelte | Index la pornirea sesiunii | Captură automată | Sincronizare echipă | Testat |
 |---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ automată | ✅ |
-| **Gemini/Antigravity** (`--gemini`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată | ✅ |
+| **Gemini/Antigravity** (`--gemini`, necesită CLI-ul `agy`) | ✅ | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` | ✅ automată | ✅ |
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 
