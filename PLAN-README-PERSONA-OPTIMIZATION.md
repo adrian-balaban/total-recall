@@ -127,7 +127,9 @@ That frees about six lines, so the three risk bullets land inside the first 25.
 
 **Kept on purpose:** the closing line under Daily use ("Name the project in the memory…") exists only in the README and is practical advice for multi-project users.
 
-**Result:** about 1,924 + 330 − 315 ≈ 1,940 EN, inside 1,950. **Per-PR rule:** PR A and PR B each land at net ≤ +10 words with their own cuts; PR D (hooks) must be net ≤ 0 — 3.1 replaces "How it's built", 3.3 moves the uninstall line rather than duplicating it, 3.5 rewrites step 4 rather than adding to it.
+**Actual after PR A and PR B:** EN 2,015, RO 2,028 (PR A: 1,986 / 1,998; PR B: +29 / +30 after its own cuts). The estimate of +330 was too low: the verify steps (1.1, 1.2, 1.4–1.8) cost about +165 on their own, and several planned cuts could not be taken because the removed text exists only in the README. Both figures are above N. **Decision needed (§7 item 1):** raise N to about 2,050 (EN) / 2,075 (RO), or accept further cuts of README-only content.
+
+**Original estimate (kept for the record):** about 1,924 + 330 − 315 ≈ 1,940 EN, inside 1,950. **Per-PR rule:** PR A and PR B each land at net ≤ +10 words with their own cuts; PR D (hooks) must be net ≤ 0 — 3.1 replaces "How it's built", 3.3 moves the uninstall line rather than duplicating it, 3.5 rewrites step 4 rather than adding to it.
 
 ## §5 EN / RO parity
 
@@ -154,7 +156,7 @@ Reviewers found no structural difference between the two READMEs (same sections,
 
 ## §7 Decisions needed from the maintainer
 
-1. **N:** accept 1,950 (EN) / 2,000 (RO), or choose another figure (a lower one means cutting content that exists only in the README).
+1. **N:** the shipped READMEs are 2,015 (EN) / 2,028 (RO). Accept about 2,050 / 2,075, or choose a lower figure (that means cutting content that exists only in the README).
 2. **Cursor and Windsurf:** are you able to test an install on each? Without that, PR C cannot ship and the support table must say "not verified".
 3. **BACKLOG.md:** refresh the numbers in place, or mark the section dated?
 4. **Badge:** keep "CI" or rename it to describe the mutation gate?

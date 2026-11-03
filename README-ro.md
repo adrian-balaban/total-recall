@@ -24,7 +24,7 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
 ## Pornire rapidă
 
-O primă memorie care supraviețuiește unei reporniri durează câteva minute. **Ai nevoie de:** Node.js 18+, git și Linux, macOS sau Windows cu Git Bash.
+O primă memorie care supraviețuiește unei reporniri durează câteva minute. **Ai nevoie de:** Node.js 18+, git și Linux, macOS sau Windows cu Git Bash (plus un `node.exe` de Windows în PATH; Node instalat doar în WSL nu contează).
 
 ### Claude Code
 
@@ -51,9 +51,9 @@ O primă memorie care supraviețuiește unei reporniri durează câteva minute. 
    - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
    ```
 
-   Acest pas e necesar: fără el, Claude Code continuă să-și folosească propria memorie bazată pe fișiere în paralel cu total-recall. Dacă folosești și pluginul oficial `remember`, dezactivează-l: amândouă fac același lucru.
+   Acest pas e necesar: fără el, Claude Code continuă să-și folosească propria memorie bazată pe fișiere în paralel cu total-recall; ca să anulezi, șterge blocul. Dacă folosești și pluginul oficial `remember`, dezactivează-l: amândouă fac același lucru.
 
-4. Repornește Claude Code și verifică: spune *„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"*. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă *„ce build tool folosește proiectul?"*.
+4. Repornește Claude Code și verifică: spune *„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5"*. Apare un fișier nou în `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă *„ce build tool folosește proiectul?"*. Apoi cere asistentului să apeleze `get_stats`: îți arată totalurile, erorile recente și dacă căutarea semantică e pornită.
 
 ### Alți asistenți
 
@@ -80,7 +80,7 @@ Apoi înregistrează serverul în configurarea MCP a clientului (comanda `bash`,
 }
 ```
 
-Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.toml`. Adaugă blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului. Fără hook-uri, asistentul citește resursa `total-recall://index` și promptul `memory-workflow` în loc de un index injectat.
+Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.toml`. Adaugă blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului. Fără hook-uri, asistentul citește resursa `total-recall://index` și promptul `memory-workflow` în loc de un index injectat. Ca să verifici că merge, cere asistentului să apeleze `get_stats`.
 
 </details>
 
@@ -116,7 +116,7 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | **Sursă** | fișierele `.md` din `~/.total-recall/personal-vault/` | dispar, dacă nu le restaurezi din repo-ul git local al vault-ului |
 | **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc automat din fișierele `.md` (contoarele de accesare se resetează). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
 
-Exportul e JSON simplu (`export_memories`), deci `jq` sau DuckDB merg direct pe el. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului): [Cele 22 de unelte → Export format](docs/TOOLS.md#export-format) (în engleză).
+Exportul e JSON simplu (`export_memories`, întors în răspunsul asistentului), deci `jq` sau DuckDB merg pe el după ce îl salvezi. Pentru o mașină nouă, îl imporți cu `import_memories` (memoriile org revin din repo-ul echipei; pentru un vault mare e mai simplu să copiezi folderul vault-ului). Pentru un backup în afara mașinii, copiază `personal-vault/`: repo-ul lui git local e pe același disc: [Cele 22 de unelte → Export format](docs/TOOLS.md#export-format) (în engleză).
 
 ## Limbi
 
@@ -139,7 +139,7 @@ Mai mult: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md) (în engleză).
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅ | ⚠️ prin fișierul de instrucțiuni | ❌ folosește promptul | ❌ manuală | ❌ |
 
-Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 3. Cu agent plugins pornite în VS Code (Preview), se pot încărca și hook-urile pluginului; încă neverificat.
+Toate cele 22 de unelte merg peste tot. „Prin fișierul de instrucțiuni" înseamnă că asistentul citește `total-recall://index` sau apelează `search_index` pentru că așa îi spune pasul 3. **Testat** înseamnă că instalarea a fost rulată cap-coadă.
 
 ## Cum e construit
 
@@ -149,7 +149,7 @@ Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișie
 
 - **Fișierele rămân locale.** Vault-ul personal nu e trimis nicăieri; repo-ul git local blochează orice push.
 - **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din transcript (trimis la `claude -p` pentru captura automată, care nu poate fi oprită deocamdată).
-- **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă face push și pull prin git. Nimic altceva, fără telemetrie.
+- **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă folosește git. Fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Dacă filtrul nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
 - **Memoriile colegilor ajung la modelul tău**, marcate ca date de referință, nu ca instrucțiuni. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md).
 - **Poți renunța fără pierderi.** Memoriile rămân ca fișiere `.md` pe care le păstrezi, iar `export_memories` îți dă JSON.
@@ -165,30 +165,31 @@ Un server MCP stdio (TypeScript) plus hook-uri de ciclu de viață, peste fișie
    git switch -c knowledge && git commit --allow-empty -m "init" && git push -u origin knowledge
    ```
 
-2. Fiecare coleg rulează scriptul de instalare cu repo-ul (pe GitHub, întâi `gh auth login`; în rest, credențiale git care pot face push):
+2. Fiecare coleg rulează scriptul de instalare cu repo-ul (pentru GitHub, întâi `gh auth login`; pentru alte platforme, credențiale git care merg fără întrebări, de exemplu un credential helper sau o cheie SSH). `--allowed-email-domain` lasă domeniul email-urilor tale de serviciu să treacă de filtrul de confidențialitate:
 
    ```bash
    ./install.sh --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
    ```
 
-3. De aici înainte, în Claude Code și Gemini/Antigravity, o memorie etichetată `org` e trimisă după salvare, iar fiecare sesiune aduce la pornire memoriile colegilor. Ceilalți asistenți nu au hook-uri pentru asta: din folderul pluginului, rulează `bash hooks/scripts/pull-org-vault.sh` ca să aduci memoriile și `node scripts/sync-org-memory.mjs <cheie>` ca să trimiți una.
+3. De aici înainte, în Claude Code și Gemini/Antigravity, o memorie etichetată `org` e trimisă după salvare, iar fiecare sesiune aduce la pornire memoriile colegilor. Ceilalți asistenți nu au hook-uri pentru asta: vezi [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
 
-Începe singur și adaugă echipa mai târziu: `install.sh` poate fi rulat din nou fără probleme. Memoriile org ale tuturor colegilor intră în indexul fiecăruia; pentru o echipă mare folosește `orgInjection: "titles"`. Setările (`orgBranch`, `allowedEmailDomains`, `orgInjection`, căile vault-urilor): [Cum funcționează → Configurare](docs/HOW-IT-WORKS.md#configuration) (în engleză).
+4. Verifică: pe o mașină spune *„ține minte pentru echipă că …"*; pe alta, pornește o sesiune nouă și întreabă despre asta. Dacă nu ajunge, cere `get_stats` (erori recente); în Claude Code, pornirea sesiunii te avertizează și când push-urile de echipă eșuează repetat.
+
+Începe singur și adaugă echipa mai târziu: `install.sh` poate fi rulat din nou fără probleme. Setările (`orgBranch`, `allowedEmailDomains`, `orgInjection`, căile vault-urilor): [Cum funcționează → Configurare](docs/HOW-IT-WORKS.md#configuration) (în engleză).
 
 ## Actualizare, backup și depanare
 
 - **Actualizare (Claude Code):** `claude plugin update total-recall@my-claude-plugins`, repornești, apoi rulezi din nou scriptul de instalare (actualizarea nu îl rulează).
-- **Actualizare (alți asistenți):** `cd ~/total-recall-plugin && git fetch && git reset --hard origin/release`, apoi rulezi din nou `./install.sh -y`. Branch-ul `release` e reconstruit de CI, așa că `git pull` poate eșua.
+- **Alți asistenți:** pașii de actualizare și dezinstalare sunt în [INSTALL.md → Install without Claude Code](plugins/total-recall/INSTALL.md#-install-without-claude-code) (în engleză).
 - **Recuperezi o memorie:** în Claude Code și Gemini, vault-ul personal primește un commit în repo-ul git local la finalul fiecărei sesiuni: `git -C ~/.total-recall/personal-vault log`, `git restore` pe ce îți trebuie, apoi ceri *„reconstruiește indexul"* (`rebuild_index`). Cu alți asistenți, fă tu commit-ul. Versiunile arhivate (`.superseded/`) și `vectors.db` nu sunt în acel repo.
 - **Ceva pare în neregulă:** `get_stats` arată erorile recente și dacă e pornită căutarea semantică. În Claude Code, pornirea sesiunii te avertizează când push-urile de echipă sau captura automată eșuează repetat. Dacă după o actualizare căutarea semantică e oprită, rulează `npm rebuild better-sqlite3` în folderul pluginului.
-- **Dezinstalare:** `claude plugin uninstall total-recall@my-claude-plugins`, sau ștergi intrarea MCP și folderul `~/total-recall-plugin`. Memoriile rămân în `~/.total-recall/` până ștergi folderul.
+- **Dezinstalare (Claude Code):** `claude plugin uninstall total-recall@my-claude-plugins`. Memoriile rămân în `~/.total-recall/` până ștergi folderul.
 
 ## Limite
 
-- **Un singur întreținător, după disponibilitate.** Fără SLA; release-urile nu sunt semnate. Vezi [Dintr-o privire](#dintr-o-privire).
-- **Indexul de la pornirea sesiunii crește odată cu vault-ul**, cu 30–40 de tokeni per memorie: cam 4.4k tokeni la 100 de memorii, 32k la 1.000. Încă nu are plafon. Curăță cu `prune_memories` (îți arată candidații și nu șterge nimic).
+- **Indexul de la pornirea sesiunii nu are plafon** (costul e în [Dintr-o privire](#dintr-o-privire)). Curăță cu `prune_memories`: îți arată candidații și nu șterge nimic.
 - **Căutarea de text citește titlul, etichetele și primele 500 de caractere** ale fiecărei memorii, nu tot textul. Pune informația cheie la început.
-- **Mai multe sesiuni în paralel** nu pot strica fișierele (fiecare memorie e un fișier separat). O memorie salvată într-o sesiune poate lipsi din căutările altei sesiuni până când aceasta repornește.
+- **Mai multe sesiuni în paralel** nu pot strica fișierele, dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
 - **Captura automată** rulează doar unde e instalat CLI-ul `claude` și nu poate fi oprită deocamdată.
 - **Calitatea căutării nu e încă măsurată** pe un set de evaluare; e în [backlog](BACKLOG.md).
 

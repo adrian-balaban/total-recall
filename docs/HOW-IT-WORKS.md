@@ -90,6 +90,7 @@ Optional, in `~/.total-recall/config.json`:
 - **Versionable.** The team vault is git-backed. The personal vault is a local-only git repo (created by `install.sh`, with a `pre-push` hook that blocks any push), committed at the end of each session.
 - **Derived indexes.** `index.json`, `invertedIndex.json`, `.index-cache.txt` and `vectors.db` are all rebuilt from the `.md` files, so losing them loses no content.
 - **Fault-tolerant.** If the vector path fails, search falls back to text search.
+- **Several sessions at once.** Each memory is its own file, so sessions cannot damage each other's files. A memory stored in one session can be missing from another session's search until that session restarts, and `index.json` is written by whichever session writes last, which can reset `accessCount` and `lastAccessed` (a known limit, tracked in [BACKLOG.md](../BACKLOG.md)).
 
 The only required dependencies are `@modelcontextprotocol/sdk` and `zod`. TF-IDF, the decay formula, RRF and the frontmatter parser are written from scratch:
 
