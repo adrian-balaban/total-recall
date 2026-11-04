@@ -4,21 +4,22 @@
 
 **Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
-Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor, Windsurf, Claude Desktop, or any other client that speaks the Model Context Protocol (MCP). Memories are plain Markdown files on your disk that you can read, edit, grep and version with git.
+Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor and Windsurf (both not yet tested), Claude Desktop, or any other client that speaks the Model Context Protocol (MCP). Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
 
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
-- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets, emails outside your allowed domains, card numbers, IBANs and phone numbers. 
-- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model once (449 MB; 87 MB for the English-only one; `--no-vector` skips it). 
+- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets and common personal identifiers (patterns only: see [Privacy](#privacy-what-leaves-your-machine)).
+- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model on first use (449 MB; 87 MB for the English-only one; `--no-vector` skips it). 
 
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
 - **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
-- **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture. The only other outbound traffic is a one-time model download and, if you opt in, your own team's git repo.
-- **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)).
+- **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (it cannot be switched off yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
+- **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Automatic team sync works only in Claude Code and Gemini/Antigravity; other assistants sync by hand.
 - **The index has no size cap:** 30–40 tokens per memory: about 4.4k at 105 memories, 32–40k at 1,000 and 162–200k at 5,000.
+- **Spec-driven tools (for architects and test leads, on by default):** link decisions to requirement IDs and check that every tagged rule in your ADL files has a test carrying its ID (coverage only; your tests are not run). Five of the 22 tools. Not using ADL files? Ignore them, or set `"specDriven": {"enabled": false}` in `~/.total-recall/config.json`. [Spec-driven work](docs/SPEC-DRIVEN.md).
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
@@ -30,20 +31,20 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ### Claude Code
 
-1. Install the plugin by its full ID (other plugins share the name):
+1. Type these in the Claude Code chat (or run `claude plugin …` in a terminal). Use the full ID, because other plugins share the name:
 
    ```
    /plugin marketplace add adrian-balaban/total-recall
    /plugin install total-recall@my-claude-plugins
    ```
 
-2. In a terminal, run the setup script once. It creates the vaults and builds the index. It asks two questions: the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only) and whether to set up a team vault (default no). `-y` accepts both defaults. The command below finds wherever the plugin cache put the current version (the glob just picks the latest if more than one is cached) and runs its `install.sh`:
+2. In a terminal (on Windows: Git Bash), run the setup script once. It creates the vaults, registers the MCP server and builds the index, and asks for the profile (**complete**, the default, adds local semantic search; **minimal**, or `--no-vector`, is text search only) and whether to add a team vault (default no). `-y` accepts both defaults; put it after the closing quote. The command finds the latest cached plugin version:
 
    ```bash
    bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh"
    ```
 
-3. Tell Claude to use total-recall instead of its built-in `MEMORY.md` files. Add this to `~/.claude/CLAUDE.md`:
+3. Tell Claude to use total-recall instead of its built-in `MEMORY.md` files. Add this to `~/.claude/CLAUDE.md` (create the file if it doesn't exist; on Windows `~` is `C:\Users\<you>`):
 
    ```markdown
    ## Memory
@@ -55,7 +56,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
    This step is required: without it, Claude Code keeps using its own file-based memory alongside total-recall; remove the block to undo. If you also run the official `remember` plugin, disable it: both do the same job.
 
-4. Restart Claude Code and check it works: say *"remember that this project uses Gradle 8 and JUnit 5"*. A new file appears under `~/.total-recall/personal-vault/`. In a new session, ask *"what build tool does this project use?"*. Then ask the assistant to call `get_stats`: it lists totals and recent errors, and whether semantic search is on.
+4. Restart Claude Code (`/exit`, then `claude`; approve the total-recall tools when asked) and check it works: say *"remember that this project uses Gradle 8 and JUnit 5"*. A new file appears in a subfolder of `~/.total-recall/personal-vault/`. In a new session, ask *"what build tool does this project use?"*. Then ask the assistant to call `get_stats`: it lists totals and recent errors, and whether semantic search is on. If the tools are missing, run `/mcp` and look for `total-recall`.
 
 ### Other assistants
 
@@ -69,7 +70,7 @@ git clone --depth 1 -b release https://github.com/adrian-balaban/total-recall.gi
 cd ~/total-recall-plugin/plugins/total-recall && ./install.sh -y
 ```
 
-Then register the server in your client's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`), for example in the `mcpServers` format:
+Without the `claude` CLI the script warns that it skipped MCP registration: that is expected (for VS Code, add `--vscode`). Then register the server in your client's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`), for example in the `mcpServers` format:
 
 ```json
 {
@@ -96,6 +97,8 @@ For Codex, the same command and argument go in `~/.codex/config.toml`. Add the `
 | *"that memory is outdated, update it"* / *"delete it"* | The file is edited or deleted | `update_memory`, `delete_memory` |
 | nothing (Claude Code) | 0–3 lessons from the session are saved before compaction | `PreCompact` hook |
 
+All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results.
+
 ## Your data
 
 Each memory is one Markdown file with a small YAML header:
@@ -118,19 +121,13 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 | **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
 | **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt from the `.md` files (access counts reset; `.index-cache.txt` only at session start, in Claude Code and Gemini). The org `index.json` in the team repo is not rebuilt: leave it alone |
 
-Export is plain JSON (`export_memories`). It comes back in the assistant's answer, so it passes through the model's context, and it leaves out access counts, confirmations, flags and archived versions. Save the answer to a file and `jq` or DuckDB work on it; `import_memories` loads it on another machine. For a backup or a move, copy `personal-vault/` and `config.json` from `~/.total-recall/` instead: that keeps every field stored in the files. The vault's local git repo sits on the same disk, so it is not a backup by itself. Org memories come back from the team repo. Export format: [Export format](docs/TOOLS.md#export-format).
+Export is plain JSON (`export_memories`). It comes back in the assistant's answer, so it passes through the model's context, and it leaves out access counts, confirmations, flags and archived versions ([Export format](docs/TOOLS.md#export-format)). For a backup, copy `personal-vault/` and `config.json` from `~/.total-recall/`; the vault's local git repo sits on the same disk, so it is not a backup by itself. To move to another machine: install, copy those two into `~/.total-recall/`, re-run the setup script, then ask for *"rebuild the index"*. Org memories come back from the team repo.
 
 ## Languages
 
 Text search works in any language written in the Latin alphabet, with most accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) covers every language pair, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 the default model is multilingual (50+ languages).
 
-If you only work in English and want the smaller download (87 MB vs. 449 MB), set the English-only model in `~/.total-recall/config.json` and restart the assistant:
-
-```json
-{ "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
-```
-
-More: [How it works → Languages](docs/HOW-IT-WORKS.md).
+English only? A smaller model (87 MB vs. 449 MB) is one config line: [How it works → Languages](docs/HOW-IT-WORKS.md#languages).
 
 ## Supported assistants
 
@@ -138,8 +135,8 @@ More: [How it works → Languages](docs/HOW-IT-WORKS.md).
 |---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
 | **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed (capture then runs on Claude) | ✅ automatic | ✅ |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
-| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the prompt | ❌ manual | ❌ |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
+| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
 
 All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end.
 
@@ -149,32 +146,33 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 - A stdio MCP server (TypeScript) plus lifecycle hooks; it starts in about 0.1 s (median 99 ms, [Quality](docs/QUALITY.md)).
 - Search is TF-IDF with a forgetting curve, optionally fused with local vectors. No LLM call is in the search path.
 - The privacy filter fails closed before anything is pushed.
-- C4 diagrams and invariants: [Architecture](plugins/total-recall/ARCHITECTURE.md). For architects: tie memories to requirements and architecture rules to tests (ADL), with a five-minute walkthrough in [Spec-driven work](docs/SPEC-DRIVEN.md).
+- C4 diagrams and invariants: [Architecture](plugins/total-recall/ARCHITECTURE.md).
 
 ## Privacy: what leaves your machine
 
-- **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes.
+- **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes. The files are not encrypted.
+- **Automatic capture reads what the session read** (web pages, tool output) and saves its lessons without review. They appear in later sessions in every project, so check them now and then with *"list my recent memories"*.
 - **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture, which cannot be switched off yet).
 - **Other network calls:** the semantic model downloads from Hugging Face once; the team vault uses git. No telemetry.
-- **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
-- **Teammates' memories reach your model**, marked as reference data, not instructions. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
-- **Stopping is painless.** Your memories stay as `.md` files you keep (`export_memories` also gives you JSON, with fewer fields). To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`).
+- **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The assistant chooses the tag, and a tagged memory is pushed without asking. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
+- **Teammates' memories reach your model.** Their entries in the index are marked as reference data, not instructions; full memories you recall are not, and `orgInjection` does not cover them. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
+- **Stopping is painless.** Your memories stay as `.md` files you keep (`export_memories` also gives you JSON, with fewer fields). To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`). Also remove the `## Memory` block from `~/.claude/CLAUDE.md`; delete `~/.total-recall/` to remove all data.
 
 ## Team setup (org vault)
 
 **Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki. Rules and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
 
-1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit:
+1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit. Don't require pull requests on that branch: sync pushes to it directly.
 
    ```bash
    git clone https://github.com/your-org/team-vault.git && cd team-vault
    git switch -c knowledge && git commit --allow-empty -m "init" && git push -u origin knowledge
    ```
 
-2. Each teammate runs the setup script with the repo (for GitHub, `gh auth login` first; for other hosts, git credentials that work without a prompt, such as a credential helper or an SSH key). `--allowed-email-domain` lets your work email domain through the privacy filter:
+2. Each teammate re-runs the setup script from Quick start step 2 with the repo (for GitHub, `gh auth login` first; for other hosts, git credentials that work without a prompt, such as a credential helper or an SSH key). `--allowed-email-domain` lets your work email domain through the privacy filter:
 
    ```bash
-   ./install.sh --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
+   bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh" --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
    ```
 
 3. From then on, in Claude Code and Gemini/Antigravity, a memory tagged `org` is pushed after it is stored, and each session pulls teammates' memories at start. Other assistants have no hooks for this: see [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
@@ -195,6 +193,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - **The index at session start has no cap** (cost in [At a glance](#at-a-glance)). Clean up with `prune_memories`: it lists candidates and deletes nothing.
 - **Text search reads the title, the tags and the first 500 characters** of each memory, not the whole body. Put the key fact first.
 - **Several sessions at once** write separate files (one per memory), but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
+- **Nothing is deleted automatically.** The forgetting curve only ranks results. A deleted memory stays in the vault's local git history and in `.superseded/`.
 - **Automatic capture** runs only where the `claude` CLI is installed, and cannot be switched off yet.
 - **Retrieval quality is not yet measured** against an evaluation set; it is on the [backlog](BACKLOG.md).
 
@@ -206,7 +205,3 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
 - [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md)
-
-## Status
-
-See [At a glance](#at-a-glance) for license, maintainer and maturity. [MIT licence](LICENSE) · [Quality metrics](docs/QUALITY.md).

@@ -5,6 +5,104 @@
 **Priorities, in order:** (1) each persona can install and verify from the README alone; (2) honest trust/risk information on the first screen; (3) attention hooks.
 **Rules:** every claim traces to code or an existing doc; README ≤ N words (§4); EN and RO structurally identical; plan only, no file other than this one is edited by this round.
 
+## $0 Prompt used
+
+Run persona review round 4 of README.md and README-ro.md in this repo.
+
+Context: rounds 1–3b are in PLAN-README-PERSONA-OPTIMIZATION.md (§1–§10).
+Report only issues that are new, regressed, or still open there. Give each
+reviewer the list of already-found issues from §10.4 and §10.7, so it
+doesn't report them again.
+
+Reviewers: one subagent per persona, all run in parallel.
+
+Core personas (README.md; no source code):
+
+1. AI developer
+2. Developer using AI for augmented development
+3. Team lead
+4. Architect
+5. Engineering manager
+6. Data engineer
+
+Extra personas (each with a focus): 7. Security / AppSec reviewer. Reads README.md and SECURITY.md as an
+attacker would: prompt injection through the org vault and through
+automatic capture, unsigned releases, what goes to `claude -p`,
+privacy-filter bypasses, what the install path makes you trust. 8. Compliance / DPO (GDPR, data residency). Not a developer. Where personal
+data goes, retention, erasure (including team-repo history and copies
+on teammates' machines), and whether the docs let you fill in a
+records-of-processing entry. 9. First-time newcomer / junior developer. Has never configured MCP or
+edited ~/.claude/CLAUDE.md, and follows instructions literally. The
+strict test of "ready to install and use": lists every term it doesn't
+understand before the end of the quick start. 10. Windows-only developer. PowerShell by default, Git Bash installed, a
+Windows node.exe, no WSL. Walks the Claude Code and VS Code paths and
+names the shell for every step. 11. Platform / DevEx engineer. Rolls the plugin out to 100+ machines:
+unattended install.sh (-y), exit codes, pinned versions, upgrades,
+central config, offline or air-gapped installs (--no-vector), and the
+model cache. 12. Open-source contributor. Wants to build, test and send a PR: where the
+contributing path, branch model, gates and commit conventions are
+documented for humans (not only in CLAUDE.md). 13. Obsidian / knowledge-management user (non-coder). Drawn by "plain
+Markdown files": can the vault be opened and hand-edited outside an
+IDE, and when do those edits take effect? 14. QA / test engineer. The second audience for "ADL rules → tagged tests":
+tagging per framework (JUnit, pytest, Playwright, Cucumber), CI use,
+and whether the quality numbers are stated in a way a tester trusts. 15. Native Romanian reader. Reads README-ro.md next to README.md for
+wording, not structure: calques, term consistency, diacritics, quotes
+(„…”), content drift from EN, identical code blocks, working anchors.
+
+What each reviewer reads:
+
+- README.md in full. The Romanian reader reads README-ro.md in full and
+  README.md for comparison.
+- docs/SPEC-DRIVEN.md, required for the vote.
+- Any linked doc it needs (docs/\*.md, INSTALL.md, SECURITY.md,
+  ARCHITECTURE.md).
+- Source code: only reviewers 7, 10, 11, 12 and 14 may read source and
+  install.sh, and only to check whether a doc claim holds. Their findings
+  must still be about the docs. Code bugs go in a separate list.
+- Ignore any CLAUDE.md injected into context.
+
+Each report must:
+
+- Start with FILES OPENED (mark partial reads; list any commands run).
+  A report without this list fails and is re-run.
+- Answer: (1) Within 30 seconds, do I know what this is and whether it's
+  for me? (2) Could I install it and confirm it works using only the
+  README? Where did I get stuck? (3) What can I skip, and what is missing
+  that I need? Say whether it is missing from the README or from all
+  docs. Cite line numbers. Mark speculation as speculation.
+- Vote on the spec-driven/ADL question below, and restate the chosen
+  option in words so the vote can't be mislabeled.
+- End with a FINDINGS table: id | location | problem | severity | fix.
+
+Spec-driven/ADL question: today the spec-driven workflow and the ADL tools
+appear only at README.md:152 and in the docs list. The candidate line is
+in §10.7 of the plan.
+A) leave it where it is
+B) one line near the top (At a glance or the feature list), linking to
+SPEC-DRIVEN.md
+C) a short section of its own (at most 5 lines) near the top
+Judge it against the "only essential information" goal: does it help your
+persona decide to adopt the plugin, or is it detail for later? If B or C,
+propose wording.
+
+Coordinator (you):
+
+1. Check every reviewer claim against the repo, including source where
+   needed. Record each claim as confirmed, plausible (needs a test) or
+   rejected, with evidence.
+2. Combine the results into a table of proposed changes: location,
+   problem, personas affected, fix. Keep separate lists for doc fixes,
+   code bugs, and product work (not adopted). Include the A/B/C vote
+   count across all 15 reviewers and your recommendation.
+3. Constraints: the first screen covers what it is, trust/risk notes,
+   install, and a check that it works. Every claim can be traced to code
+   or an existing doc. EN and RO keep the same structure. State the prose
+   word count (code blocks excluded) before and after, and say which cuts
+   pay for the additions.
+4. Write this up as "round 4" in PLAN-README-PERSONA-OPTIMIZATION.md.
+   Edit nothing else, and don't commit. I'll approve the changes before
+   they are applied.
+
 ## §1 Method and its limits
 
 Six subagents, one per persona (AI developer, AI-augmented developer, team lead, architect, manager, data engineer), each told to read only the 12 docs (the two READMEs, `docs/*.md`, `SECURITY.md`, `BACKLOG.md`, `plugins/total-recall/{INSTALL,ARCHITECTURE,README}.md`), never source code, and to cite line numbers. Findings below were then **checked against the repo by the coordinator** (§2); claims that did not hold were dropped.
@@ -227,3 +325,272 @@ Each was checked in the repo by the coordinator; reviewers that raised it in bra
 T1 and T2 (client-level) still decide criterion a for Cursor/Windsurf; the data-engineer FAIL is closed by F10.
 
 **Applied 2026-11-03 (uncommitted on `main`):** F1–F17, in README, README-ro, INSTALL.md, SECURITY.md, SPEC-DRIVEN.md, COMPARISON.md, HOW-IT-WORKS.md, BACKLOG.md and the plugin README.
+
+## §10 Round 3 (2026-11-04, on `main` at `ff0b041`)
+
+**Status:** proposed, nothing applied. **Scope:** issues that are new, regressed, or still open after F1–F17, plus one question: should the spec-driven/ADL capability move toward the top of both root READMEs?
+
+### §10.1 Method
+
+Six subagents, one per persona, ran in parallel. Each read README.md in full and any linked doc it needed (no source code), had to list the files it opened, and was given the round-2 resolved list so it would not report those again. Every report carried the file list, so none was rejected. The coordinator then checked each claim against docs **and source** (§10.2).
+
+| Reviewer         | Opened in full                                       | Partial or grep only                                               |
+| ---------------- | ---------------------------------------------------- | ------------------------------------------------------------------ |
+| AI developer     | README, SPEC-DRIVEN, TOOLS, COMPARISON, HOW-IT-WORKS | INSTALL; QUALITY, SECURITY, ARCHITECTURE (headings)                |
+| AI-augmented dev | README, SPEC-DRIVEN                                  | INSTALL, HOW-IT-WORKS, TOOLS                                       |
+| Team lead        | README, SPEC-DRIVEN, SECURITY, INSTALL               | HOW-IT-WORKS                                                       |
+| Architect        | README, SPEC-DRIVEN, ARCHITECTURE                    | TOOLS; HOW-IT-WORKS, INSTALL, SECURITY, QUALITY, COMPARISON (grep) |
+| Manager          | README, SECURITY, SPEC-DRIVEN                        | INSTALL, QUALITY                                                   |
+| Data engineer    | README, SPEC-DRIVEN, TOOLS                           | HOW-IT-WORKS, QUALITY, INSTALL                                     |
+
+Limits: the reviewers read only README.md. The coordinator checked README-ro.md against every confirmed defect (each one is present in RO too) and found two RO-only typos (R1). The architect is the only reviewer that read ARCHITECTURE.md in full.
+
+### §10.2 Coordinator verification
+
+| Claim (reviewer)                                                                                                    | Result                                                | Evidence                                                                                                                                                                                                                                                         |
+| ------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| "30–40 tokens per memory" does not match 4.4k at 105 (AI dev)                                                       | **Rejected**                                          | `QUALITY.md:101` adds a fixed header of ~250 tokens: (4,400 − 250) / 105 ≈ 40                                                                                                                                                                                    |
+| **Regression:** nothing says how projects are kept apart in one vault (AI-aug, data eng)                            | **Confirmed, regression**                             | The line "All projects share one vault. Name the project in the memory…" that §4 kept on purpose was removed in `4f6b213` (2026-11-03). No tool has a project filter (`src/tools/`), and no doc mentions it                                                      |
+| README L160: teammates' memories arrive "marked as reference data" (team lead)                                      | **Confirmed, misstatement**                           | `SECURITY.md:16-25`: only the index entries are framed; full bodies from `recall_memory` / `get_memories_by_keys` and guardrails are not, and `orgInjection` does not cover them. Same at RO L166                                                                |
+| Team setup L177 `./install.sh` does not work for Claude Code users (team lead, manager)                             | **Confirmed**                                         | the script lives in the plugin cache (L43)                                                                                                                                                                                                                       |
+| L167 does not warn against required PRs on `knowledge` (team lead)                                                  | **Confirmed**                                         | `INSTALL.md:134`, `SECURITY.md:28-29`                                                                                                                                                                                                                            |
+| No way documented to stop team sync, or to purge a leaked item from history (team lead)                             | **Confirmed, all docs**                               | `HOW-IT-WORKS.md:76` shows `orgRepo` only; `INSTALL.md:136` says "ordinary git commits", which keep the item in history                                                                                                                                          |
+| At a glance L19 omits "cannot be switched off yet" (manager)                                                        | **Confirmed**                                         | stated only at L157, L198                                                                                                                                                                                                                                        |
+| "Personal vault is not encrypted" only in INSTALL (manager)                                                         | **Confirmed**                                         | `INSTALL.md:152`                                                                                                                                                                                                                                                 |
+| SECURITY.md covers only the org vault (manager)                                                                     | **Confirmed**                                         | `SECURITY.md` ends at L31; transcript, unsigned releases, model download and plaintext vault are absent                                                                                                                                                          |
+| README L69 omits the `--vscode` flag (AI-aug)                                                                       | **Confirmed**                                         | flag only in the L141 table and `INSTALL.md:80`                                                                                                                                                                                                                  |
+| README L40 omits that setup registers the MCP server (AI-aug)                                                       | **Confirmed**                                         | `INSTALL.md:47` says it does                                                                                                                                                                                                                                     |
+| Without the `claude` CLI, `install.sh` warns that it skipped MCP registration; README L69 doesn't say this (AI dev) | **Confirmed**                                         | `INSTALL.md:67`                                                                                                                                                                                                                                                  |
+| "Use the prompt" (L141-142) names no prompt (AI-aug)                                                                | **Confirmed**                                         | `extract-session-learnings` is named only at `INSTALL.md:187`                                                                                                                                                                                                    |
+| No "server not loaded" check in the quick start (AI-aug)                                                            | **Confirmed**                                         | `/mcp` / `claude mcp get total-recall` only at `INSTALL.md:104`, in a developer section                                                                                                                                                                          |
+| Model download "once" vs "on first use" (AI-aug)                                                                    | **Confirmed (wording)**                               | `install.sh:212`: the model downloads on first semantic search, not during install                                                                                                                                                                               |
+| Copilot instruction-file name missing (AI-aug)                                                                      | **Confirmed missing; name not verified**              | no doc names one. `.github/copilot-instructions.md` is Copilot's usual file, but add it only after the T1-style client test                                                                                                                                      |
+| ADL syntax not documented anywhere (architect, AI-aug)                                                              | **Confirmed**                                         | the accepted forms exist only in `src/spec/adl-parse.ts:1-5,67-76`: header directives, `DEFINE <KIND> <Name> AS <id>` nested by indentation, `DEFINE CONST`, `DEFINE COMMUNICATION … TO … AS …`, `FOREACH … DO … END`, `ASSERT(…)` with an optional `# [ID]` tag |
+| Element ID comes from the name or from the `AS` alias? (architect)                                                  | **Confirmed ambiguous in the doc; source says alias** | `adl-parse.ts:69` captures the `AS` id                                                                                                                                                                                                                           |
+| Re-running `index_architecture` is unspecified (architect)                                                          | **Confirmed in the docs**                             | the tool description says "stores or updates … re-running on unchanged files writes nothing" (`src/tools/architecture.ts:154`); SPEC-DRIVEN doesn't say so                                                                                                       |
+| Repo gate catches unknown IDs, shipped tool does not (architect)                                                    | **Confirmed**                                         | `spec-architecture.test.ts:62-63` fails on orphan IDs; `SPEC-DRIVEN.md:41` says the tool does not report them; L49 doesn't mention the difference                                                                                                                |
+| "ADL" never expanded or defined in README (manager, architect)                                                      | **Confirmed**                                         | README L152, L205; first explanation at `SPEC-DRIVEN.md:45`                                                                                                                                                                                                      |
+| 5 ARCHITECTURE invariants carry no TR tag (architect)                                                               | **Confirmed**                                         | `ARCHITECTURE.md:91,100,104,106,107`                                                                                                                                                                                                                             |
+| `config.json` vault paths may break a move to another home dir (data eng, speculation)                              | **Rejected for the default setup**                    | paths are absent by default and resolve under `$HOME`; set paths expand `~` (`src/paths.ts:82-88`). Only an absolute custom path needs editing; the missing restore steps are confirmed                                                                          |
+| Tool schemas, an export schema version                                                                              | **Not adopted (already decided)**                     | §9 "Not adopted here"                                                                                                                                                                                                                                            |
+| No comparison with general memory servers (mem0, Zep, Letta, reference server) (AI dev)                             | **Confirmed, outside README**                         | `COMPARISON.md` covers same-name plugins, cq and `MEMORY.md` only                                                                                                                                                                                                |
+| Token cost of the 22 tool definitions not stated (AI dev, AI-aug)                                                   | **Confirmed missing; unmeasured**                     | no figure in any doc. Measure it with `tools/list` before writing a number                                                                                                                                                                                       |
+
+### §10.3 Spec-driven / ADL question
+
+**Vote: B 6, A 0, C 0.** All six agreed for the same two reasons. First, it doesn't decide adoption for five of the six personas, so a section of its own (C) would push the risks down. Second, the five architecture tools are **on by default** (`TOOLS.md:32`), which affects every user's tool list. That makes it something to know before adopting, and today it shows up only at L152. For the architect it does decide adoption: "a memory plugin alone is a commodity; tying decisions to assertions and tests is not."
+
+**Recommendation: B**, as a fourth bullet after "Cost" (L13), with the second sentence of L152 removed so it appears in only two places (top and the docs list). Merged from the six drafts, defining ADL in passing and saying what the check does and doesn't do:
+
+> - **For architects (optional, on by default):** link decisions to requirement IDs, and check that every rule in your ADL files (plain-text architecture rules) has a test carrying its ID; coverage only, your CI runs the tests. Five of the 22 tools; `"specDriven": {"enabled": false}` removes them. [Spec-driven work](docs/SPEC-DRIVEN.md).
+
+RO:
+
+> - **Pentru arhitecți (opțional, pornit implicit):** leagă deciziile de ID-uri de cerințe și verifică faptul că fiecare regulă din fișierele ADL (reguli de arhitectură în text simplu) are un test care îi poartă ID-ul; se verifică doar acoperirea, testele le rulează CI-ul tău. Cinci din cele 22 de tool-uri; `"specDriven": {"enabled": false}` le elimină. [Lucru spec-driven](docs/SPEC-DRIVEN.md) (în engleză).
+
+**Placement check:** the bullet adds about two rendered lines, so the three risk bullets move from L19–21 to about L21–23, still inside the first 25. §9 noted that long bullets already wrap to about screen line 27 on GitHub, so check the rendered page after the change.
+
+**SPEC-DRIVEN.md must back the promise** (S1–S6 below). The README line is only honest if the walkthrough runs without guessing.
+
+### §10.4 Proposed changes
+
+Numbers in brackets: personas that raised it. EN and RO get the same change.
+
+**Priority 1: install, verify and use from the README alone**
+
+| #   | Location                    | Problem                                                                                                           | Fix                                                                                                                                                                                    |
+| --- | --------------------------- | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| G1  | Daily use (after the table) | **Regression:** project scoping unexplained [AI-aug, data eng]                                                    | Restore: "All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results."                                        |
+| G2  | Team setup step 2, L177     | `./install.sh` doesn't resolve for Claude Code users [team lead, manager]                                         | "Each teammate re-runs the setup script from Quick start step 2 with these flags" and show the L43 command with `--org-repo … --allowed-email-domain …`                                |
+| G3  | Team setup step 1, L167     | Required PRs on `knowledge` silently break sync [team lead]                                                       | One clause: "don't require pull requests on it: sync pushes directly"                                                                                                                  |
+| G4  | Quick start step 4, L58     | No check when the tools never load [AI-aug]                                                                       | "If the tools are missing, run `/mcp` and look for `total-recall`"                                                                                                                     |
+| G5  | `<details>` block, L69      | VS Code users run the wrong command; the "skipped MCP registration" warning looks like a failure [AI-aug, AI dev] | "(VS Code: `--vscode`; without the `claude` CLI, a warning that MCP registration was skipped is expected)"                                                                             |
+| G6  | Support table L141-142      | "use the prompt" doesn't name it [AI-aug]                                                                         | "use the `extract-session-learnings` prompt"                                                                                                                                           |
+| G7  | Quick start step 2, L40     | Doesn't say setup registers the MCP server [AI-aug]                                                               | "creates the vaults, registers the MCP server and builds the index" (`INSTALL.md:47`)                                                                                                  |
+| G8  | Your data, L121             | A move has no order of steps [data eng]                                                                           | "To move: install, copy `personal-vault/` and `config.json` into `~/.total-recall/`, re-run the setup script, then _rebuild the index_." Default paths are portable (`paths.ts:82-88`) |
+
+**Priority 2: honest trust and risk**
+
+| #   | Location               | Problem                                                                                 | Fix                                                                                                                                                         |
+| --- | ---------------------- | --------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| T1  | Privacy L160 (RO L166) | **Misstatement:** says teammates' memories are framed; only index lines are [team lead] | "Teammates' entries in the index are marked as reference data, not instructions; full memories you recall are not, and `orgInjection` does not cover them." |
+| T2  | At a glance L19        | Automatic capture can't be switched off; only stated at L157/L198 [manager]             | Add "(cannot be switched off yet)" after `claude -p`                                                                                                        |
+| T3  | At a glance L20        | Mixed-assistant teams find out at L141 that sync is manual for them [team lead]         | Add "Team sync is automatic only in Claude Code and Gemini/Antigravity."                                                                                    |
+| T4  | Privacy L156           | Plain-text vault only in INSTALL [manager]                                              | "…blocks pushes. The files are not encrypted."                                                                                                              |
+| T5  | Cost L13               | "downloads … once" hides when [AI-aug]                                                  | "downloads … on the first semantic search" (`install.sh:212`)                                                                                               |
+
+**Priority 3: spec-driven / ADL (§10.3) and the doc behind it**
+
+| #   | Location             | Fix                                                                                                                                                                 |
+| --- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0  | README L13 + L152    | The B bullet; remove L152's second sentence                                                                                                                         |
+| S1  | SPEC-DRIVEN L1-3     | Define ADL on first use (one clause; the full paragraph stays at L45)                                                                                               |
+| S2  | SPEC-DRIVEN L45      | "What the indexer reads": the forms in `adl-parse.ts:1-5`, plus the tag format `# [ID]`                                                                             |
+| S3  | SPEC-DRIVEN L19, L37 | Make name and alias differ (`DEFINE COMPONENT DomainCore AS domain`) and say the ID comes from the `AS` alias                                                       |
+| S4  | SPEC-DRIVEN L34-35   | Say re-indexing updates in place and writes nothing on unchanged files; add a "see a failure" step: remove the tag, validate, restore                               |
+| S5  | SPEC-DRIVEN L41, L49 | State that the repo's own gate also fails on unknown IDs and that the shipped tool does not                                                                         |
+| S6  | SPEC-DRIVEN L69      | Start with "On by default." (`TOOLS.md:32`); name the parameter in `trace(id="ORD-S1")` at L36 (check the real parameter name in `src/tools/architecture.ts` first) |
+
+**Cuts (to pay for the additions)**
+
+| #   | Cut                                                                                                                                                                                                                                                                                                         | Prose words | Where the fact lives afterwards                 |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- | ----------------------------------------------- |
+| C1  | `## Status` section (L210-212): repeats At a glance [AI dev, team lead, manager, data eng]                                                                                                                                                                                                                  | −16         | At a glance; licence link at L17                |
+| C2  | L152, second sentence (moves to the S0 bullet) [team lead, architect, data eng]                                                                                                                                                                                                                             | −18         | S0 bullet, L205                                 |
+| C3  | L121 export paragraph cut to two sentences: "Export is plain JSON (`export_memories`), returned in the assistant's answer and missing some fields ([details](docs/TOOLS.md#export-format)). For a backup or a move, copy `personal-vault/` and `config.json`." plus G8 [AI dev, AI-aug, team lead, manager] | about −60   | `TOOLS.md:44-70` already has every dropped fact |
+| C4  | L12 privacy-filter list → "after a privacy filter that blocks secrets and personal data" [team lead, data eng]                                                                                                                                                                                              | −12         | L159, `INSTALL.md:150`                          |
+| C5  | Languages L127-131 English-only snippet → one sentence and a link. **First** move the snippet into `HOW-IT-WORKS.md` §Languages, which today points back to the README for it (`HOW-IT-WORKS.md:156`) [AI dev, AI-aug, team lead, manager]                                                                  | −26         | HOW-IT-WORKS §Languages                         |
+
+Not cut, though suggested: "How it's built" (the AI dev and architect want these facts, so keep them); the frontmatter example (mostly code, so it doesn't count toward prose); L18 metrics (the manager and architect use them).
+
+**Outside the READMEs**
+
+| #   | File                                     | Fix                                                                                                                                                                                                                                           |
+| --- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| O1  | SECURITY.md                              | A short "Other data flows" list: transcript to `claude -p` (also from Gemini), plaintext personal vault, unsigned releases, Hugging Face download, linking README#privacy; add "best-effort response, no SLA" to the reporting line [manager] |
+| O2  | INSTALL.md §Org vault                    | "Stopping team sync" (remove `orgRepo`, restart; what stays on each machine) and "history keeps it: use `git filter-repo`" at L136 [team lead]. **Check in `install.sh` / `pull-org-vault.sh` how `orgRepo` removal behaves before writing**  |
+| O3  | ARCHITECTURE.md:89-107                   | Tag the five untagged invariants or mark them as not covered by the ADL gate [architect]                                                                                                                                                      |
+| O4  | HOW-IT-WORKS (Limits) or SPEC-DRIVEN L25 | Scala, `*IT.java`, `.sql` and `.yml` aren't scanned, so dbt or data-contract tests can't link [data eng, AI dev]                                                                                                                              |
+| O5  | COMPARISON.md                            | A short paragraph on general memory MCP servers. **Needs research and sources first** [AI dev]                                                                                                                                                |
+| O6  | TOOLS.md                                 | Token cost of the 22 tool definitions and how much `specDriven.enabled: false` saves. **Measure with `tools/list` first** [AI dev, AI-aug]                                                                                                    |
+| R1  | README-ro.md L7                          | `respecta` → `respectă`; `'căutabilă'` → `căutabilă` (no quotes; coordinator)                                                                                                                                                                 |
+
+**Still open from round 2 (all six hit them):** T1 Cursor/Windsurf install test, T2 client-level `mcpServers` test (§8). A13 adds: L7 lists Cursor and Windsurf without saying they are untested. Proposed: "(Cursor and Windsurf: not yet tested)" at L7 until T1 is done.
+
+### §10.5 Word budget
+
+Prose words (fenced code and the collapsed `<details>` block excluded, as in §4):
+
+|              | Before (`ff0b041`) | After, estimated |
+| ------------ | -----------------: | ---------------: |
+| README.md    |              2,088 |          ≈ 2,080 |
+| README-ro.md |              2,144 |          ≈ 2,140 |
+
+Additions G1–G8, T1–T5 and S0 come to about +150. Cuts C1–C5 come to about −130, plus about −20 from rewording L121 together with G8. Net is about −10. **The after-figures are estimates; the PR that applies this measures with the same script and reports the real numbers.** That still leaves the READMEs above the ~2,050 / 2,075 in §7 item 1. Reaching that needs one more cut of about 30–40 words: the best candidate is rewriting step 2 (L40, 70 words in one sentence, flagged by AI-aug) to about 35.
+
+### §10.6 Decisions needed
+
+1. **Spec-driven placement:** approve B with the wording above (recommended), or keep A.
+2. **Order:** apply Priority 1–2, S0 and C1–C5 as one README PR; S1–S6 and O1–O4 as a second PR; O5–O6 need research or measurement first.
+3. **Word budget (§7 item 1, still open):** accept ≈ 2,080 / 2,140, or also take the L40 rewrite.
+4. **L7 "not yet tested" note for Cursor/Windsurf:** add now, or wait for T1.
+5. **Extra personas:** run as round 3b, the same day (§10.7).
+
+### §10.7 Round 3b: nine more personas
+
+Same method and rules as §10.1. Each reviewer also received the round-3 findings so it would not repeat them, and five (security, Windows, platform, contributor, QA) were allowed to read source to check a doc claim. Every report carried its file list.
+
+| Persona                | Vote                                                               | Main theme                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| Security / AppSec      | B, amended                                                         | automatic capture as a lasting injection path; the model chooses the `org` tag; filter overclaims; install-time trust |
+| Compliance / DPO       | B, reworded for non-developers                                     | no retention, erasure or data-categories facts; Gemini → second provider                                              |
+| Newcomer to MCP        | **A**                                                              | undefined terms; where to type each command; what "restart" means; no expected output                                 |
+| Windows-only developer | B                                                                  | the shell is never named; `--vscode` and CRLF are broken on Windows                                                   |
+| Platform / DevEx       | B (off by default for a fleet)                                     | no exit codes, version pin, model cache or offline path                                                               |
+| OSS contributor        | "A" (but asks for a line in At a glance, which is B in our labels) | no CONTRIBUTING; every rule is in the AI-facing `CLAUDE.md`                                                           |
+| Obsidian / KM user     | **A**                                                              | Obsidian not mentioned at the top; when hand edits take effect; folder layout                                         |
+| QA / test engineer     | B, "architects **and test leads**"                                 | tag rules per framework; no CI recipe; scope of the quality numbers                                                   |
+| Native Romanian reader | B, with corrected RO                                               | 20 wording fixes; a broken word at RO L17                                                                             |
+
+**Totals over 15 reviewers: B 12 (the contributor counted as B by intent), A 3, C 0.** The two A votes from personas who don't do architecture (newcomer, Obsidian) both say the line is jargon near the top and suggest putting it lower or adding "ignore it if you don't use ADL".
+
+#### Revised recommendation (replaces the wording in §10.3)
+
+Put the line as the **last bullet of At a glance**, not under "What you get". It is a trade-off (on by default, five extra tools) more than a selling point [contributor, Obsidian], and placed there it doesn't push the three risk bullets down. Wording merged from QA, newcomer, platform, compliance and the Romanian reader:
+
+> - **Spec-driven tools (for architects and test leads, on by default):** link decisions to requirement IDs and check that every tagged rule in your ADL files has a test carrying its ID (coverage only; your tests are not run). Five of the 22 tools. Not using ADL files? Ignore them, or set `"specDriven": {"enabled": false}` in `~/.total-recall/config.json`. [Spec-driven work](docs/SPEC-DRIVEN.md).
+
+> - **Unelte spec-driven (pentru arhitecți și lideri de testare, active implicit):** leagă deciziile de ID-urile cerințelor și verifică dacă fiecare regulă cu ID din fișierele ADL are un test care conține acel ID (doar acoperirea; testele nu sunt rulate). Cinci din cele 22 de unelte. Nu folosești fișiere ADL? Ignoră-le sau setează `"specDriven": {"enabled": false}` în `~/.total-recall/config.json`. [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md) (în engleză).
+
+Security asked for two more facts in the line: any path is accepted, and guardrails come back unframed. Both are true (`src/tools/architecture.ts:23-27`; `SPEC-DRIVEN.md:65`), but they don't fit one line. They go into SPEC-DRIVEN L34 and into SECURITY.md (X1).
+
+#### Coordinator verification (the claims that change the plan)
+
+| Claim                                                                                                                   | Result                                                       | Evidence                                                                                                            |
+| ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| `--vscode` on Windows writes a file VS Code never reads (Windows)                                                       | **Confirmed (code bug)**                                     | `install.sh:588-591` handles only `Darwin`, else `~/.config/Code/User/mcp.json`; Windows uses `%APPDATA%\Code\User` |
+| The VS Code entry starts the `.sh` file directly (Windows)                                                              | **Confirmed**; fails on Windows is **plausible**             | `scripts/register-vscode-mcp.mjs:19` `command: …start-server.sh`, no `bash`; README L72 says "command `bash`"       |
+| No `.gitattributes`, so `.sh` files can check out as CRLF (Windows)                                                     | **Confirmed absent**; breakage **plausible**, not tested     | repo root                                                                                                           |
+| `claude mcp get total-recall` is the wrong name for marketplace installs (platform)                                     | **Confirmed**                                                | `install.sh:717`: `plugin:total-recall:total-recall`; `INSTALL.md:104`                                              |
+| `install.sh` exits 0 after failed steps (platform)                                                                      | **Confirmed** for the final check                            | Step 8 only `warn`s (`install.sh:714-722`); `die` is the only exit 1                                                |
+| The model downloads once per plugin version, not once (platform, security)                                              | **Plausible, needs a test**                                  | `src/embeddings.ts` sets no cache dir; transformers.js caches under its own `node_modules` by default               |
+| Complete profile runs `npm install` of the vector packages at setup (security)                                          | **Confirmed**                                                | `install.sh:680` `npm install --no-save $VEC_DEPS`; no doc names npm traffic                                        |
+| Labelled-secret pattern needs 16+ characters, so "nothing … ever reaches" overclaims (security)                         | **Confirmed**                                                | `src/privacy-filter.ts:125` `{16,}`; `INSTALL.md:151`                                                               |
+| Nested `claude -p` runs with the user's normal permissions (security)                                                   | **Confirmed: no restricting flags; impact plausible**        | `hooks/scripts/extract-and-store-memories.sh:95` passes no `--allowedTools` / `--disallowedTools`                   |
+| `index_architecture` accepts any directory (security)                                                                   | **Confirmed**                                                | `architecture.ts:23-27` checks only "exists and is a directory"                                                     |
+| SECURITY L27-28 "protect the default branch" points the wrong way (security)                                            | **Rejected**                                                 | fixed in F12: L28-29 already say the sync branch is controlled through push access                                  |
+| Obsidian block-list `tags:` may not parse (Obsidian, rated high)                                                        | **Rejected**                                                 | `src/frontmatter.ts:8` parses block arrays                                                                          |
+| `.obsidian/` is indexed (Obsidian)                                                                                      | **Rejected**                                                 | `src/paths.ts:96-97` skips `.obsidian` and `templates`                                                              |
+| **New (coordinator):** `projects/`, `reference-docs/`, `in-progress/` and `completed/` folders are silently skipped too | **Confirmed, undocumented**                                  | `src/paths.ts:96-97`; no doc names them. A user who files memories under `projects/` gets nothing indexed           |
+| Test IDs must be in square brackets; "put the ID in the test name" is impossible for pytest/Go function names (QA)      | **Confirmed**                                                | `src/spec/indexer.ts:116` `\[([A-Za-z][A-Za-z0-9_.-]*)\]` on any line                                               |
+| No CONTRIBUTING, no templates; rules live only in `CLAUDE.md`, which contradicts itself on `-S` (contributor)           | **Confirmed**                                                | repo root and `.github/` (only `workflows/`); `plugins/total-recall/CLAUDE.md:66` vs `:72`                          |
+| `package.json` has no `license` field (contributor)                                                                     | **Confirmed**                                                | `require('./package.json').license` is `undefined`                                                                  |
+| RO L17 `'free'ă`, RO L13 `'free'` (Romanian)                                                                            | **Confirmed**                                                | file                                                                                                                |
+| RO code blocks differ from EN (extra blank lines in `## Memory`) (Romanian)                                             | **Confirmed**; renders the same, but the copied text differs | RO L48-56                                                                                                           |
+
+#### Additions to §10.4
+
+**README (EN + RO), Priority 1: install and verify**
+
+| #   | Location                 | Fix                                                                                                                   | Raised by            |
+| --- | ------------------------ | --------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| G9  | Step 1, L33              | "Type these in the Claude Code chat (or `claude plugin …` in a terminal)"                                             | newcomer             |
+| G10 | Step 2, L40              | "In a terminal (on Windows: **Git Bash**, not PowerShell)" and show where `-y` goes                                   | Windows, newcomer    |
+| G11 | Step 3, L46              | "Create the file if it doesn't exist; append the block"                                                               | newcomer, Windows    |
+| G12 | Step 4, L58              | "Restart: `/exit`, then `claude`. Approve the total-recall tools when asked." The new file is in a category subfolder | newcomer             |
+| G13 | Privacy L161 (uninstall) | "…and remove the `## Memory` block from `~/.claude/CLAUDE.md`; delete `~/.total-recall/` to remove all data"          | newcomer, compliance |
+| G14 | L7 or L12                | "(opens as an Obsidian vault)" linking HOW-IT-WORKS#obsidian                                                          | Obsidian             |
+
+**README, Priority 2: trust**
+
+| #   | Location            | Fix                                                                                                                                                                                                                        | Raised by            |
+| --- | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| T6  | Privacy, new bullet | "Automatic capture reads the end of the session, including web pages and tool output, and stores its lessons without review; they appear in later sessions in every project. Check them with _"list my recent memories"_." | security, compliance |
+| T7  | Privacy L159        | "The assistant chooses the `org` tag, and a tagged memory is pushed without asking."                                                                                                                                       | security             |
+| T8  | L19                 | "The only other outbound traffic: npm packages and the model at setup (Complete profile), and…" (wording after the cache test below)                                                                                       | security, platform   |
+| T9  | L150 or Limits      | "The forgetting curve only ranks results; nothing is deleted automatically. A deleted memory stays in the vault's local git history and `.superseded/`."                                                                   | compliance, security |
+
+**Docs outside the READMEs**
+
+| #   | File                        | Fix                                                                                                                                                                                                                                                                                                             | Raised by             |
+| --- | --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------- |
+| X1  | SECURITY.md                 | Widen O1 to: capture as a lasting injection path (L31 "not affected" is only true for the org-vault threat), `org` chosen by the model, the filter covers only pushes through the sync hook (a raw `git push` skips it), `index_architecture` takes any path, nested `claude -p` permissions                    | security              |
+| X2  | INSTALL.md:151              | Replace "Nothing in those categories ever reaches" with the real limits (labelled secrets of 16+ characters, known prefixes, high-entropy mixed-case strings)                                                                                                                                                   | security              |
+| X3  | INSTALL.md                  | Windows section: Git Bash for every shell step; `~` = `C:\Users\<you>`; `"command": "C:\\Program Files\\Git\\bin\\bash.exe"` in MCP configs; Build Tools if no better-sqlite3 prebuild matches                                                                                                                  | Windows               |
+| X4  | INSTALL.md:104              | `claude mcp get plugin:total-recall:total-recall` for marketplace installs                                                                                                                                                                                                                                      | platform              |
+| X5  | INSTALL.md                  | Fleet notes: exit codes (today 0 unless `die`), run as the target user, `install.sh` merges an existing `config.json` (`install.sh:333-345`), network needs per profile, `-y --gemini` skips `agy plugin install` (`install.sh:564-577`), version pinning (none today)                                          | platform              |
+| X6  | HOW-IT-WORKS §Obsidian      | When hand edits take effect (each new session in Claude Code; restart or `rebuild_index` elsewhere); which folders are skipped (`src/paths.ts:96-97`); renaming a file changes its key; don't put the personal vault in iCloud/Syncthing (`vectors.db`, nested `.git`); edit org memories through the assistant | Obsidian, coordinator |
+| X7  | HOW-IT-WORKS §Configuration | One table with every key, including `embeddingModel`, the vault paths and `specDriven`                                                                                                                                                                                                                          | platform              |
+| X8  | SPEC-DRIVEN L25             | "on any line of the test file, in square brackets (`@DisplayName`, docstring, `pytest.param(id=…)`); `@Tag("ORD-S1")` and Playwright `tag:` don't match; Cucumber `.feature` files are not scanned"; counting is per line; several IDs per line work                                                            | QA                    |
+| X9  | SPEC-DRIVEN L35             | Result shape, `record:false` (dry run), and "no CLI or exit code: for a CI gate, copy `adl-coverage.test.ts`"                                                                                                                                                                                                   | QA                    |
+| X10 | SPEC-DRIVEN L34             | "the path is not limited to the current project"; a Windows example (`C:/Users/me/repo`)                                                                                                                                                                                                                        | security, Windows     |
+| X11 | SPEC-DRIVEN, after L49      | "Adding a module or rule here": `components.ts` and `[TR-S12]`, ID naming, the name-tag and unknown-ID rules of the repo's own gate                                                                                                                                                                             | contributor           |
+| X12 | new CONTRIBUTING.md         | Branch `main` (never `release`), build and test commands (including `typecheck` and clean `HOME`), the gates and what to do when one fails, Conventional Commits, who bumps the version; link from README "More". Move the human-relevant part of `CLAUDE.md` here                                              | contributor           |
+| X13 | QUALITY.md                  | "97% statement coverage, unit suite only; mutation score of all mutants; CI on ubuntu-latest, Node 20" and a link to the Actions run                                                                                                                                                                            | QA                    |
+| X14 | README-ro.md                | Adopt R1–R20 from the Romanian review: R1/R2 broken `'free'`, R6 closing quotes `”`, R9 copy the EN code blocks verbatim, plus the calques (R4, R5, R12, R14) and register (R16) fixes                                                                                                                          | Romanian              |
+
+**Code and config bugs found (not doc wording; separate issues)**
+
+| #   | Where                                | Bug                                                                                                                               |
+| --- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| B1  | `install.sh:588-591`                 | `--vscode` writes the Linux path on Windows (MINGW)                                                                               |
+| B2  | `scripts/register-vscode-mcp.mjs:19` | VS Code entry starts the `.sh` directly, with no `bash`; on Windows that likely fails                                             |
+| B3  | repo root                            | No `.gitattributes` (`*.sh text eol=lf`)                                                                                          |
+| B4  | `install.sh` Step 8                  | Exits 0 when the MCP server is not registered; add a non-zero exit or `--strict`                                                  |
+| B5  | `install.sh --help` and prompt       | `--org-repo` described as a GitHub URL; README says any host                                                                      |
+| B6  | `plugins/total-recall/CLAUDE.md:66`  | `git commit -S` contradicts L72 "commits are NOT signed"                                                                          |
+| B7  | `plugins/total-recall/package.json`  | No `"license": "MIT"`                                                                                                             |
+| B8  | `src/embeddings.ts`                  | **Test first:** whether the model re-downloads after each `claude plugin update`. If so, set a cache dir under `~/.total-recall/` |
+
+**Not adopted:** a "For your DPIA" block and per-client provider names in the README (compliance) are useful but long. Put them in SECURITY.md under X1 if wanted. A PII detector for the personal vault and a capture rule that excludes names are product work. HTTP transport, multi-user use and a CLI health check are product work.
+
+#### Word budget after round 3b
+
+G9–G14 and T6–T9 add about +170 prose words to each README, on top of §10.5. Without new cuts, EN goes to about 2,250. To stay near §7's 2,050 and still meet "only essential information", one structural cut is needed. The candidate several reviewers named [AI dev, data eng, manager] is **Team setup steps 1–4 (L167-184, about 200 words) moved to `INSTALL.md` → Org vault**, leaving the bold risk line, a two-line summary and the link. The team lead wanted _more_ there (G2, G3), so this is a trade-off for the maintainer to decide.
+
+#### Decisions added to §10.6
+
+6. Placement of the spec-driven line: **last bullet of At a glance** (recommended, 12 of 15) vs. under "What you get".
+7. Adopt T6–T9 (capture and deletion facts). They are the main new trust facts and cost about 80 words.
+8. Move Team setup steps to INSTALL.md to pay for 7 (or accept about 2,250 words).
+9. File B1–B8 as issues. B1–B3 block Windows users, so fix them before any Windows claim is made.

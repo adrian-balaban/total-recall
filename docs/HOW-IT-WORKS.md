@@ -153,7 +153,11 @@ npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or
 
 ### Languages
 
-Cross-language search is done by the embedding model, so it works for any language pair the model covers. Text search alone matches only the words you typed; the one extra is a small built-in dictionary of about 28 Romanian ↔ English word pairs (`enableMultilingualSearch`), and no other language has one. With semantic search on: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). How to switch models is in the [README](../README.md#languages).
+Cross-language search is done by the embedding model, so it works for any language pair the model covers. Text search alone matches only the words you typed; the one extra is a small built-in dictionary of about 28 Romanian ↔ English word pairs (`enableMultilingualSearch`), and no other language has one. With semantic search on: the default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` handles 50+ languages; `Xenova/all-MiniLM-L6-v2` (the default up to 1.6.7) handles English only. When the configured model differs from the one that made the stored vectors, the next start rebuilds the vector index and re-embeds every memory ([TR-R6]). To switch to the English-only model (87 MB instead of 449 MB), set it in `~/.total-recall/config.json` and restart the assistant:
+
+```json
+{ "embeddingModel": "Xenova/all-MiniLM-L6-v2" }
+```
 
 **Benchmark.** Measured with the plugin's own pipeline: one English memory, one English decoy, and the same question asked in 11 languages.
 
