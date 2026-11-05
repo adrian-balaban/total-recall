@@ -22,6 +22,8 @@ Measured on **v1.6.8** at commit `0625d95` (2026-11-02; only documentation has c
 
 ## Tests and mutation
 
+Scope of the numbers: coverage is from the unit suite only (the integration tests are not counted); the mutation score is over all mutants Stryker generates in the 18 mutated modules; CI runs on `ubuntu-latest` with Node 20 ([workflow runs](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml)).
+
 | | |
 |---|---|
 | Test files | 75, with 2,373 assertions (2.34 per test, house target ≥ 1.5) |

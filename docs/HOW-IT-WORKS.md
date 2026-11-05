@@ -81,7 +81,18 @@ Optional, in `~/.total-recall/config.json`:
 }
 ```
 
-`orgInjection` is `index` (default), `titles` or `off`. `embeddingModel` is covered in [Languages](#languages). Vault paths are `personalVault` and `orgVault`; the server reads them once at start, so restart the assistant after changing them (a changed `orgVault` without a restart silently stops org sync); the spec-driven settings are in [SPEC-DRIVEN.md](SPEC-DRIVEN.md).
+Every key is optional:
+
+| Key | Default | Effect |
+|---|---|---|
+| `orgRepo` | none | Git URL of the team repo; set by `install.sh --org-repo` |
+| `orgBranch` | `knowledge` | Branch the org sync pushes to and pulls from |
+| `allowedEmailDomains` | `[]` | Email domains the privacy filter lets through |
+| `orgInjection` | `index` | How org entries appear in the injected index: `index`, `titles` or `off` |
+| `enableMultilingualSearch` | `true` | Multilingual text search; read on every search, no restart needed |
+| `embeddingModel` | multilingual model | Semantic-search model; see [Languages](#languages) |
+| `personalVault`, `orgVault` | `~/.total-recall/personal-vault`, `~/.total-recall/org` | Vault folders. Read once at start: restart the assistant after changing them (a changed `orgVault` without a restart silently stops org sync) |
+| `specDriven` | on | Spec-driven tools and hooks; see [SPEC-DRIVEN.md](SPEC-DRIVEN.md) |
 
 ## 🧱 Design principles
 
@@ -197,7 +208,11 @@ Before each context compaction (Claude Code; Gemini/Antigravity when the `claude
 Both vaults open as Obsidian vaults.
 
 - Keep the YAML simple: flat string arrays and scalars. The parser does not support anchors or multi-line scalars.
-- Edits made in Obsidian appear after a new session or `rebuild_index`.
+- Edits made in Obsidian appear after a new session (Claude Code) or after a restart or `rebuild_index` (other assistants).
+- These folders are skipped, at any depth: `projects`, `templates`, `.obsidian`, `reference-docs`, `in-progress` and `completed`. A memory filed under `projects/` is never indexed.
+- A memory's key comes from its path: renaming or moving a file changes its key.
+- Do not put the personal vault in iCloud or Syncthing: it holds `vectors.db` and a nested `.git`.
+- Edit org memories through the assistant, not by hand: the tools refuse to change other authors' org memories, and a hand edit skips the privacy filter.
 - `[[wikilinks]]` are indexed as words; the link graph is not used.
 - Do not use Obsidian Sync on the org vault: only total-recall's git sync runs the privacy filter.
 

@@ -63,7 +63,7 @@ The one step CI cannot do for you:
 
 **Increase the version.** Bump it in **`package.json` only** — it is the single source of truth. Do **not** hand-edit `.claude-plugin/plugin.json` or `gemini-extension.json`: `npm run build` runs `sync:version` (`scripts/sync-version.mjs`), which copies `package.json`'s version into both, and CI fails if they are out of sync. `claude plugin update` only picks up the change when the version advances, so a fix committed at the same version is invisible to consumers. Use patch (`1.0.4 → 1.0.5`) for fixes, minor for new tools/features. The build injects the version into the bundle via `--define:__PLUGIN_VERSION__` (from `$npm_package_version`).
 
-Then `git add -A && git commit -S` from the plugin root (signed commit), and push.
+Then `git add -A && git commit` from the plugin root and push (commits are not signed yet; see the signing policy below).
 
 Running `npm test` and `npm run typecheck` locally before pushing is optional now, not mandated — CI runs both. When you do run them locally, run with a **clean `HOME`** (`HOME=$(mktemp -d) npm test`): a developer box carries `~/.total-recall/config.json`, and env-dependent tests can pass there while failing on a fresh CI runner. That is exactly how the `sync-org-memory.mjs` import-time `process.exit(1)` survived until v1.1.21. A red gate means the `release` branch simply does not refresh, so consumers keep the last good build rather than receiving a broken one. That is the safety property untracking `dist/` bought. The flip side: a red gate is also **silent** from a consumer's perspective — nothing breaks, but nothing ships either, so check the run after pushing a fix you expect people to receive.
 

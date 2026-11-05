@@ -105,3 +105,5 @@ Sources: `architecture/diagrams/*.puml` and `../../docs/diagrams/*.puml`. Re-ren
 | SessionStart output carries `hookEventName` `[TR-C5]` | `load-memory-index.sh` |
 | PostToolUse matcher stays a regex | `hooks-matcher.test.ts` |
 | PreCompact reads `transcript_path` from stdin JSON | `extract-and-store-memories.sh` |
+
+Five of these invariants carry no `[TR-…]` ID (one `memIndex` per process, journal only on personal stores, optional deps never bundled, the PostToolUse matcher stays a regex, PreCompact reads `transcript_path`): the ADL gate does not cover them, and only the named tests do.

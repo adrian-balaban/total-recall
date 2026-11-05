@@ -101,7 +101,7 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 /mcp add total-recall -- node /absolute/path/to/plugins/total-recall/dist/index.js
 ```
 
-`/mcp` also lists and can remove already-registered servers — useful for checking that `install.sh` registered `total-recall` correctly (equivalent to `claude mcp get total-recall` from the shell).
+`/mcp` also lists and can remove already-registered servers — useful for checking that `install.sh` registered `total-recall` correctly (equivalent to `claude mcp get total-recall` from the shell, or `claude mcp get plugin:total-recall:total-recall` when the plugin came from the marketplace).
 
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 
@@ -122,6 +122,25 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 ./install.sh --org-repo https://github.com/your-org/team-vault.git \
              --allowed-email-domain yourcompany.com
 ```
+
+**Team setup, step by step**
+
+1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit. Don't require pull requests on that branch: sync pushes to it directly.
+
+   ```bash
+   git clone https://github.com/your-org/team-vault.git && cd team-vault
+   git switch -c knowledge && git commit --allow-empty -m "init" && git push -u origin knowledge
+   ```
+
+2. Each teammate re-runs the setup script from the README's [Quick start, step 2](../../README.md#claude-code) with the repo (for GitHub, `gh auth login` first; for other hosts, git credentials that work without a prompt, such as a credential helper or an SSH key). `--allowed-email-domain` lets your work email domain through the privacy filter:
+
+   ```bash
+   bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh" --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
+   ```
+
+3. From then on, in Claude Code and Gemini/Antigravity, a memory tagged `org` is pushed after it is stored, and each session pulls teammates' memories at start. Other assistants have no hooks for this: see the notes below.
+
+4. Check it: on one machine say *"remember for the team that …"*; on another, start a new session and ask about it. If it does not arrive, ask for `get_stats` (recent errors); in Claude Code the session start also warns when team pushes keep failing.
 
 Requirements: for GitHub, `gh auth status` green (the scripts use `gh` when it is available and fall back to plain `git`, with prompts disabled, so other hosts need credentials that work without a prompt, such as a credential helper or an SSH key), and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
@@ -148,7 +167,7 @@ Starting solo and adding the team later needs no migration: re-run `./install.sh
 
 Two layers, with different threat models:
 
-- **Org vault (shared repo) — hard block.** The org-sync hook runs a fail-closed privacy filter *before* `git add`: it refuses to push any memory containing a secret token / API key (known-prefix `sk-`, `ghp_`, `AKIA`…, PEM headers; labeled-generic `api_key:` / `Authorization: Bearer` / `password =` forms; high-entropy mixed-class blobs), a credit card (Luhn-validated), an IBAN (ISO 13616 mod-97-validated), a formatted phone number, or a personal email outside your `--allowed-email-domain`. Nothing in those categories ever reaches the shared repo.
+- **Org vault (shared repo) — hard block.** The org-sync hook runs a fail-closed privacy filter *before* `git add`: it refuses to push any memory containing a secret token / API key (known-prefix `sk-`, `ghp_`, `AKIA`…, PEM headers; labeled-generic `api_key:` / `Authorization: Bearer` / `password =` forms; high-entropy mixed-class blobs), a credit card (Luhn-validated), an IBAN (ISO 13616 mod-97-validated), a formatted phone number, or a personal email outside your `--allowed-email-domain`. The filter is best-effort pattern matching, not a guarantee: a labelled secret (`api_key: …`) is caught only when its value has 16 or more characters, and an unlabelled secret only when it has a known prefix or looks like a high-entropy mixed-case string. It covers pushes made by the sync hook only: a raw `git push` in the org repo skips it.
 - **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process and the vault itself is never pushed; the model provider still sees any memory the assistant reads), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
 
 
