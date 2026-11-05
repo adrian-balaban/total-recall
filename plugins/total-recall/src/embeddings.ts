@@ -10,7 +10,8 @@
  * silent: vector search silently off was the exact footgun a bad embeddingModel
  * (e.g. a bare "bge-m3" with no org/ prefix) produced before this.
  */
-import { VECTORS_DB, CONFIG_PATH, embeddingModel } from './paths.js';
+import * as path from 'path';
+import { VECTORS_DB, CONFIG_PATH, TOTAL_RECALL_DIR, embeddingModel } from './paths.js';
 import { upsertVector } from './vectorStore.js';
 import { recordError, memIndex } from './state.js';
 
@@ -81,7 +82,11 @@ async function getEmbedder(): Promise<((text: string) => Promise<number[] | null
   const model = embeddingModel();
   loadPromise = (async () => {
     try {
-      const { pipeline: hfPipeline } = await import('@huggingface/transformers');
+      const { pipeline: hfPipeline, env } = await import('@huggingface/transformers');
+      // Keep the model outside the plugin folder: its default cache sits under the plugin's
+      // node_modules, which `claude plugin update` replaces with a new version directory,
+      // so the model (hundreds of MB) was downloaded again after every update (issue #43).
+      if (env) env.cacheDir = path.join(TOTAL_RECALL_DIR, 'models');
       const extractor = await hfPipeline('feature-extraction', model);
       pipeline = async (text: string) => {
         const output = await extractor(text, { pooling: 'mean', normalize: true });
