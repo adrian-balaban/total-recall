@@ -138,7 +138,7 @@ Lucrezi doar în engleză? Un model mai mic (87 MB față de 449 MB) se setează
 | **VS Code, Copilot** (`--vscode`)                             | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                                                      | ❌ manuală          | ❌     |
 | **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                                                      | ❌ manuală          | ❌     |
 
-Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de instrucțiuni” înseamnă că adaugi blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului tău, iar asistentul citește `total-recall://index` sau apelează `search_index`, așa cum îi spune blocul. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă.
+Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de instrucțiuni” înseamnă că adaugi blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului tău, iar asistentul citește `total-recall://index` sau apelează `search_index`, așa cum îi spune blocul. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă. Autorul nu a avut la dispoziție Cursor, Windsurf, Claude Desktop, VS Code/Copilot sau o mașină Windows, deci aceste rânduri sunt netestate: serverul a fost verificat prin stdio (`initialize`, `tools/list`, `get_stats`), iar configurația clientului este forma standard `mcpServers`. Rapoartele sunt binevenite.
 
 ## Cum e construit
 

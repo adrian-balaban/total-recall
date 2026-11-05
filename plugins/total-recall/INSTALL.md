@@ -17,6 +17,13 @@ Run `install.sh` from **Git Bash** (ships with [Git for Windows](https://gitforw
 
 Use a **Windows Node.js** (`node.exe` on PATH). Node installed only inside WSL is not visible to Git Bash/Claude Code.
 
+- **Every shell step in these docs** (`install.sh`, the `bash "$(ls -d …)"` command, `bash hooks/scripts/pull-org-vault.sh`) runs in Git Bash, not PowerShell or cmd.
+- **`~`** is `C:\Users\<you>`: the vaults live in `C:\Users\<you>\.total-recall\`.
+- **MCP configs for other clients** use `bash` as the command and the script path as the argument; if `bash` is not on the client's `PATH`, give the full path: `"command": "C:\\Program Files\\Git\\bin\\bash.exe"`.
+- **`--vscode`** writes `%APPDATA%\Code\User\mcp.json` and a `bash` entry (fixed in 1.6.9; see issues #36–#38).
+- **Vector search** needs a `better-sqlite3` binary. If no prebuilt one matches your Node version, npm compiles it, which needs the Visual Studio Build Tools; without it, search stays text-only.
+- **Not tested on a real Windows machine.** The Windows steps follow the code and Git for Windows behaviour but no end-to-end install on Windows has been run by the maintainer. Reports are welcome.
+
 ## 🎚️ Install profiles
 
 On start, `install.sh` asks which profile you want (skip the prompt with a flag). **Complete is the default** — pressing Enter, `-y`, or a non-interactive run all select it:
@@ -162,6 +169,19 @@ Assistants without hooks (Codex, Cursor, Windsurf, Claude Desktop) do not pull o
 4. Offboarding is revoking push access (see above).
 
 Starting solo and adding the team later needs no migration: re-run `./install.sh --org-repo …`.
+
+**Stopping team sync.** Remove `orgRepo` from `~/.total-recall/config.json` and restart the assistant. Then each session start prints "Org vault skipped: orgRepo not set", no pull happens, and a memory tagged `org` is still written to the local org vault but its push fails at once with "orgRepo is not set" from the sync script (that early exit is not written to `.sync-errors.log`, so the session-start warning does not appear). The local org vault stays on disk and stays indexed, so teammates' old memories remain searchable; delete `~/.total-recall/org/` to remove them. Memories already pushed stay in the team repo and in its history: to purge one, rewrite the history with `git filter-repo` and ask every teammate to re-clone.
+
+## 🚛 Fleet and unattended installs
+
+For many machines, run `install.sh -y` as the target user (it writes to that user's home and `~/.claude`).
+
+- **Exit codes:** `0` unless the script stops with an error (`1`). A skipped or failed MCP registration is a warning and still exits `0`, so check afterwards with `claude mcp get plugin:total-recall:total-recall` (marketplace install) or `claude mcp get total-recall` (script install).
+- **Re-runs and existing config:** safe. An existing `~/.total-recall/config.json` is merged, not replaced.
+- **Network:** the Minimal profile (`--no-vector`) needs none after the plugin itself is fetched. The Complete profile runs `npm install` for the vector packages and downloads the embedding model (about 465 MB) from Hugging Face on the first semantic search; the model is cached in `~/.total-recall/models/`, which you can copy to a machine without internet access.
+- **Gemini/Antigravity:** `-y --gemini` skips `agy plugin install` and prints the command to run.
+- **Versions:** there is no version pin. `claude plugin update` moves to the newest release; to hold a version, do not update.
+- **Not tested at scale:** these notes come from reading the scripts, not from a fleet rollout.
 
 ## 🔐 Privacy model — what is blocked, what is only warned
 
