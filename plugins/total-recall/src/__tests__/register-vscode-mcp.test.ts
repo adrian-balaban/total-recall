@@ -17,7 +17,7 @@ describe('register-vscode-mcp (install.sh --vscode)', () => {
   it('creates the file with the servers schema and an absolute launcher path', () => {
     expect(register(file, ROOT)).toBe('written');
     expect(JSON.parse(fs.readFileSync(file, 'utf8'))).toEqual({
-      servers: { 'total-recall': { type: 'stdio', command: `${ROOT}/scripts/start-server.sh` } },
+      servers: { 'total-recall': { type: 'stdio', command: 'bash', args: [`${ROOT}/scripts/start-server.sh`] } },
     });
   });
 
@@ -29,12 +29,17 @@ describe('register-vscode-mcp (install.sh --vscode)', () => {
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
     expect(j.inputs).toEqual([1]);
     expect(j.servers.other).toEqual({ command: 'x' });
-    expect(j.servers['total-recall'].command).toBe(`${ROOT}/scripts/start-server.sh`);
+    expect(j.servers['total-recall'].args).toEqual([`${ROOT}/scripts/start-server.sh`]);
   });
 
   it('replaces a stale total-recall entry in place', () => {
     const out = mergeServer({ servers: { 'total-recall': { command: 'node' } } }, ROOT);
-    expect(out.servers['total-recall']).toEqual({ type: 'stdio', command: `${ROOT}/scripts/start-server.sh` });
+    expect(out.servers['total-recall']).toEqual({ type: 'stdio', command: 'bash', args: [`${ROOT}/scripts/start-server.sh`] });
+  });
+
+  it('normalises Windows backslashes in the plugin root', () => {
+    const out = mergeServer({}, 'C:\\Users\\me\\tr');
+    expect(out.servers['total-recall'].args).toEqual(['C:/Users/me/tr/scripts/start-server.sh']);
   });
 
   it('leaves a non-strict-JSON file (comments) untouched and exits 2 from the CLI', () => {
