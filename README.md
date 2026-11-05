@@ -160,24 +160,9 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 
 ## Team setup (org vault)
 
-**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki. Rules and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
+**Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki.
 
-1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit. Don't require pull requests on that branch: sync pushes to it directly.
-
-   ```bash
-   git clone https://github.com/your-org/team-vault.git && cd team-vault
-   git switch -c knowledge && git commit --allow-empty -m "init" && git push -u origin knowledge
-   ```
-
-2. Each teammate re-runs the setup script from Quick start step 2 with the repo (for GitHub, `gh auth login` first; for other hosts, git credentials that work without a prompt, such as a credential helper or an SSH key). `--allowed-email-domain` lets your work email domain through the privacy filter:
-
-   ```bash
-   bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh" --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
-   ```
-
-3. From then on, in Claude Code and Gemini/Antigravity, a memory tagged `org` is pushed after it is stored, and each session pulls teammates' memories at start. Other assistants have no hooks for this: see [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
-
-4. Check it: on one machine say *"remember for the team that …"*; on another, start a new session and ask about it. If it does not arrive, ask for `get_stats` (recent errors); in Claude Code the session start also warns when team pushes keep failing.
+In short: create a private Git repo with a `knowledge` branch (no required pull requests), then each teammate re-runs the setup script with `--org-repo <url> --allowed-email-domain <domain>`. From then on, memories tagged `org` sync automatically in Claude Code and Gemini/Antigravity. Steps, check and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
 
 Start solo and add the team later: `install.sh` is safe to re-run. Settings (`orgBranch`, `allowedEmailDomains`, `orgInjection`, vault paths): [How it works → Configuration](docs/HOW-IT-WORKS.md#configuration).
 
@@ -204,4 +189,4 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - [Spec-driven work and ADL](docs/SPEC-DRIVEN.md): link decisions to requirements and architecture rules to tests, with a five-minute walkthrough
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
-- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md)
+- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md) · [Contributing](CONTRIBUTING.md)

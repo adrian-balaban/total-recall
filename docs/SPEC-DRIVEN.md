@@ -1,6 +1,6 @@
 # 📐 Spec-driven work and architecture as code (ADL)
 
-Total Recall can tie memories to a spec, and, when a project keeps its architecture in ADL files, link each rule to the tests that enforce it. The ADL files stay in your repository as the source of truth. The memories hold what the files do not: why a rule exists, what was rejected, which checks failed and how they were fixed.
+Total Recall can tie memories to a spec, and, when a project keeps its architecture in ADL files (plain-text pseudocode that names the components and states the rules between them, see [ADL in one paragraph](#adl-in-one-paragraph)), link each rule to the tests that enforce it. The ADL files stay in your repository as the source of truth. The memories hold what the files do not: why a rule exists, what was rejected, which checks failed and how they were fixed.
 
 [← README](../README.md)
 
@@ -16,13 +16,13 @@ Total Recall can tie memories to a spec, and, when a project keeps its architect
    ```
    DEFINE SYSTEM Orders AS ord
        DEFINE COMPONENT Api AS api
-       DEFINE COMPONENT Domain AS domain
-   ASSERT(Domain HAS NO DEPENDENCY ON Api) # [ORD-S1]
+       DEFINE COMPONENT DomainCore AS domain
+   ASSERT(DomainCore HAS NO DEPENDENCY ON Api) # [ORD-S1]
    ```
 
-   The `# [ORD-S1]` tag is the assertion ID. Give every assertion one.
+   The `# [ORD-S1]` tag is the assertion ID. Give every assertion one. Each element's ID comes from its `AS` alias, not its name: `DomainCore` becomes `adl:domain`.
 
-2. **Write a test that carries the ID.** Any framework works: a line containing `[ORD-S1]` in a test file links that test to the assertion, so put the ID in the test name. The indexer looks in `*.test.*` / `*.spec.*` (JS/TS), `*Test` / `*Tests` `.java` `.kt` `.cs`, `*_test.go`, `*_test.py` and `test_*.py`. It does not look at `*IT.java`, Spock or Kotest `*Spec` files, or Scala:
+2. **Write a test that carries the ID.** Any framework works: any line of a test file that contains the ID **in square brackets**, `[ORD-S1]`, links that test to the assertion. The test name is the clearest place; where a name cannot hold brackets (pytest or Go function names), use a docstring, a comment, or `pytest.param(..., id="[ORD-S1]")`. `@Tag("ORD-S1")` and Playwright's `tag: '@ORD-S1'` have no brackets, so they do not match. Matching is per line, and one line may carry several IDs. The indexer looks in `*.test.*` / `*.spec.*` (JS/TS), `*Test` / `*Tests` `.java` `.kt` `.cs`, `*_test.go`, `*_test.py` and `test_*.py`. It does not look at `*IT.java`, Spock or Kotest `*Spec` files, Scala, Cucumber `.feature` files, `.sql` or `.yml`, so dbt tests and data contracts cannot be linked yet:
 
    ```java
    @Test
@@ -31,22 +31,25 @@ Total Recall can tie memories to a spec, and, when a project keeps its architect
    ```
 
 3. **Ask Claude**, in a session opened in that project:
-   - *"index the architecture of this repo"* → `index_architecture(path="/abs/path/to/repo")` stores one summary memory for the system. Use an absolute path: a relative one is resolved against the MCP server's working directory, which differs between assistants. The scan reads at most 5,000 files and skips `node_modules`, `.git`, `dist`, `build` and `coverage`; add `target`, `out` or `vendor` to `specDriven.excludeDirs` if you have them.
-   - *"validate the architecture"* → `validate_architecture(path="/abs/path/to/repo")` lists any tagged assertion with no test and stores it as a `fitness-result` memory; a later pass marks it resolved.
-   - *"trace ORD-S1"* → `trace("ORD-S1")` shows the assertion, its tests, past failures and the decisions linked to it.
-   - Before you change a component: *"what do we know about the Domain component of ord?"* → `get_architecture_context(system="ord", element="adl:domain")`. The system is named by its `AS` id (`ord`) and is a namespace, not part of the element ID. Element IDs are `adl:<component>`, or `adl:<domain>.<component>` when the component sits inside a `DEFINE DOMAIN`.
+   - *"index the architecture of this repo"* → `index_architecture(path="/abs/path/to/repo")` stores one summary memory for the system. Re-running it updates that memory in place and writes nothing when the files have not changed. Use an absolute path (on Windows, `C:/Users/me/repo`): a relative one is resolved against the MCP server's working directory, which differs between assistants. The path is not limited to the current project: any directory the server can read is accepted. The scan reads at most 5,000 files and skips `node_modules`, `.git`, `dist`, `build` and `coverage`; add `target`, `out` or `vendor` to `specDriven.excludeDirs` if you have them.
+   - *"validate the architecture"* → `validate_architecture(path="/abs/path/to/repo")` lists any tagged assertion with no test and stores it as a `fitness-result` memory; a later pass marks it resolved. The result is `{ ok, systems: [{ system, ok, passed, failed, recorded }] }`; pass `record: false` for a dry run that stores nothing.
+   - **See a failure once:** remove `[ORD-S1]` from the test, validate again (the assertion appears under `failed`), then restore the tag.
+   - *"trace ORD-S1"* → `trace(id="ORD-S1")` shows the assertion, its tests, past failures and the decisions linked to it.
+   - Before you change a component: *"what do we know about the Domain component of ord?"* → `get_architecture_context(system="ord", element="adl:domain")`. The system is named by its `AS` id (`ord`) and is a namespace, not part of the element ID. Element IDs are `adl:<alias>`, or `adl:<domain>.<alias>` when the component sits inside a `DEFINE DOMAIN`.
 
 4. **Record decisions** as you go: *"store the decision to split Domain from Api, linked to ORD-S1"*. The `spec-driven-workflow` skill describes the whole loop (spec → requirement IDs → ADL → tagged tests → code → validation → captured decisions) and ships a [spec template](../plugins/total-recall/skills/spec-driven-workflow/templates/spec.md).
 
-**What `validate_architecture` checks and what it doesn't.** It checks **coverage**: every tagged assertion has at least one test file line containing its ID. That match is purely textual, so a comment or a disabled test counts too. It does not run your tests or read their results; the rules are enforced by your own tests running in your CI. Untagged assertions are skipped, an ID found in tests with no matching assertion is not reported, and results (`fitness-result` memories) go to your personal vault, so teammates do not see each other's failures.
+**What `validate_architecture` checks and what it doesn't.** It checks **coverage**: every tagged assertion has at least one test file line containing its ID. That match is purely textual, so a comment or a disabled test counts too. It does not run your tests or read their results; the rules are enforced by your own tests running in your CI. Untagged assertions are skipped, an ID found in tests with no matching assertion is not reported, and results (`fitness-result` memories) go to your personal vault, so teammates do not see each other's failures. There is no CLI and no exit code: for a CI gate, copy this repository's [adl-coverage.test.ts](../plugins/total-recall/src/__tests__/architecture/adl-coverage.test.ts) into your test suite.
 
 ## ADL in one paragraph
 
 ADL is the notation from Neal Ford's masterclass [How to Teach Your Agents About Architecture](https://codecamp.ro/masterclasses/how-to-teach-your-agents-about-architecture-iasi-2026/) (Codecamp Iași, October 2026). It is pseudocode with no formal grammar: `DEFINE` lines name the system, domains and components; `ASSERT(…)` lines state the rules the code must keep; `DEFINE COMMUNICATION <from> TO <to> AS <style>` describes the runtime connections. An ADL file is never executed: each assertion is checked by a test written for it (a fitness function). The `# [ID]` tag is a Total Recall convention, not part of ADL. The course material is not published here; every example is from this repository.
 
+**What the indexer reads.** Header directives (`DESCRIPTION`, `CATEGORY`, `NAMESPACE`, `TYPE`, `CAPABILITY`); `DEFINE <KIND> <Name> AS <id>`, nested by indentation (any kind: `SYSTEM`, `DOMAIN`, `COMPONENT`, `SERVICE`, `DATABASE`, …); value definitions such as `DEFINE CAPABILITY <Name> AS <text> FOR <element>` and `DEFINE CONTRACT <name> BETWEEN {A, B} AS …`; `DEFINE CONST`; `DEFINE COMMUNICATION`; `FOREACH … DO … END` blocks; and `ASSERT(…)` with an optional trailing `# [ID]`. A line it does not recognise is kept as text, never an error. An `ASSERT` without a tag is not checked.
+
 ## This repository's own ADL
 
-Total Recall describes itself in nine ADL files under [plugins/total-recall/architecture/adl/](../plugins/total-recall/architecture/adl/), each assertion enforced by a tagged test (ArchUnitTS for the dependency rules). `adl-coverage.test.ts` fails when an assertion has no test.
+Total Recall describes itself in nine ADL files under [plugins/total-recall/architecture/adl/](../plugins/total-recall/architecture/adl/), each assertion enforced by a tagged test (ArchUnitTS for the dependency rules). The repository's own gate, `adl-coverage.test.ts`, is stricter than the shipped `validate_architecture`: it counts an ID only in a test name (an `it(…)` call), and it also fails when a test name carries an ID that no assertion defines.
 
 | File | What it governs |
 |---|---|
@@ -60,13 +63,19 @@ Total Recall describes itself in nine ADL files under [plugins/total-recall/arch
 | [system.adl](../plugins/total-recall/architecture/adl/system.adl) | The runtime landscape: who talks to whom |
 | [architecture-style.adl](../plugins/total-recall/architecture/adl/architecture-style.adl) | The architecture style, the capabilities it favours, and the stressors it must survive |
 
+### Adding a module or rule here
+
+- **A new source file** must belong to exactly one component: add it to the matching pattern in [components.ts](../plugins/total-recall/src/__tests__/architecture/components.ts), or the partition rule `[TR-S12]` fails.
+- **A new rule** is an `ASSERT(…)` in the ADL file it belongs to, tagged with the next free ID of that file's prefix (`TR-S` structure, `TR-D` data governance, `TR-R` runtime safety, `TR-W` workflows, `TR-C` contracts, `TR-P` capabilities, `TR-Q` code quality).
+- **Its test** carries the ID in its name, `it('[TR-S15] …')`. A rule the code does not meet yet can start as `it.fails('[TR-…] …')` and be switched to `it` once the code complies.
+
 ## Org guardrails
 
 Memories tagged `guardrail` (a reusable ADL assertion, the reason, and the incident behind it) are returned by `get_architecture_context` for every system. Store them with the `org` tag to share them with the team. Their bodies reach the model as written, not framed as teammate data (see [SECURITY.md](../SECURITY.md)), so they are only as trustworthy as the people who can push to the team repo. An org memory with `artifact: "spec"` is refused when it names a credential, a term in `orgBlockedTerms`, or a host name on a common top-level domain, so specs stay personal; the host check is a fixed list, not a guarantee.
 
 ## ⚙️ Configuration (`specDriven`)
 
-Every key is optional. `"specDriven": {"enabled": false}` gives back the plain 17-tool behaviour.
+On by default. Every key is optional. `"specDriven": {"enabled": false}` gives back the plain 17-tool behaviour.
 
 ```json
 {

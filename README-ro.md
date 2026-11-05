@@ -160,24 +160,9 @@ Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de
 
 ## Configurare pentru echipă (vault org)
 
-**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita orice memorie sau o poate publica în numele altcuiva, și nimic nu e revizuit înainte să devină activ pentru toată echipa.** Tratează-l ca pe un wiki comun. Regulile și lista de verificare pentru introducerea în echipă: [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
+**Controlul accesului e slab: oricine are drept de push pe repo-ul echipei poate edita orice memorie sau o poate publica în numele altcuiva, și nimic nu e revizuit înainte să devină activ pentru toată echipa.** Tratează-l ca pe un wiki comun.
 
-1. Creează un repo Git privat pe orice platformă (GitHub, GitLab, Bitbucket, propriul server), cu un branch `knowledge` care are cel puțin un commit. Nu cere pull request-uri pe acel branch: sincronizarea face push direct în el:
-
-   ```bash
-   git clone https://github.com/your-org/team-vault.git && cd team-vault
-   git switch -c knowledge && git commit --allow-empty -m "init" && git push -u origin knowledge
-   ```
-
-2. Fiecare coleg rulează din nou scriptul de instalare de la pasul 2 din Pornirea rapidă, cu repo-ul (pentru GitHub, întâi `gh auth login`; pentru alte platforme, credențiale git care funcționează fără să ceară parola, de exemplu un credential helper sau o cheie SSH). `--allowed-email-domain` lasă domeniul adreselor tale de email de serviciu să treacă de filtrul de confidențialitate:
-
-   ```bash
-   bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -V | tail -1)install.sh" --org-repo https://github.com/your-org/team-vault.git --allowed-email-domain yourcompany.com
-   ```
-
-3. De aici înainte, în Claude Code și Gemini/Antigravity, o memorie etichetată `org` e trimisă după salvare, iar fiecare sesiune aduce la pornire memoriile colegilor. Ceilalți asistenți nu au hook-uri pentru asta: vezi [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
-
-4. Verifică: pe o mașină spune _„ține minte pentru echipă că …”_; pe alta, pornește o sesiune nouă și întreabă despre asta. Dacă nu ajunge, cere `get_stats` (erori recente); în Claude Code, pornirea sesiunii te avertizează și când push-urile de echipă eșuează repetat.
+Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull request-uri obligatorii), apoi fiecare coleg rulează din nou scriptul de instalare cu `--org-repo <url> --allowed-email-domain <domeniu>`. De aici înainte, memoriile etichetate `org` se sincronizează automat în Claude Code și Gemini/Antigravity. Pașii, verificarea și lista de verificare pentru introducerea în echipă: [INSTALL.md → Vault org](plugins/total-recall/INSTALL.md#-org-vault-team-memory) (în engleză).
 
 Începe singur și adaugă echipa mai târziu: `install.sh` poate fi rulat din nou fără probleme. Setările (`orgBranch`, `allowedEmailDomains`, `orgInjection`, căile vault-urilor): [Cum funcționează → Configurare](docs/HOW-IT-WORKS.md#configuration) (în engleză).
 
@@ -204,4 +189,4 @@ Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de
 - [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md): leagă deciziile de cerințe și regulile de arhitectură de teste, cu un exemplu de cinci minute
 - [Arhitectura](plugins/total-recall/ARCHITECTURE.md): diagrame C4, model de date, fluxul de scriere
 - [Metrici de calitate](docs/QUALITY.md): teste, scor de mutație, complexitate, cuplare, livrare, scalare
-- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md)
+- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md) · [Contribuție](CONTRIBUTING.md)
