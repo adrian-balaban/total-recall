@@ -40,7 +40,7 @@ At PreCompact (and session end, where the host has it) a nested `claude -p` run 
 - **Session transcript to `claude -p`** (and, on Gemini/Antigravity, to the second provider that host uses): the end of the session leaves your machine for the model provider, as any chat does.
 - **Plain-text vault:** memories are Markdown files, not encrypted. Anyone who can read your home directory can read them.
 - **Deleted memories stay in history:** the vault's local git history and `.superseded/` keep earlier versions. In a team repo, removing a memory does not remove it from teammates' clones or from the repo history (use `git filter-repo` and ask teammates to re-clone).
-- **Model download:** the embedding model comes from Hugging Face on the first semantic search. The Complete install profile also runs `npm install` for the vector packages.
+- **Model download:** the embedding model (about 465 MB) comes from Hugging Face on the first semantic search and is kept in `~/.total-recall/models/`, so a plugin update does not download it again (before 1.6.9 it sat inside the plugin folder and came back with every version). The Complete install profile also runs `npm install` for the vector packages.
 - **Unsigned releases:** commits, tags and the `dist/` bundle are not signed yet (see [PLAN-SIGNED-RELEASES.md](PLAN-SIGNED-RELEASES.md)). What you trust is this repository and its GitHub Actions build.
 - **`index_architecture` accepts any directory** the server can read, not only the current project. `get_architecture_context` returns org guardrails unframed (see [SPEC-DRIVEN.md](docs/SPEC-DRIVEN.md#org-guardrails)).
 

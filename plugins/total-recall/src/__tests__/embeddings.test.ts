@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Redirect HOME before any module import — paths.ts captures os.homedir() once
@@ -56,7 +57,9 @@ vi.mock('../vectorStore.js', () => ({
 // below can exercise the catch block. Existing tests never reach this path —
 // they inject via __testSetEmbedder, which short-circuits getEmbedder before
 // the import — so mocking the module is inert for them.
+const hfEnv = vi.hoisted(() => ({ cacheDir: '/default/in/node_modules/.cache' }));
 vi.mock('@huggingface/transformers', () => ({
+  env: hfEnv,
   pipeline: async () => { throw new Error('model id rejected by hub: 404'); },
 }));
 
@@ -303,6 +306,11 @@ describe('embeddings — loud embedder-load failure', () => {
     // Restore the test embedder so later describes aren't left on the real
     // (failing) load path.
     __testSetEmbedder(async () => makeVector(384, 0.1));
+  });
+
+  it('keeps the model cache under ~/.total-recall/models, not the plugin folder (issue #43)', async () => {
+    await embed('probe');
+    expect(hfEnv.cacheDir).toBe(path.join(process.env.HOME!, '.total-recall', 'models'));
   });
 
   it('returns null, records the failure, and writes a stderr warning naming the model + config', async () => {
