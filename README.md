@@ -138,7 +138,7 @@ English only? A smaller model (87 MB vs. 449 MB) is one config line: [How it wor
 | **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
 | **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
 
-All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end.
+All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end. The maintainer had no Cursor, Windsurf, Claude Desktop, VS Code/Copilot or Windows machine to test on, so those rows are untested: the server was checked over stdio (`initialize`, `tools/list`, `get_stats`), and the client config shown is the standard `mcpServers` form. Reports are welcome.
 
 ## How it's built
 
