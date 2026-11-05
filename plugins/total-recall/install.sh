@@ -585,23 +585,28 @@ step "Step 5d — VS Code MCP entry (optional)"
 if [ "$VSCODE" -ne 1 ]; then
   ok "VS Code entry skipped. (Pass --vscode to register in VS Code's user mcp.json.)"
 else
+  VSCODE_ROOT="$PLUGIN_ROOT"
   case "$(uname -s)" in
     Darwin) VSCODE_MCP="$HOME/Library/Application Support/Code/User/mcp.json";;
+    MINGW*|MSYS*|CYGWIN*)
+      # Git Bash on Windows: VS Code reads %APPDATA%\Code\User, and node needs Windows-style paths.
+      VSCODE_MCP="$(cygpath -u "${APPDATA:-$HOME/AppData/Roaming}")/Code/User/mcp.json"
+      VSCODE_ROOT="$(cygpath -m "$PLUGIN_ROOT")";;
     *)      VSCODE_MCP="${XDG_CONFIG_HOME:-$HOME/.config}/Code/User/mcp.json";;
   esac
   if [ ! -x "$PLUGIN_ROOT/scripts/start-server.sh" ]; then
     warn "scripts/start-server.sh not found or not executable under $PLUGIN_ROOT — skipping."
   else
-    VSCODE_RESULT=$(node "$PLUGIN_ROOT/scripts/register-vscode-mcp.mjs" "$VSCODE_MCP" "$PLUGIN_ROOT" 2>/dev/null)
+    VSCODE_RESULT=$(node "$PLUGIN_ROOT/scripts/register-vscode-mcp.mjs" "$VSCODE_MCP" "$VSCODE_ROOT" 2>/dev/null)
     case "$VSCODE_RESULT" in
       written)   ok "Registered total-recall in $VSCODE_MCP"; note "VS Code MCP entry written.";;
       unchanged) ok "total-recall already registered in $VSCODE_MCP";;
       *)         warn "$VSCODE_MCP is not strict JSON (comments?) — left untouched. Add this under \"servers\":"
-                 info "\"total-recall\": { \"type\": \"stdio\", \"command\": \"$PLUGIN_ROOT/scripts/start-server.sh\" }";;
+                 info "\"total-recall\": { \"type\": \"stdio\", \"command\": \"bash\", \"args\": [\"$VSCODE_ROOT/scripts/start-server.sh\"] }";;
     esac
   fi
   info "Visual Studio: put this in <solution>/.mcp.json (unverified, see plan step 1):"
-  info "{ \"servers\": { \"total-recall\": { \"type\": \"stdio\", \"command\": \"$PLUGIN_ROOT/scripts/start-server.sh\" } } }"
+  info "{ \"servers\": { \"total-recall\": { \"type\": \"stdio\", \"command\": \"bash\", \"args\": [\"$VSCODE_ROOT/scripts/start-server.sh\"] } } }"
 fi
 
 # --------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 // Idempotently registers the total-recall MCP server in a VS Code user mcp.json
 // (schema: top-level "servers"), pointing at the node-resolving launcher
-// scripts/start-server.sh by absolute path. Used by `install.sh --vscode` as the
+// scripts/start-server.sh by absolute path through `bash` (a .sh file cannot be a command on Windows). Used by `install.sh --vscode` as the
 // fallback when VS Code agent plugins are off.
 // Usage: node register-vscode-mcp.mjs <mcp.json path> <plugin root>
 // Foreign servers are kept. A file that is not strict JSON (VS Code allows
@@ -16,7 +16,7 @@ export function mergeServer(existing, pluginRoot) {
     ...cfg,
     servers: {
       ...servers,
-      'total-recall': { type: 'stdio', command: path.join(pluginRoot, 'scripts', 'start-server.sh') },
+      'total-recall': { type: 'stdio', command: 'bash', args: [path.posix.join(pluginRoot.replace(/\\/g, '/'), 'scripts', 'start-server.sh')] },
     },
   };
 }
