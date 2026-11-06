@@ -1,6 +1,6 @@
 # 📏 Quality metrics
 
-Measured on **v1.7.1** at commit `af0c7cf` (2026-11-06). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history (the same script reproduces the v1.6.8 figures, see [Reproduce](#reproduce)). Four figures were **not re-measured** and still show their v1.6.8 value, marked as such: server start time, lead time, time to restore, and the scale benchmarks. All were computed with the formulas from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
+Measured on **v1.7.1** at commit `af0c7cf` (2026-11-06). Test, coverage and mutation figures come from the CI run on `main`; the rest were computed from the source and the git history (the same method reproduces the v1.6.8 figures, see [Reproduce](#reproduce)). Four figures were **not re-measured** and still show their v1.6.8 value, marked as such: server start time, lead time, time to restore and the scale benchmarks. The formulas are from Neal Ford's masterclass *How to Teach Your Agents About Architecture* (Codecamp Iași, October 2026). "House" marks a target that is ours, not the course's.
 
 [← README](../README.md)
 
@@ -72,7 +72,7 @@ A = abstract declarations (interfaces, type aliases) ÷ all top-level declaratio
 
 `helpers`, `paths`, `state` and `walk` sit in the Zone of Pain (concrete and heavily depended on), but they are small, stable leaves with no outgoing dependencies; the zone only hurts when such code also changes often. A undercounts abstraction in functional TypeScript, where function types count as concrete. The components worth watching are `persistence` and `search`: no abstractions, real fan-in, and the highest average complexity. There are no dependency cycles (`[TR-S7]`).
 
-1.7.0 added `org-sync.ts` to `server` and a listener in `registry` that `server` sets: `server` now depends directly on `state` and `registry` (Ce 5 → 7), and `registry` gains a second incoming edge. The two new edges lower ML from 74.2% (v1.6.8) to 72.7%; the mean distance drops from 0.44 to 0.42 because `registry` now sits on the main sequence.
+1.7.0 added `org-sync.ts` to `server` and a listener hook in `registry` that `server` sets: the server's outgoing edges rise from 5 to 7 and `registry` gains an incoming edge. The two new edges lower ML from 74.2% (v1.6.8) to 72.7%; the mean distance drops from 0.44 to 0.42 because `registry` now sits on the main sequence.
 
 The earlier figure of 68.9% for ML was computed over 10 components; 1.6.7 added `walk` and `indexcache`, so the two values are not directly comparable.
 
@@ -94,10 +94,10 @@ Counted over the 28 tags from v1.1.18 (2026-08-20) to v1.7.1 (2026-11-06). Befor
 |---|---|
 | Deployment frequency | 11.0 tags per month; 24 in the last 30 days |
 | Lead time (commit → tag) | median 0.26 h, p90 15.2 h (v1.6.8; not recomputed, see below) |
-| Time to restore (failed release → fix release) | median 8.1 h (v1.6.8; no release since needed a fix for a regression it introduced) |
+| Time to restore (failed release → fix release) | median 8.1 h (v1.6.8; not recomputed) |
 | Rollbacks | 0 reverts |
 
-Lead time was not recomputed: GitHub's release timestamps do not give the tag time reliably (`createdAt` is the commit's date, and `publishedAt` changed when older releases were edited), so the v1.6.8 method could not be reproduced from the API.
+Lead time and time to restore were not recomputed: the release timestamps GitHub returned gave inconsistent results here (a median near 0 h with one field, a p90 above 1,600 h with another), so the v1.6.8 method could not be reproduced from the API. They need the tag timestamps from git.
 
 ## Scale
 
