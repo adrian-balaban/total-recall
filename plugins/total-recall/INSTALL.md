@@ -132,6 +132,8 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
              --allowed-email-domain yourcompany.com
 ```
 
+`--org-repo` takes a repo on **any** git host — pass an `https://` URL (typically ending in `.git`) or a `git@` SSH URL. `gh` is used for authentication when the host is GitHub and falls back to plain `git` otherwise, so GitLab, Bitbucket and self-hosted remotes work the same way (see the requirements note below).
+
 **Team setup, step by step**
 
 1. Create a private Git repo on any host (GitHub, GitLab, Bitbucket, your own) with a branch named `knowledge` that has at least one commit. Don't require pull requests on that branch: sync pushes to it directly.
@@ -178,7 +180,14 @@ Starting solo and adding the team later needs no migration: re-run `./install.sh
 
 For many machines, run `install.sh -y` as the target user (it writes to that user's home and `~/.claude`).
 
-- **Exit codes:** `0` unless the script stops with an error (`1`). A skipped or failed MCP registration is a warning and still exits `0`, so check afterwards with `claude mcp get plugin:total-recall:total-recall` (marketplace install) or `claude mcp get total-recall` (script install).
+- **Exit codes:** `0` unless the script stops with an error (`1`). By default a skipped or failed MCP registration is only a warning and still exits `0` — so an unattended install cannot tell from the exit code that it ended up without a working server.
+- **`--strict` (recommended for unattended installs):** makes the final verification decide the exit code. With `--strict` the script exits `1` when `dist/index.js` is missing or the MCP server is not registered, listing each problem first. Every step still runs (so the summary stays complete); only the exit code changes.
+
+  ```bash
+  ./install.sh -y --strict || echo "total-recall install incomplete"
+  ```
+
+  Without `--strict`, check afterwards with `claude mcp get plugin:total-recall:total-recall` (marketplace install) or `claude mcp get total-recall` (script install).
 - **Re-runs and existing config:** safe. An existing `~/.total-recall/config.json` is merged, not replaced.
 - **Network:** the Minimal profile (`--no-vector`) needs none after the plugin itself is fetched. The Complete profile runs `npm install` for the vector packages and downloads the embedding model (449 MB) from Hugging Face on the first semantic search; the model is cached in `~/.total-recall/models/`, which you can copy to a machine without internet access.
 - **Gemini/Antigravity:** `-y --gemini` skips `agy plugin install` and prints the command to run.

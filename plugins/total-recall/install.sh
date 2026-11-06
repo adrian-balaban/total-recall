@@ -54,13 +54,23 @@
 #                             node-resolving launcher scripts/start-server.sh. Needed only
 #                             when VS Code agent plugins are off. Also prints the
 #                             Visual Studio .mcp.json snippet.
-#   --org-repo URL            Enable the shared org vault from this GitHub repo
-#                             (full HTTPS URL ending in .git)
+#   --org-repo URL            Enable the shared org vault from this git repo.
+#                             Any git host works (GitHub, GitLab, Bitbucket,
+#                             self-hosted): pass an https:// URL (typically
+#                             ending in .git) or a git@ SSH URL. `gh` is used
+#                             for authentication when the host is GitHub and
+#                             falls back to plain git otherwise.
 #   --allowed-email-domain D  Allow this work-email domain through the org-vault
 #                             privacy filter (default blocks ALL emails)
 #   --vector                  Enable hybrid vector search (local HuggingFace
 #                             multilingual MiniLM embeddings, ~450 MB on first use)
 #   --no-vector               Skip vector search without prompting
+#   --strict                  Exit non-zero if the Step 8 verification finds the
+#                             install incomplete (dist/index.js missing, or the
+#                             MCP server not registered). Intended for unattended
+#                             installs (CI, provisioning) with -y, which cannot
+#                             otherwise detect failure — without it the script
+#                             only warns and still exits 0.
 #   -y, --yes                 Non-interactive: take defaults (Complete profile
 #                             with vector search), skip optional prompts (org
 #                             vault) unless their flags were given
@@ -76,7 +86,8 @@
 #
 # Prerequisites:
 #   - Node.js v18+
-#   - gh CLI authenticated (`gh auth status`) — only for the org vault
+#   - gh CLI authenticated (`gh auth status`) — only for a GitHub-hosted org
+#     vault; other hosts just need working git credentials for the remote
 #   - agy CLI on PATH — only for --gemini
 #
 # --------------------------------------------------------------------------
@@ -133,6 +144,13 @@ VECTOR=""        # "" = ask, "yes" = install, "no" = skip
 ASSUME_YES=0
 GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
 VSCODE=0         # --vscode: register the MCP server in VS Code's user mcp.json
+STRICT=0         # --strict: exit non-zero if Step 8 finds the install incomplete
+
+# Step 8 records verification failures here. The script deliberately has no
+# `set -e` (every step must run so the summary is complete), so a failed verify
+# cannot abort mid-way — it is collected and acted on at the very end.
+VERIFY_FAILURES=()
+verify_fail() { VERIFY_FAILURES+=("$1"); warn "$1"; }
 
 if [ -t 1 ]; then
   C_BOLD=$'\033[1m'; C_GREEN=$'\033[32m'; C_YELLOW=$'\033[33m'; C_RED=$'\033[31m'; C_RST=$'\033[0m'
@@ -195,6 +213,7 @@ while [ $# -gt 0 ]; do
     --allowed-email-domain) ORG_DOMAIN="${2:?--allowed-email-domain needs a domain}"; shift 2;;
     --vector|--complete|--default)   VECTOR="yes"; shift;;
     --no-vector) VECTOR="no"; shift;;
+    --strict)              STRICT=1; shift;;
     -y|--yes)              ASSUME_YES=1; shift;;
     -h|--help)             usage; exit 0;;
     *) die "Unknown option: $1  (try --help)";;
@@ -248,7 +267,7 @@ command -v claude >/dev/null 2>&1 || warn "'claude' CLI not found — MCP regist
 if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
   ok "gh CLI authenticated"
 else
-  warn "gh CLI not authenticated — required only for the org vault (Step 6)."
+  warn "gh CLI not authenticated — needed only for a GitHub-hosted org vault (Step 6); other hosts use plain git."
 fi
 # `agy` is optional — only required if --gemini is passed. Warn-but-don't-fail
 # so non-Gemini users don't see a hard error.
@@ -616,21 +635,21 @@ step "Step 6 — Org vault (optional)"
 ENABLE_ORG=0
 if [ -n "$ORG_REPO" ]; then
   ENABLE_ORG=1
-elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to GitHub)?" "n"; then
+elif ask_yes_no "Enable the shared org vault (sync 'org'-tagged memories to a shared git repo)?" "n"; then
   ENABLE_ORG=1
   EXISTING_REPO=""
   if [ -f "$CONFIG_FILE" ]; then
     EXISTING_REPO=$("$NODE_BIN" -e "try { const c=JSON.parse(require('fs').readFileSync('$CONFIG_FILE','utf8')); console.log(c.orgRepo || ''); } catch { console.log(''); }")
   fi
   if [ -n "$EXISTING_REPO" ]; then
-    ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)? [default: $EXISTING_REPO]" ORG_REPO
+    ask_value "Git repo URL for the org vault (any host; https:// or git@ SSH)? [default: $EXISTING_REPO]" ORG_REPO
     [ -z "$ORG_REPO" ] && ORG_REPO="$EXISTING_REPO"
   else
-    ask_value "GitHub repo URL for the org vault (HTTPS, ending in .git)?" ORG_REPO
+    ask_value "Git repo URL for the org vault (any host; https:// or git@ SSH)?" ORG_REPO
   fi
   warn "The 'knowledge' branch (or the one set as orgBranch in config.json) must already exist with at least one commit."
   if [ -z "$ORG_DOMAIN" ]; then
-    info "The privacy filter blocks all email addresses by default before pushing to GitHub."
+    info "The privacy filter blocks all email addresses by default before pushing."
     info "You can specify a domain (e.g., company.com) to allow work emails to bypass the filter."
     ask_value "Work email domain to allow in org-vault sync (blank = block all)?" ORG_DOMAIN
     [ -z "$ORG_DOMAIN" ] && ORG_DOMAIN_CLEARED=1
@@ -654,7 +673,10 @@ NODE
     if bash "$PLUGIN_ROOT/hooks/scripts/pull-org-vault.sh"; then
       ok "Org vault cloned/pulled."
     else
-      warn "Clone failed. Check: 'git ls-remote $ORG_REPO knowledge' and 'gh auth status'."
+      case "$ORG_REPO" in
+        *github.com*) warn "Clone failed. Check: 'git ls-remote $ORG_REPO knowledge' and 'gh auth status'." ;;
+        *)            warn "Clone failed. Check: 'git ls-remote $ORG_REPO knowledge' and your git credentials for this host." ;;
+      esac
     fi
   fi
   note "Org vault enabled ($ORG_REPO)."
@@ -717,14 +739,18 @@ fi
 # Step 8 — Verify
 # --------------------------------------------------------------------------
 step "Step 8 — Verify"
-[ -f "$PLUGIN_ROOT/dist/index.js" ] && ok "dist/index.js present" || warn "dist/index.js missing — run 'npm run build' in $PLUGIN_ROOT"
+if [ -f "$PLUGIN_ROOT/dist/index.js" ]; then
+  ok "dist/index.js present"
+else
+  verify_fail "dist/index.js missing — run 'npm run build' in $PLUGIN_ROOT"
+fi
 if command -v claude >/dev/null 2>&1; then
   # A plugin-managed install's server is named plugin:total-recall:total-recall.
   if [ "$PLUGIN_MANAGED" -eq 1 ]; then MCP_NAME="plugin:total-recall:total-recall"; else MCP_NAME="total-recall"; fi
   if claude_mcp get "$MCP_NAME" >/dev/null 2>&1; then
     ok "MCP server '$MCP_NAME' is registered"
   else
-    warn "MCP server '$MCP_NAME' not registered"
+    verify_fail "MCP server '$MCP_NAME' not registered"
   fi
 fi
 
@@ -738,4 +764,12 @@ else
   for line in "${SUMMARY[@]}"; do info "• $line"; done
 fi
 info ""
+if [ "${#VERIFY_FAILURES[@]}" -gt 0 ]; then
+  info "Verification found ${#VERIFY_FAILURES[@]} problem(s):"
+  for line in "${VERIFY_FAILURES[@]}"; do err "• $line"; done
+  if [ "$STRICT" -eq 1 ]; then
+    die "Install incomplete (--strict)."
+  fi
+  info "Re-run with --strict to make this exit non-zero (useful for unattended installs)."
+fi
 info "Done. Start a new Claude Code session to load the injected memory index."

@@ -31,7 +31,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 ### Claude Code
 
-**One command instead of steps 1 and 2:** `npx @adrian-balaban/total-recall` adds the marketplace, installs the plugin and runs the setup script; it accepts the same flags as `install.sh` (`-y`, `--no-vector`, `--vscode`, `--org-repo …`). Use the scoped name: the unscoped `total-recall` on npm is an unrelated tool. The npm package holds only this launcher; the plugin itself still comes from this repository's `release` branch. Then continue at step 3.
+**One command instead of steps 1 and 2:** `npx @adrian-balaban/total-recall` adds the marketplace, installs the plugin and runs the setup script; it accepts the same flags as `install.sh` (`-y`, `--strict`, `--no-vector`, `--vscode`, `--org-repo …`). Use the scoped name: the unscoped `total-recall` on npm is an unrelated tool. The npm package holds only this launcher; the plugin itself still comes from this repository's `release` branch. Then continue at step 3.
 
 1. Type these in the Claude Code chat (or run `claude plugin …` in a terminal). Use the full ID, because other plugins share the name:
 

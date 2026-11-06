@@ -38,6 +38,18 @@ describe('.mcp.json', () => {
   });
 });
 
+// B7 (issue #42): package.json carried no `license` field, so the plugin's own
+// manifest did not state its terms even though the repo ships an MIT LICENSE and
+// the npx bootstrap's root package.json declares MIT. Tools that read the
+// manifest (npm, SBOM/licence scanners, `npm pack`) therefore saw it as
+// UNLICENSED. Pinned here, against the LICENSE file, so the two can't drift.
+describe('package.json license', () => {
+  it('declares MIT, matching the shipped LICENSE file', () => {
+    expect(pkg.license).toBe('MIT');
+    expect(fs.readFileSync(path.join(ROOT, '..', '..', 'LICENSE'), 'utf8')).toContain('MIT License');
+  });
+});
+
 describe('plugin name, server key and org-sync matcher agree', () => {
   const syncGroup = (hooks.hooks.PostToolUse as any[]).find((g) =>
     (g.hooks ?? []).some((h: any) => String(h.command).includes('sync-org-memory.sh')),

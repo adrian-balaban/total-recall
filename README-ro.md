@@ -31,7 +31,7 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
 ### Claude Code
 
-**O singură comandă în loc de pașii 1 și 2:** `npx @adrian-balaban/total-recall` adaugă marketplace-ul, instalează pluginul și rulează scriptul de instalare; acceptă aceleași opțiuni ca `install.sh` (`-y`, `--no-vector`, `--vscode`, `--org-repo …`). Folosește numele cu scope: `total-recall` fără scope de pe npm este o unealtă fără legătură. Pachetul npm conține doar acest lansator; pluginul vine în continuare din branch-ul `release` al acestui repo. Apoi continuă cu pasul 3.
+**O singură comandă în loc de pașii 1 și 2:** `npx @adrian-balaban/total-recall` adaugă marketplace-ul, instalează pluginul și rulează scriptul de instalare; acceptă aceleași opțiuni ca `install.sh` (`-y`, `--strict`, `--no-vector`, `--vscode`, `--org-repo …`). Folosește numele cu scope: `total-recall` fără scope de pe npm este o unealtă fără legătură. Pachetul npm conține doar acest lansator; pluginul vine în continuare din branch-ul `release` al acestui repo. Apoi continuă cu pasul 3.
 
 1. Scrie comenzile astea în chatul Claude Code (sau rulează `claude plugin …` într-un terminal). Folosește ID-ul complet, fiindcă alte pluginuri au același nume:
 
