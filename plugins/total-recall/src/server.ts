@@ -22,6 +22,8 @@ import { register as registerRerank } from './tools/rerank.js';
 import { register as registerBulk } from './tools/bulk.js';
 import { register as registerArchitecture } from './tools/architecture.js';
 import { register as registerHostContext } from './host-context.js';
+import { setToolListener } from './tools/registry.js';
+import { afterToolResult } from './org-sync.js';
 
 // ─── Plugin metadata ─────────────────────────────────────────────────────────
 
@@ -76,6 +78,8 @@ registerBulk(server);
 registerArchitecture(server, spec);
 // Resources + prompts for hosts without SessionStart hooks; never touch tools/list ([TR-C7]).
 registerHostContext(server);
+// orgSync "server": push org writes from here on hosts that run no hooks (no-op in the default "hook" mode).
+setToolListener(afterToolResult);
 
 // ─── Boot ─────────────────────────────────────────────────────────────────────
 

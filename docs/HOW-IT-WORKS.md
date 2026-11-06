@@ -90,6 +90,7 @@ Every key is optional:
 | `allowedEmailDomains` | `[]` | Email domains the privacy filter lets through |
 | `orgInjection` | `index` | How org entries appear in the injected index: `index`, `titles` or `off` |
 | `enableMultilingualSearch` | `true` | Multilingual text search; read on every search, no restart needed |
+| `orgSync` | `hook` | Who pushes org memories: `hook` (the PostToolUse hook, Claude Code and Gemini) or `server` (the MCP server itself, for hosts without hooks such as Visual Studio). Set one, never both; in `server` mode the hook does nothing for org keys |
 | `embeddingModel` | multilingual model | Semantic-search model; see [Languages](#languages) |
 | `personalVault`, `orgVault` | `~/.total-recall/personal-vault`, `~/.total-recall/org` | Vault folders. Read once at start: restart the assistant after changing them (a changed `orgVault` without a restart silently stops org sync) |
 | `specDriven` | on | Spec-driven tools and hooks; see [SPEC-DRIVEN.md](SPEC-DRIVEN.md) |

@@ -22,6 +22,8 @@ export interface TotalRecallConfig {
   enableMultilingualSearch?: boolean;
   // How the org part of the injected index is exposed: 'index' (default) | 'titles' | 'off'.
   orgInjection?: string;
+  // Who pushes org memories: 'hook' (default, the PostToolUse hook) or 'server' (this MCP server).
+  orgSync?: string;
   // Spec-driven features; parsed by spec/config.ts (parseSpecConfig).
   specDriven?: unknown;
 }

@@ -135,9 +135,9 @@ describe('architecture fitness functions', () => {
   });
 
   describe('runtime safety', () => {
-    it('[TR-R4] only vectorStore.ts and spec/exec.ts start external processes', async () => {
+    it('[TR-R4] only vectorStore.ts, org-sync.ts and spec/exec.ts start external processes', async () => {
       const rule = projectFiles()
-        .inPath(/^src\/(?!__tests__\/|vectorStore\.ts$|spec\/exec\.ts$)/)
+        .inPath(/^src\/(?!__tests__\/|vectorStore\.ts$|org-sync\.ts$|spec\/exec\.ts$)/)
         .should()
         .adhereTo((file) => !PROCESS_IMPORT.test(file.content), 'must not import child_process (use spec/exec.ts)');
       await expect(rule).toPassAsync();
