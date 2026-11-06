@@ -78,6 +78,7 @@ Run this after every release, not just hardening ones.
 - [ ] (1.6.0) `./install.sh --vscode` adds a `total-recall` entry to VS Code's user `mcp.json` and keeps the existing servers
 - [ ] (1.7.0) With `"orgSync": "server"` and an org vault: storing a memory tagged `org` pushes it to the team repo, and `.sync.log` shows one push, not two; with `orgSync` unset the PostToolUse hook pushes as before
 - [ ] (host matrix) VS Code with Copilot and a Claude model, and Visual Studio: install per INSTALL.md, then `get_stats` and a store/recall round trip. **Not run: the maintainer has neither client.** Record the result here when someone does
+- [ ] (npx) `npx -y @adrian-balaban/total-recall --help` prints the usage; on a clean sandboxed `HOME` (with `claude` installed) `npx -y @adrian-balaban/total-recall -y` adds the marketplace, installs the plugin, runs `install.sh`, and a new session shows the memory index
 - [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 
 ---

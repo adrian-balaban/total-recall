@@ -34,6 +34,7 @@ on:
 
 permissions:
   contents: write
+  id-token: write   # npm trusted publishing (provenance), no stored token
 
 jobs:
   release:
@@ -116,3 +117,20 @@ jobs:
             --target "$SHA" \
             --title "v${{ steps.v.outputs.version }}" \
             --generate-notes
+
+      # The npm package is only the install bootstrap (bin/cli.mjs, no plugin code; the
+      # prepublishOnly guard fails the publish if anything else would ship). It is published
+      # when the version advances, from the same validated commit, with provenance.
+      - name: Set up Node for npm publishing
+        if: steps.check.outputs.exists == 'false'
+        uses: actions/setup-node@v5
+        with:
+          # npm trusted publishing needs Node 22.14+ and npm 11.5.1+ (docs.npmjs.com/trusted-publishers).
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+      - name: Use an npm that supports trusted publishing
+        if: steps.check.outputs.exists == 'false'
+        run: npm install -g npm@^11.5.1
+      - name: Publish the npx bootstrap to npm
+        if: steps.check.outputs.exists == 'false'
+        run: npm publish --access public --provenance

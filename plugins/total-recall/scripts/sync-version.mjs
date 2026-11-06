@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Single-source the plugin version. `package.json` is authoritative; this script
 // copies its `version` into every manifest that ships alongside it (currently
-// `.claude-plugin/plugin.json` for Claude Code and `gemini-extension.json` for
-// the Gemini CLI), so the three can never drift.
+// `.claude-plugin/plugin.json` for Claude Code, `gemini-extension.json` for
+// the Gemini CLI, and the root `package.json` of the npx bootstrap), so they can never drift.
 //
 // Idempotent and surgical: it rewrites ONLY the version value — the rest of the
 // manifest is left byte-for-byte unchanged (no JSON reformatting) — and it skips
@@ -22,6 +22,8 @@ const pkgPath = path.join(root, 'package.json');
 const MANIFESTS = [
   path.join(root, '.claude-plugin', 'plugin.json'),
   path.join(root, 'gemini-extension.json'),
+  // The npx bootstrap at the repository root releases in lockstep with the plugin.
+  path.join(root, '..', '..', 'package.json'),
 ];
 
 const pkgVersion = JSON.parse(fs.readFileSync(pkgPath, 'utf8')).version;

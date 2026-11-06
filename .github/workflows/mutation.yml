@@ -42,7 +42,7 @@ jobs:
       # out of sync with package.json.
       - run: npm run build
       - name: Verify manifests are version-synced with package.json
-        run: git diff --exit-code -- .claude-plugin/plugin.json gemini-extension.json
+        run: git diff --exit-code -- .claude-plugin/plugin.json gemini-extension.json ../../package.json
       # The full unit suite — MUST run after the build. dist/ is gitignored, and
       # hooks/scripts/store-learning.mjs imports dist/frontmatter.mjs at runtime,
       # so hook-scripts.test.ts hits ERR_MODULE_NOT_FOUND on an unbuilt tree
@@ -64,3 +64,10 @@ jobs:
       # The `break: 65` threshold in stryker.conf.json makes stryker exit 1
       # when the "of total" score is below 65, failing this job.
       - run: npx stryker run
+      # The npx bootstrap at the repository root (bin/cli.mjs): plain node:test, no dependencies.
+      # It is orchestration, so it stays outside the Stryker scope above.
+      - name: Test the npx bootstrap
+        working-directory: .
+        run: |
+          npm test
+          node test/pack-guard.mjs
