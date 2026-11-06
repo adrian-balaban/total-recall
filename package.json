@@ -7,7 +7,7 @@
   "bin": { "total-recall": "bin/cli.mjs" },
   "files": ["bin"],
   "engines": { "node": ">=18" },
-  "repository": "github:adrian-balaban/total-recall",
+  "repository": { "type": "git", "url": "git+https://github.com/adrian-balaban/total-recall.git" },
   "scripts": {
     "test": "node --test test/cli.test.mjs",
     "prepublishOnly": "node test/pack-guard.mjs"
