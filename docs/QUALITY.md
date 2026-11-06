@@ -10,7 +10,7 @@ Measured on **v1.7.1** at commit `af0c7cf` (2026-11-06). Test, coverage and muta
 |---|---|---|---|
 | Unit / integration tests | 1,022 / 24, all passing (plus 19 for the npx launcher) | — | ✅ |
 | Coverage (statements · branches · functions · lines) | 96.7% · 90.9% · 95.0% · 97.9% | 95 · 90 · 95 · 95 | ✅ |
-| Mutation score (Stryker, 18 modules) | **81.0%** | ≥ 65% `[TR-Q6]` | ✅ |
+| Mutation score (Stryker, 18 modules in the v1.7.1 baseline) | **81.0%** | ≥ 65% `[TR-Q6]` | ✅ |
 | Average cyclomatic complexity (441 functions) | 3.41 | < 4 | ✅ |
 | Functions with complexity ≥ 10 | 26 (max 58, `storeMemory`) | 0; frozen by a ratchet `[TR-Q9]` | ⚠️ |
 | Mean distance from the main sequence | 0.42 | < 0.6 | ✅ |
@@ -22,7 +22,7 @@ Measured on **v1.7.1** at commit `af0c7cf` (2026-11-06). Test, coverage and muta
 
 ## Tests and mutation
 
-Scope of the numbers: coverage is from the unit suite only (the integration tests are not counted); the mutation score is over all mutants Stryker generates in the 18 mutated modules; CI runs on `ubuntu-latest` with Node 20 ([workflow runs](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml)).
+Scope of the numbers: coverage is from the unit suite only (the integration tests are not counted); the mutation score is over all mutants Stryker generates in the 18 mutated modules of this v1.7.1 baseline (19 since 1.8.0); CI runs on `ubuntu-latest` with Node 20 ([workflow runs](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml)).
 
 | | |
 |---|---|

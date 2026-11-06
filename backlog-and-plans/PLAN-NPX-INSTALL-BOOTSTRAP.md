@@ -1,6 +1,6 @@
 # PLAN — `npx @adrian-balaban/total-recall`: one-command install bootstrap
 
-**Status:** steps 1–7 implemented in PR #49 (updated 2026-11-06); step 8 done (npm scope, first publish of 1.7.0 by hand, Trusted Publisher set); step 9 (clean-machine check) and the first CI publish, at the next plugin bump, are still open · **Date:** 2026-11-02 · **Branch:** `main` (written on `feat/release-1.6.8-multilingual-default`, merged in #27)
+**Status:** steps 1–8 implemented in PR #49; the first CI publish shipped with 1.7.1 and npm now shows 1.8.1 as latest (verified 2026-11-06); step 9 (clean-machine check) is still open · **Date:** 2026-11-02, status updated 2026-11-06 · **Branch:** `main` (written on `feat/release-1.6.8-multilingual-default`, merged in #27)
 **Deliverable of this document:** the implementation plan for letting users install total-recall with `npx` / `npm` in addition to the current marketplace route.
 
 ## 1. Goal

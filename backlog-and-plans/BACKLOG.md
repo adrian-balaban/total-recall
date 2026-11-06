@@ -15,7 +15,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ### vault-scan dir-mtime cache (review item 9.1)
 - **Source:** `review-synthetized-25072026.txt` §9.1.
-- **What:** `reconcileIndex` re-walks every directory on each poll even when only
+- **What:** `reconcileIndex` re-walks the vault on each reconcile even when only
   files changed. A per-directory mtime cache (skip a subtree whose dir mtime is
   unchanged) would cut the walk cost.
 - **Trigger:** vault grows into the thousands of memories (today it's personal
@@ -140,7 +140,7 @@ pruned (2026-07-29); this backlog is now the sole record.
 ### Context graph / temporal relations over memories (Technology Radar Vol 34)
 - **Source:** Thoughtworks Technology Radar Vol 34 (2026) — *Context graph*
   (Assess technique) and *Graphiti* (Trial platform, Zep's open-source
-  bi-temporal knowledge-graph engine). 
+  bi-temporal knowledge-graph engine).
 - **What:** the plugin has a *supersede* primitive (`store_memory force=true`
   archives the prior body + appends a `supersededAt[]` chain — CLAUDE.md, and
   `supersededAt` in `store.ts`/`frontmatter.ts`) but no queryable relation/graph
@@ -214,30 +214,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   syncing** until the server restarts. Config-restart hygiene gap, not a crash.
 - **Trigger:** `config.orgVault`/`personalVault` edited at runtime without an
   MCP-server restart. Low, latent.
-- **Shape when picked up:** Option A (cheapest) — document in the config section
-  of `plugins/total-recall/README.md` / `CLAUDE.md` that changing
-  `orgVault`/`personalVault` needs an MCP-server restart for the write path to
-  pick it up (hooks already re-read config per invocation; only the long-lived
-  server is stale). Option B (robust) — resolve `ORG_VAULT`/`PERSONAL_VAULT`
-  dynamically at use time in `store.ts`/`mutate.ts` instead of importing the
-  module-load const.
-
-### `GEMINI.md` duplicates `CLAUDE.md` rules
-- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
-- **What:** `plugins/total-recall/GEMINI.md` repeats "always-true" rules from
-  `CLAUDE.md` and install/compat text from the READMEs, so it can drift.
-- **Trigger:** the next edit to either file, or a Gemini/Antigravity-specific change.
-- **Shape when picked up:** reduce `GEMINI.md` to Gemini/Antigravity-only notes and link to
-  `CLAUDE.md`, or fold it into the README compatibility notes.
-
-### Two hook manifests kept in sync by hand
-- **Source:** the removed `NON-ESSENTIAL-ANALYSIS.md`.
-- **What:** `hooks/hooks.json` and `hooks/hooks.gemini.json` must be edited
-  together (`CLAUDE.md` says so). Nothing fails if they diverge.
-- **Trigger:** any new hook (the spec-driven plan adds three), or dropping
-  Gemini/Antigravity support.
-- **Shape when picked up:** a unit test asserting the two list the same events
-  and scripts, or generate one from the other.
+- **Shape when picked up:** the restart requirement is documented in `docs/HOW-IT-WORKS.md`; the remaining robust fix is to resolve vault paths at use time in `store.ts`/`mutate.ts` instead of importing module-load constants.
 
 ---
 

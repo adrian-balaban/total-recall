@@ -1,13 +1,13 @@
 # Post-release smoke test — total-recall
 
-Manual checklist to run after `claude plugin update total-recall` picks up a
+Manual checklist to run after `claude plugin update total-recall@my-claude-plugins` picks up a
 new version. CI (`mutation.yml`) already proves the code is correct in
 isolation; this catches packaging/runtime regressions that no unit test can
 see — a missing `.mcp.json` server, a stale plugin cache, a broken native
 binding — because those only surface in a real installed plugin, in a real
 Claude Code session, talking to the real filesystem.
 
-Run this after every release, not just hardening ones. 
+Run this after every release, not just hardening ones.
 ---
 
 ## 0. Before updating
@@ -18,7 +18,7 @@ Run this after every release, not just hardening ones.
 
 ## 1. Update + restart
 
-- [ ] `claude plugin update total-recall` (or `/plugin` → update)
+- [ ] `claude plugin update total-recall@my-claude-plugins` (or `/plugin` → update)
 - [ ] Fully restart Claude Code (not just a new session — the MCP server process must respawn)
 - [ ] Confirm new version: `claude plugin list` shows the expected version
 
@@ -30,7 +30,7 @@ Run this after every release, not just hardening ones.
 
 ## 3. SessionStart injection
 
-- [ ] New session shows the "Total Recall vX.Y.Z active" banner with the **correct** version (not a stale cached one — this drifted before, see TR-REVIEW-PLAN P3)
+- [ ] New session shows the "Total Recall vX.Y.Z active" banner with the **correct** version (not a stale cached one)
 - [ ] Memory index is injected and non-empty (assuming vault has memories)
 
 ## 4. Core tool round-trip
@@ -45,9 +45,9 @@ Run this after every release, not just hardening ones.
 
 - [ ] `get_stats` reports `vector.enabled: true` (or check `depsPresent`)
 - [ ] Store a memory, wait a few seconds, confirm no error in `get_stats.recentErrors` about embedding/sqlite-vec
-- [ ] If this is a **fresh plugin-cache version dir** (first run after `claude plugin update`, not just a restart): specifically check for the "Could not locate binding file" self-heal path — `better-sqlite3` ships source-only per version dir and needs a rebuild. Should self-heal silently; if it doesn't, `recentErrors` should say the binding is "still missing" and name `npm rebuild better-sqlite3` as the fix (never trust npm's exit code alone here)
-- [ ] **Cross-language semantic search.** The default `Xenova/paraphrase-multilingual-MiniLM-L12-v2` is multilingual (since 1.6.8); skip this check only if `get_stats.vector.model` shows the English-only `Xenova/all-MiniLM-L6-v2`. Store a throwaway memory with ENGLISH-only content (no Romanian words), then call `rerank_memories` with a ROMANIAN query describing the same idea against a candidate list containing that key plus 2-3 unrelated keys (and vice versa: a Romanian memory, an English query). The correct match's cosine score should be clearly separated from the unrelated candidates (e.g. 0.5+ vs <0.25) — that is direct evidence the embeddings do cross-language semantic matching, isolated from ranking/fusion effects. Delete the throwaway after.
-  - Do **not** use `recall_memory` for this check — its hybrid path merges TF-IDF and vector lists via Reciprocal Rank Fusion (`rrf.ts`, rank-based, not score-based), and a memory with ZERO lexical overlap can rank #1 in the vector list yet still be out-ranked in the fused result by memories that place decently in *both* lists. That's RRF behaving as designed, not a vector-search defect — but it means `recall_memory` alone is the wrong tool to verify the embeddings are doing their job.
+- [ ] Fresh plugin-cache version dir: confirm the `better-sqlite3` self-heal. If it fails, `recentErrors` should say the binding is still missing and name `npm rebuild better-sqlite3`; do not trust npm's exit code alone.
+- [ ] **Cross-language semantic search.** Store an English-only throwaway, then call `rerank_memories` with a Romanian query for the same idea plus 2–3 unrelated keys; repeat reversed. The correct match's cosine score should be clearly separated (for example, 0.5+ versus <0.25). Delete the throwaway. Skip only if `get_stats.vector.model` shows the English-only `Xenova/all-MiniLM-L6-v2`.
+  - Do not use `recall_memory` for this check: RRF can outrank a zero-overlap vector hit with entries that match both lexical and vector lists. `rerank_memories` isolates the embeddings.
 
 ## 6. Org vault + sync (only if org vault configured)
 
@@ -61,7 +61,7 @@ Run this after every release, not just hardening ones.
 
 - [ ] `SessionStart`: org vault pulled, index rebuilt, no errors in hook output
 - [ ] `PreCompact` (if a long session / manual compact triggers it): check personal vault for any auto-captured learning `.md` files
-- [ ] `SessionEnd` on quit: check `~/.total-recall/personal-vault/.git log -1` — H1 auto-commit should have a fresh commit if the vault is a git repo. Only `install.sh` runs `git init` on the vault; `claude plugin update` does not, and the SessionEnd hook never inits one, so a vault without `.git` is skipped silently (re-run `./install.sh` to create it)
+- [ ] `SessionEnd` on quit: run `git -C ~/.total-recall/personal-vault log -1` — the H1 auto-commit should have a fresh commit if the vault is a git repo. Only `install.sh` runs `git init` on the vault; `claude plugin update` does not, and the SessionEnd hook never inits one, so a vault without `.git` is skipped silently (re-run `./install.sh` to create it)
 
 ## 8. Error-path spot check (only if a recent change touched these)
 
@@ -80,10 +80,10 @@ Run this after every release, not just hardening ones.
 - [ ] (1.6.9) The first semantic search after an update downloads the model into `~/.total-recall/models/`; after a later `claude plugin update`, no second download (the folder is reused)
 - [ ] (1.6.9, Windows) `./install.sh --vscode` from Git Bash writes `%APPDATA%\Code\User\mcp.json` with `"command": "bash"` and the script as argument
 - [ ] (1.7.0) With `"orgSync": "server"` and an org vault: storing a memory tagged `org` pushes it to the team repo, and `.sync.log` shows one push, not two; with `orgSync` unset the PostToolUse hook pushes as before
-- [ ] (host matrix) VS Code with Copilot and a Claude model, and Visual Studio: install per INSTALL.md, then `get_stats` and a store/recall round trip. **Not run: the maintainer has neither client.** Record the result here when someone does
+- [ ] (host matrix) VS Code with Copilot and a Claude model, and Visual Studio: install per INSTALL.md, then `get_stats` and a store/recall round trip. **Not run: no client available.** Record the result here when someone does
 - [ ] (1.8.0) With more memories than `indexMaxEntries` (set it to 3 to try): the SessionStart index lists 3 memories, the first line shows the real total, the last line says how many are not listed, and `search_index` finds one of them
 - [ ] (1.8.0) After a PreCompact, `~/.total-recall/.extract.log` ends with `outcome=wrote` or `outcome=nothing`, not `cli-error` (the nested `claude -p` now runs with `--tools ""`)
-- [ ] (1.7.1) The npm page of `@adrian-balaban/total-recall` shows the release version with a provenance badge (published by `release.yml` through Trusted Publishing); `npm pack --dry-run @adrian-balaban/total-recall` lists only the launcher, `package.json`, README and LICENSE
+- [ ] (npm) The npm page of `@adrian-balaban/total-recall` shows the current release version with a provenance badge (published by `release.yml` through Trusted Publishing); `npm pack --dry-run @adrian-balaban/total-recall` lists only the launcher, `package.json`, README and LICENSE
 - [ ] (npx) `npx -y @adrian-balaban/total-recall --help` prints the usage; on a clean sandboxed `HOME` (with `claude` installed) `npx -y @adrian-balaban/total-recall -y` adds the marketplace, installs the plugin, runs `install.sh`, and a new session shows the memory index
 - [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 

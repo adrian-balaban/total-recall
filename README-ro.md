@@ -4,21 +4,21 @@
 
 **Asistentul tău AI uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor și Windsurf (ambele netestate încă), Claude Desktop sau orice alt client care respectă Model Context Protocol (MCP). Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau o deschizi ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
+Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor și Windsurf (ambele netestate încă), Claude Desktop sau orice alt client care respectă Model Context Protocol (MCP). Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…”), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
-- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Nu trebuie să rulezi niciun server și nu ai nevoie de cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete și identificatori personali uzuali (doar tipare: vezi [Confidențialitate](#confidențialitate-ce-pleacă-de-pe-mașina-ta)).
+- **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Nu ai nevoie de un server separat sau de un cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete și identificatori personali uzuali (doar tipare: vezi [Confidențialitate](#confidențialitate-ce-pleacă-de-pe-mașina-ta)).
 - **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă la prima utilizare un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite).
 
 ## Dintr-o privire
 
 - **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** v1.7.1, release-uri cu tag din august 2026 (~10/lună). 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
+- **Maturitate:** v1.8.1, release-uri cu tag din august 2026 (~10/lună). Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată (nu poate fi oprită deocamdată). Singurul alt trafic spre exterior sunt descărcările de pachete și de model la instalare (profilul Complete) și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)). Sincronizarea echipei e automată în Claude Code și Gemini/Antigravity; la ceilalți asistenți setează `"orgSync": "server"` ca serverul să facă push, iar memoriile colegilor le aduci manual.
-- **Indexul nu are plafon:** 30–40 de tokeni per memorie, cam 4,4k la 105 memorii, 32–40k la 1.000 și 162–200k la 5.000.
+- **Indexul are plafon implicit:** `indexMaxEntries` are valoarea implicită 300 (circa 10k tokeni); `0` elimină plafonul. O memorie costă 30–40 de tokeni (exemple fără plafon: circa 4,4k la 105 memorii, 32–40k la 1.000 și 162–200k la 5.000), iar intrările dincolo de plafon rămân accesibile prin căutare.
 - **Unelte spec-driven (pentru arhitecți și lideri de testare, active implicit):** leagă deciziile de ID-urile cerințelor și verifică dacă fiecare regulă cu ID din fișierele ADL are un test care conține acel ID (doar acoperirea; testele nu sunt rulate). Cinci din cele 22 de unelte. Nu folosești fișiere ADL? Ignoră-le sau setează `"specDriven": {"enabled": false}` în `~/.total-recall/config.json`. [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md) (în engleză).
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
@@ -127,7 +127,7 @@ Exportul e JSON simplu (`export_memories`). Vine în răspunsul asistentului, de
 
 ## Limbi
 
-Căutarea de text merge în orice limbă scrisă cu alfabet latin, ignorând majoritatea diacriticelor, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte; nu vede alte alfabete. Căutarea semantică opțională (activă implicit în profilul „Complete”) acoperă orice pereche de limbi, inclusiv chirilică, greacă, arabă, chineză și japoneză: din 1.6.8 modelul implicit e multilingv (50+ limbi).
+Căutarea de text merge în orice limbă scrisă cu alfabet latin, ignorând majoritatea diacriticelor, atâta timp cât întrebarea și memoria folosesc aceleași cuvinte; nu vede alte alfabete. Căutarea semantică opțională (activă implicit în profilul „Complete”) suportă potrivire între limbile acoperite de modelul implicit (50+ limbi), inclusiv chirilică, greacă, arabă, chineză și japoneză: din 1.6.8 e multilingv.
 
 Lucrezi doar în engleză? Un model mai mic (87 MB față de 449 MB) se setează dintr-o linie de configurare: [Cum funcționează → Limbi](docs/HOW-IT-WORKS.md#languages) (în engleză).
 
@@ -177,7 +177,7 @@ Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull requ
 
 ## Limite
 
-- **Indexul de la pornirea sesiunii nu are plafon** (costul e în [Dintr-o privire](#dintr-o-privire)). Curăță cu `prune_memories`: îți arată candidații și nu șterge nimic.
+- **Indexul injectat are plafonul `indexMaxEntries`** (implicit 300; `0` = fără plafon; costul e în [Dintr-o privire](#dintr-o-privire)). Curăță cu `prune_memories`: îți arată candidații și nu șterge nimic.
 - **Căutarea de text citește titlul, etichetele și primele 500 de caractere** ale fiecărei memorii, nu tot textul. Pune informația-cheie la început.
 - **Mai multe sesiuni în paralel** scriu fișiere separate (câte unul pe memorie), dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
 - **Nimic nu se șterge automat.** Curba uitării doar ordonează rezultatele. O memorie ștearsă rămâne în istoricul git local al vault-ului și în `.superseded/`.

@@ -2,7 +2,7 @@
 
 [← README](../README.md) · [SECURITY.md](../SECURITY.md) (how to report, and the user-facing summary)
 
-A first threat model for Total Recall 1.8.0, written from the code and the existing docs. It follows the Technology Radar's advice (Vol 35, Adopt: threat modeling) for tools that feed text to a language model: prompt injection and autonomous action are the main risks, so the model below starts from *what text reaches the model and what the model can then do*. It has not been reviewed by anyone outside the project and is not a penetration test. Every mitigation named here has a test or an ADL rule you can run; where there is none, it says so.
+A first threat model for Total Recall 1.8.x, written from the code and the existing docs. It follows the Technology Radar's advice (Vol 35, Adopt: threat modeling) for tools that feed text to a language model: prompt injection and autonomous action are the main risks, so the model below starts from *what text reaches the model and what the model can then do*. It has not been reviewed by anyone outside the project and is not a penetration test. Every mitigation named here has a test or an ADL rule you can run; where there is none, it says so.
 
 ## 1. What is protected
 

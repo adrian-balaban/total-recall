@@ -10,8 +10,8 @@ description: Use when storing or retrieving memories with the Total Recall plugi
 Follow this order strictly — earlier steps are cheaper:
 
 1. **Scan injected index first** (already in context — free, zero tokens)
-   - At session start, an index of all memories was injected into context
-   - Check it before calling any MCP tool
+   - At session start, up to `indexMaxEntries` memories (default 300) were injected
+   - Check it before calling any MCP tool; a missing key may simply be beyond the cap
 2. **Key found in index?** → `get_memories_by_keys(keys=[...], summary=true)`
    - Returns ~500-char executive summary per memory
 3. **Need full depth?** → `get_memories_by_keys(keys=[...], summary=false)`

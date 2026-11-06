@@ -29,7 +29,7 @@ You rarely call these by name: say *"remember that…"*, *"what did we decide ab
 | `get_architecture_history` | Architecture | Change log | Architecture changes in time order |
 | `validate_architecture` | Architecture | Coverage check | Every tagged assertion has a test carrying its ID; failures are stored |
 
-**Context cost.** The definitions the server sends with `tools/list` are about 16,800 characters for all 22 tools, roughly 4,200 to 4,800 tokens (a characters-per-token estimate, measured on 1.6.8; no tool or schema changed through 1.7.1). With `specDriven.enabled: false` there are 17 tools and about 11,200 characters, roughly 2,800 to 3,200 tokens, so switching spec-driven off saves about 1,400 to 1,600 tokens per session. `store_memory` alone is about 2,700 characters.
+**Context cost.** The definitions the server sends with `tools/list` are about 16,800 characters for all 22 tools, roughly 4,200 to 4,800 tokens (a characters-per-token estimate, measured on 1.6.8; the 1.8.x index cap changes configuration, not tool schemas). With `specDriven.enabled: false` there are 17 tools and about 11,200 characters, roughly 2,800 to 3,200 tokens, so switching spec-driven off saves about 1,400 to 1,600 tokens per session. `store_memory` alone is about 2,700 characters.
 
 The five architecture tools are on by default. Switch them off one by one (`specDriven.tools`) or all together (`specDriven.enabled: false`, which also removes the optional spec fields from the other tools).
 

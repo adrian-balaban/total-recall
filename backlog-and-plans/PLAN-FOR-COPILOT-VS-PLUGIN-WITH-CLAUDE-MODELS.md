@@ -56,7 +56,7 @@ Merges three reviews:
 
 ## 🛠️ Plan
 
-![Order of work](docs/diagrams/copilot-plan.svg)
+![Order of work](../docs/diagrams/copilot-plan.svg)
 
 Every step is one PR that keeps `npm test`, `test:integration` and `validate_architecture` green.
 

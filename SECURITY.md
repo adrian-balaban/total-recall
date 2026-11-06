@@ -33,7 +33,7 @@ model can still be influenced by text it reads.
 
 ## Automatic capture is a lasting injection path
 
-At PreCompact (and session end, where the host has it) a nested `claude -p` run (with no tools, no MCP servers and no skills since 1.8.0, so injected text cannot make it run commands or read files) reads the end of the session, including web pages and tool output, and stores what it judges worth keeping, without review. Text planted in a page the assistant read can therefore become a stored memory that appears in the index of later sessions, in every project. The nested run starts with your normal permissions: it passes no `--allowedTools` or `--disallowedTools`. Capture cannot be switched off yet. Check what was stored with "list my recent memories", and delete what you do not want.
+At PreCompact (and session end, where the host has it), a nested `claude -p` run reads the end of the session, including web pages and tool output, and stores what it judges worth keeping, without review. Since 1.8.0 that run is sandboxed: no tools, no MCP servers, no skills and no saved session, so planted text cannot make it run commands or read files. It still runs with your OS account and model-provider login, and planted text can become a stored memory that reaches later sessions in every project. Capture cannot be switched off yet. Check what was stored with "list my recent memories", and delete what you do not want.
 
 ## Other data flows
 

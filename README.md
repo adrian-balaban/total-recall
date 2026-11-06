@@ -9,16 +9,16 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 🇬🇧 English · [🇷🇴 Română](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
-- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No server to run, no account. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets and common personal identifiers (patterns only: see [Privacy](#privacy-what-leaves-your-machine)).
-- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model on first use (449 MB; 87 MB for the English-only one; `--no-vector` skips it). 
+- **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No external server or account to manage. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets and common personal identifiers (patterns only: see [Privacy](#privacy-what-leaves-your-machine)).
+- **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model on first use (449 MB; 87 MB for the English-only one; `--no-vector` skips it).
 
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** v1.7.1, tagged releases since August 2026 (~10/month). 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
+- **Maturity:** v1.8.1, tagged releases since August 2026 (~10/month). Latest measured baseline (v1.7.1): 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (it cannot be switched off yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
 - **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Team sync is automatic in Claude Code and Gemini/Antigravity; on other assistants set `"orgSync": "server"` so the server pushes, and pull teammates' memories by hand.
-- **The index has no size cap:** 30–40 tokens per memory: about 4.4k at 105 memories, 32–40k at 1,000 and 162–200k at 5,000.
+- **The index is capped by default:** `indexMaxEntries` defaults to 300 (about 10k tokens); `0` removes the cap. Memories cost 30–40 tokens each (uncapped examples: about 4.4k at 105, 32–40k at 1,000 and 162–200k at 5,000), and entries beyond the cap stay findable through search.
 - **Spec-driven tools (for architects and test leads, on by default):** link decisions to requirement IDs and check that every tagged rule in your ADL files has a test carrying its ID (coverage only; your tests are not run). Five of the 22 tools. Not using ADL files? Ignore them, or set `"specDriven": {"enabled": false}` in `~/.total-recall/config.json`. [Spec-driven work](docs/SPEC-DRIVEN.md).
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
@@ -127,7 +127,7 @@ Export is plain JSON (`export_memories`). It comes back in the assistant's answe
 
 ## Languages
 
-Text search works in any language written in the Latin alphabet, with most accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) covers every language pair, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 the default model is multilingual (50+ languages).
+Text search works in any language written in the Latin alphabet, with most accents ignored, as long as the question and the memory use the same words; it cannot see other scripts. Optional semantic search (on by default in the "complete" profile) supports cross-language matching across the 50+ languages covered by the default model, including Cyrillic, Greek, Arabic, Chinese and Japanese: since 1.6.8 it is multilingual.
 
 English only? A smaller model (87 MB vs. 449 MB) is one config line: [How it works → Languages](docs/HOW-IT-WORKS.md#languages).
 
@@ -177,7 +177,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 
 ## Limits
 
-- **The index at session start has no cap** (cost in [At a glance](#at-a-glance)). Clean up with `prune_memories`: it lists candidates and deletes nothing.
+- **The injected index is capped at `indexMaxEntries`** (default 300; `0` = no cap; cost in [At a glance](#at-a-glance)). Clean up with `prune_memories`: it lists candidates and deletes nothing.
 - **Text search reads the title, the tags and the first 500 characters** of each memory, not the whole body. Put the key fact first.
 - **Several sessions at once** write separate files (one per memory), but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
 - **Nothing is deleted automatically.** The forgetting curve only ranks results. A deleted memory stays in the vault's local git history and in `.superseded/`.

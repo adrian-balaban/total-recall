@@ -61,7 +61,7 @@ Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.
 
 **One command (npx).** `npx @adrian-balaban/total-recall [install.sh flags]` runs `claude plugin marketplace add adrian-balaban/total-recall`, then `claude plugin install total-recall@my-claude-plugins`, then the `install.sh` of the newest cached version. It is safe to re-run, skips the first two steps when the plugin is already installed, finds the `claude` binary bundled with the VS Code extension when it is not on `PATH`, and stops when another plugin named `total-recall` is installed (`--force` overrides). On Windows it needs Git Bash and exits with code 69 without it. Always use the scoped name: the unscoped `total-recall` on npm is an unrelated tool. To check what the package contains: `npm pack --dry-run @adrian-balaban/total-recall` lists the launcher, `package.json`, README and LICENSE.
 
-**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact is committed there. There is deliberately no zip download, and the only npm package is the install launcher described below, which contains no plugin code — one channel for the code, built by CI. Nothing is signed yet (commits, tags and the bundle), so what you trust is this repository and GitHub Actions.
+**What you are installing.** The marketplace fetches the CI-built `release` tree; `dist/` is not committed to `main`. The npm launcher contains no plugin code, and there is no zip download. Commits, tags and the bundle are unsigned, so trust ultimately rests on this repository and GitHub Actions.
 
 ## 🧩 Install without Claude Code
 
@@ -73,7 +73,7 @@ cd ~/total-recall-plugin/plugins/total-recall
 ./install.sh -y            # add --gemini or --vscode to register the server for those hosts
 ```
 
-Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file (the `## Memory` block from the README's [Quick start, step 3](../../README.md#claude-code)). Host-specific notes follow below: [Gemini/Antigravity](#geminiantigravity), [VS Code](#vs-code-copilot-agent-mode--manual-mcpjson), [Codex CLI](#-codex-cli-mcp-only-no-hooks). To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`. To uninstall: remove the `total-recall` entry from your assistant's MCP configuration and delete the clone (`~/total-recall-plugin`); your memories stay in `~/.total-recall/` until you delete that folder.
+Without the `claude` CLI, `install.sh` skips MCP registration with a warning and does the rest. Register the server in your assistant's MCP configuration (command `bash`, argument the absolute path of `scripts/start-server.sh`) and add the memory instructions to its instruction file (the `## Memory` block from the README's [Quick start, step 3](../../README.md#claude-code)). Host-specific notes follow below: [Gemini/Antigravity](#geminiantigravity), [VS Code](#vs-code-copilot-agent-mode-manual-mcpjson), [Codex CLI](#-codex-cli-mcp-only-no-hooks). To upgrade: `git fetch && git reset --hard origin/release` in the clone (the branch is rebuilt by CI, so `git pull` can fail), then re-run `./install.sh -y`. To uninstall: remove the `total-recall` entry from your assistant's MCP configuration and delete the clone (`~/total-recall-plugin`); your memories stay in `~/.total-recall/` until you delete that folder.
 
 ### Gemini/Antigravity
 
@@ -81,7 +81,7 @@ Without the `claude` CLI, `install.sh` skips MCP registration with a warning and
 ./install.sh --gemini    # MCP + hooks/hooks.gemini.json (requires the `agy` CLI)
 ```
 
-### VS Code (Copilot agent mode) — manual `mcp.json`
+### VS Code (Copilot agent mode) manual `mcp.json`
 
 Only needed when VS Code agent plugins are off (with them on, the plugin's own `.mcp.json` and hooks should load; not yet verified end to end).
 
@@ -196,10 +196,10 @@ For many machines, run `install.sh -y` as the target user (it writes to that use
 
 ## 🔐 Privacy model — what is blocked, what is only warned
 
-Two layers, with different threat models:
+Two layers:
 
-- **Org vault (shared repo) — hard block.** The org-sync hook runs a fail-closed privacy filter *before* `git add`: it refuses to push any memory containing a secret token / API key (known-prefix `sk-`, `ghp_`, `AKIA`…, PEM headers; labeled-generic `api_key:` / `Authorization: Bearer` / `password =` forms; high-entropy mixed-class blobs), a credit card (Luhn-validated), an IBAN (ISO 13616 mod-97-validated), a formatted phone number, or a personal email outside your `--allowed-email-domain`. The filter is best-effort pattern matching, not a guarantee: a labelled secret (`api_key: …`) is caught only when its value has 16 or more characters, and an unlabelled secret only when it has a known prefix or looks like a high-entropy mixed-case string. It covers pushes made by the sync hook only: a raw `git push` in the org repo skips it.
-- **Personal vault (local, in the clear) — non-blocking warning only.** The personal vault stores content verbatim and is local to your machine (the embedder runs in-process and the vault itself is never pushed; the model provider still sees any memory the assistant reads), so a secret stored there is not a *remote* leak — but it IS sitting on disk in the clear. `store_memory` writes a one-line stderr warning when the body looks like a known-prefix secret token (`sk-…`, `ghp_…`, `AKIA…`, PEM headers). It does **not** block the store — the broader labeled-generic / high-entropy / financial / email detectors are intentionally NOT applied to the personal vault, to keep the personal-vault false-positive rate near zero (a noisy warning you learn to ignore is worse than no warning). If you need a hard guarantee a secret never touches disk, do not store it in any vault — the personal vault is not encrypted.
+- **Org vault (shared repo) — hard block.** The sync hook runs a fail-closed filter before `git add`. It blocks known-prefix tokens, labelled secrets, high-entropy blobs, Luhn-valid cards, mod-97 IBANs, formatted phone numbers and emails outside `--allowed-email-domain`. It is pattern matching, not semantics: a labelled secret needs 16+ characters, and a raw `git push` bypasses the filter.
+- **Personal vault (local, in the clear) — warning only.** It stores content verbatim and is never pushed; the model provider still sees what the assistant reads. `store_memory` warns on known-prefix secret tokens but does not block, and broader detectors are intentionally off to keep false positives low. Do not store a secret that must never touch disk.
 
 
 ## 🏷️ Same name, other plugins

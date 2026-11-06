@@ -201,7 +201,7 @@ Models that expect CLS pooling (LaBSE, bge-m3) load but rank worse than mean-poo
 
 ### PreCompact capture
 
-Before each context compaction (Claude Code; Gemini/Antigravity when the `claude` CLI is installed), `extract-and-store-memories.sh` sends the last 1 MiB of the session transcript to `claude -p` (your Claude Code login and default model, one call per compaction) and asks for 0–3 learnings as JSON lines. `store-learning.mjs` writes them to the personal vault and never overwrites a file. Each run appends one line to `~/.total-recall/.extract.log` (`outcome=wrote|nothing|dropped|cli-error|store-error`).
+Before each context compaction (Claude Code; Gemini/Antigravity when the `claude` CLI is installed), `extract-and-store-memories.sh` sends the last 1 MiB of the session transcript to `claude -p` (your Claude Code login and default model, one call per compaction). Since 1.8.0 the nested run has no tools, MCP servers, skills or saved session. It asks for 0–3 learnings as JSON lines. `store-learning.mjs` writes them to the personal vault and never overwrites a file. Each run appends one line to `~/.total-recall/.extract.log` (`outcome=wrote|nothing|dropped|cli-error|store-error`).
 
 - **Saved:** what worked and what didn't, and project context that is not obvious from the code (motivations, constraints, decisions).
 - **Not saved:** code, file paths, git history. All of it can be read from the workspace.

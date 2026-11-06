@@ -18,10 +18,10 @@ Claude Code.
   matcher is wired in `hooks/hooks.gemini.json`.
 - **Event renames:** Gemini/Antigravity's `AfterTool` / `PreCompress` map to Claude Code's
   `PostToolUse` / `PreCompact`. Both hook manifests (`hooks/hooks.json` and
-  `hooks/hooks.gemini.json`) must stay in sync — see `CLAUDE.md` gotcha 8.5.
+  `hooks/hooks.gemini.json`) must stay in sync — see `CLAUDE.md` → Hooks and `hooks-parity.test.ts`.
 - **No `Skill` tool in Gemini/Antigravity.** The Claude-specific skills
   (`memory-workflow`, `spec-driven-workflow`) ship in `skills/` but are **not loadable** in Gemini/Antigravity —
-  Gemini/Antigravity silently drops it. If a task needs the retrieval tree or the
+  Gemini/Antigravity silently drops them. If a task needs the retrieval tree or the
   "memorize more proactively" loop, or the spec-driven loop, ask the user to paste the `SKILL.md`
   body and proceed as a one-shot knowledge injection.
 - **Spec-driven hooks are wired but silent.** `architecture-change.sh` runs on
