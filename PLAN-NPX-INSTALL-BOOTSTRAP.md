@@ -1,6 +1,6 @@
 # PLAN — `npx @adrian-balaban/total-recall`: one-command install bootstrap
 
-**Status:** proposed (scope decision approved by maintainer) · **Date:** 2026-11-02 · **Branch:** `main` (written on `feat/release-1.6.8-multilingual-default`, merged in #27)
+**Status:** steps 1–7 implemented in PR #49 (updated 2026-11-06); steps 8 and 9 are manual and still open (npm account/scope, first publish, Trusted Publisher, clean-machine check) · **Date:** 2026-11-02 · **Branch:** `main` (written on `feat/release-1.6.8-multilingual-default`, merged in #27)
 **Deliverable of this document:** the implementation plan for letting users install total-recall with `npx` / `npm` in addition to the current marketplace route.
 
 ## 1. Goal
@@ -44,15 +44,15 @@ npx @adrian-balaban/total-recall          # or: npm i -g @adrian-balaban/total-r
 ```json
 {
   "name": "@adrian-balaban/total-recall",
-  "version": "1.6.7",
+  "version": "1.7.0",   // stamped from plugins/total-recall/package.json by sync-version.mjs
   "description": "One-command install bootstrap for the total-recall memory plugin (Claude Code / Gemini / VS Code). The plugin code itself ships from the GitHub release branch.",
   "type": "module",
   "license": "MIT",
   "bin": { "total-recall": "bin/cli.mjs" },
   "files": ["bin"],
   "engines": { "node": ">=18" },
-  "repository": "github:adrian-balaban/total-recall",
-  "scripts": { "test": "node --test test/" }
+  "repository": { "type": "git", "url": "git+https://github.com/adrian-balaban/total-recall.git" },
+  "scripts": { "test": "node --test test/cli.test.mjs", "prepublishOnly": "node test/pack-guard.mjs" }
 }
 ```
 
@@ -78,10 +78,10 @@ The root `package.json` version is stamped from `plugins/total-recall/package.js
 ## 6. CI publishing (npm trusted publishing — no stored token)
 
 - Extend `.github/workflows/release.yml` **after** the existing tag step with a `publish-npm` step:
-  - job permission `id-token: write`; `actions/setup-node` (node 20) with `registry-url: https://registry.npmjs.org/`;
+  - job permission `id-token: write`; `actions/setup-node` (**Node 22**; trusted publishing needs Node 22.14+ and npm 11.5.1+, so the job also runs `npm install -g npm@^11.5.1`) with `registry-url: https://registry.npmjs.org/`;
   - `npm publish --access public --provenance` from the repo root;
   - gate on the existing version-change check output (`steps.check`), so doc-only commits don't republish.
-- **One-time manual setup:** create the `@adrian-balaban` scope on npmjs.com, register the package for **Trusted Publishing** bound to this repo + `release.yml`, then do the first publish locally (`npm publish --access public --provenance`) since OIDC-only first publishes need the package to exist.
+- **One-time manual setup:** create the `@adrian-balaban` scope on npmjs.com, register the package for **Trusted Publishing** bound to this repo + `release.yml`, then do the first publish locally (`npm publish --access public`; provenance only exists in CI) since OIDC-only first publishes need the package to exist. `v1.7.0` was tagged before this step existed, so CI skips the npm step for 1.7.0: publish 1.7.0 by hand, and CI publishes from the next plugin version.
 - **Tarball invariant:** a `prepublishOnly` guard runs `npm pack --dry-run` and fails if anything beyond `bin/`, `package.json`, `README.md`, `LICENSE` would ship.
 
 ## 7. Tests
@@ -112,8 +112,8 @@ The root `package.json` version is stamped from `plugins/total-recall/package.js
 ## 11. Open questions
 
 1. First publish: npm Trusted Publishing requires the package name to exist; plan = one manual `npm publish --provenance` by the maintainer, CI handles everything after.
-2. Collision policy: hard-stop when a foreign `total-recall` is installed (default) vs `--force` escape hatch — `--force` proposed.
-3. Should `--uninstall` exist? Deferred — `claude plugin uninstall total-recall@my-claude-plugins` already covers it.
+2. Collision policy: hard-stop when a foreign `total-recall` is installed (default), with a `--force` escape hatch. **Done.**
+3. Should `--uninstall` exist? Deferred (tracked in BACKLOG.md) — `claude plugin uninstall total-recall@my-claude-plugins` already covers it.
 
 ## 12. Risks & mitigations
 
@@ -128,14 +128,14 @@ The root `package.json` version is stamped from `plugins/total-recall/package.js
 
 ## 13. Implementation checklist (ordered)
 
-1. `bin/cli.mjs` + root `package.json` (+ executable bit on the bin).
-2. `test/cli.test.mjs` (`node:test`) → root `npm test` green locally.
-3. `plugins/total-recall/scripts/sync-version.mjs`: add root `package.json` to the stamped manifests.
-4. `.github/workflows/release.yml`: `publish-npm` step (OIDC trusted publishing, gated on version change).
-5. `.github/workflows/mutation.yml`: add root `npm test` step.
-6. `.gitignore`: reword the root-package.json comment (§9).
-7. Docs: `README.md`, `README-ro.md`, `plugins/total-recall/INSTALL.md`, `SECURITY.md`, `RELEASE-SMOKE-TEST.md`.
-8. npmjs.com: create `@adrian-balaban/total-recall`, bind Trusted Publishing to `release.yml`, first manual publish.
-9. End-to-end verify on a clean machine/container: `npx -y @adrian-balaban/total-recall` → marketplace install + `install.sh` complete → new Claude Code session shows the injected memory index.
+1. ✅ `bin/cli.mjs` + root `package.json` (+ executable bit on the bin).
+2. ✅ `test/cli.test.mjs` (`node:test`) → root `npm test` green locally.
+3. ✅ `plugins/total-recall/scripts/sync-version.mjs`: add root `package.json` to the stamped manifests.
+4. ✅ `.github/workflows/release.yml`: `publish-npm` step (OIDC trusted publishing, gated on version change).
+5. ✅ `.github/workflows/mutation.yml`: add root `npm test` step.
+6. ✅ `.gitignore`: reword the root-package.json comment (§9).
+7. ✅ Docs: `README.md`, `README-ro.md`, `plugins/total-recall/INSTALL.md`, `SECURITY.md`, `RELEASE-SMOKE-TEST.md`.
+8. ⏳ (maintainer) npmjs.com: create `@adrian-balaban/total-recall`, bind Trusted Publishing to `release.yml`, first manual publish.
+9. ⏳ (maintainer) End-to-end verify on a clean machine/container: `npx -y @adrian-balaban/total-recall` → marketplace install + `install.sh` complete → new Claude Code session shows the injected memory index.
 
 
