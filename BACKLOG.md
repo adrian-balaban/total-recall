@@ -113,6 +113,12 @@ pruned (2026-07-29); this backlog is now the sole record.
   map behind the existing `embed()` seam. Pin vectorStore 3.1/3.2 dim-mismatch
   guards against the new provider's dim.
 
+### npx launcher: `--uninstall` and `--mcp`
+- **Source:** `PLAN-NPX-INSTALL-BOOTSTRAP.md` §10 and §11. The launcher itself (`npx @adrian-balaban/total-recall`) shipped; npm is only an install bootstrap, the plugin code still comes from the `release` branch.
+- **What:** no `--uninstall` (use `claude plugin uninstall total-recall@my-claude-plugins`) and no `--mcp` subcommand that registers the standalone server for Codex-style hosts.
+- **Trigger:** users asking for a one-command uninstall, or for Codex/Cursor installs that need more than the documented `mcpServers` snippet.
+- **Shape when picked up:** extra flags in `bin/cli.mjs` with the same injected-runner tests; `--mcp` must not make npm a second channel for plugin code.
+
 ### Org-sync freshness relies on marker-file polling
 - **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 5 (file pruned 2026-07-28).
 - **What:** teammate memories can lag until the next poll/hook fires — there is
