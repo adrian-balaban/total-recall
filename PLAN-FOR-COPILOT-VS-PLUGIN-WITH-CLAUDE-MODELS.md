@@ -70,7 +70,7 @@ Every step is one PR that keeps `npm test`, `test:integration` and `validate_arc
 | 3 ✅ 1.4.2 (#16), envelope per host waits for step 1 | **Host-tolerant hooks** (after 1.4.0) | Hook scripts accept Copilot payload variants (snake/camel case, `toolName`, VS Code MCP tool names) and match tool names inside the script (`[TR-C4]`, enforced in the script). Output uses the right envelope per host. Fixtures come from the spike. | New tests with Copilot-shaped stdin; org sync fires for Copilot tool names |
 | 4 🟡 1.6.0 (#18), Windows #44 | **Installers + docs** | `install.sh --vscode` (user `mcp.json`, `servers` schema, absolute paths) as the fallback when agent plugins are off. A Visual Studio `.mcp.json` snippet. An optional `adl.instructions.md`. | Idempotent-merge tests on a temp HOME, as in B |
 | 5 🔄 PR #17 (1.5.0) | **Server context** (after 1.4.0) | Richer `instructions` (retrieval order, capture rules). Resources: `total-recall://index` (with `[TR-D12]` framing and `orgInjection`) and `total-recall://sync-status`. Prompts: `memory-workflow` and `extract-session-learnings` (the stand-in for PreCompact). New `[TR-C7]`: resources and prompts never change `tools/list`. | `[TR-C7]` test; `tools/list` golden unchanged (`[TR-C1]`) |
-| 6 ✅ 1.7.0 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
+| 6 ✅ 1.7.0 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the user sets `server` for Visual Studio (INSTALL.md says how; the installer does not write it). In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
 
 ## 📝 ADR draft for step 6: `orgSync: hook | server`
 
@@ -78,11 +78,11 @@ Status: **accepted 2026-11-06** (stored as a `decisions` memory tagged `no-prune
 
 - **Context:** org sync runs only from the PostToolUse hook. On hosts without hooks (Visual Studio, a manual `mcp.json`) an `org` memory is written locally and never reaches teammates. That is a non-sync, not a leak.
 - **Decision (proposed):**
-  1. New config `orgSync: "hook" | "server"`, default `hook`. `install.sh --vscode` does not change it; the installer sets `server` for Visual Studio.
+  1. New config `orgSync: "hook" | "server"`, default `hook`. `install.sh --vscode` does not change it. As shipped, the installer does not set it for Visual Studio either: INSTALL.md tells the user to set it.
   2. In `server` mode, after `store/update/delete_memory` on an `org/*` key, the server adds the job to the same queue (`.sync-queue`) and drains it with `sync-org-memory.mjs` under the same lock as today (`[TR-W5]`).
   3. The privacy filter is unchanged (`[TR-D3]`).
   4. `hook` mode is unchanged. To avoid a double push, the queue deduplicates jobs and the server does not sync while the mode is `hook`.
-- **ADL consequence:** reword `[TR-R4]` to "Only Vectors, Spec exec and Org sync (`server` mode, through `sync-org-memory.mjs`) start external processes". Without it, step 6 breaks the rule.
+- **ADL consequence:** reword `[TR-R4]` to "Only Vectors (native binding self-heal), the Spec exec module and Org sync (server mode, through sync-org-memory.sh) start external processes" (the wording that shipped in 1.7.0). Without it, step 6 breaks the rule.
 - **Rejected alternatives:**
   - Detecting the client by `clientInfo.name`: fragile; a wrong guess means a double push or none.
   - A new MCP sync tool: changes the tool list and breaks `[TR-C1]`.

@@ -15,9 +15,9 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** v1.6.8, tagged releases since August 2026 (~10/month). 1,036 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
+- **Maturity:** v1.7.1, tagged releases since August 2026 (~10/month). 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (it cannot be switched off yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
-- **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Automatic team sync works only in Claude Code and Gemini/Antigravity; other assistants sync by hand.
+- **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Team sync is automatic in Claude Code and Gemini/Antigravity; on other assistants set `"orgSync": "server"` so the server pushes, and pull teammates' memories by hand.
 - **The index has no size cap:** 30–40 tokens per memory: about 4.4k at 105 memories, 32–40k at 1,000 and 162–200k at 5,000.
 - **Spec-driven tools (for architects and test leads, on by default):** link decisions to requirement IDs and check that every tagged rule in your ADL files has a test carrying its ID (coverage only; your tests are not run). Five of the 22 tools. Not using ADL files? Ignore them, or set `"specDriven": {"enabled": false}` in `~/.total-recall/config.json`. [Spec-driven work](docs/SPEC-DRIVEN.md).
 
@@ -137,8 +137,8 @@ English only? A smaller model (87 MB vs. 449 MB) is one config line: [How it wor
 |---|---|---|---|---|---|
 | **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
 | **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed (capture then runs on Claude) | ✅ automatic | ✅ |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
-| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ❌ manual | ❌ |
+| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ⚠️ push with `orgSync: "server"`, pull by hand | ❌ |
+| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ⚠️ push with `orgSync: "server"`, pull by hand | ❌ |
 
 All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end. The maintainer had no Cursor, Windsurf, Claude Desktop, VS Code/Copilot or Windows machine to test on, so those rows are untested: the server was checked over stdio (`initialize`, `tools/list`, `get_stats`), and the client config shown is the standard `mcpServers` form. Reports are welcome.
 
@@ -155,7 +155,7 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 - **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes. The files are not encrypted.
 - **Automatic capture reads what the session read** (web pages, tool output) and saves its lessons without review. They appear in later sessions in every project, so check them now and then with *"list my recent memories"*.
 - **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture, which cannot be switched off yet).
-- **Other network calls:** the semantic model downloads from Hugging Face once; the team vault uses git. No telemetry.
+- **Other network calls:** the semantic model downloads from Hugging Face once (kept in `~/.total-recall/models/`); the team vault uses git. No telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The assistant chooses the tag, and a tagged memory is pushed without asking. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
 - **Teammates' memories reach your model.** Their entries in the index are marked as reference data, not instructions; full memories you recall are not, and `orgInjection` does not cover them. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md).
 - **Stopping is painless.** Your memories stay as `.md` files you keep (`export_memories` also gives you JSON, with fewer fields). To uninstall in Claude Code: `claude plugin uninstall total-recall@my-claude-plugins` (memories stay in `~/.total-recall/`). Also remove the `## Memory` block from `~/.claude/CLAUDE.md`; delete `~/.total-recall/` to remove all data.
@@ -164,9 +164,9 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 
 **Access control is weak: anyone with push access to the team repo can edit or impersonate any memory, and nothing is reviewed before it goes live for the whole team.** Treat it like a shared wiki.
 
-In short: create a private Git repo with a `knowledge` branch (no required pull requests), then each teammate re-runs the setup script with `--org-repo <url> --allowed-email-domain <domain>`. From then on, memories tagged `org` sync automatically in Claude Code and Gemini/Antigravity. Steps, check and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
+In short: create a private Git repo with a `knowledge` branch (no required pull requests), then each teammate re-runs the setup script with `--org-repo <url> --allowed-email-domain <domain>`. From then on, memories tagged `org` sync automatically in Claude Code and Gemini/Antigravity; on other assistants set `"orgSync": "server"` so the server pushes them, and pull by hand. Steps, check and rollout checklist: [INSTALL.md → Org vault](plugins/total-recall/INSTALL.md#-org-vault-team-memory).
 
-Start solo and add the team later: `install.sh` is safe to re-run. Settings (`orgBranch`, `allowedEmailDomains`, `orgInjection`, vault paths): [How it works → Configuration](docs/HOW-IT-WORKS.md#configuration).
+Start solo and add the team later: `install.sh` is safe to re-run. Settings (`orgBranch`, `orgSync`, `allowedEmailDomains`, `orgInjection`, vault paths): [How it works → Configuration](docs/HOW-IT-WORKS.md#configuration).
 
 ## Upgrade, backup and troubleshooting
 

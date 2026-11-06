@@ -19,6 +19,7 @@ Two separate vaults live under `~/.total-recall/`:
 ├── invertedIndex.json       ← TF-IDF inverted index: token → {docs, idf} (derived)
 ├── .index-cache.txt         ← the text injected at SessionStart (written only by the SessionStart hook)
 ├── config.json              ← optional configuration
+├── models/                  ← the embedding model, downloaded on the first semantic search (since 1.6.9; kept across plugin updates)
 ├── personal-vault/          ← a local-only git repo, snapshotted at the end of each session
 │   ├── architecture/
 │   │   └── db-choice.md     ← one memory: YAML frontmatter + Markdown body
@@ -157,7 +158,7 @@ The `no-prune` tag keeps a memory out of `prune_memories` and blocks its deletio
 
 ### Semantic search (optional)
 
-Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2` by default, 384 dimensions, 50+ languages) handles paraphrase and other languages. RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
+Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2` by default, 384 dimensions, 50+ languages) handles paraphrase and other languages. The model is downloaded from Hugging Face on the first semantic search and kept in `~/.total-recall/models/`, so a plugin update does not download it again (before 1.6.9 it sat inside the plugin folder). RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
 
 ```bash
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or ./install.sh --complete
@@ -192,7 +193,7 @@ Models that expect CLS pooling (LaBSE, bge-m3) load but rank worse than mean-poo
 | | `load-memory-index.sh` | Injects the index (and, in an ADL project, a short architecture summary) into the session |
 | | `check-extract-outcomes.sh` | Warns when at least 3 of the last 5 PreCompact runs failed |
 | | `check-sync-errors.sh` | Warns when org pushes failed since the last success |
-| `PostToolUse` (store/update/delete) | `sync-org-memory.sh` | For `org` memories: privacy filter, commit, push. Bursts are coalesced into one background sync |
+| `PostToolUse` (store/update/delete) | `sync-org-memory.sh` | For `org` memories: privacy filter, commit, push. Bursts are coalesced into one background sync. With `orgSync: "server"` the hook skips org keys and the MCP server runs this same script itself (for hosts without hooks) |
 | `PostToolUse` (`Write\|Edit\|MultiEdit`) | `architecture-change.sh` | After an `.adl` edit, asks the model to re-index and record the change |
 | `PreCompact` | `extract-and-store-memories.sh` | See below |
 | `SessionEnd` | `session-end.sh` | Flushes pending writes and commits the personal vault's local git repo |

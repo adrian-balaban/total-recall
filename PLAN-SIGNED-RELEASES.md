@@ -2,7 +2,7 @@
 
 **Status:** proposed · **Date:** 2026-11-03 · **Branch:** `main`
 **Goal:** let a consumer verify who produced what they install, and replace the README's "releases are **not signed**" caveat with a claim that is true and checkable.
-**Out of scope:** changing the distribution channel (marketplace only, no zip, no npm package; see [PLAN-NPX-INSTALL-BOOTSTRAP.md](PLAN-NPX-INSTALL-BOOTSTRAP.md) for the one planned exception, a bootstrap launcher).
+**Out of scope:** changing the distribution channel (plugin code only through the marketplace, no zip). The one exception, the npx bootstrap launcher, shipped in 1.7.0 ([PLAN-NPX-INSTALL-BOOTSTRAP.md](PLAN-NPX-INSTALL-BOOTSTRAP.md)); its npm tarball holds no plugin code.
 
 ## §1 Current state (facts from the repo)
 
@@ -13,6 +13,7 @@
 | `release` branch commit (`build: dist for vX (SHA)`) | `release.yml`, as `github-actions[bot]` via `git commit` + `git push --force` | **No** (plain `git commit`) | `.github/workflows/release.yml`, step "Publish built tree to the release branch" |
 | Tag `vX.Y.Z` and GitHub Release | `release.yml`, `gh release create --target $SHA` | **No** (lightweight tag, created by GitHub) | step "Create tag and release" |
 | `dist/` bundle consumers run | built in CI, committed to `release` | **No provenance** | no attestation step in the workflow |
+| npm tarball of the npx launcher (`@adrian-balaban/total-recall`) | `release.yml`, `npm publish --provenance` through Trusted Publishing (since 1.7.1; 1.7.0 was published by hand) | **Yes, npm provenance** for the launcher only; it says nothing about `dist/` | `.github/workflows/release.yml`, step "Publish the npx bootstrap to npm" |
 
 What consumers install is the `release` branch (`marketplace.json` pins `"ref": "release"`). So the object that needs a trust story is that branch, not `main`.
 

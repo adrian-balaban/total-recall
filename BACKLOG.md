@@ -23,20 +23,20 @@ pruned (2026-07-29); this backlog is now the sole record.
   missed subdir is real).
 - **Shape when picked up:** cache dir mtime alongside the file index in
   `src/vault-scan.ts`; invalidate on any write. Re-run Stryker — vault-scan has a
-  high mutation score (85.6% in the v1.6.8 run), so a regression there is visible.
+  high mutation score (85.6% in the v1.7.1 run), so a regression there is visible.
 
 ### Mutation-coverage survivors: persistence / vectorStore / embeddings
 - **Source:** `stryker-mutation-audit-26072026.md`; current scores in
   `reports/mutation/mutation.html` (gitignored).
-- **What:** mutation score is 81.1% (1,586 killed, 310 survived, 60 without coverage;
-  CI run for v1.6.8, 2026-11-02), above the 65% break gate. The lowest
-  modules are `paths.ts` (36.6%), `embeddings.ts` (51.9%), `atomic-write.ts`
+- **What:** mutation score is 81.0% (1,586 killed, 310 survived, 63 without coverage;
+  CI run for v1.7.1, 2026-11-06), above the 65% break gate. The lowest
+  modules are `paths.ts` (36.6%), `embeddings.ts` (52.2%), `atomic-write.ts`
   (60.9%), `vectorStore.ts` (79.3%, 65 survivors — native
-  better-sqlite3/sqlite-vec boundary), `persistence.ts` (83.3%).
+  better-sqlite3/sqlite-vec boundary), `persistence.ts` (82.6%).
 - **Trigger:** next deliberate mutation-hardening pass. The native-boundary
   NoCoverage in vectorStore/embeddings is partly structural (mocked in tests,
   so the real code path is NoCoverage under Stryker) — prioritize
-  `persistence.ts` (50 survivors, pure logic) first.
+  `persistence.ts` (52 survivors, pure logic) first.
 - **Shape when picked up:** one targeted test file per module, same pattern as
   `vault-scan-reconcile.test.ts`. Re-run `npm run mutation` and update the
   audit file with the new per-module table.

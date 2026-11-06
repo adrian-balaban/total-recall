@@ -46,6 +46,7 @@ Follow this order strictly — earlier steps are cheaper:
 
 - Tag with `org` to route to shared org vault
 - **Never** use both `org` and `personal` tags on the same memory
+- Who pushes an `org` memory: the PostToolUse hook (Claude Code, Gemini/Antigravity), or the MCP server itself when `orgSync` is `"server"` in `~/.total-recall/config.json` (hosts without hooks). Elsewhere it stays local until someone runs the sync script
 - Key collisions between vaults are prevented by design, not resolved by precedence: org keys are always prefixed `org/`, and the personal vault reserves (skips scanning) any `org/` subdirectory — so the same key can never resolve to both a personal and an org memory
 - Org sync uses `spawnSync` with args as array — no shell interpolation risk
 

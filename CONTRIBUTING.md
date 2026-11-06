@@ -19,6 +19,8 @@ HOME=$(mktemp -d) npm test         # a clean HOME: your own ~/.total-recall/conf
 npm run test:integration
 ```
 
+From the repository root, `npm test` runs the npx launcher's tests (plain `node:test`, no install needed) and `node test/pack-guard.mjs` checks that its npm tarball holds only the launcher.
+
 If a native test fails with `NODE_MODULE_VERSION` in the message, you switched Node versions: run `npm rebuild better-sqlite3`.
 
 ## The gates
@@ -34,7 +36,7 @@ When a gate fails, the message names the file or ID. Fix the cause; do not lower
 ## Commits and versions
 
 - Use [Conventional Commits](https://www.conventionalcommits.org/): `feat:`, `fix:`, `docs:`, `test:`, `chore:`.
-- A change that should reach users bumps the version in `plugins/total-recall/package.json` only (`npm run build` copies it to the manifests). The release workflow tags and publishes when the version changes. A docs-only change does not need a bump.
+- A change that should reach users bumps the version in `plugins/total-recall/package.json` only (`npm run build` copies it to the plugin manifests and to the root `package.json` of the npx launcher). The release workflow tags and publishes when the version changes. A docs-only change does not need a bump.
 - Commits are not signed yet ([PLAN-SIGNED-RELEASES.md](PLAN-SIGNED-RELEASES.md)).
 
 ## Reporting problems

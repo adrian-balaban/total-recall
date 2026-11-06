@@ -1,6 +1,7 @@
 # PLAN — README.md & README-ro.md: persona-review round 2
 
-**Status:** proposed · **Date:** 2026-11-03 · **Branch:** `main` (HEAD `ddc33cc`)
+**Status:** rounds 1–3b applied (#29–#35, #45, #47); round 4 not run yet · **Date:** 2026-11-03, status updated 2026-11-06 · **Branch:** `main`
+**Code bugs B1–B8** were filed as #36–#43: B1–B3 fixed in #44, B6 in #45, B8 in #46 (1.6.9); B4 (#39), B5 (#40) and B7 (#42) are open. T1/T2 (Cursor, Windsurf, Claude Desktop) were not run, no client available; the READMEs say so.
 **Supersedes:** the round-1 plan of the same name. Its structure work shipped in #29 and its hooks in #30; this round is driven by evidence from six independent reviews of the shipped READMEs, not by a single-pass evaluation.
 **Priorities, in order:** (1) each persona can install and verify from the README alone; (2) honest trust/risk information on the first screen; (3) attention hooks.
 **Rules:** every claim traces to code or an existing doc; README ≤ N words (§4); EN and RO structurally identical; plan only, no file other than this one is edited by this round.
