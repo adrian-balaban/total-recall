@@ -197,6 +197,14 @@ start_worker() {
   ) 2>&1 | stamp_log &
 }
 
+# orgSync "server" (config.json): the MCP server pushes org writes itself (src/org-sync.ts runs
+# this very script with a synthesized payload and ORG_SYNC_FROM_SERVER=1). Any other caller, i.e.
+# the PostToolUse hook, does nothing for org keys, so a write is never pushed twice.
+ORG_SYNC_MODE=$(CONFIG_FILE="$HOME/.total-recall/config.json" "$NODE_BIN" -e "try{process.stdout.write(String(JSON.parse(require('fs').readFileSync(process.env.CONFIG_FILE,'utf8')).orgSync||''))}catch{}" 2>/dev/null || echo "")
+if [ "$ORG_SYNC_MODE" = "server" ] && [ "${ORG_SYNC_FROM_SERVER:-}" != "1" ]; then
+  case "$KEY" in org/*) echo '{"continue":true}'; exit 0;; esac
+fi
+
 case "$KEY" in
   org/*)
     # Coalesce org syncs: append an atomic job record, then start a background

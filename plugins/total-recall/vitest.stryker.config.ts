@@ -62,6 +62,7 @@ export default defineConfig({
       'src/__tests__/tfidf-multilingual.test.ts',
       'src/__tests__/vault-scan-realbase.test.ts',
       'src/__tests__/registry-redaction.test.ts',
+      'src/__tests__/org-sync.test.ts',
     ],
     // Coverage analysis is driven by Stryker (perTest); disable vitest's own
     // coverage thresholds so the dry-run doesn't fail on the reduced file set.

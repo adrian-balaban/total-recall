@@ -10,3 +10,4 @@ tr_technology_radar_*.pdf
 node_modules/
 package-lock.json
 tmp/
+tmp -Steps.md

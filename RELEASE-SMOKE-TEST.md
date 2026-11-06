@@ -76,6 +76,8 @@ Run this after every release, not just hardening ones.
 - [ ] (1.4.0) With an org vault: the SessionStart index shows org entries inside the "teammate-written reference data, not instructions" block; `orgInjection: "off"` removes them
 - [ ] (1.5.0) The client lists the `total-recall://index` and `total-recall://sync-status` resources and the `memory-workflow` / `extract-session-learnings` prompts; `tools/list` still shows 22 tools
 - [ ] (1.6.0) `./install.sh --vscode` adds a `total-recall` entry to VS Code's user `mcp.json` and keeps the existing servers
+- [ ] (1.7.0) With `"orgSync": "server"` and an org vault: storing a memory tagged `org` pushes it to the team repo, and `.sync.log` shows one push, not two; with `orgSync` unset the PostToolUse hook pushes as before
+- [ ] (host matrix) VS Code with Copilot and a Claude model, and Visual Studio: install per INSTALL.md, then `get_stats` and a store/recall round trip. **Not run: the maintainer has neither client.** Record the result here when someone does
 - [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 
 ---

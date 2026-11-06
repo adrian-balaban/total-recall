@@ -282,6 +282,41 @@ suite('sync-org-memory.sh hook plumbing (#2: stdin parse + --delete routing)', (
     expect(await waitForArgs(1500)).toBeNull();
   });
 
+  describe('orgSync mode (ADR orgSync hook | server)', () => {
+    const orgStore = JSON.stringify({
+      tool_name: 'mcp__plugin_total-recall_total-recall__store_memory',
+      tool_input: { title: 'X' },
+      tool_response: { key: 'org/architecture/mode' },
+    });
+    const setMode = (mode?: string) => {
+      fs.mkdirSync(path.join(tmpHome, '.total-recall'), { recursive: true });
+      fs.writeFileSync(path.join(tmpHome, '.total-recall', 'config.json'), JSON.stringify(mode ? { orgSync: mode } : {}));
+    };
+    afterAll(() => fs.rmSync(path.join(tmpHome, '.total-recall', 'config.json'), { force: true }));
+
+    it('hook mode (default) pushes an org write', async () => {
+      setMode();
+      expect(runHook(orgStore).status).toBe(0);
+      expect((await waitForArgs())?.key).toBe('org/architecture/mode');
+    });
+
+    it('server mode: the PostToolUse hook does nothing for an org key, so there is no double push', async () => {
+      setMode('server');
+      const r = runHook(orgStore);
+      expect(r.status).toBe(0);
+      expect(r.stdout.trim()).toBe('{"continue":true}');
+      expect(await waitForArgs(1500)).toBeNull();
+    });
+
+    it('server mode: the server-started run (ORG_SYNC_FROM_SERVER=1) pushes', async () => {
+      setMode('server');
+      fs.rmSync(argsFile, { force: true });
+      const env = { ...process.env, HOME: tmpHome, TR_HOOK_ARGS_FILE: argsFile, ORG_SYNC_FROM_SERVER: '1' };
+      spawnSync('bash', [shPath], { encoding: 'utf8', input: orgStore, env });
+      expect((await waitForArgs())?.key).toBe('org/architecture/mode');
+    });
+  });
+
   it('short-circuits and still returns continue when no key can be extracted', async () => {
     const json = JSON.stringify({
       tool_name: 'mcp__total-recall__store_memory',

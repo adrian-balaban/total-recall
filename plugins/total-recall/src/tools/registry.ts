@@ -37,6 +37,12 @@ export type ToolHandler = (args: any) => any;
 // these in order to wire the 17 tools onto the McpServer.
 export type RegisterFn = (server: McpServer) => void;
 
+// A listener told about every successful tool call (server.ts wires org sync to it).
+// It lives here as a plain callback so the registry keeps depending only on State and Paths ([TR-S6]).
+type ToolListener = (tool: string, args: any, result: any) => void;
+let toolListener: ToolListener | null = null;
+export function setToolListener(l: ToolListener | null): void { toolListener = l; }
+
 // Wrap a tool handler in the CallToolResult envelope + the perf/error
 // instrumentation that the old CallTool setRequestHandler owned. The
 // returned callback is what `server.registerTool` receives as its third arg.
@@ -52,6 +58,7 @@ export function wrapHandler(name: string, handler: ToolHandler) {
       // #21: route through the shared bounded-append helper (amortized-O(1)
       // trim) — perfSamples is read only by getStats for the percentile calc.
       recordPerfSample(Date.now() - start);
+      toolListener?.(name, args ?? {}, result);
       return { content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }] };
     } catch (e: any) {
       recordError(`${name}: ${e.message}`);

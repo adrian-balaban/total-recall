@@ -151,7 +151,7 @@ Run `./install.sh --help` for every flag (`-y` for non-interactive defaults).
 
 Requirements: for GitHub, `gh auth status` green (the scripts use `gh` when it is available and fall back to plain `git`, with prompts disabled, so other hosts need credentials that work without a prompt, such as a credential helper or an SSH key), and the org-sync branch (`orgBranch` in `~/.total-recall/config.json`, default `knowledge`) must already exist on the repo with at least one commit. Memories tagged `org` then sync automatically through the fail-closed privacy filter.
 
-Assistants without hooks (Codex, Cursor, Windsurf, Claude Desktop) do not pull or push on their own: from the plugin folder, run `bash hooks/scripts/pull-org-vault.sh` to pull teammates' memories and `node scripts/sync-org-memory.mjs <key>` to push one memory.
+Assistants without hooks (Codex, Cursor, Windsurf, Claude Desktop, Visual Studio) do not pull or push on their own. To make the MCP server push org writes for you, set `"orgSync": "server"` in `~/.total-recall/config.json` and restart the assistant (1.7.0): after a store, update or delete of an `org/` memory the server runs the same sync script the hook would, with the same lock and privacy filter. Pulling teammates' memories is still manual. Do not set `server` on Claude Code or Gemini, where the hooks already push. Without `orgSync`, run by hand: from the plugin folder, run `bash hooks/scripts/pull-org-vault.sh` to pull teammates' memories and `node scripts/sync-org-memory.mjs <key>` to push one memory.
 
 **How it behaves**
 

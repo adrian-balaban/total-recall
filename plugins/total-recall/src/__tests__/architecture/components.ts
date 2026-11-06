@@ -30,7 +30,7 @@ export const REGISTRY = /^src\/tools\/registry\.ts$/;
 export const TOOL_NAMES: string[] = ['store', 'mutate', 'query', 'recall', 'rerank'];
 
 // ADL [TR-R4]: the only files allowed to start external processes.
-export const PROCESS_OWNERS = /^src\/(vectorStore|spec\/exec)\.ts$/;
+export const PROCESS_OWNERS = /^src\/(vectorStore|org-sync|spec\/exec)\.ts$/;
 export const PROCESS_IMPORT = /(?:from\s+|import\s*\(\s*|require\s*\(\s*)['"](?:node:)?child_process['"]/;
 
 // ADL component `spec`: src/spec/** (leaves and core modules).
@@ -70,6 +70,6 @@ export const COMPONENT_FILES: Record<string, RegExp> = {
   vectors: /^src\/(embeddings|vectorStore)\.ts$/,
   registry: REGISTRY,
   tools: /^src\/tools\/(?!registry\.ts$)/,
-  server: /^src\/(index|server|host-context)\.ts$/,
+  server: /^src\/(index|server|host-context|org-sync)\.ts$/,
   spec: /^src\/spec\/(?!(config|fields|elements|adl-parse)\.ts$)/,
 };

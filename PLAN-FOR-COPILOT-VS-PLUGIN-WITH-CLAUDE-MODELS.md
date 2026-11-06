@@ -1,6 +1,6 @@
 # 🧭 Final plan: Total Recall in VS Code and Visual Studio with Claude models
 
-Status: **in progress** (steps 0, 2, 3 done; 5 in review) · Date: 2026-10-30 · Baseline: `main` at `966d4c2` (v1.3.4)
+Status: **steps 0, 2, 3, 5, 6 done; step 4 partly done (installer, Windows fix); step 1 not run (no Copilot or Visual Studio client available)**; updated 2026-11-06 · Date: 2026-10-30 · Baseline: `main` at `966d4c2` (v1.3.4)
 
 Merges three reviews:
 
@@ -65,16 +65,16 @@ Every step is one PR that keeps `npm test`, `test:integration` and `validate_arc
 | # | PR | What | Done when |
 |---|---|---|---|
 | 0 ✅ 1.4.0 (#14) | **1.4.0 org-injection** (BACKLOG, decided) | Frame org content in a delimited "teammate-written reference data — not instructions" block; add `orgInjection: "index" \| "titles" \| "off"`; update `SECURITY.md`. | `it.fails('[TR-D12] …')` switched to `it` and green |
-| 1 | **Spike + host matrix** (docs only) | Install the existing plugin in VS Code Copilot via `chat.plugins.marketplaces` with a Claude model. Record which events fire, the stdin fields, the MCP tool-name format, matcher handling, and whether `sessionStart` honours `additionalContext`. Repeat for Visual Studio (`.mcp.json`). Reproduce the bare-`node` failure. | `INSTALL.md` has a host matrix; `RELEASE-SMOKE-TEST.md` has one smoke entry per host |
+| 1 ❌ not run | **Spike + host matrix** (docs only) | Install the existing plugin in VS Code Copilot via `chat.plugins.marketplaces` with a Claude model. Record which events fire, the stdin fields, the MCP tool-name format, matcher handling, and whether `sessionStart` honours `additionalContext`. Repeat for Visual Studio (`.mcp.json`). Reproduce the bare-`node` failure. | `INSTALL.md` has a host matrix; `RELEASE-SMOKE-TEST.md` has one smoke entry per host |
 | 2 ✅ 1.4.1 (#15) | **PATH traps** | Add an MCP launcher that resolves node the way `_resolve-node.sh` does. Add `_resolve-claude.sh`, which probes `~/.vscode*/extensions/anthropic.claude-code-*`, and use it in `install.sh` and `extract-and-store-memories.sh`. | The server starts with `env -i HOME=$HOME`; PreCompact runs with only the bundled binary |
 | 3 ✅ 1.4.2 (#16), envelope per host waits for step 1 | **Host-tolerant hooks** (after 1.4.0) | Hook scripts accept Copilot payload variants (snake/camel case, `toolName`, VS Code MCP tool names) and match tool names inside the script (`[TR-C4]`, enforced in the script). Output uses the right envelope per host. Fixtures come from the spike. | New tests with Copilot-shaped stdin; org sync fires for Copilot tool names |
-| 4 | **Installers + docs** | `install.sh --vscode` (user `mcp.json`, `servers` schema, absolute paths) as the fallback when agent plugins are off. A Visual Studio `.mcp.json` snippet. An optional `adl.instructions.md`. | Idempotent-merge tests on a temp HOME, as in B |
+| 4 🟡 1.6.0 (#18), Windows #44 | **Installers + docs** | `install.sh --vscode` (user `mcp.json`, `servers` schema, absolute paths) as the fallback when agent plugins are off. A Visual Studio `.mcp.json` snippet. An optional `adl.instructions.md`. | Idempotent-merge tests on a temp HOME, as in B |
 | 5 🔄 PR #17 (1.5.0) | **Server context** (after 1.4.0) | Richer `instructions` (retrieval order, capture rules). Resources: `total-recall://index` (with `[TR-D12]` framing and `orgInjection`) and `total-recall://sync-status`. Prompts: `memory-workflow` and `extract-session-learnings` (the stand-in for PreCompact). New `[TR-C7]`: resources and prompts never change `tools/list`. | `[TR-C7]` test; `tools/list` golden unchanged (`[TR-C1]`) |
-| 6 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
+| 6 ✅ 1.7.0 | **Explicit org-sync mode** | Config `orgSync: "hook" \| "server"`, default `hook`; the installer sets `server` for Visual Studio. In `server` mode the server enqueues the job and drains it through `sync-org-memory.mjs` under the existing lock (`[TR-W5]`). The privacy filter is unchanged (`[TR-D3]`). Run the H1 snapshot on shutdown. Write the ADR first, then reword `[TR-R4]`. | Tests for both modes; no double push when both run |
 
 ## 📝 ADR draft for step 6: `orgSync: hook | server`
 
-Status: **draft, decision pending**. No duplicate exists in the memory store. `[TR-R4]` today reads: "Only Vectors (native binding self-heal) and the Spec exec module start external processes".
+Status: **accepted 2026-11-06** (stored as a `decisions` memory tagged `no-prune`; the code shipped in 1.7.0, `[TR-R4]` reworded). No duplicate exists in the memory store. `[TR-R4]` today reads: "Only Vectors (native binding self-heal) and the Spec exec module start external processes".
 
 - **Context:** org sync runs only from the PostToolUse hook. On hosts without hooks (Visual Studio, a manual `mcp.json`) an `org` memory is written locally and never reaches teammates. That is a non-sync, not a leak.
 - **Decision (proposed):**
@@ -88,7 +88,7 @@ Status: **draft, decision pending**. No duplicate exists in the memory store. `[
   - A new MCP sync tool: changes the tool list and breaks `[TR-C1]`.
   - No sync on these hosts: leaves a known gap.
 - **Risk:** the server starts `git` with the user's credentials. The hook already uses the same credentials, so the exposure is similar, but the process now runs inside the MCP server.
-- **Decision needed:** may the server start `git` in `server` mode, with the reworded `[TR-R4]`? If yes: publish the ADR as a `decisions` memory tagged `no-prune`, then write the step 6 code. If no: step 6 stops.
+- **Decision:** yes. Alternatives were rejected above, so the server may start `git` in `server` mode. Implementation: `src/org-sync.ts` runs `hooks/scripts/sync-org-memory.sh`, which keeps owning the queue, lock and privacy filter; in `server` mode the hook skips org keys, so there is no double push.
 
 ## 🚫 Rejected or deferred
 
