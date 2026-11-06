@@ -24,6 +24,9 @@ export interface TotalRecallConfig {
   orgInjection?: string;
   // Who pushes org memories: 'hook' (default, the PostToolUse hook) or 'server' (this MCP server).
   orgSync?: string;
+  // Cap on the memories listed in the injected index (default 300, 0 = no cap). The rest stay
+  // reachable through search_index / recall_memory.
+  indexMaxEntries?: number;
   // Spec-driven features; parsed by spec/config.ts (parseSpecConfig).
   specDriven?: unknown;
 }

@@ -91,8 +91,14 @@ MAX_LOG_LINES=1000
 # PIPESTATUS can be read; the hook still always ends with {"continue":true}.
 STORE_ERR=$(mktemp)
 trap 'rm -f "$STORE_ERR"' EXIT
+# Sandbox (Technology Radar Vol 35, Adopt: agent sandboxing). The transcript holds web pages
+# and tool output, so text planted there could steer this run. It only has to print JSON
+# lines, so it gets no tools (`--tools ""`), no MCP servers (`--strict-mcp-config`, none are
+# passed), no skills and no saved session. A claude CLI too old to know these flags fails
+# here with outcome=cli-error, which the SessionStart alarm reports: fail closed on purpose.
 set +e
-"$CLAUDE_BIN" -p "$EXTRACT_PROMPT" < <(tail -c "$MAX_BYTES" "$TRANSCRIPT") 2>>"$EXTRACT_LOG" \
+"$CLAUDE_BIN" -p "$EXTRACT_PROMPT" --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence \
+  < <(tail -c "$MAX_BYTES" "$TRANSCRIPT") 2>>"$EXTRACT_LOG" \
   | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>"$STORE_ERR"
 CLAUDE_RC=${PIPESTATUS[0]}
 set -e

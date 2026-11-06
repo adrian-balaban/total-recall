@@ -33,6 +33,7 @@ pruned (2026-07-29); this backlog is now the sole record.
   modules are `paths.ts` (36.6%), `embeddings.ts` (52.2%), `atomic-write.ts`
   (60.9%), `vectorStore.ts` (79.3%, 65 survivors — native
   better-sqlite3/sqlite-vec boundary), `persistence.ts` (82.6%).
+- **Update (1.8.0):** `paths.ts`, `embeddings.ts` and `atomic-write.ts` got dedicated tests (local Stryker run on those modules: 87%, 90%, 91%); `vectorStore.ts` and `persistence.ts` remain.
 - **Trigger:** next deliberate mutation-hardening pass. The native-boundary
   NoCoverage in vectorStore/embeddings is partly structural (mocked in tests,
   so the real code path is NoCoverage under Stryker) — prioritize

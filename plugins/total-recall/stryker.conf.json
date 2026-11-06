@@ -29,6 +29,7 @@
     "src/atomic-write.ts",
     "src/state.ts",
     "src/embeddings.ts",
+    "src/org-sync.ts",
     "src/errors.ts"
   ],
   "thresholds": {

@@ -29,12 +29,10 @@ Scope of the numbers: coverage is from the unit suite only (the integration test
 | Test files | 76, with 2,390 assertions (2.34 per test, house target ≥ 1.5) |
 | Assertion-free tests, tautologies | 0, 0 (`[TR-Q4]`, `[TR-Q5]`) |
 | Mutants | 1,586 killed, 1 timeout, 310 survived, 63 without coverage |
-| Weakest modules | `paths.ts` 36.6%, `embeddings.ts` 52.2%, `atomic-write.ts` 60.9% |
+| Weakest modules | `paths.ts` 36.6%, `embeddings.ts` 52.2%, `atomic-write.ts` 60.9% (v1.7.1). Version 1.8.0 adds tests for these and puts `org-sync.ts` under mutation; a local Stryker run on only those modules gave `paths.ts` 87%, `embeddings.ts` 90%, `atomic-write.ts` 91%, `org-sync.ts` 88%, `index-cache.ts` 77% (CI's run over all 19 modules gives the official figure) |
 | Strongest modules | `ebbinghaus.ts`, `journal.ts`, `rrf.ts`, `errors.ts` 100% |
 
 Mutation testing checks whether the tests would notice a bug: Stryker changes small things in the code (`>` becomes `<`, `true` becomes `false`), and a test suite that still passes is not strict enough. Coverage alone cannot show this: `embeddings.ts` is covered well but half its mutants survive, partly because the native and model-loading code is mocked in the tests.
-
-`org-sync.ts` (1.7.0) is not among the 18 mutated modules; its unit tests and the hook-script tests cover it.
 
 The score drifts about ±1 point between runs with no source change (mutants that time out under varying CI load), so do not read the decimal as exact. The gate is 65%, about 16 points below today's score.
 
@@ -106,7 +104,7 @@ Lead time and time to restore were not recomputed: the release timestamps GitHub
 | Index injected at SessionStart | ~4.3k tokens | ~32k tokens | ~162k tokens |
 | SessionStart index build | 0.05 s (v1.6.8) | — | 0.14 s (the old bash builder: 14.3 s) |
 
-The injected index costs 30–40 tokens per memory (about 32 with short titles, about 40 on a real vault), plus a fixed header of roughly 250 tokens, and has **no size cap** today. Beyond a few hundred memories, prune with `prune_memories`, or set `orgInjection` to `titles` or `off` to shrink the org part.
+The injected index costs 30–40 tokens per memory (about 32 with short titles, about 40 on a real vault), plus a fixed header of roughly 250 tokens, and, since 1.8.0, lists at most `indexMaxEntries` memories (default 300, about 10k tokens; `0` removes the cap), keeping no-prune, then the most important, then the most recent. The 1,000 and 5,000 columns above are v1.6.8 figures for an uncapped index. Beyond the cap, prune with `prune_memories`, or set `orgInjection` to `titles` or `off` to shrink the org part.
 
 ## Reproduce
 
