@@ -89,7 +89,7 @@ Only needed when VS Code agent plugins are off (with them on, the plugin's own `
 ./install.sh --vscode    # adds total-recall to VS Code's user mcp.json (tools only; no hooks)
 ```
 
-The entry points at `scripts/start-server.sh`, which finds `node` even when VS Code was launched without it on `PATH`. Existing servers in the file are kept; a file with comments is left untouched and the snippet is printed instead. Without hooks the model reads the memory index from the `total-recall://index` resource and the `memory-workflow` prompt. The same command prints a snippet for Visual Studio's `.mcp.json` (not yet verified on a real install).
+The entry runs `bash` with the absolute path of `scripts/start-server.sh`, which finds `node` even when VS Code was launched without it on `PATH`. For team sync without hooks, set `"orgSync": "server"` (see [Org vault](#-org-vault-team-memory)). Existing servers in the file are kept; a file with comments is left untouched and the snippet is printed instead. Without hooks the model reads the memory index from the `total-recall://index` resource and the `memory-workflow` prompt. The same command prints a snippet for Visual Studio's `.mcp.json` (not yet verified on a real install).
 
 ### Developing from a clone
 
@@ -180,7 +180,7 @@ For many machines, run `install.sh -y` as the target user (it writes to that use
 
 - **Exit codes:** `0` unless the script stops with an error (`1`). A skipped or failed MCP registration is a warning and still exits `0`, so check afterwards with `claude mcp get plugin:total-recall:total-recall` (marketplace install) or `claude mcp get total-recall` (script install).
 - **Re-runs and existing config:** safe. An existing `~/.total-recall/config.json` is merged, not replaced.
-- **Network:** the Minimal profile (`--no-vector`) needs none after the plugin itself is fetched. The Complete profile runs `npm install` for the vector packages and downloads the embedding model (about 465 MB) from Hugging Face on the first semantic search; the model is cached in `~/.total-recall/models/`, which you can copy to a machine without internet access.
+- **Network:** the Minimal profile (`--no-vector`) needs none after the plugin itself is fetched. The Complete profile runs `npm install` for the vector packages and downloads the embedding model (449 MB) from Hugging Face on the first semantic search; the model is cached in `~/.total-recall/models/`, which you can copy to a machine without internet access.
 - **Gemini/Antigravity:** `-y --gemini` skips `agy plugin install` and prints the command to run.
 - **Versions:** there is no version pin. `claude plugin update` moves to the newest release; to hold a version, do not update.
 - **Not tested at scale:** these notes come from reading the scripts, not from a fleet rollout.
