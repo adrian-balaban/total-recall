@@ -59,7 +59,9 @@ bash "$(ls -d ~/.claude/plugins/cache/my-claude-plugins/total-recall/*/ | sort -
 
 Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.json`.
 
-**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact is committed there. There is deliberately no zip download and no npm package — one channel, built by CI. Nothing is signed yet (commits, tags and the bundle), so what you trust is this repository and GitHub Actions.
+**One command (npx).** `npx @adrian-balaban/total-recall [install.sh flags]` runs `claude plugin marketplace add adrian-balaban/total-recall`, then `claude plugin install total-recall@my-claude-plugins`, then the `install.sh` of the newest cached version. It is safe to re-run, skips the first two steps when the plugin is already installed, finds the `claude` binary bundled with the VS Code extension when it is not on `PATH`, and stops when another plugin named `total-recall` is installed (`--force` overrides). On Windows it needs Git Bash and exits with code 69 without it. Always use the scoped name: the unscoped `total-recall` on npm is an unrelated tool. To check what the package contains: `npm pack --dry-run @adrian-balaban/total-recall` lists the launcher, `package.json`, README and LICENSE.
+
+**What you are installing.** The marketplace fetches the **`release` branch**, whose `dist/` bundle is built by GitHub Actions after the CI gate (dependency audit, typecheck, build, mutation testing) goes green. `dist/` is gitignored on `main`, so no hand-built artifact is committed there. There is deliberately no zip download, and the only npm package is the install launcher described below, which contains no plugin code — one channel for the code, built by CI. Nothing is signed yet (commits, tags and the bundle), so what you trust is this repository and GitHub Actions.
 
 ## 🧩 Install without Claude Code
 
