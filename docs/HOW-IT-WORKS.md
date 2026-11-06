@@ -104,7 +104,7 @@ Every key is optional:
 - **Versionable.** The team vault is git-backed. The personal vault is a local-only git repo (created by `install.sh`, with a `pre-push` hook that blocks any push), committed at the end of each session.
 - **Derived indexes.** `index.json`, `invertedIndex.json`, `.index-cache.txt` and `vectors.db` are all rebuilt from the `.md` files, so losing them loses no content.
 - **Fault-tolerant.** If the vector path fails, search falls back to text search.
-- **Several sessions at once.** Each memory is its own file, so sessions do not overwrite each other's memories. Memory files are written in place, not atomically, so a crash in the middle of a write can truncate one (tracked in [BACKLOG.md](../BACKLOG.md)). A memory stored in one session can be missing from another session's search until that session restarts, and `index.json` is written by whichever session writes last, which can reset `accessCount` and `lastAccessed` (a known limit, tracked in [BACKLOG.md](../BACKLOG.md)).
+- **Several sessions at once.** Each memory is its own file, so sessions do not overwrite each other's memories. Memory files are written in place, not atomically, so a crash in the middle of a write can truncate one (tracked in [BACKLOG.md](../backlog-and-plans/BACKLOG.md)). A memory stored in one session can be missing from another session's search until that session restarts, and `index.json` is written by whichever session writes last, which can reset `accessCount` and `lastAccessed` (a known limit, tracked in [BACKLOG.md](../backlog-and-plans/BACKLOG.md)).
 
 The only required dependencies are `@modelcontextprotocol/sdk` and `zod`. TF-IDF, the decay formula, RRF and the frontmatter parser are written from scratch:
 
@@ -221,4 +221,4 @@ Both vaults open as Obsidian vaults.
 
 ## 📡 Design context
 
-Several techniques from the [Thoughtworks Technology Radar Vol. 34](https://www.thoughtworks.com/radar) are used here: progressive context disclosure (only the index is injected), mutation testing (a Stryker gate in CI), plugin-marketplace distribution, structured output from the capture hook, and keeping system operations (git, indexing) in plain scripts rather than MCP tools. Future directions, each with the trigger that would start it, are in [BACKLOG.md](../BACKLOG.md).
+Several techniques from the [Thoughtworks Technology Radar Vol. 34](https://www.thoughtworks.com/radar) are used here: progressive context disclosure (only the index is injected), mutation testing (a Stryker gate in CI), plugin-marketplace distribution, structured output from the capture hook, and keeping system operations (git, indexing) in plain scripts rather than MCP tools. Future directions, each with the trigger that would start it, are in [BACKLOG.md](../backlog-and-plans/BACKLOG.md).

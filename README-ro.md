@@ -182,7 +182,7 @@ Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull requ
 - **Mai multe sesiuni în paralel** scriu fișiere separate (câte unul pe memorie), dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
 - **Nimic nu se șterge automat.** Curba uitării doar ordonează rezultatele. O memorie ștearsă rămâne în istoricul git local al vault-ului și în `.superseded/`.
 - **Captura automată** rulează doar unde e instalat CLI-ul `claude` și nu poate fi oprită deocamdată.
-- **Calitatea căutării nu e încă măsurată** pe un set de evaluare; e în [backlog](BACKLOG.md) (în engleză).
+- **Calitatea căutării nu e încă măsurată** pe un set de evaluare; e în [backlog](backlog-and-plans/BACKLOG.md) (în engleză).
 
 ## Mai mult (în engleză)
 
@@ -191,4 +191,4 @@ Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull requ
 - [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md): leagă deciziile de cerințe și regulile de arhitectură de teste, cu un exemplu de cinci minute
 - [Arhitectura](plugins/total-recall/ARCHITECTURE.md): diagrame C4, model de date, fluxul de scriere
 - [Metrici de calitate](docs/QUALITY.md): teste, scor de mutație, complexitate, cuplare, livrare, scalare
-- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Model de amenințări](docs/THREAT-MODEL.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md) · [Contribuție](CONTRIBUTING.md)
+- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Model de amenințări](docs/THREAT-MODEL.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md)

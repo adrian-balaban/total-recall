@@ -182,7 +182,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - **Several sessions at once** write separate files (one per memory), but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
 - **Nothing is deleted automatically.** The forgetting curve only ranks results. A deleted memory stays in the vault's local git history and in `.superseded/`.
 - **Automatic capture** runs only where the `claude` CLI is installed, and cannot be switched off yet.
-- **Retrieval quality is not yet measured** against an evaluation set; it is on the [backlog](BACKLOG.md).
+- **Retrieval quality is not yet measured** against an evaluation set; it is on the [backlog](backlog-and-plans/BACKLOG.md).
 
 ## More
 
@@ -191,4 +191,4 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - [Spec-driven work and ADL](docs/SPEC-DRIVEN.md): link decisions to requirements and architecture rules to tests, with a five-minute walkthrough
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
-- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Threat model](docs/THREAT-MODEL.md) · [Install guide](plugins/total-recall/INSTALL.md) · [Contributing](CONTRIBUTING.md)
+- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Threat model](docs/THREAT-MODEL.md) · [Install guide](plugins/total-recall/INSTALL.md)

@@ -22,7 +22,7 @@ A first threat model for Total Recall 1.8.0, written from the code and the exist
 | The model provider | Sees whatever the assistant reads, including injected memories and the end of the session transcript | Same as any chat; see SECURITY.md |
 | Teammates with push access to the org repo | **Can write text into every teammate's model context** | The central risk; there is no review |
 | Web pages, tool output, files the assistant reads | **Untrusted** | They end up in the transcript that automatic capture reads |
-| GitHub, npm, Hugging Face | Trusted for delivery | Unsigned commits and tags today; see PLAN-SIGNED-RELEASES.md |
+| GitHub, npm, Hugging Face | Trusted for delivery | Unsigned commits and tags today; see [PLAN-SIGNED-RELEASES.md](../backlog-and-plans/PLAN-SIGNED-RELEASES.md) |
 
 Trust boundaries: (a) the org repo ↔ the local org vault; (b) the session transcript ↔ the capture step; (c) the MCP server ↔ the host (stdio); (d) the release branch ↔ the user's machine.
 
@@ -65,7 +65,7 @@ Each row gives the attacker's goal, how it can happen, what stops it today, and 
 
 | # | Path | Mitigation today | Residual risk |
 |---|---|---|---|
-| T17 | A tampered `release` branch or bundle. | Built only by CI after the gate (audit, typecheck, tests, mutation); `dist/` is never committed by hand. | Commits, tags and the bundle are **unsigned**; what you trust is this repository and GitHub Actions (PLAN-SIGNED-RELEASES.md). |
+| T17 | A tampered `release` branch or bundle. | Built only by CI after the gate (audit, typecheck, tests, mutation); `dist/` is never committed by hand. | Commits, tags and the bundle are **unsigned**; what you trust is this repository and GitHub Actions ([PLAN-SIGNED-RELEASES.md](../backlog-and-plans/PLAN-SIGNED-RELEASES.md)). |
 | T18 | A tampered npm package. | The npm package holds only the launcher and no plugin code (a guard fails the publish otherwise); published from CI with provenance. | The launcher runs `claude plugin install` and then the installed plugin's `install.sh`, so it is as trustworthy as T17. Provenance for `dist/` does not exist yet. |
 | T19 | A malicious dependency. | `npm audit --audit-level=critical --omit=dev` is in the gate; the required runtime dependencies are two (`@modelcontextprotocol/sdk`, `zod`); the frontmatter parser is written in-house, so there is no YAML library to attack. | The optional vector stack (`@huggingface/transformers`, `sqlite-vec`, `better-sqlite3`) is installed with `npm install` at setup, and the embedding model is downloaded from Hugging Face on first use. |
 | T20 | A name collision: another plugin called `total-recall`. | Documented; install uses the full ID; the npx launcher stops on a foreign install unless `--force`. | The unscoped npm package `total-recall` is an unrelated tool. |
