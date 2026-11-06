@@ -17,7 +17,7 @@ Run `install.sh` from **Git Bash** (ships with [Git for Windows](https://gitforw
 
 Use a **Windows Node.js** (`node.exe` on PATH). Node installed only inside WSL is not visible to Git Bash/Claude Code.
 
-- **Every shell step in these docs** (`install.sh`, the `bash "$(ls -d …)"` command, `bash hooks/scripts/pull-org-vault.sh`) runs in Git Bash, not PowerShell or cmd.
+- **Every shell step in these docs** (`install.sh`, the `bash "$(ls -d …)"` command, `bash hooks/scripts/pull-org-vault.sh`) runs here, not PowerShell or cmd.
 - **`~`** is `C:\Users\<you>`: the vaults live in `C:\Users\<you>\.total-recall\`.
 - **MCP configs for other clients** use `bash` as the command and the script path as the argument; if `bash` is not on the client's `PATH`, give the full path: `"command": "C:\\Program Files\\Git\\bin\\bash.exe"`.
 - **`--vscode`** writes `%APPDATA%\Code\User\mcp.json` and a `bash` entry (fixed in 1.6.9; see issues #36–#38).

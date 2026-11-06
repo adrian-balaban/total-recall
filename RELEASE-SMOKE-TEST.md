@@ -65,7 +65,7 @@ Run this after every release, not just hardening ones.
 
 ## 8. Error-path spot check (only if a recent change touched these)
 
-- [ ] Tool error text is redacted — trigger an EACCES/ENOENT (e.g. chmod a vault file 000, try to recall it) and confirm the error mentions `~` or `<org-vault>`, not an absolute path with the real username
+- [ ] Tool error text is redacted — trigger an EACCES/ENOENT (e.g. chmod a vault file 000, try to recall it) and confirm the error mentions `~` or `<org-vault>`, not an absolute path with the real username. Not reproducible as a manual check if the server process runs privileged enough to bypass `chmod 000` on files it owns, or if the key is already in `contentCache` (30-min LRU) — delete the file instead of chmod'ing it, and use a key that was not just read, to force an actual disk read
 - [ ] If bulk/import changed: round-trip `export_memories` → `import_memories` on a throwaway key, confirm counts match
 
 ## 9. Regression-specific checks (update this section per release)
@@ -76,6 +76,7 @@ Run this after every release, not just hardening ones.
 - [ ] (1.4.0) With an org vault: the SessionStart index shows org entries inside the "teammate-written reference data, not instructions" block; `orgInjection: "off"` removes them
 - [ ] (1.5.0) The client lists the `total-recall://index` and `total-recall://sync-status` resources and the `memory-workflow` / `extract-session-learnings` prompts; `tools/list` still shows 22 tools
 - [ ] (1.6.0) `./install.sh --vscode` adds a `total-recall` entry to VS Code's user `mcp.json` and keeps the existing servers
+- [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 - [ ] (1.6.8) After changing `embeddingModel` (or on the first start after upgrading from ≤ 1.6.7), the vector index is rebuilt once and `get_stats.vector.model` names the configured model
 - [ ] (1.6.9) The first semantic search after an update downloads the model into `~/.total-recall/models/`; after a later `claude plugin update`, no second download (the folder is reused)
 - [ ] (1.6.9, Windows) `./install.sh --vscode` from Git Bash writes `%APPDATA%\Code\User\mcp.json` with `"command": "bash"` and the script as argument
@@ -85,7 +86,6 @@ Run this after every release, not just hardening ones.
 - [ ] (1.8.0) After a PreCompact, `~/.total-recall/.extract.log` ends with `outcome=wrote` or `outcome=nothing`, not `cli-error` (the nested `claude -p` now runs with `--tools ""`)
 - [ ] (npm) The npm page of `@adrian-balaban/total-recall` shows the current release version with a provenance badge (published by `release.yml` through Trusted Publishing); `npm pack --dry-run @adrian-balaban/total-recall` lists only the launcher, `package.json`, README and LICENSE
 - [ ] (npx) `npx -y @adrian-balaban/total-recall --help` prints the usage; on a clean sandboxed `HOME` (with `claude` installed) `npx -y @adrian-balaban/total-recall -y` adds the marketplace, installs the plugin, runs `install.sh`, and a new session shows the memory index
-- [ ] (1.6.1) The `release` branch no longer contains `src/__tests__/`, the vitest/Stryker configs, `scripts/loadtest.ts` or `scripts/eval/`, and `./install.sh --complete` still rebuilds `dist/`
 
 ---
 

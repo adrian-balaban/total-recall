@@ -159,7 +159,7 @@ The `no-prune` tag keeps a memory out of `prune_memories` and blocks its deletio
 
 ### Semantic search (optional)
 
-Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (`Xenova/paraphrase-multilingual-MiniLM-L12-v2` by default, 384 dimensions, 50+ languages) handles paraphrase and other languages. The model is downloaded from Hugging Face on the first semantic search and kept in `~/.total-recall/models/`, so a plugin update does not download it again (before 1.6.9 it sat inside the plugin folder). RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
+Lazy-loaded and fully local: no cloud API, no API key. Vectors are computed once at write time and stored in `vectors.db`. TF-IDF matches exact tokens ("k8s pod OOM" misses "workload killed for memory pressure"); the embedding model (384 dimensions; see [Languages](#languages) for which one and what it covers) handles paraphrase and other languages. The model is downloaded from Hugging Face on the first semantic search and kept in `~/.total-recall/models/`, so a plugin update does not download it again (before 1.6.9 it sat inside the plugin folder). RRF merges the two rankings by position only, because lexical scores and cosine similarities are not comparable.
 
 ```bash
 npm install --no-save @huggingface/transformers sqlite-vec better-sqlite3   # or ./install.sh --complete

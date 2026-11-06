@@ -26,7 +26,7 @@ Scope of the numbers: coverage is from the unit suite only (the integration test
 
 | | |
 |---|---|
-| Test files | 76, with 2,390 assertions (2.34 per test, house target ≥ 1.5) |
+| Test files | 79, with 2,390 assertions (2.34 per test, house target ≥ 1.5) |
 | Assertion-free tests, tautologies | 0, 0 (`[TR-Q4]`, `[TR-Q5]`) |
 | Mutants | 1,586 killed, 1 timeout, 310 survived, 63 without coverage |
 | Weakest modules | `paths.ts` 36.6%, `embeddings.ts` 52.2%, `atomic-write.ts` 60.9% (v1.7.1). Version 1.8.0 adds tests for these and puts `org-sync.ts` under mutation; a local Stryker run on only those modules gave `paths.ts` 87%, `embeddings.ts` 90%, `atomic-write.ts` 91%, `org-sync.ts` 88%, `index-cache.ts` 77% (CI's run over all 19 modules gives the official figure) |

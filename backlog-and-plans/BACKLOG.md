@@ -59,7 +59,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   3x before merging, since the abort is intermittent under plain vitest.
 
 ### Atomic writes for memory `.md` files
-- **Source:** `ADL-EXPANSION-PLAN.md` (Rejected or deferred; file deleted 2026-10-31).
 - **What:** memory `.md` files are written with plain `writeFileSync` in
   `store.ts` and `mutate.ts`. Only the index files are written atomically
   (`persistence.ts` `atomicWrite()`), so any "all vault writes are atomic" rule
@@ -94,7 +93,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   full plan.
 
 ### index.json has no lock (single-writer assumption)
-- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 1 (file pruned 2026-07-28).
 - **What:** `index.json` is written under a single-writer assumption. Concurrent
   Claude Code windows can clobber runtime-only fields (`accessCount`,
   `lastAccessed`).
@@ -104,7 +102,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   fields, so a stale writer can't overwrite a fresher access record.
 
 ### Embedding provider is a hardcoded if/else
-- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 2 (file pruned 2026-07-28).
 - **What:** `src/embeddings.ts` selects the provider via a hardcoded if/else,
   blocking the addition of OpenAI/Voyage/Cohere/Ollama embedders without
   touching core logic.
@@ -121,7 +118,6 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Shape when picked up:** extra flags in `bin/cli.mjs` with the same injected-runner tests; `--mcp` must not make npm a second channel for plugin code.
 
 ### Org-sync freshness relies on marker-file polling
-- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 5 (file pruned 2026-07-28).
 - **What:** teammate memories can lag until the next poll/hook fires — there is
   no push path.
 - **Trigger:** team-shared org-vault usage where staleness is felt (banking
@@ -130,7 +126,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   polling on network filesystems where inotify isn't reliable.
 
 ### state.ts global singletons couple tools/* to one process
-- **Source:** `ARCHITECTURE-REVIEW-TODO.md` item 7 (file pruned 2026-07-28).
 - **What:** `state.ts` global singletons couple the whole `tools/*` layer to one
   process, blocking any future multi-tenant/worker-pool design.
 - **Trigger:** scope grows beyond one process per user (multi-tenant SaaS, worker pool).
@@ -201,8 +196,6 @@ pruned (2026-07-29); this backlog is now the sole record.
   generated corpus in CI. Generic `recall_memory` quality is still not evaluated.
 
 ### `config.orgVault` change without restart silently stops org sync
-- **Source:** `REVIEW-bugfix-proposals-30072026.md` Fix 4 (proposal file deleted
-  after triage; this entry is the record).
 - **What:** `src/paths.ts` resolves `ORG_VAULT` once at module load from
   `loadConfig()` (the exported const is fixed for the process lifetime);
   `src/tools/store.ts` writes org memories to that frozen value. The
