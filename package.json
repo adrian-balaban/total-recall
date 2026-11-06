@@ -1,6 +1,6 @@
 {
   "name": "@adrian-balaban/total-recall",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "One-command install bootstrap for the total-recall memory plugin (Claude Code / Gemini / VS Code). The plugin code itself ships from the GitHub release branch.",
   "type": "module",
   "license": "MIT",

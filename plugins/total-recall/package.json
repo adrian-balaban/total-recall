@@ -1,7 +1,8 @@
 {
   "name": "total-recall",
-  "version": "1.8.0",
+  "version": "1.8.1",
   "description": "Persistent memory MCP server for Claude Code and Gemini CLI",
+  "license": "MIT",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

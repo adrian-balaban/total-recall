@@ -426,6 +426,103 @@ suite('hook-scripts (load-memory-index.sh, build-memory-index.sh)', () => {
     }
   });
 
+  // B4 (issue #39): Step 8's verification only ever `warn`ed, so an unattended
+  // install (-y, in CI/provisioning) that ended up WITHOUT a registered MCP
+  // server still exited 0 and looked successful. The fix collects Step 8's
+  // failures in VERIFY_FAILURES and, under --strict, exits non-zero at the end.
+  // Exiting unconditionally was NOT an option: the pipefail test above and the
+  // .mcp.json-scope tests below assert status 0 on installs that legitimately
+  // report an unreachable/absent server, and `install.sh` deliberately has no
+  // `set -e` so every step runs and the summary stays complete. Hence an opt-in
+  // flag, checked after the summary rather than at the failing step.
+  // The stub makes `claude mcp get` always fail (the real B4 scenario: the
+  // server is not registered), so the ONLY difference between the two runs is
+  // the flag.
+  function installWithUnregisteredServer(extraArgs: string[]) {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-strict-'));
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    const claudeStub = path.join(binDir, 'claude');
+    fs.writeFileSync(claudeStub, [
+      '#!/usr/bin/env bash',
+      // `mcp get` never succeeds → Step 8 concludes "not registered".
+      'if [ "$1" = "mcp" ] && [ "$2" = "get" ]; then exit 1; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(claudeStub, 0o755);
+    try {
+      const r = spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector', ...extraArgs], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      return { status: r.status, out: r.stdout + r.stderr };
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  }
+
+  it('install.sh: an unregistered MCP server still exits 0 without --strict (warn-only default)', () => {
+    const { status, out } = installWithUnregisteredServer([]);
+    expect(status).toBe(0);
+    expect(out).toContain("MCP server 'total-recall' not registered");
+    // The default run must point at the flag, or B4 is undiscoverable.
+    expect(out).toContain('--strict');
+  });
+
+  it('install.sh --strict: exits non-zero when Step 8 finds the MCP server unregistered', () => {
+    const { status, out } = installWithUnregisteredServer(['--strict']);
+    expect(status).not.toBe(0);
+    expect(out).toContain("MCP server 'total-recall' not registered");
+    expect(out).toContain('Install incomplete (--strict)');
+  });
+
+  it('install.sh --strict: exits 0 when verification passes (no false positives)', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-install-strict-ok-'));
+    const binDir = path.join(home, 'bin');
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'claude'), [
+      '#!/usr/bin/env bash',
+      // Healthy install: the server resolves once add-json has run.
+      'if [ "$1" = "mcp" ] && [ "$2" = "get" ]; then [ -f "$HOME/registered" ] && exit 0; exit 1; fi',
+      'if [ "$1" = "mcp" ] && [ "$2" = "add-json" ]; then touch "$HOME/registered"; exit 0; fi',
+      'exit 0',
+    ].join('\n'));
+    fs.chmodSync(path.join(binDir, 'claude'), 0o755);
+    try {
+      const r = spawnSync('bash', [INSTALL_SCRIPT, '--plugin-root', REPO_ROOT, '-y', '--no-vector', '--strict'], {
+        encoding: 'utf8',
+        stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      expect(r.stdout + r.stderr).not.toContain('Install incomplete');
+    } finally {
+      fs.rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  // B5 (issue #40): --help and the interactive prompt described --org-repo as a
+  // GitHub URL, while INSTALL.md documents any git host. The code is genuinely
+  // host-agnostic (pull-org-vault.sh falls back from `gh repo clone` to plain
+  // `git clone`, and accepts git@ SSH URLs), so the HELP was the wrong side.
+  it('install.sh: --org-repo help text is host-agnostic, matching INSTALL.md', () => {
+    const help = spawnSync('bash', [INSTALL_SCRIPT, '--help'], { encoding: 'utf8' }).stdout;
+    const orgRepoHelp = help.slice(help.indexOf('--org-repo'), help.indexOf('--allowed-email-domain'));
+    expect(orgRepoHelp).toMatch(/any git host/i);
+    expect(orgRepoHelp).toMatch(/GitLab|Bitbucket/);
+    // It must no longer claim GitHub exclusively ("from this GitHub repo").
+    expect(orgRepoHelp).not.toMatch(/this GitHub repo/);
+    // INSTALL.md's "any host" claim is the contract being matched.
+    expect(fs.readFileSync(path.join(REPO_ROOT, 'INSTALL.md'), 'utf8')).toMatch(/any host/i);
+  });
+
+  it('install.sh: the org-vault prompt does not promise GitHub specifically', () => {
+    const src = fs.readFileSync(INSTALL_SCRIPT, 'utf8');
+    expect(src).not.toContain('GitHub repo URL for the org vault');
+    expect(src).toContain('Git repo URL for the org vault');
+  });
+
   // install.sh must never touch a .mcp.json in the folder it is run from. The
   // plugin root ships a .mcp.json that declares the server, and RELEASE-SMOKE-TEST /
   // INSTALL tell users to run ./install.sh from there. From that folder
