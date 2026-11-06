@@ -1,0 +1,5 @@
+# Dev toolchain (https://mise.jdx.dev). Node 20 is what the CI gate runs, so use it locally too:
+# a native module (better-sqlite3) built under another Node fails to load under this one.
+# The npm release job uses Node 22 on purpose (trusted publishing needs it); that is CI-only.
+[tools]
+node = "20"

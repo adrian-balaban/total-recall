@@ -91,6 +91,7 @@ Every key is optional:
 | `allowedEmailDomains` | `[]` | Email domains the privacy filter lets through |
 | `orgInjection` | `index` | How org entries appear in the injected index: `index`, `titles` or `off` |
 | `enableMultilingualSearch` | `true` | Multilingual text search; read on every search, no restart needed |
+| `indexMaxEntries` | `300` | Most memories listed in the index injected at session start (about 10k tokens at the cap); `0` = no cap. Above it, no-prune memories come first, then the most important, then the most recently updated; the count line still shows the real total and a last line says how many were left out. The rest are found with `search_index` / `recall_memory`. Applies to the hook's index and to `total-recall://index` |
 | `orgSync` | `hook` | Who pushes org memories: `hook` (the PostToolUse hook, Claude Code and Gemini) or `server` (the MCP server itself, for hosts without hooks such as Visual Studio). Set one, never both; in `server` mode the hook does nothing for org keys |
 | `embeddingModel` | multilingual model | Semantic-search model; see [Languages](#languages) |
 | `personalVault`, `orgVault` | `~/.total-recall/personal-vault`, `~/.total-recall/org` | Vault folders. Read once at start: restart the assistant after changing them (a changed `orgVault` without a restart silently stops org sync) |

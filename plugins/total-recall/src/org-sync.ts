@@ -24,7 +24,7 @@ const WRITE_TOOLS = new Set(['store_memory', 'update_memory', 'delete_memory']);
 
 type Starter = (script: string, payload: string) => void;
 
-function startHookScript(script: string, payload: string): void {
+export function startHookScript(script: string, payload: string): void {
   const child = spawn('bash', [script], { stdio: ['pipe', 'ignore', 'ignore'], detached: true, env: { ...process.env, ORG_SYNC_FROM_SERVER: '1' } });
   child.on('error', (e) => recordError(`org sync (server mode): could not start ${path.basename(script)}: ${e.message}`));
   child.stdin.on('error', () => { /* the script exited before reading; its own log has the reason */ });
@@ -36,7 +36,12 @@ let starter: Starter = startHookScript;
 /** Test seam: replace the process starter. */
 export function __testSetStarter(s: Starter | null): void { starter = s ?? startHookScript; }
 
+let scriptOverride: string | null = null;
+/** Test seam: point at another script (or null for the real one). */
+export function __testSetScript(p: string | null): void { scriptOverride = p; }
+
 function hookScript(): string {
+  if (scriptOverride) return scriptOverride;
   // dist/index.js (bundle) and src/org-sync.ts (tsx) both sit one level under the plugin root.
   const here = path.dirname(fileURLToPath(import.meta.url));
   return path.join(here, '..', 'hooks', 'scripts', 'sync-org-memory.sh');

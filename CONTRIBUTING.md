@@ -9,6 +9,8 @@ Thanks for helping. This page is the short human version of the rules; the longe
 
 ## Build and test
 
+Use Node 20, the version the CI gate runs: the repository has a `.nvmrc` (`nvm use`) and a `mise.toml` (`mise install`). A native module built under another Node version fails to load under this one.
+
 Run everything from `plugins/total-recall/`:
 
 ```bash

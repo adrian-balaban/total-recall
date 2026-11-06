@@ -36,6 +36,7 @@ const extractLog = () => path.join(tmpHome, '.total-recall', '.extract.log');
 // output from $TR_CLAUDE_LINES_FILE (if set) and exits with $TR_CLAUDE_EXIT (default 0).
 const CLAUDE_STUB = `#!/usr/bin/env bash
 cat > /dev/null
+[ -n "\${TR_CLAUDE_ARGS_FILE:-}" ] && printf '%s\\n' "$@" > "$TR_CLAUDE_ARGS_FILE"
 [ -n "\${TR_CLAUDE_MARKER:-}" ] && touch "$TR_CLAUDE_MARKER"
 [ -n "\${TR_CLAUDE_LINES_FILE:-}" ] && [ -f "$TR_CLAUDE_LINES_FILE" ] && cat "$TR_CLAUDE_LINES_FILE"
 exit "\${TR_CLAUDE_EXIT:-0}"
@@ -52,6 +53,7 @@ function runHook(stdinJson: string, opts: {
     HOME: tmpHome,
     NODE_BIN: process.execPath,
     TR_CLAUDE_MARKER: claudeMarker,
+    TR_CLAUDE_ARGS_FILE: path.join(tmpHome, 'claude-args.txt'),
   };
   if (opts.claudeLines !== undefined) {
     const f = path.join(tmpHome, 'claude-lines.txt');
@@ -140,6 +142,19 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{"continue":true}');
     expect(r.stderr).toContain('claude CLI not found');
+  });
+
+  it('sandbox: the nested `claude -p` gets no tools, no MCP servers, no skills and no saved session (Radar: agent sandboxing)', () => {
+    runHook(JSON.stringify({ transcript_path: transcript, session_id: 's-sbx' }), { claudeLines: '' });
+    const args = fs.readFileSync(path.join(tmpHome, 'claude-args.txt'), 'utf8').split('\n');
+    expect(args).toContain('-p');
+    // `--tools ""`: the value after --tools is an empty string, i.e. every built-in tool is off.
+    const i = args.indexOf('--tools');
+    expect(i).toBeGreaterThan(-1);
+    expect(args[i + 1]).toBe('');
+    expect(args).toContain('--strict-mcp-config');
+    expect(args).toContain('--disable-slash-commands');
+    expect(args).toContain('--no-session-persistence');
   });
 
   it('A5: extraction yields zero learnings → nothing written, still continue', () => {

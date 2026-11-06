@@ -398,3 +398,161 @@ describe('single writer', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+
+// Progressive context disclosure (Technology Radar Vol 35, Adopt): the injected index is capped
+// so its cost stops growing with the vault. The memories left out stay findable by search.
+describe('renderIndexCache: size cap (indexMaxEntries)', () => {
+  const mk = (n: number, extra: Partial<import('../index-cache.js').CacheEntry> = {}) => ({
+    key: `knowledge/m${String(n).padStart(3, '0')}`, title: `Memory ${n}`, tags: [], category: 'knowledge', ...extra,
+  });
+
+  it('lists everything when the vault is under the cap (output unchanged)', () => {
+    const out = renderIndexCache([mk(1), mk(2)], 5);
+    expect(out.split('\n')).toEqual(['2', '- knowledge/m001: Memory 1 [] (knowledge)', '- knowledge/m002: Memory 2 [] (knowledge)']);
+  });
+
+  it('keeps the highest-importance, then most recent, entries and says how many were left out', () => {
+    const entries = [
+      mk(1, { importance: 0.3, updated: '2026-11-05T00:00:00Z' }),
+      mk(2, { importance: 1.0, updated: '2026-01-01T00:00:00Z' }),
+      mk(3, { importance: 0.5, updated: '2026-02-01T00:00:00Z' }),
+      mk(4, { importance: 0.5, updated: '2026-06-01T00:00:00Z' }),
+    ];
+    const lines = renderIndexCache(entries, 2).split('\n');
+    expect(lines[0]).toBe('4');                                  // the count line stays the real total
+    expect(lines.filter((l) => l.startsWith('- '))).toEqual([     // kept: importance 1.0 and the newer 0.5, in key order
+      '- knowledge/m002: Memory 2 [] (knowledge)',
+      '- knowledge/m004: Memory 4 [] (knowledge)',
+    ]);
+    expect(lines.at(-1)).toMatch(/2 more memories are not listed.*search_index/);
+  });
+
+  it('never drops a no-prune memory', () => {
+    const entries = [
+      mk(1, { importance: 0.1, tags: ['no-prune'] }),
+      mk(2, { importance: 1.0 }), mk(3, { importance: 0.9 }),
+    ];
+    const kept = renderIndexCache(entries, 1).split('\n').filter((l) => l.startsWith('- '));
+    expect(kept).toHaveLength(1);
+    expect(kept[0]).toContain('knowledge/m001');
+  });
+
+  it('0 means no cap', () => {
+    const many = Array.from({ length: 450 }, (_, i) => mk(i));
+    expect(renderIndexCache(many, 0).split('\n').filter((l) => l.startsWith('- '))).toHaveLength(450);
+  });
+
+  it('the default cap is 300 and indexMaxEntries in config.json overrides it', () => {
+    const many = Array.from({ length: 320 }, (_, i) => mk(i));
+    expect(renderIndexCache(many).split('\n').filter((l) => l.startsWith('- '))).toHaveLength(300);
+    fs.mkdirSync(path.join(process.env.HOME!, '.total-recall'), { recursive: true });
+    fs.writeFileSync(path.join(process.env.HOME!, '.total-recall', 'config.json'), JSON.stringify({ indexMaxEntries: 10 }));
+    try {
+      expect(renderIndexCache(many).split('\n').filter((l) => l.startsWith('- '))).toHaveLength(10);
+    } finally {
+      fs.rmSync(path.join(process.env.HOME!, '.total-recall', 'config.json'), { force: true });
+    }
+  });
+
+  it('reads importance and updated from the frontmatter when building from files', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-cap-'));
+    fs.mkdirSync(path.join(dir, 'knowledge'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'knowledge', 'a.md'), '---\ntitle: "A"\ntags: [no-prune]\nimportanceScore: 0.2\nupdated: 2026-05-01T00:00:00Z\n---\nbody\n');
+    const [e] = readCacheEntries(dir, false);
+    expect(e).toMatchObject({ key: 'knowledge/a', importance: 0.2, updated: '2026-05-01T00:00:00Z' });
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+
+describe('renderIndexCache: ranking details', () => {
+  const mk = (n: string, extra: Partial<import('../index-cache.js').CacheEntry> = {}) => ({
+    key: `k/${n}`, title: n, tags: [], category: 'k', ...extra,
+  });
+  const keysOf = (out: string) => out.split('\n').filter((l) => l.startsWith('- ')).map((l) => l.slice(2, l.indexOf(':')));
+
+  it('lists the kept entries in key order even when their rank order is different', () => {
+    const out = renderIndexCache([mk('a', { importance: 0.1 }), mk('b', { importance: 0.9 }), mk('c', { importance: 0.8 })], 2);
+    expect(keysOf(out)).toEqual(['k/b', 'k/c']);
+    const out2 = renderIndexCache([mk('z', { importance: 0.9 }), mk('y', { importance: 0.8 }), mk('x', { importance: 0.1 })], 2);
+    expect(keysOf(out2)).toEqual(['k/y', 'k/z']);
+  });
+
+  it('ranks by importance first, then newest update, then key', () => {
+    const entries = [
+      mk('a', { importance: 0.5, updated: '2026-01-01' }),
+      mk('b', { importance: 0.5, updated: '2026-03-01' }),
+      mk('c', { importance: 0.5, updated: '2026-03-01' }),
+      mk('d', { importance: 0.5 }),                      // no date counts as oldest
+    ];
+    expect(keysOf(renderIndexCache(entries, 1))).toEqual(['k/b']);   // newest, key b before c
+    expect(keysOf(renderIndexCache(entries, 3))).toEqual(['k/a', 'k/b', 'k/c']);
+  });
+
+  it('treats a missing importance as 0.5', () => {
+    const entries = [mk('a', { importance: 0.4 }), mk('b'), mk('c', { importance: 0.6 })];
+    expect(keysOf(renderIndexCache(entries, 2))).toEqual(['k/b', 'k/c']);
+  });
+
+  it('a vault exactly at the cap is listed whole with no note', () => {
+    const out = renderIndexCache([mk('a'), mk('b')], 2);
+    expect(keysOf(out)).toEqual(['k/a', 'k/b']);
+    expect(out).not.toContain('not listed');
+  });
+
+  it('leaves the given order alone when nothing is cut (under the cap, or exactly at it)', () => {
+    expect(keysOf(renderIndexCache([mk('b'), mk('a')], 5))).toEqual(['k/b', 'k/a']);
+    expect(keysOf(renderIndexCache([mk('b'), mk('a')], 2))).toEqual(['k/b', 'k/a']);
+  });
+});
+
+describe('maxIndexEntries: reading the setting', () => {
+  const cfgFile = () => path.join(process.env.HOME!, '.total-recall', 'config.json');
+  const withConfig = async (c: object | null, fn: () => void) => {
+    fs.mkdirSync(path.dirname(cfgFile()), { recursive: true });
+    if (c === null) fs.rmSync(cfgFile(), { force: true }); else fs.writeFileSync(cfgFile(), JSON.stringify(c));
+    // loadConfig caches by mtime: make sure a rewrite within the same millisecond is seen
+    if (c !== null) fs.utimesSync(cfgFile(), new Date(), new Date(Date.now() + Math.random() * 1e6));
+    try { fn(); } finally { fs.rmSync(cfgFile(), { force: true }); }
+  };
+
+  it.each([
+    [{ indexMaxEntries: 7 }, 7],
+    [{ indexMaxEntries: 0 }, 0],
+    [{ indexMaxEntries: 7.9 }, 7],
+    [{ indexMaxEntries: -1 }, 300],
+    [{ indexMaxEntries: '5' }, 300],
+    [{ indexMaxEntries: null }, 300],
+    [{}, 300],
+  ])('config %j gives %i', async (c, want) => {
+    const { maxIndexEntries } = await import('../index-cache.js');
+    await withConfig(c, () => expect(maxIndexEntries()).toBe(want));
+  });
+
+  it('is 300 without a config file', async () => {
+    const { maxIndexEntries } = await import('../index-cache.js');
+    await withConfig(null, () => expect(maxIndexEntries()).toBe(300));
+  });
+
+  it('ignores an importanceScore that is not a number when reading a vault', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-rank-'));
+    fs.mkdirSync(path.join(dir, 'k'), { recursive: true });
+    fs.writeFileSync(path.join(dir, 'k', 'a.md'), '---\ntitle: "A"\nimportanceScore: high\n---\nx\n');
+    fs.writeFileSync(path.join(dir, 'k', 'b.md'), '---\ntitle: "B"\nimportanceScore: 0.9\n---\nx\n');
+    const entries = readCacheEntries(dir, false);
+    expect(entries.find((e) => e.key === 'k/a')!.importance).toBeUndefined();
+    expect(entries.find((e) => e.key === 'k/b')!.importance).toBe(0.9);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('returns the entries of a vault sorted by key', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sort-'));
+    for (const n of ['c', 'a', 'b']) {
+      fs.mkdirSync(path.join(dir, 'k'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'k', `${n}.md`), `---\ntitle: "${n}"\n---\nx\n`);
+    }
+    expect(readCacheEntries(dir, false).map((e) => e.key)).toEqual(['k/a', 'k/b', 'k/c']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+});

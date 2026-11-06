@@ -191,4 +191,4 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - [Spec-driven work and ADL](docs/SPEC-DRIVEN.md): link decisions to requirements and architecture rules to tests, with a five-minute walkthrough
 - [Architecture](plugins/total-recall/ARCHITECTURE.md): C4 diagrams, data model, write path
 - [Quality metrics](docs/QUALITY.md): tests, mutation score, complexity, coupling, delivery, scale
-- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Install guide](plugins/total-recall/INSTALL.md) · [Contributing](CONTRIBUTING.md)
+- [Similar projects](docs/COMPARISON.md) · [Security](SECURITY.md) · [Threat model](docs/THREAT-MODEL.md) · [Install guide](plugins/total-recall/INSTALL.md) · [Contributing](CONTRIBUTING.md)

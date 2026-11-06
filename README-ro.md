@@ -191,4 +191,4 @@ Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull requ
 - [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md): leagă deciziile de cerințe și regulile de arhitectură de teste, cu un exemplu de cinci minute
 - [Arhitectura](plugins/total-recall/ARCHITECTURE.md): diagrame C4, model de date, fluxul de scriere
 - [Metrici de calitate](docs/QUALITY.md): teste, scor de mutație, complexitate, cuplare, livrare, scalare
-- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md) · [Contribuție](CONTRIBUTING.md)
+- [Proiecte similare](docs/COMPARISON.md) · [Securitate](SECURITY.md) · [Model de amenințări](docs/THREAT-MODEL.md) · [Ghid de instalare](plugins/total-recall/INSTALL.md) · [Contribuție](CONTRIBUTING.md)

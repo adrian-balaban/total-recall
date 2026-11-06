@@ -410,5 +410,7 @@ export function flushPending() {
 // from memory instead of from a file.
 
 export function renderIndexCache(): string {
-  return renderCache(Object.values(memIndex));
+  return renderCache(Object.values(memIndex).map((m) => ({
+    key: m.key, title: m.title, tags: m.tags ?? [], category: m.category, importance: m.importanceScore, updated: m.updated,
+  })));
 }

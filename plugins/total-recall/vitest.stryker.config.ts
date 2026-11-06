@@ -63,6 +63,9 @@ export default defineConfig({
       'src/__tests__/vault-scan-realbase.test.ts',
       'src/__tests__/registry-redaction.test.ts',
       'src/__tests__/org-sync.test.ts',
+      'src/__tests__/atomic-write-src.test.ts',
+      'src/__tests__/paths-values.test.ts',
+      'src/__tests__/embeddings-behaviour.test.ts',
     ],
     // Coverage analysis is driven by Stryker (perTest); disable vitest's own
     // coverage thresholds so the dry-run doesn't fail on the reduced file set.
