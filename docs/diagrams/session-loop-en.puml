@@ -15,5 +15,6 @@ C --> D
 D --> E
 E ..> A
 C ..> R : tagged org,\nafter the privacy filter
+E ..> A : pulled at session start
 R ..> A : pulled at session start
 @enduml

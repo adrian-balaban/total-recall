@@ -15,5 +15,6 @@ C --> D
 D --> E
 E ..> A
 C ..> R : etichetate org,\ndupă filtrul de confidențialitate
+E ..> A : aduse la pornirea sesiunii
 R ..> A : aduse la pornirea sesiunii
 @enduml
