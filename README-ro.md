@@ -60,6 +60,10 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
 4. Repornește Claude Code (`/exit`, apoi `claude`; aprobă uneltele total-recall când ți se cere) și verifică: spune _„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5”_. Apare un fișier nou într-un subfolder din `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă _„ce build tool folosește proiectul?”_. Apoi cere asistentului să apeleze `get_stats`: îți arată totalurile, erorile recente și dacă căutarea semantică e pornită. Dacă lipsesc uneltele, rulează `/mcp` și caută `total-recall`.
 
+### Din sursă / fork
+
+`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` construiește pluginul din clona ta și îl instalează, în loc să aducă build-ul `release` din marketplace. Pentru forkuri și cod de pe `main` nelansat încă: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself) (în engleză).
+
 ### Alți asistenți
 
 Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. INSTALL.md are pași pentru Gemini/Antigravity, VS Code și Codex, plus notele pentru Windows și toate opțiunile: [INSTALL.md](plugins/total-recall/INSTALL.md) (în engleză). Pentru ceilalți clienți, folosește blocul de mai jos.

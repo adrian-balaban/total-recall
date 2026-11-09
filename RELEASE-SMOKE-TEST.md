@@ -86,6 +86,14 @@ Run this after every release, not just hardening ones.
 - [ ] (1.8.0) After a PreCompact, `~/.total-recall/.extract.log` ends with `outcome=wrote` or `outcome=nothing`, not `cli-error` (the nested `claude -p` now runs with `--tools ""`)
 - [ ] (npm) The npm page of `@adrian-balaban/total-recall` shows the current release version with a provenance badge (published by `release.yml` through Trusted Publishing); `npm pack --dry-run @adrian-balaban/total-recall` lists only the launcher, `package.json`, README and LICENSE
 - [ ] (npx) `npx -y @adrian-balaban/total-recall --help` prints the usage; on a clean sandboxed `HOME` (with `claude` installed) `npx -y @adrian-balaban/total-recall -y` adds the marketplace, installs the plugin, runs `install.sh`, and a new session shows the memory index
+- [ ] (local-install channel, `HOME=$(mktemp -d)`, a clean clone with no `node_modules`/`dist`) See [PLAN-INSTALARE-LOCALA-FINAL.md § Pasul 9](backlog-and-plans/PLAN-INSTALARE-LOCALA-FINAL.md#pasul-9--smoke-end-to-end) for the full checklist. Short form:
+  - `./install.sh -y --no-vector` exits 0; `claude plugin list` shows `total-recall@total-recall-local` enabled
+  - the `installPath` from `installed_plugins.json` has all 6 `dist/` artifacts and **no** `node_modules`
+  - re-run with no changes → "unchanged", no `uninstall`; a trivial edit under `src/` → re-run rebuilds and the cache's `dist/index.js` is the new one
+  - complete profile (no `--no-vector`): vector deps land in `installPath/node_modules`, never in the clone or the staging dir
+  - marketplace already installed + `--local` → stop with the switch-channel command; `--force` → proceeds with a warning (and the reverse direction)
+  - without `claude`: exits 0, vaults + index created, no MCP registered unless `--vscode`/`--gemini` was passed
+  - documented uninstall (both with and without `claude`) leaves `claude plugin list` clean / no orphaned VS Code `mcp.json` entry, and memories untouched
 
 ---
 

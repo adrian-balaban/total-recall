@@ -25,9 +25,9 @@ Tests run sequentially (maxWorkers=1) because the server has module-level state 
 
 ## 🚀 Install / setup
 
-`install.sh` (plugin root) is the one-shot, state-aware setup script. It prompts for a profile, creates vault directories (including one-time local-only `git init` of the personal vault), registers MCP, builds the index, then configures optional org vault/vector search and verifies. Hooks are not wired manually; they auto-load from `hooks/hooks.json`. A manual clone gets the same behavior through `claude plugin install "$(pwd)"`.
+`install.sh` (plugin root) is the one-shot, state-aware setup script. It prompts for a profile, creates vault directories (including one-time local-only `git init` of the personal vault), registers MCP, builds the index, then configures optional org vault/vector search and verifies. Hooks are not wired manually; they auto-load from `hooks/hooks.json`. `claude plugin install "$(pwd)"` does **not** work — `claude plugin install` only accepts `plugin[@marketplace]`, never a filesystem path. A manual clone gets installed either via the root `./install.sh` (builds, stages a clean copy, registers it as a `total-recall-local` directory marketplace, installs it, then runs its `install.sh` — see [INSTALL.md § Install from a local clone](INSTALL.md#-install-from-a-local-clone-build-it-yourself)), or for a dev-only session, `claude --plugin-dir "$(pwd)"`.
 
-Flags: `-y`/`--yes`, `--strict`, `--default`/`--complete`/`--vector`, `--no-vector`, `--statusline`, `--gemini` (requires `agy`), `--vscode`, `--org-repo`, `--allowed-email-domain`, `--plugin-root`, `-h`/`--help`.
+Flags: `-y`/`--yes`, `--strict`, `--default`/`--complete`/`--vector`, `--no-vector`, `--statusline`, `--gemini` (requires `agy`), `--vscode`, `--org-repo`, `--allowed-email-domain`, `--plugin-root`, `--rebuild`, `-h`/`--help`.
 
 - `--strict` is the only flag that changes the exit code: it turns collected verification failures into `exit 1`. The default remains warn-and-exit-0.
 - `--org-repo` is host-agnostic (`https://` or `git@`). Keep its help, prompt and INSTALL.md in agreement.

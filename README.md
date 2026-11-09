@@ -60,6 +60,10 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
 4. Restart Claude Code (`/exit`, then `claude`; approve the total-recall tools when asked) and check it works: say *"remember that this project uses Gradle 8 and JUnit 5"*. A new file appears in a subfolder of `~/.total-recall/personal-vault/`. In a new session, ask *"what build tool does this project use?"*. Then ask the assistant to call `get_stats`: it lists totals and recent errors, and whether semantic search is on. If the tools are missing, run `/mcp` and look for `total-recall`.
 
+### From source / fork
+
+`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` builds the plugin from your clone and installs it, instead of fetching the marketplace's `release` build. For forks and code on `main` ahead of the last release: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself).
+
 ### Other assistants
 
 Gemini/Antigravity, VS Code, Codex, Cursor, Windsurf, Claude Desktop. INSTALL.md has steps for Gemini/Antigravity, VS Code and Codex, plus Windows notes and every flag: [INSTALL.md](plugins/total-recall/INSTALL.md). For the other clients, use the block below.
