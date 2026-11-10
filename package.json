@@ -1,6 +1,6 @@
 {
   "name": "@adrian-balaban/total-recall",
-  "version": "1.8.1",
+  "version": "1.9.0",
   "description": "One-command install bootstrap for the total-recall memory plugin (Claude Code / Gemini / VS Code). The plugin code itself ships from the GitHub release branch.",
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,9 @@
   "engines": { "node": ">=18" },
   "repository": { "type": "git", "url": "git+https://github.com/adrian-balaban/total-recall.git" },
   "scripts": {
-    "test": "node --test test/cli.test.mjs",
+    "build": "npm --prefix plugins/total-recall run build",
+    "install:local": "node bin/cli.mjs --local .",
+    "test": "node --test test/*.test.mjs",
     "prepublishOnly": "node test/pack-guard.mjs"
   }
 }

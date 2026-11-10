@@ -13,6 +13,26 @@ pruned (2026-07-29); this backlog is now the sole record.
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
+### `install.sh` Step 5c → 7 ordering: Gemini copy predates vector deps
+- **Source:** [PLAN-INSTALARE-LOCALA-FINAL.md §10](PLAN-INSTALARE-LOCALA-FINAL.md#10-follow-up-uri-găsite-la-review-de-trecut-în-backlog).
+- **What:** the Gemini extension (`agy plugin install`, Step 5c) copies the plugin directory
+  **before** Step 7 installs the vector-search dependencies, so the Gemini copy never gets
+  hybrid vector search — it stays on TF-IDF only. This predates the local-install channel and
+  affects every install path (marketplace, npx, `--local`) the same way.
+- **Trigger:** low priority; revisit when touching `install.sh`'s step ordering, or if a Gemini
+  user reports semantic search not working.
+
+### Orphan cache directories after `uninstall`/`claude plugin update`
+- **Source:** [PLAN-INSTALARE-LOCALA-FINAL.md §10](PLAN-INSTALARE-LOCALA-FINAL.md#10-follow-up-uri-găsite-la-review-de-trecut-în-backlog), F4/F5.
+- **What:** `claude plugin uninstall` empties the plugin's entry in `installed_plugins.json` but
+  leaves the versioned directory under `~/.claude/plugins/cache/<marketplace>/total-recall/` on
+  disk; `claude plugin update` leaves the previous version's directory behind the same way. Disk
+  use grows with every uninstall/update cycle, on both the marketplace and the `total-recall-local`
+  caches.
+- **Trigger:** low priority (disk, not correctness — `installState()`/`readInstalledPlugin()`
+  read `installed_plugins.json` first, so a stale directory is not picked up as installed).
+  Revisit if `claude plugin prune` ships, or write a documented manual cleanup.
+
 ### vault-scan dir-mtime cache (review item 9.1)
 - **Source:** `review-synthetized-25072026.txt` §9.1.
 - **What:** `reconcileIndex` re-walks the vault on each reconcile even when only

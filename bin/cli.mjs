@@ -9,10 +9,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { installLocal } from './local.mjs';
 
 export const MARKETPLACE = 'adrian-balaban/total-recall';
 export const MARKETPLACE_NAME = 'my-claude-plugins';
 export const PLUGIN_ID = `total-recall@${MARKETPLACE_NAME}`;
+export const LOCAL_MARKETPLACE_NAME = 'total-recall-local';
+export const LOCAL_PLUGIN_ID = `total-recall@${LOCAL_MARKETPLACE_NAME}`;
 export const EX_UNAVAILABLE = 69;
 
 const USAGE = `total-recall — install the total-recall memory plugin (Claude Code, Gemini, VS Code)
@@ -30,6 +33,8 @@ Every option below is passed to install.sh as is.
   --allowed-email-domain D      let a work email domain through the privacy filter
 
 Own options:
+  --local [path]  build and install from a git clone instead of the marketplace
+                   (after "git clone ... && cd total-recall", run ./install.sh)
   --force      continue even if another plugin called "total-recall" is installed
   --version    print this launcher's version
   -h, --help   print this text
@@ -37,13 +42,18 @@ Own options:
 
 /** Parse argv: own flags are removed, everything else is forwarded verbatim. */
 export function parseArgs(argv) {
-  const own = { help: false, version: false, force: false };
+  const own = { help: false, version: false, force: false, local: false };
   const forward = [];
-  for (const a of argv) {
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i];
     if (a === '-h' || a === '--help') own.help = true;
     else if (a === '--version') own.version = true;
     else if (a === '--force') own.force = true;
-    else forward.push(a);
+    else if (a === '--local') {
+      const next = argv[i + 1];
+      if (next !== undefined && !next.startsWith('-')) { own.local = next; i++; }
+      else own.local = true;
+    } else forward.push(a);
   }
   return { own, forward };
 }
@@ -107,16 +117,59 @@ export function resolveBash({ platform = process.platform, env = process.env, fs
 }
 
 /**
- * Installed-plugin state from the cache dir: 'ours' (our marketplace), 'foreign' (another
- * plugin called total-recall under a different marketplace) or 'none'.
+ * Parses ~/.claude/plugins/installed_plugins.json. Returns {} on a missing or unparseable file
+ * (the caller decides whether that means "none installed" or "fall back to the cache dir").
+ * Shape (observed on Claude Code 2.1.220): { version: 2, plugins: { "<name>@<mkt>": [ { scope,
+ * installPath, version, installedAt, lastUpdated, gitCommitSha? } ] } }. The value is an ARRAY
+ * of entries, one per scope — not a single object.
+ */
+export function readInstalledPlugins(home, fsImpl = fs) {
+  const file = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
+  try {
+    const data = JSON.parse(fsImpl.readFileSync(file, 'utf8'));
+    return (data && typeof data === 'object' && data.plugins && typeof data.plugins === 'object') ? data.plugins : {};
+  } catch { return {}; }
+}
+
+/** The entry for `pluginId` (e.g. "total-recall@my-claude-plugins"): prefers scope "user". Null if absent/empty. */
+export function readInstalledPlugin(home, pluginId, fsImpl = fs) {
+  const entries = readInstalledPlugins(home, fsImpl)[pluginId];
+  if (!Array.isArray(entries) || entries.length === 0) return null;
+  return entries.find((e) => e && e.scope === 'user') ?? entries[0];
+}
+
+/**
+ * Installed-plugin state: 'ours' (our marketplace), 'local' (the --local marketplace),
+ * 'foreign' (another plugin called total-recall under a different marketplace) or 'none'.
+ * Based on installed_plugins.json; falls back to scanning the cache dir only when that file
+ * itself is missing/unparseable (readInstalledPlugins returns {} either way, so this function
+ * re-checks the file's existence directly to tell "legitimately empty" from "can't read it").
  */
 export function installState(home, fsImpl = fs) {
+  const file = path.join(home, '.claude', 'plugins', 'installed_plugins.json');
+  let fileExists = true;
+  try { fileExists = fsImpl.existsSync(file); } catch { fileExists = false; }
+
+  if (fileExists) {
+    const plugins = readInstalledPlugins(home, fsImpl);
+    const has = (id) => Array.isArray(plugins[id]) && plugins[id].length > 0;
+    if (has(PLUGIN_ID)) return 'ours';
+    if (has(LOCAL_PLUGIN_ID)) return 'local';
+    for (const key of Object.keys(plugins)) {
+      if (key.split('@')[0] === 'total-recall' && key !== PLUGIN_ID && key !== LOCAL_PLUGIN_ID && has(key)) return 'foreign';
+    }
+    return 'none';
+  }
+
+  // Fallback: installed_plugins.json itself is missing — scan the cache dir (legacy behavior,
+  // also fixes the old F5 bug where this was the ONLY signal and never saw an uninstall).
   const base = path.join(home, '.claude', 'plugins', 'cache');
   let markets = [];
   try { markets = fsImpl.readdirSync(base); } catch { return 'none'; }
   if (markets.includes(MARKETPLACE_NAME) && newestVersionDir(path.join(base, MARKETPLACE_NAME, 'total-recall'), fsImpl)) return 'ours';
+  if (markets.includes(LOCAL_MARKETPLACE_NAME) && newestVersionDir(path.join(base, LOCAL_MARKETPLACE_NAME, 'total-recall'), fsImpl)) return 'local';
   for (const m of markets) {
-    if (m !== MARKETPLACE_NAME && fsImpl.existsSync(path.join(base, m, 'total-recall'))) return 'foreign';
+    if (m !== MARKETPLACE_NAME && m !== LOCAL_MARKETPLACE_NAME && fsImpl.existsSync(path.join(base, m, 'total-recall'))) return 'foreign';
   }
   return 'none';
 }
@@ -124,7 +177,10 @@ export function installState(home, fsImpl = fs) {
 /** The whole flow. All side effects come in through `deps`, so tests spawn nothing. */
 export function main(argv, deps = {}) {
   const {
-    run = (cmd, args, opts = {}) => spawnSync(cmd, args, { stdio: opts.inherit ? 'inherit' : 'ignore' }),
+    run = (cmd, args, opts = {}) => {
+      const r = spawnSync(cmd, args, { stdio: opts.inherit ? 'inherit' : 'pipe', cwd: opts.cwd, shell: opts.shell });
+      return opts.capture ? { status: r.status, stdout: r.stdout ? r.stdout.toString('utf8') : '' } : { status: r.status };
+    },
     out = (s) => process.stdout.write(s + '\n'),
     err = (s) => process.stderr.write(s + '\n'),
     home = os.homedir(),
@@ -133,6 +189,7 @@ export function main(argv, deps = {}) {
     env = process.env,
     nodeVersion = process.versions.node,
     version = readVersion(),
+    cwd = process.cwd(),
   } = deps;
 
   const { own, forward } = parseArgs(argv);
@@ -140,6 +197,10 @@ export function main(argv, deps = {}) {
   if (own.version) { out(version); return 0; }
 
   if (parseInt(nodeVersion.split('.')[0], 10) < 18) { err(`total-recall: Node 18 or newer is required (found ${nodeVersion}).`); return 1; }
+
+  if (own.local !== false) {
+    return installLocal(forward, own, { run, out, err, home, fsImpl, platform, env, cwd, claudeDeps: { run, home, fsImpl, platform } });
+  }
 
   const claude = resolveClaude({ run, home, fsImpl, platform });
   if (!claude) {
@@ -151,6 +212,11 @@ export function main(argv, deps = {}) {
   if (state === 'foreign' && !own.force) {
     err('total-recall: another plugin named "total-recall" is installed from a different marketplace. ' +
         `This installer only manages ${PLUGIN_ID}. Remove the other one, or re-run with --force.`);
+    return 1;
+  }
+  if (state === 'local' && !own.force) {
+    err(`total-recall: a local-build install (${LOCAL_PLUGIN_ID}) is already set up. ` +
+        `Switch to the marketplace with \`claude plugin uninstall ${LOCAL_PLUGIN_ID}\`, or re-run with --force.`);
     return 1;
   }
   if (state !== 'ours') {

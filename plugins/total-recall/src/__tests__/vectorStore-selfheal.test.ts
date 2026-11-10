@@ -3,8 +3,9 @@ import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
 
-// ─── Native-binding self-heal (getDb retries after `npm rebuild` on a missing
-// better_sqlite3.node, then degrades gracefully if the rebuild fails). The
+// ─── Native-binding self-heal (getDb degrades at once, runs `npm rebuild` in the
+// background on a missing better_sqlite3.node, and installs the db once the
+// retry loads — or records an error if the rebuild did not restore it). The
 // default __rebuildImpl is a no-op under NODE_ENV=test, so each test injects a
 // fake to exercise the retry / latch / recordError paths without spawning npm.
 //
@@ -24,7 +25,7 @@ describe('vectorStore — native-binding self-heal', () => {
     try { fs.unlinkSync(tmpDb); } catch {}
   });
 
-  it('retries the load after a successful rebuild and returns a db', async () => {
+  it('degrades immediately, then serves the db once the background rebuild heals the binding', async () => {
     // better-sqlite3: constructor throws on the first call (missing .node), then
     // succeeds on the retry — mirrors the real "binding absent then rebuilt" flow.
     let ctorCalls = 0;
@@ -56,9 +57,13 @@ describe('vectorStore — native-binding self-heal', () => {
       return { attempted: true, ok: true };
     });
 
+    // The first call must NOT wait for the rebuild (it used to block the event
+    // loop for minutes, timing out the MCP handshake).
+    expect(await vs.__testsGetDb(tmpDb)).toBeNull();
+    await vs.__testsAwaitRebuild();
     const db = await vs.__testsGetDb(tmpDb);
     expect(db).toBeTruthy();
-    expect(ctorCalls).toBe(2); // 1st threw, retry after rebuild succeeded
+    expect(ctorCalls).toBe(2); // 1st threw, background retry succeeded and was cached
     expect(rebuildCalls).toBe(1);
     expect(errors.length).toBe(0);
   });
@@ -79,6 +84,7 @@ describe('vectorStore — native-binding self-heal', () => {
 
     const db = await vs.__testsGetDb(tmpDb);
     expect(db).toBeNull();
+    await vs.__testsAwaitRebuild();
     expect(rebuildCalls).toBe(1);
     expect(errors.some(e => /rebuild failed/i.test(e.msg))).toBe(true);
     expect(errors.some(e => /npm rebuild better-sqlite3/i.test(e.msg))).toBe(true);
@@ -98,7 +104,9 @@ describe('vectorStore — native-binding self-heal', () => {
     });
 
     expect(await vs.__testsGetDb(tmpDb)).toBeNull();
-    expect(await vs.__testsGetDb(tmpDb)).toBeNull(); // latch: no second rebuild
+    expect(await vs.__testsGetDb(tmpDb)).toBeNull(); // while in flight: no second rebuild
+    await vs.__testsAwaitRebuild();
+    expect(await vs.__testsGetDb(tmpDb)).toBeNull(); // after it failed: still latched
     expect(rebuildCalls).toBe(1);
   });
 
@@ -120,6 +128,7 @@ describe('vectorStore — native-binding self-heal', () => {
 
     const db = await vs.__testsGetDb(tmpDb);
     expect(db).toBeNull();
+    await vs.__testsAwaitRebuild();
     const msg = errors[errors.length - 1]?.msg ?? '';
     expect(msg).toMatch(/reported success.*still absent/i); // honest: NOT "succeeded"
     expect(msg).toMatch(/npm rebuild better-sqlite3/i);      // actionable fix command
@@ -136,6 +145,26 @@ describe('vectorStore — native-binding self-heal', () => {
     const { errors } = await import('../state.js');
     const db = await vs.__testsGetDb(tmpDb);
     expect(db).toBeNull();
+    await vs.__testsAwaitRebuild();
     expect(errors.length).toBe(0);
+  });
+
+  it('does not block getDb while the rebuild is still running', async () => {
+    vi.doMock('sqlite-vec', () => ({ load: vi.fn() }));
+    vi.doMock('better-sqlite3', () => ({
+      default: class { constructor() { throw new Error('no binary'); } },
+    }));
+
+    const vs = await import('../vectorStore.js');
+    let release!: () => void;
+    vs.__testsSetRebuildImpl(() => new Promise((resolve) => {
+      release = () => resolve({ attempted: true, ok: false, detail: 'exit 1' });
+    }));
+
+    // The rebuild never settles until release(): getDb must still return.
+    expect(await vs.__testsGetDb(tmpDb)).toBeNull();
+    expect(await vs.__testsGetDb(tmpDb)).toBeNull();
+    release();
+    await vs.__testsAwaitRebuild();
   });
 });

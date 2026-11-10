@@ -61,7 +61,7 @@ Hooks need no wiring — they auto-load from the plugin manifest's `hooks/hooks.
 
 **One command (npx).** `npx @adrian-balaban/total-recall [install.sh flags]` runs `claude plugin marketplace add adrian-balaban/total-recall`, then `claude plugin install total-recall@my-claude-plugins`, then the `install.sh` of the newest cached version. It is safe to re-run, skips the first two steps when the plugin is already installed, finds the `claude` binary bundled with the VS Code extension when it is not on `PATH`, and stops when another plugin named `total-recall` is installed (`--force` overrides). On Windows it needs Git Bash and exits with code 69 without it. Always use the scoped name: the unscoped `total-recall` on npm is an unrelated tool. To check what the package contains: `npm pack --dry-run @adrian-balaban/total-recall` lists the launcher, `package.json`, README and LICENSE.
 
-**What you are installing.** The marketplace fetches the CI-built `release` tree; `dist/` is not committed to `main`. The npm launcher contains no plugin code, and there is no zip download. Commits, tags and the bundle are unsigned, so trust ultimately rests on this repository and GitHub Actions.
+**What you are installing.** The marketplace fetches the CI-built `release` tree; `dist/` is not committed to `main`. The npm launcher contains no plugin code, and there is no zip download. Commits, tags and the bundle are unsigned, so trust ultimately rests on this repository and GitHub Actions. The [local-clone channel](#-install-from-a-local-clone-build-it-yourself) below builds from whatever is in your working copy instead — no CI gate, no code review in between; use it only when you trust the commit and toolchain yourself.
 
 ## 🧩 Install without Claude Code
 
@@ -93,16 +93,16 @@ The entry runs `bash` with the absolute path of `scripts/start-server.sh`, which
 
 ### Developing from a clone
 
-Only for working on the plugin. Users without Claude Code should clone the `release` branch instead (see above), which has `dist/` prebuilt:
+For a live dev loop — editing the server and seeing it reload — load the plugin for the current session only:
 
 ```bash
 git clone https://github.com/adrian-balaban/total-recall.git
 cd total-recall/plugins/total-recall
 npm install && npm run build   # dist/ is gitignored, so a clone has none
-claude plugin install "$(pwd)"
+claude --plugin-dir "$(pwd)"   # loads this plugin for THIS session only
 ```
 
-`./install.sh` also builds `dist/` for you when it is missing.
+To actually install from the clone (vaults, MCP registration, persisting across sessions), use the root `./install.sh` described in [Install from a local clone](#-install-from-a-local-clone-build-it-yourself) below — not `claude plugin install "$(pwd)"`, which does not work (`claude plugin install` only accepts `plugin[@marketplace]`, never a filesystem path).
 
 If you only want the MCP server registered (no hooks, e.g. to inspect/manage it) without going through the plugin flow, use `/mcp`:
 
@@ -111,6 +111,44 @@ If you only want the MCP server registered (no hooks, e.g. to inspect/manage it)
 ```
 
 `/mcp` also lists and can remove already-registered servers — useful for checking that `install.sh` registered `total-recall` correctly (equivalent to `claude mcp get total-recall` from the shell, or `claude mcp get plugin:total-recall:total-recall` when the plugin came from the marketplace).
+
+## 🧱 Install from a local clone (build it yourself)
+
+For forks, for code on `main` ahead of the last release, and for power users. The marketplace (above) remains the recommended channel for everyone else — it fetches a CI-built, reviewed `release` tree; this channel builds whatever is in your working copy.
+
+**Requirements:** Node.js ≥18 (build with the same Node your host uses), npm with registry access at build time, and `git`. On Windows, Git Bash is required — the script exits with code 69 without it.
+
+```bash
+git clone https://github.com/adrian-balaban/total-recall.git
+cd total-recall
+./install.sh [-y] [--no-vector] [--gemini] [--vscode] [...]   # every install.sh flag above works here too
+```
+
+What it does: builds the plugin bundle from this clone, stages a clean copy (tracked files + `dist/`, never `node_modules/`) at `~/.total-recall/local-marketplace/`, registers it as a Claude Code directory marketplace, installs `total-recall@total-recall-local`, then runs that installed copy's `install.sh` — same vaults, MCP registration and verification as the marketplace path. Without the `claude` CLI, it skips the Claude-specific steps and runs `install.sh` directly against the staging directory; `--vscode`/`--gemini` still register those hosts from there.
+
+**Upgrade:** `git pull && ./install.sh -y`, then restart any running Claude Code sessions so they pick up the new build.
+
+**Uninstall, with `claude`:**
+
+```bash
+claude plugin uninstall total-recall@total-recall-local
+claude plugin marketplace remove total-recall-local
+rm -rf ~/.total-recall/local-marketplace
+```
+
+Your memories are untouched (they live under `~/.total-recall/personal-vault/` and `~/.total-recall/org/`, not in the marketplace staging dir).
+
+**Uninstall, without `claude`:** remove the host registration first — the `total-recall` entry from VS Code's `mcp.json` if you used `--vscode`, or the Gemini extension (`agy`) if you used `--gemini` — **then** delete the staging directory:
+
+```bash
+rm -rf ~/.total-recall/local-marketplace
+```
+
+Deleting the staging directory before removing a host registration leaves that host with an MCP entry that can no longer start.
+
+**Switching channels:** installing `--local` while the marketplace plugin is installed (or vice versa) stops with the exact `claude plugin uninstall …` command to run first; pass `--force` to install both side by side (not recommended — you'll end up with duplicate hooks and MCP servers).
+
+**Trust:** this channel means trusting the commit you cloned, your local toolchain, and the npm registry at build time — there is no CI gate or code review in between. See [SECURITY.md](../../SECURITY.md).
 
 `install.sh` is **safe to re-run** — every step checks current state first. What it does:
 

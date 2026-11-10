@@ -2,11 +2,13 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import {
-  parseArgs, compareVersions, newestVersionDir, claudeCandidates, resolveClaude, resolveBash, installState, main, PLUGIN_ID, EX_UNAVAILABLE,
+  parseArgs, compareVersions, newestVersionDir, claudeCandidates, resolveClaude, resolveBash,
+  installState, readInstalledPlugin, main, PLUGIN_ID, LOCAL_PLUGIN_ID, EX_UNAVAILABLE,
 } from '../bin/cli.mjs';
 
-// A fake file system: a Set of paths that "exist"; directories list their children.
-function fakeFs(paths) {
+// A fake file system: a Set of paths that "exist"; directories list their children. Files whose
+// content matters (installed_plugins.json) are passed in `files` and served by readFileSync.
+function fakeFs(paths, files = {}) {
   const all = new Set(paths);
   const children = (dir) => {
     const prefix = dir.endsWith(path.sep) ? dir : dir + path.sep;
@@ -15,18 +17,41 @@ function fakeFs(paths) {
     return [...names];
   };
   return {
-    existsSync: (p) => all.has(p) || children(p).length > 0,
+    existsSync: (p) => all.has(p) || children(p).length > 0 || Object.hasOwn(files, p),
     readdirSync: (p) => { const c = children(p); if (!c.length) throw new Error('ENOENT'); return c; },
+    readFileSync: (p) => { if (!Object.hasOwn(files, p)) throw new Error('ENOENT'); return files[p]; },
   };
 }
 const HOME = '/home/u';
 const cache = (...p) => path.join(HOME, '.claude/plugins/cache', ...p);
+const installedPluginsPath = path.join(HOME, '.claude', 'plugins', 'installed_plugins.json');
+
+/** Builds a real installed_plugins.json fixture: { "<id>": [{scope:"user", installPath, ...}] }. */
+function installedPluginsFile(entries) {
+  const plugins = {};
+  for (const [id, installPath] of Object.entries(entries)) {
+    plugins[id] = installPath === null ? [] : [{ scope: 'user', installPath, version: '1.0.0', installedAt: '2026-01-01T00:00:00Z', lastUpdated: '2026-01-01T00:00:00Z' }];
+  }
+  return JSON.stringify({ version: 2, plugins });
+}
 
 describe('arguments', () => {
   it('removes its own flags and forwards the rest verbatim, in order', () => {
     const { own, forward } = parseArgs(['-y', '--gemini', '--force', '--org-repo', 'https://x/y.git', '--allowed-email-domain', 'a.com']);
     assert.equal(own.force, true);
     assert.deepEqual(forward, ['-y', '--gemini', '--org-repo', 'https://x/y.git', '--allowed-email-domain', 'a.com']);
+  });
+
+  it('parses --local with and without a path, forwarding the rest in order', () => {
+    assert.equal(parseArgs(['--local', '/p']).own.local, '/p');
+    const withGemini = parseArgs(['--local', '--gemini']);
+    assert.equal(withGemini.own.local, true);
+    assert.deepEqual(withGemini.forward, ['--gemini']);
+    const atEnd = parseArgs(['-y', '--local']);
+    assert.equal(atEnd.own.local, true);
+    assert.deepEqual(atEnd.forward, ['-y']);
+    const noLocal = parseArgs(['-y', '--vscode']);
+    assert.equal(noLocal.own.local, false);
   });
 });
 
@@ -85,12 +110,46 @@ describe('bash on Windows', () => {
 });
 
 describe('install state', () => {
-  it('ours / foreign / none', () => {
+  it('ours / foreign / none, via the cache fallback (installed_plugins.json absent)', () => {
     const ours = fakeFs([cache('my-claude-plugins/total-recall/1.7.0/install.sh')]);
     const foreign = fakeFs([cache('someone-else/total-recall/0.1.0/x')]);
     assert.equal(installState(HOME, ours), 'ours');
     assert.equal(installState(HOME, foreign), 'foreign');
     assert.equal(installState(HOME, fakeFs([])), 'none');
+  });
+
+  it('ours / local / foreign / none, from installed_plugins.json', () => {
+    const fx = (entries) => fakeFs([installedPluginsPath], { [installedPluginsPath]: installedPluginsFile(entries) });
+    assert.equal(installState(HOME, fx({ [PLUGIN_ID]: '/cache/a' })), 'ours');
+    assert.equal(installState(HOME, fx({ [LOCAL_PLUGIN_ID]: '/cache/b' })), 'local');
+    assert.equal(installState(HOME, fx({ 'total-recall@someone-else': '/cache/c' })), 'foreign');
+    assert.equal(installState(HOME, fx({})), 'none');
+  });
+
+  it('F5: a cache dir left behind after uninstall does not resurrect "ours" once installed_plugins.json exists', () => {
+    const fsImpl = fakeFs(
+      [cache('my-claude-plugins/total-recall/1.7.0/install.sh'), installedPluginsPath],
+      { [installedPluginsPath]: installedPluginsFile({ [PLUGIN_ID]: null }) }, // emptied by uninstall
+    );
+    assert.equal(installState(HOME, fsImpl), 'none');
+  });
+
+  it('precedence stays ours > local > foreign when installed_plugins.json is unusable and the cache fallback runs', () => {
+    const fsImpl = fakeFs([
+      cache('my-claude-plugins/total-recall/1.0.0/install.sh'),
+      cache('total-recall-local/total-recall/1.0.0/install.sh'),
+      cache('someone-else/total-recall/0.1.0/x'),
+    ]);
+    assert.equal(installState(HOME, fsImpl), 'ours');
+  });
+});
+
+describe('readInstalledPlugin', () => {
+  it('reads installPath for the user scope, and null when absent or emptied', () => {
+    const fx = (entries) => fakeFs([installedPluginsPath], { [installedPluginsPath]: installedPluginsFile(entries) });
+    assert.equal(readInstalledPlugin(HOME, PLUGIN_ID, fx({ [PLUGIN_ID]: '/cache/x' })).installPath, '/cache/x');
+    assert.equal(readInstalledPlugin(HOME, PLUGIN_ID, fx({})), null);
+    assert.equal(readInstalledPlugin(HOME, PLUGIN_ID, fx({ [PLUGIN_ID]: null })), null);
   });
 });
 
@@ -151,6 +210,20 @@ describe('main', () => {
     assert.match(a.err[0], /another plugin named "total-recall"/);
     assert.deepEqual(a.calls.filter((c) => c[1] === 'plugin'), []);
     const b = harness({ fsImpl: fakeFs([cache('someone-else/total-recall/0.1.0/x'), cache('my-claude-plugins/total-recall/1.0.0/install.sh')]) });
+    assert.equal(main(['--force'], b.deps), 0);
+  });
+
+  it('aborts when a --local install is already set up, unless --force', () => {
+    const fsImpl = fakeFs(
+      [installedPluginsPath, cache('my-claude-plugins/total-recall/1.6.10/install.sh')],
+      { [installedPluginsPath]: installedPluginsFile({ [LOCAL_PLUGIN_ID]: '/cache/local' }) },
+    );
+    const a = harness({ fsImpl });
+    assert.equal(main([], a.deps), 1);
+    assert.match(a.err[0], /local-build install/);
+    assert.deepEqual(a.calls.filter((c) => c[1] === 'plugin'), []);
+    const b = harness({ fsImpl });
+    b.deps.run = (cmd, args) => { b.calls.push([cmd, ...args]); return { status: 0 }; };
     assert.equal(main(['--force'], b.deps), 0);
   });
 

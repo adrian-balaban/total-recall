@@ -59,7 +59,7 @@ jobs:
 
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '26'
           cache: 'npm'
           cache-dependency-path: plugins/total-recall/package-lock.json
 
@@ -126,7 +126,7 @@ jobs:
         uses: actions/setup-node@v5
         with:
           # npm trusted publishing needs Node 22.14+ and npm 11.5.1+ (docs.npmjs.com/trusted-publishers).
-          node-version: '22'
+          node-version: '26'
           registry-url: 'https://registry.npmjs.org'
       - name: Use an npm that supports trusted publishing
         if: steps.check.outputs.exists == 'false'

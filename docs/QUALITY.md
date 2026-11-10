@@ -22,7 +22,7 @@ Measured on **v1.7.1** at commit `af0c7cf` (2026-11-06). Test, coverage and muta
 
 ## Tests and mutation
 
-Scope of the numbers: coverage is from the unit suite only (the integration tests are not counted); the mutation score is over all mutants Stryker generates in the 18 mutated modules of this v1.7.1 baseline (19 since 1.8.0); CI runs on `ubuntu-latest` with Node 20 ([workflow runs](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml)).
+Scope of the numbers: coverage is from the unit suite only (the integration tests are not counted); the mutation score is over all mutants Stryker generates in the 18 mutated modules of this v1.7.1 baseline (19 since 1.8.0); CI runs on `ubuntu-latest` with Node 26 ([workflow runs](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml)).
 
 | | |
 |---|---|

@@ -60,10 +60,29 @@ GH_TOKEN=$(gh auth token 2>/dev/null || echo "")
 
 mkdir -p "$ORG_VAULT"
 
+# Emit a SessionStart context line; node JSON-encodes it so git error text with
+# quotes/backslashes can't break the envelope.
+emit_ctx() {
+  MSG="$1" "$NODE_BIN" -e 'process.stdout.write(JSON.stringify({continue:true,hookSpecificOutput:{hookEventName:"SessionStart",additionalContext:process.env.MSG}}))'
+  echo
+}
+
 if [ ! -d "$ORG_VAULT/.git" ]; then
+  # The MCP server ensureDir()s the org vault subdirectory (e.g. org/org-vault/)
+  # at boot, so this clone target is often non-empty before the first clone ever
+  # succeeds — and `git clone` refuses a non-empty destination, failing on every
+  # session forever. Empty directories are safe to drop (the clone recreates
+  # them); anything containing a file is left untouched and reported.
+  if [ -n "$(find "$ORG_VAULT" -mindepth 1 ! -type d -print -quit 2>/dev/null)" ]; then
+    emit_ctx "Failed to clone org vault: $ORG_VAULT contains files but is not a git repo. Move it aside to let the next session clone it."
+    exit 0
+  fi
+  find "$ORG_VAULT" -mindepth 1 -depth -type d -empty -delete 2>/dev/null || true
+
   if ! gh repo clone "$ORG_REPO" "$ORG_VAULT" -- --no-recurse-submodules --branch "$BRANCH" --depth 1 2>/dev/null; then
-    if ! git clone --no-recurse-submodules --branch "$BRANCH" --depth 1 "$ORG_REPO" "$ORG_VAULT" 2>/dev/null; then
-      echo '{"continue":true,"hookSpecificOutput":{"hookEventName":"SessionStart","additionalContext":"Failed to clone org vault."}}'
+    if ! CLONE_ERR=$(git clone --no-recurse-submodules --branch "$BRANCH" --depth 1 "$ORG_REPO" "$ORG_VAULT" 2>&1 >/dev/null); then
+      LAST=$(printf '%s\n' "$CLONE_ERR" | grep -v '^[[:space:]]*$' | tail -n 1)
+      emit_ctx "Failed to clone org vault${LAST:+: $LAST}"
       exit 0
     fi
   fi

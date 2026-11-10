@@ -65,6 +65,9 @@
 #   --vector                  Enable hybrid vector search (local HuggingFace
 #                             multilingual MiniLM embeddings, ~450 MB on first use)
 #   --no-vector               Skip vector search without prompting
+#   --rebuild                 Force a rebuild (npm ci && npm run build) even if
+#                             dist/ already has all 6 build artifacts. Useful
+#                             after a `git pull` when you want a clean rebuild.
 #   --strict                  Exit non-zero if the Step 8 verification finds the
 #                             install incomplete (dist/index.js missing, or the
 #                             MCP server not registered). Intended for unattended
@@ -145,6 +148,7 @@ ASSUME_YES=0
 GEMINI=0         # --gemini: install the extension into ~/.gemini/extensions/
 VSCODE=0         # --vscode: register the MCP server in VS Code's user mcp.json
 STRICT=0         # --strict: exit non-zero if Step 8 finds the install incomplete
+REBUILD=0        # --rebuild: force a rebuild even if dist/ already has all artifacts
 
 # Step 8 records verification failures here. The script deliberately has no
 # `set -e` (every step must run so the summary is complete), so a failed verify
@@ -214,6 +218,7 @@ while [ $# -gt 0 ]; do
     --vector|--complete|--default)   VECTOR="yes"; shift;;
     --no-vector) VECTOR="no"; shift;;
     --strict)              STRICT=1; shift;;
+    --rebuild)              REBUILD=1; shift;;
     -y|--yes)              ASSUME_YES=1; shift;;
     -h|--help)             usage; exit 0;;
     *) die "Unknown option: $1  (try --help)";;
@@ -299,20 +304,32 @@ fi
 PLUGIN_ROOT="$(cd -- "$PLUGIN_ROOT" && pwd -P)"
 ok "Plugin root: $PLUGIN_ROOT"
 
-# Build the bundle when it is absent. Release zips ship a prebuilt dist/; a
-# marketplace/git-subdir install or a manual clone does not, because dist/ is
-# gitignored — so this is the step that makes those paths runnable at all.
-if [ ! -f "$PLUGIN_ROOT/dist/index.js" ]; then
+# Build the bundle when it is absent (or any of its 6 artifacts is), or when
+# --rebuild was passed. Release zips ship a prebuilt dist/; a marketplace/
+# git-subdir install or a manual clone does not, because dist/ is gitignored
+# — so this is the step that makes those paths runnable at all.
+DIST_ARTIFACTS=(index.js frontmatter.mjs build-index-cache.mjs privacy-filter.mjs spec-config.mjs spec-fields.mjs)
+DIST_INCOMPLETE=0
+for f in "${DIST_ARTIFACTS[@]}"; do
+  [ -f "$PLUGIN_ROOT/dist/$f" ] || DIST_INCOMPLETE=1
+done
+if [ "$DIST_INCOMPLETE" -eq 1 ] || [ "$REBUILD" -eq 1 ]; then
   if [ ! -f "$PLUGIN_ROOT/package.json" ]; then
-    die "dist/index.js is missing and '$PLUGIN_ROOT' has no package.json to build from."
+    die "dist/ is missing build artifacts and '$PLUGIN_ROOT' has no package.json to build from."
   fi
-  info "dist/ not found — building the plugin bundle (npm ci && npm run build)"
+  if [ "$REBUILD" -eq 1 ]; then
+    info "--rebuild — building the plugin bundle (npm ci && npm run build)"
+  else
+    info "dist/ incomplete — building the plugin bundle (npm ci && npm run build)"
+  fi
   ( cd "$PLUGIN_ROOT" && npm ci --no-audit --no-fund && npm run build ) \
     || die "Build failed in '$PLUGIN_ROOT'. Run 'npm ci && npm run build' there and re-run install.sh."
   ok "Built dist/index.js"
 fi
-[ -f "$PLUGIN_ROOT/dist/index.js" ] \
-  || die "Build completed but dist/index.js is still missing under '$PLUGIN_ROOT'."
+for f in "${DIST_ARTIFACTS[@]}"; do
+  [ -f "$PLUGIN_ROOT/dist/$f" ] \
+    || die "Build completed but dist/$f is still missing under '$PLUGIN_ROOT'."
+done
 
 # Surface which version is actually being installed. A resolved PLUGIN_ROOT
 # inside the Claude plugin cache is pinned to the git SHA of the last
@@ -320,6 +337,9 @@ fi
 PLUGIN_VERSION=$(node -e 'try{process.stdout.write(JSON.parse(require("fs").readFileSync(process.argv[1]+"/.claude-plugin/plugin.json","utf8")).version||"unknown")}catch{process.stdout.write("unknown")}' "$PLUGIN_ROOT" 2>/dev/null || echo unknown)
 info "Plugin version: $PLUGIN_VERSION"
 case "$PLUGIN_ROOT" in
+  */.claude/plugins/cache/total-recall-local/*)
+    info "Local build (total-recall-local) — after 'git pull', re-run ./install.sh in your clone."
+    ;;
   */.claude/plugins/cache/*)
     warn "PLUGIN_ROOT is inside the Claude plugin cache — this copy is pinned to the last 'claude plugin update' and may lag the repo."
     warn "If you have a checkout, re-run this script from there (or pass --plugin-root <checkout>/plugins/total-recall)."
@@ -704,26 +724,44 @@ if [ "$VECTOR" = "yes" ]; then
   # defeating graceful degradation. --no-save installs into node_modules only,
   # leaving package.json untouched.
   # shellcheck disable=SC2086  # VEC_DEPS is an intentional word-split list
-  if ( cd "$PLUGIN_ROOT" && npm install --no-save $VEC_DEPS && npm run build ); then
+  # --no-audit/--no-fund/--loglevel=error: keep the install log readable. EBADENGINE
+  # warnings come from dev-only tooling (vite/vitest/stryker) and do not affect the
+  # runtime; real errors still print.
+  if ( cd "$PLUGIN_ROOT" && npm install --no-save --no-audit --no-fund --loglevel=error $VEC_DEPS && npm run --silent build ); then
     # Verify the better-sqlite3 native binding actually loads. npm install runs
     # prebuild-install as better-sqlite3's postinstall, but a source-only dir
     # (e.g. a `claude plugin update` landing without a matching prebuild, or a
     # musl/glibc mismatch) leaves the .node file absent — `require()` throws.
     # The runtime getDb() self-heal + honest "still missing" error in
     # vectorStore.ts is the backstop; this install-time check catches it now and
-    # attempts a node-gyp rebuild before deferring to the backstop.
-    if ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
+    # compiles the binding here, where a multi-minute build is expected, instead of
+    # leaving it to the server's first start (where a synchronous rebuild blocks the
+    # MCP handshake past the client's timeout).
+    #
+    # better-sqlite3 is an optionalDependency, so when its install script fails
+    # (e.g. no prebuild for this exact Node version and the source build errors)
+    # npm drops it and STILL exits 0 — the check below is the only signal.
+    # The test must also open a DB: require() alone succeeds without the .node
+    # file, the binding is only loaded on `new Database()`.
+    BSQL_CHECK="new (require('better-sqlite3'))(':memory:').close()"
+    if ( cd "$PLUGIN_ROOT" && node -e "$BSQL_CHECK" ) 2>/dev/null; then
       ok "Vector search enabled (TF-IDF + local HuggingFace embeddings via RRF)."
       note "Vector search enabled (local HuggingFace embeddings)."
     else
-      warn "better-sqlite3 native binding missing — attempting node-gyp rebuild ..."
-      if [ -d "$PLUGIN_ROOT/node_modules/better-sqlite3" ] && \
-         ( cd "$PLUGIN_ROOT/node_modules/better-sqlite3" && npx --no-install node-gyp rebuild ) 2>/dev/null && \
-         ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
-        ok "Vector search enabled (native binding rebuilt via node-gyp)."
+      warn "better-sqlite3 native binding missing — building it from source (can take a few minutes) ..."
+      # `npm rebuild` uses npm's bundled node-gyp. The previous
+      # `npx --no-install node-gyp rebuild` always failed: node-gyp is not a local
+      # bin in the plugin's node_modules, and 2>/dev/null hid why.
+      BSQL_LOG="$(mktemp "${TMPDIR:-/tmp}/total-recall-bsql.XXXXXX")"
+      if ( cd "$PLUGIN_ROOT" && npm rebuild better-sqlite3 ) >"$BSQL_LOG" 2>&1 && \
+         ( cd "$PLUGIN_ROOT" && node -e "$BSQL_CHECK" ) 2>/dev/null; then
+        ok "Vector search enabled (native binding built from source)."
         note "Vector search enabled (local HuggingFace embeddings)."
+        rm -f "$BSQL_LOG"
       else
-        warn "better-sqlite3 native binding still missing — plugin will run TF-IDF only (getDb self-heals on next start)."
+        tail -n 20 "$BSQL_LOG" >&2
+        warn "better-sqlite3 native binding still missing (full build log: $BSQL_LOG) — plugin will run TF-IDF only."
+        warn "Fix the build error above, then run: (cd \"$PLUGIN_ROOT\" && npm rebuild better-sqlite3)"
         note "Vector search unavailable — native binding missing."
       fi
     fi

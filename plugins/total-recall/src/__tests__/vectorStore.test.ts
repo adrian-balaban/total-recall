@@ -486,7 +486,7 @@ describe('vectorStore — native-binding self-heal latch', () => {
   });
 
   it('attempts the rebuild exactly once across repeated getDb calls (latch), then degrades', async () => {
-    const { __testsSetRebuildImpl, __testsGetDb } = await import('../vectorStore.js');
+    const { __testsSetRebuildImpl, __testsGetDb, __testsAwaitRebuild } = await import('../vectorStore.js');
     const { errors } = await import('../state.js');
 
     let rebuildCalls = 0;
@@ -497,6 +497,7 @@ describe('vectorStore — native-binding self-heal latch', () => {
 
     const before = errors.length;
     const d1 = await __testsGetDb(tmpDb);
+    await __testsAwaitRebuild();
     const d2 = await __testsGetDb(tmpDb);
     const d3 = await __testsGetDb(tmpDb);
 
@@ -513,7 +514,7 @@ describe('vectorStore — native-binding self-heal latch', () => {
   });
 
   it('records the "npm reported success but binding still absent" outcome when ok=true yet load still fails', async () => {
-    const { __testsSetRebuildImpl, __testsGetDb } = await import('../vectorStore.js');
+    const { __testsSetRebuildImpl, __testsGetDb, __testsAwaitRebuild } = await import('../vectorStore.js');
     const { errors } = await import('../state.js');
 
     __testsSetRebuildImpl(async () => ({ attempted: true, ok: true }));
@@ -521,12 +522,13 @@ describe('vectorStore — native-binding self-heal latch', () => {
     const before = errors.length;
     const d = await __testsGetDb(tmpDb);
     expect(d).toBeNull();
+    await __testsAwaitRebuild();
     expect(errors.length).toBeGreaterThan(before);
     expect(errors[errors.length - 1]!.msg).toMatch(/npm rebuild reported success .* binding is still absent/);
   });
 
   it('silently degrades (no recordError) when rebuild was not attempted', async () => {
-    const { __testsSetRebuildImpl, __testsGetDb } = await import('../vectorStore.js');
+    const { __testsSetRebuildImpl, __testsGetDb, __testsAwaitRebuild } = await import('../vectorStore.js');
     const { errors } = await import('../state.js');
 
     // r.attempted === false (the test-default / no node_modules found path).
@@ -535,6 +537,7 @@ describe('vectorStore — native-binding self-heal latch', () => {
     const before = errors.length;
     const d = await __testsGetDb(tmpDb);
     expect(d).toBeNull();
+    await __testsAwaitRebuild();
     // Silent degrade — no error recorded (optional-dep-absent behavior).
     expect(errors.length).toBe(before);
   });

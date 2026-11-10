@@ -27,7 +27,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
-          node-version: '20'
+          node-version: '26'
           cache: 'npm'
           cache-dependency-path: plugins/total-recall/package-lock.json
       # Install optional native deps too — Stryker runs the real vitest suite,
