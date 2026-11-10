@@ -724,26 +724,44 @@ if [ "$VECTOR" = "yes" ]; then
   # defeating graceful degradation. --no-save installs into node_modules only,
   # leaving package.json untouched.
   # shellcheck disable=SC2086  # VEC_DEPS is an intentional word-split list
-  if ( cd "$PLUGIN_ROOT" && npm install --no-save $VEC_DEPS && npm run build ); then
+  # --no-audit/--no-fund/--loglevel=error: keep the install log readable. EBADENGINE
+  # warnings come from dev-only tooling (vite/vitest/stryker) and do not affect the
+  # runtime; real errors still print.
+  if ( cd "$PLUGIN_ROOT" && npm install --no-save --no-audit --no-fund --loglevel=error $VEC_DEPS && npm run --silent build ); then
     # Verify the better-sqlite3 native binding actually loads. npm install runs
     # prebuild-install as better-sqlite3's postinstall, but a source-only dir
     # (e.g. a `claude plugin update` landing without a matching prebuild, or a
     # musl/glibc mismatch) leaves the .node file absent — `require()` throws.
     # The runtime getDb() self-heal + honest "still missing" error in
     # vectorStore.ts is the backstop; this install-time check catches it now and
-    # attempts a node-gyp rebuild before deferring to the backstop.
-    if ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
+    # compiles the binding here, where a multi-minute build is expected, instead of
+    # leaving it to the server's first start (where a synchronous rebuild blocks the
+    # MCP handshake past the client's timeout).
+    #
+    # better-sqlite3 is an optionalDependency, so when its install script fails
+    # (e.g. no prebuild for this exact Node version and the source build errors)
+    # npm drops it and STILL exits 0 — the check below is the only signal.
+    # The test must also open a DB: require() alone succeeds without the .node
+    # file, the binding is only loaded on `new Database()`.
+    BSQL_CHECK="new (require('better-sqlite3'))(':memory:').close()"
+    if ( cd "$PLUGIN_ROOT" && node -e "$BSQL_CHECK" ) 2>/dev/null; then
       ok "Vector search enabled (TF-IDF + local HuggingFace embeddings via RRF)."
       note "Vector search enabled (local HuggingFace embeddings)."
     else
-      warn "better-sqlite3 native binding missing — attempting node-gyp rebuild ..."
-      if [ -d "$PLUGIN_ROOT/node_modules/better-sqlite3" ] && \
-         ( cd "$PLUGIN_ROOT/node_modules/better-sqlite3" && npx --no-install node-gyp rebuild ) 2>/dev/null && \
-         ( cd "$PLUGIN_ROOT" && node -e "require('better-sqlite3')" ) 2>/dev/null; then
-        ok "Vector search enabled (native binding rebuilt via node-gyp)."
+      warn "better-sqlite3 native binding missing — building it from source (can take a few minutes) ..."
+      # `npm rebuild` uses npm's bundled node-gyp. The previous
+      # `npx --no-install node-gyp rebuild` always failed: node-gyp is not a local
+      # bin in the plugin's node_modules, and 2>/dev/null hid why.
+      BSQL_LOG="$(mktemp "${TMPDIR:-/tmp}/total-recall-bsql.XXXXXX")"
+      if ( cd "$PLUGIN_ROOT" && npm rebuild better-sqlite3 ) >"$BSQL_LOG" 2>&1 && \
+         ( cd "$PLUGIN_ROOT" && node -e "$BSQL_CHECK" ) 2>/dev/null; then
+        ok "Vector search enabled (native binding built from source)."
         note "Vector search enabled (local HuggingFace embeddings)."
+        rm -f "$BSQL_LOG"
       else
-        warn "better-sqlite3 native binding still missing — plugin will run TF-IDF only (getDb self-heals on next start)."
+        tail -n 20 "$BSQL_LOG" >&2
+        warn "better-sqlite3 native binding still missing (full build log: $BSQL_LOG) — plugin will run TF-IDF only."
+        warn "Fix the build error above, then run: (cd \"$PLUGIN_ROOT\" && npm rebuild better-sqlite3)"
         note "Vector search unavailable — native binding missing."
       fi
     fi

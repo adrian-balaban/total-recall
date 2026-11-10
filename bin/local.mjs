@@ -229,6 +229,15 @@ export function stageLocalRelease({ pluginDir, home, run, fsImpl = fs, gitSha })
     `${JSON.stringify({ source: pluginDir, gitSha: gitSha ?? null, fingerprint, builtAt: new Date().toISOString() }, null, 2)}\n`,
   );
 
+  // Carry the previous staging dir's node_modules over. Claude Code runs a directory-marketplace
+  // plugin straight from this staging dir (not from its plugins/cache copy), so install.sh Step 7
+  // installs the vector-search deps here; dropping them on every re-stage would turn vector
+  // search off until the next full npm install.
+  const prevModules = path.join(stagingDir, 'plugins', 'total-recall', 'node_modules');
+  if (fsImpl.existsSync(prevModules)) {
+    try { fsImpl.renameSync(prevModules, path.join(pluginStageDir, 'node_modules')); } catch { /* reinstalled by install.sh */ }
+  }
+
   // Atomic swap: remove any previous staging dir, then rename the temp dir into place.
   try { fsImpl.rmSync(stagingDir, { recursive: true, force: true }); } catch { /* none yet */ }
   fsImpl.renameSync(tmpDir, stagingDir);
@@ -329,7 +338,11 @@ export function installLocal(forward, own, deps = {}) {
       err('total-recall: on Windows, install.sh needs Git Bash (https://gitforwindows.org/). Install it and run this command again.');
       return EX_UNAVAILABLE;
     }
-    const r = run(bash, [path.join(entry.installPath, 'install.sh'), '--plugin-root', entry.installPath, ...forward], { inherit: true });
+    // Set up the directory Claude Code actually loads. For a "directory" marketplace that is the
+    // staging dir itself (the MCP server runs from <staging>/plugins/total-recall/dist/index.js,
+    // with CLAUDE_PLUGIN_ROOT pointing there), not entry.installPath under plugins/cache —
+    // installing the vector-search deps into installPath left the running server without them.
+    const r = run(bash, [path.join(staged.pluginStageDir, 'install.sh'), '--plugin-root', staged.pluginStageDir, ...forward], { inherit: true });
     return r.status ?? 1;
   }
 

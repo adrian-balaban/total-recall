@@ -189,6 +189,21 @@ describe('stageLocalRelease', () => {
     assert.notEqual(third.fingerprint, second.fingerprint);
   });
 
+  it('keeps the staged node_modules across a re-stage (vector deps live there)', () => {
+    const plugin = path.join(tmp, 'plugin');
+    makePluginDir(plugin);
+    makeDist(plugin);
+    fs.mkdirSync(path.join(plugin, '.git'));
+    const home = path.join(tmp, 'home');
+    fs.mkdirSync(home);
+    const run = gitRun(plugin, ['.claude-plugin/plugin.json', 'package.json']);
+
+    const first = stageLocalRelease({ pluginDir: plugin, home, run });
+    writeFile(path.join(first.pluginStageDir, 'node_modules', 'better-sqlite3', 'package.json'), '{}');
+    const second = stageLocalRelease({ pluginDir: plugin, home, run });
+    assert.ok(fs.existsSync(path.join(second.pluginStageDir, 'node_modules', 'better-sqlite3', 'package.json')));
+  });
+
   it('fallback without .git is fail-closed: skips unlisted dotfiles, keeps the allowlisted ones', () => {
     const plugin = path.join(tmp, 'plugin');
     makePluginDir(plugin);
@@ -356,7 +371,7 @@ describe('installLocal with claude', () => {
     assert.ok(subs.some((s) => s.startsWith('claude plugin install')));
   });
 
-  it('re-reads installPath after uninstall+install completes, and runs install.sh from the NEW path', () => {
+  it('re-reads installPath after uninstall+install completes, and runs install.sh from the staging dir Claude Code loads', () => {
     const oldInstallPath = path.join(tmp, 'old2');
     fs.mkdirSync(oldInstallPath, { recursive: true });
     writeFile(path.join(oldInstallPath, 'install.sh'), '#!/usr/bin/env bash\n');
@@ -381,8 +396,11 @@ describe('installLocal with claude', () => {
       run, out: ctx.out, err: ctx.err, home: ctx.home, platform: 'linux', cwd: ctx.plugin,
     });
     assert.equal(code, 0);
+    // A directory marketplace runs the plugin from the staging dir, not from installPath, so
+    // install.sh (and its Step 7 vector deps) must target the staging dir.
     const bashCall = ctx.calls.find((c) => c[0] === 'bash');
-    assert.match(bashCall.join(' '), new RegExp(newInstallPath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+    const stage = path.join(ctx.home, '.total-recall', 'local-marketplace', 'plugins', 'total-recall');
+    assert.deepEqual(bashCall, ['bash', path.join(stage, 'install.sh'), '--plugin-root', stage]);
   });
 
   it('exits 1 when installPath is missing after install', () => {
