@@ -834,6 +834,88 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     } finally { fs.rmSync(home, { recursive: true, force: true }); }
   });
 
+  // Regression: the MCP server ensureDir()s ~/.total-recall/org/org-vault/ at
+  // boot, leaving the clone target non-empty without .git. `git clone` refuses
+  // a non-empty destination, so every SessionStart reported "Failed to clone org
+  // vault." forever. Empty dirs must be cleared; real files must be preserved.
+  function stubFailingGh(binDir: string): void {
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.writeFileSync(path.join(binDir, 'gh'), '#!/usr/bin/env bash\nexit 1\n');
+    fs.chmodSync(path.join(binDir, 'gh'), 0o755);
+  }
+
+  it('clones into a target pre-populated with an empty org-vault/ dir', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-emptysub-'));
+    const remote = path.join(home, 'remote');
+    const seed = path.join(home, 'seed');
+    // Identity via GIT_AUTHOR_*/GIT_COMMITTER_* (works on git < 2.31, which
+    // ignores GIT_CONFIG_COUNT env config).
+    const gitEnv = { ...process.env, HOME: home,
+      GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t',
+      GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' };
+    const g = (cwd: string, args: string[]) => spawnSync('git', args, { cwd, env: gitEnv, encoding: 'utf8' });
+    fs.mkdirSync(path.join(seed, 'org-vault'), { recursive: true });
+    fs.writeFileSync(path.join(seed, 'org-vault', 'm.md'), '# m\n');
+    g(seed, ['init', '-q', '-b', 'knowledge']);
+    g(seed, ['add', '-A']); g(seed, ['commit', '-qm', 'seed']);
+    g(home, ['clone', '-q', '--bare', seed, remote]);
+    // https:// passes the URL guard; insteadOf redirects it to the local fixture.
+    fs.writeFileSync(path.join(home, '.gitconfig'),
+      `[url "file://${remote}"]\n\tinsteadOf = https://example.invalid/r\n[protocol "file"]\n\tallow = always\n`);
+    writeOrgConfig(home, 'https://example.invalid/r');
+    fs.mkdirSync(path.join(home, '.total-recall', 'org', 'org-vault'), { recursive: true });
+    const binDir = path.join(home, 'bin');
+    stubFailingGh(binDir);
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      expect(JSON.parse(r.stdout).hookSpecificOutput.additionalContext).toContain('Org vault cloned');
+      expect(fs.existsSync(path.join(home, '.total-recall', 'org', 'org-vault', 'm.md'))).toBe(true);
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('refuses (and preserves) a non-git target that contains files, with a clear message', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-dirty-'));
+    writeOrgConfig(home, 'https://example.invalid/r');
+    const stray = path.join(home, '.total-recall', 'org', 'org-vault', 'keep.md');
+    fs.mkdirSync(path.dirname(stray), { recursive: true });
+    fs.writeFileSync(stray, '# keep\n');
+    const binDir = path.join(home, 'bin');
+    stubFailingGh(binDir);
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx).toContain('contains files but is not a git repo');
+      expect(fs.readFileSync(stray, 'utf8')).toBe('# keep\n');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
+  it('surfaces git\'s error text when the clone fails', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-pull-errtext-'));
+    writeOrgConfig(home, 'https://example.invalid/r');
+    const binDir = path.join(home, 'bin');
+    stubFailingGh(binDir);
+    fs.writeFileSync(path.join(binDir, 'git'),
+      '#!/usr/bin/env bash\necho "fatal: repo \\"x\\" not found" >&2\nexit 128\n');
+    fs.chmodSync(path.join(binDir, 'git'), 0o755);
+    try {
+      const r = spawnSync('bash', [PULL_SCRIPT], {
+        encoding: 'utf8', stdio: 'pipe',
+        env: { ...process.env, HOME: home, PATH: binDir + ':' + (process.env.PATH ?? '') },
+      });
+      expect(r.status).toBe(0);
+      const ctx = JSON.parse(r.stdout).hookSpecificOutput.additionalContext;
+      expect(ctx).toBe('Failed to clone org vault: fatal: repo "x" not found');
+    } finally { fs.rmSync(home, { recursive: true, force: true }); }
+  });
+
   // session-end.sh: SessionEnd hook. Must (a) emit a VALID SessionEnd stdout
   // envelope — {"continue":true} — and specifically NOT the
   // hookSpecificOutput.additionalContext shape, which the SessionEnd event
