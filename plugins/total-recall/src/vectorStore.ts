@@ -5,7 +5,7 @@
 
 import { fileURLToPath } from 'node:url';
 import * as path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { recordError } from './state.js';
 import { embeddingModel } from './paths.js';
@@ -26,12 +26,23 @@ let cachedDbPath: string | null = null;
 // throws ("Could not locate binding file build/Release/better_sqlite3.node").
 // Vector search then silently stays off until someone hand-runs the rebuild.
 //
-// Self-heal: on the FIRST load failure, run `npm rebuild better-sqlite3` in the
+// Self-heal: on the FIRST load failure, start `npm rebuild better-sqlite3` in the
 // plugin dir (re-runs prebuild-install || node-gyp rebuild — the exact install.sh
-// path) and retry the import once. Latched per-process so a persistent failure
-// (no build tools, offline) blocks for one timeout, not on every recall.
+// path) IN THE BACKGROUND and retry the load once it finishes. Latched
+// per-process so a persistent failure (no build tools, offline) is tried once.
 // sqlite-vec is pure JS (no native binding), so only better-sqlite3 needs this.
+//
+// Why background: with no prebuild for the running Node ABI the rebuild is a
+// from-source compile that takes minutes. It used to run via spawnSync, freezing
+// the event loop — the MCP server could not answer tools/list, so the client
+// timed out and the session had no total-recall tools at all. Now getDb returns
+// null at once (callers degrade to TF-IDF) and vectors come back mid-session.
 let rebuildAttempted = false;
+let rebuildInFlight: Promise<void> | null = null;
+
+// A from-source compile of better-sqlite3 took ~140s on a dev machine; nothing
+// waits on it any more, so allow slow machines plenty of headroom.
+const REBUILD_TIMEOUT_MS = 600_000;
 
 type RebuildResult = { attempted: boolean; ok: boolean; detail?: string };
 
@@ -64,28 +75,45 @@ function resolveNpmCli(): string | null {
   return null;
 }
 
+// Async (spawn, not spawnSync): the event loop keeps serving MCP requests while
+// npm compiles. stdout is ignored — never inherited — because the server's own
+// stdout is the MCP stdio channel and npm output there would corrupt it.
 async function rebuildNativeBindings(): Promise<RebuildResult> {
   const root = pluginRootForRebuild();
   if (!root) return { attempted: false, ok: false }; // nothing to rebuild
   const npmCli = resolveNpmCli();
-  const tail = (s: string | Buffer | undefined) =>
-    typeof s === 'string' ? s.slice(-500) : '';
+  const opts = { cwd: root, stdio: ['ignore', 'ignore', 'pipe'] as ('ignore' | 'pipe')[] };
   try {
-    const result = npmCli
-      ? spawnSync(process.execPath, [npmCli, 'rebuild', 'better-sqlite3'], {
-          cwd: root, encoding: 'utf8', timeout: 180000, stdio: ['ignore', 'pipe', 'pipe'],
-        })
-      : spawnSync('npm', ['rebuild', 'better-sqlite3'], {
-          cwd: root, encoding: 'utf8', timeout: 180000, shell: true, stdio: ['ignore', 'pipe', 'pipe'],
-        });
-    if (result.error || result.status !== 0) {
-      return {
-        attempted: true,
-        ok: false,
-        detail: `exit ${result.status ?? 'n/a'}: ${result.error ? result.error.message : tail(result.stderr)}`.trim(),
+    const child = npmCli
+      ? spawn(process.execPath, [npmCli, 'rebuild', 'better-sqlite3'], opts)
+      : spawn('npm', ['rebuild', 'better-sqlite3'], { ...opts, shell: true });
+    return await new Promise<RebuildResult>((resolve) => {
+      let stderr = '';
+      let timedOut = false;
+      let settled = false;
+      const finish = (r: RebuildResult) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(r);
       };
-    }
-    return { attempted: true, ok: true };
+      // unref: a pending rebuild must never keep the process alive on shutdown.
+      const timer = setTimeout(() => { timedOut = true; child.kill('SIGTERM'); }, REBUILD_TIMEOUT_MS);
+      timer.unref?.();
+      child.stderr?.setEncoding('utf8');
+      // Keep only a bounded tail — a full compile log is large.
+      child.stderr?.on('data', (s: string) => { stderr = (stderr + s).slice(-500); });
+      child.on('error', (e: Error) => finish({ attempted: true, ok: false, detail: `exit n/a: ${e.message}` }));
+      child.on('close', (code: number | null) => {
+        if (timedOut) {
+          finish({ attempted: true, ok: false, detail: `timed out after ${REBUILD_TIMEOUT_MS / 1000}s` });
+        } else if (code !== 0) {
+          finish({ attempted: true, ok: false, detail: `exit ${code ?? 'n/a'}: ${stderr}`.trim() });
+        } else {
+          finish({ attempted: true, ok: true });
+        }
+      });
+    });
   } catch (e: any) {
     return { attempted: true, ok: false, detail: `threw: ${e?.message ?? String(e)}` };
   }
@@ -107,6 +135,63 @@ export const __testRebuildNativeBindings = rebuildNativeBindings;
 export async function __testsGetDb(dbPath: string): Promise<any> {
   return getDb(dbPath);
 }
+// Test-only: wait for a background self-heal rebuild (and its retry) to settle.
+export async function __testsAwaitRebuild(): Promise<void> {
+  if (rebuildInFlight) await rebuildInFlight;
+}
+
+async function openDb(dbPath: string): Promise<any> {
+  const sqliteVec = await import('sqlite-vec');
+  const Database = (await import('better-sqlite3')).default;
+  const d = new Database(dbPath);
+  sqliteVec.load(d);
+  return d;
+}
+
+// Background half of the self-heal: rebuild, then retry the load.
+//
+// CAVEAT: `npm rebuild better-sqlite3` can exit 0 ("rebuilt dependencies
+// successfully") WITHOUT producing the binding — its install script is
+// `prebuild-install || node-gyp rebuild --release`, and prebuild-install
+// fails offline (ECONNREFUSED to the GitHub releases host) while the
+// source-compile fallback may be unable to run. npm treats the failed install
+// script as non-fatal and still exits 0. So the load RETRY is the ground truth —
+// never claim success from npm's exit code alone. When the retry still fails,
+// record an honest, actionable error (not "succeeded").
+async function selfHealInBackground(dbPath: string, loadErr: any): Promise<void> {
+  const r = await __rebuildImpl();
+  // r.attempted === false (test default, or no node_modules/better-sqlite3
+  // found): silent degrade — preserves the pre-self-heal optional-dep-absent
+  // behavior, no recordError.
+  if (!r.attempted) return;
+  try {
+    const d = await openDb(dbPath);
+    // A getDb that ran while we were rebuilding found the binding still missing
+    // and left dbPromise unset; install the healed db unless someone beat us to it.
+    if (dbPromise === null && (cachedDbPath === null || cachedDbPath === dbPath)) {
+      cachedDbPath = dbPath;
+      dbPromise = Promise.resolve(d);
+    } else {
+      try { d.close(); } catch { /* best effort */ }
+    }
+  } catch (retryErr: any) {
+    recordHealFailure(r, loadErr, retryErr);
+  }
+}
+
+function recordHealFailure(r: RebuildResult, loadErr: any, retryErr: any): void {
+  const outcome = r.ok
+    ? `npm rebuild reported success (exit 0) but the binding is still absent ` +
+      `(prebuild-install likely failed to download — offline or no matching prebuild ` +
+      `for this Node ABI — and the node-gyp source compile did not produce it)`
+    : `npm rebuild failed (${r.detail ?? 'non-zero exit'})`;
+  recordError(
+    `vectorStore: better-sqlite3 native binding missing and in-process rebuild did ` +
+    `not restore it (${outcome}; original load error: ${loadErr?.message ?? loadErr}; ` +
+    `retry load error: ${retryErr?.message ?? retryErr}). Run 'npm rebuild better-sqlite3' ` +
+    `in the plugin dir to restore vector search. TF-IDF search still works.`
+  );
+}
 
 async function getDb(dbPath: string): Promise<any> {
   if (cachedDbPath !== null && cachedDbPath !== dbPath) {
@@ -120,54 +205,15 @@ async function getDb(dbPath: string): Promise<any> {
   cachedDbPath = dbPath;
   dbPromise = (async () => {
     try {
-      const sqliteVec = await import('sqlite-vec');
-      const Database = (await import('better-sqlite3')).default;
-      const d = new Database(dbPath);
-      sqliteVec.load(d);
-      return d;
+      return await openDb(dbPath);
     } catch (loadErr: any) {
-      // Self-heal: a fresh plugin-cache dir (from `claude plugin update`) can
-      // ship better-sqlite3 source-only — its install script didn't produce
-      // build/Release/better_sqlite3.node. install.sh doesn't re-run on update,
-      // so attempt one in-process `npm rebuild better-sqlite3` before degrading.
-      // Latched per-process so a persistent failure blocks once, not per recall.
-      //
-      // CAVEAT: `npm rebuild better-sqlite3` can exit 0 ("rebuilt dependencies
-      // successfully") WITHOUT producing the binding — its install script is
-      // `prebuild-install || node-gyp rebuild --release`, and prebuild-install
-      // fails offline (ECONNREFUSED to the GitHub releases host) while node-gyp
-      // is often not installed, so the source-compile fallback can't run. npm
-      // treats the failed install script as non-fatal and still exits 0. So the
-      // load RETRY below is the ground truth — never claim success from npm's
-      // exit code alone. When the retry still fails, record an honest, actionable
-      // error (not "succeeded") so the user knows to run the rebuild manually.
+      // Self-heal: a fresh plugin dir can ship better-sqlite3 source-only — its
+      // install script didn't produce build/Release/better_sqlite3.node. Start
+      // one background `npm rebuild better-sqlite3` (latched per process) and
+      // degrade NOW; the rebuild installs the db when it finishes.
       if (!rebuildAttempted) {
         rebuildAttempted = true;
-        const r = await __rebuildImpl();
-        if (r.attempted) {
-          try {
-            const sqliteVec = await import('sqlite-vec');
-            const Database = (await import('better-sqlite3')).default;
-            const d = new Database(dbPath);
-            sqliteVec.load(d);
-            return d;
-          } catch (retryErr: any) {
-            const outcome = r.ok
-              ? `npm rebuild reported success (exit 0) but the binding is still absent ` +
-                `(prebuild-install likely failed to download — offline or no matching prebuild ` +
-                `for this Node ABI — and node-gyp is not installed to compile from source)`
-              : `npm rebuild failed (${r.detail ?? 'non-zero exit'})`;
-            recordError(
-              `vectorStore: better-sqlite3 native binding missing and in-process rebuild did ` +
-              `not restore it (${outcome}; original load error: ${loadErr?.message ?? loadErr}; ` +
-              `retry load error: ${retryErr?.message ?? retryErr}). Run 'npm rebuild better-sqlite3' ` +
-              `in the plugin dir to restore vector search. TF-IDF search still works.`
-            );
-          }
-        }
-        // r.attempted === false (test default, or no node_modules/better-sqlite3
-        // found): silent degrade — preserves the pre-self-heal optional-dep-absent
-        // behavior, no recordError.
+        rebuildInFlight = selfHealInBackground(dbPath, loadErr).finally(() => { rebuildInFlight = null; });
       }
       // Only cache successful loads; a transient failure (missing optional dep,
       // sqlite I/O error) should not permanently disable vector search until restart.
