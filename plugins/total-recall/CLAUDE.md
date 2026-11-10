@@ -131,7 +131,7 @@ This is an MCP server that exposes 22 tools: 17 for persistent memory management
 
 ## 🧪 Toolchain
 
-Use Node 20 locally (`.nvmrc`, `mise.toml`): it is what the gate runs, and a native module (`better-sqlite3`) built under another Node fails to load under this one (the three `vectorStore` tests then fail with `NODE_MODULE_VERSION`; fix with `npm rebuild better-sqlite3`). The npm release job uses Node 22 on purpose (trusted publishing).
+Use Node 26 locally (`.nvmrc`, `mise.toml`): it is what the gate runs, and a native module (`better-sqlite3`) built under another Node fails to load under this one (the three `vectorStore` tests then fail with `NODE_MODULE_VERSION`; fix with `npm rebuild better-sqlite3`). The npm release job also runs Node 26 (trusted publishing needs 22.14+).
 
 ## 🧠 Memory Workflow
 
