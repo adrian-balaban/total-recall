@@ -1,6 +1,6 @@
 {
   "name": "total-recall",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "description": "Persistent memory MCP server for Claude Code and Gemini CLI",
   "license": "MIT",
   "type": "module",
@@ -39,7 +39,7 @@
     "vitest": "^4.1.8"
   },
   "optionalDependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.3.2",
     "better-sqlite3": "^12.10.0",
     "sqlite-vec": "^0.1.9"
   },
