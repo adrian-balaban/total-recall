@@ -1,0 +1,17 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /plugins/total-recall
+    schedule:
+      interval: weekly
+    # Version updates stay off: this file exists only to carry the ignore rules below.
+    # Security updates are separate and keep opening PRs for everything else.
+    open-pull-requests-limit: 0
+    ignore:
+      # Fix needs minimatch >= 11.0.1, but @stryker-mutator/core@9.6.1 pins minimatch ~10.2.4,
+      # so Dependabot reports security_update_not_possible and the job goes red daily.
+      # Remove this entry when Stryker allows minimatch 11.
+      - dependency-name: minimatch
+      # Fix is in @vitest/mocker 4.1.12, which only arrives with a vitest release; vitest is
+      # not ignored, so the fix lands through it. Remove if a newer vitest is already in place.
+      - dependency-name: "@vitest/mocker"
