@@ -219,7 +219,7 @@ describe('6.2 boundary enforcement: safeParse rejects malformed arguments before
   it('recall_memory does NOT reject a negative numeric limit (no .min(0) on the Zod shape; handler clamps)', async () => {
     const res = await client.callTool({
       name: 'recall_memory',
-      arguments: { query: 'x', limit: -5 },
+      arguments: { query: 'x', limit: -5, hybrid: false },
     });
     expect(res.isError).toBeFalsy();
     // The handler returns an array of results (possibly empty for a no-match
