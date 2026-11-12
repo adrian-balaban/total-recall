@@ -136,7 +136,7 @@ describe('total-recall over real stdio', () => {
     const recalled = json(
       await client.callTool({
         name: 'recall_memory',
-        arguments: { query: 'round-tripped stdio' },
+        arguments: { query: 'round-tripped stdio', hybrid: false },
       }),
     );
     expect(Array.isArray(recalled)).toBe(true);
