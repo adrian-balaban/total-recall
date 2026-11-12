@@ -8,7 +8,18 @@ updates:
     # Security updates are separate and keep opening PRs for everything else.
     open-pull-requests-limit: 0
     ignore:
-      # Fix needs minimatch >= 11.0.1, but @stryker-mutator/core@9.6.1 pins minimatch ~10.2.4,
-      # so Dependabot reports security_update_not_possible and the job goes red daily.
-      # Remove this entry when Stryker allows minimatch 11.
+      # GHSA-g3hv-75wg-m249 (moderate) needs minimatch >= 11.0.1, which nothing here can
+      # reach: @stryker-mutator/core pins minimatch ~10.2.4, and so does the latest Stryker
+      # (10.1.1, checked 2026-11-12) — upgrading Stryker does NOT lift the pin. archunit
+      # wants ^10.0.1. Without this entry Dependabot reports security_update_not_possible
+      # and the job goes red daily.
+      #
+      # Accepted risk, not an oversight. The advisory is a DoS that needs an
+      # ATTACKER-CONTROLLED glob pattern; the only patterns here are the static ones in
+      # stryker.conf.json, read by a dev-time mutation runner. minimatch is dev-only and
+      # never ships — the runtime dependencies are @modelcontextprotocol/sdk and zod, which
+      # is why `npm audit --omit=dev` stays clean.
+      #
+      # This silences the UPDATE, not the ALERT: alert #12 stays open on the Dependabot page
+      # unless dismissed there as "risk is tolerable". Re-check when Stryker relaxes the pin.
       - dependency-name: minimatch
