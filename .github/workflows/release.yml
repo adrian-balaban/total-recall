@@ -74,6 +74,15 @@ jobs:
       # branch the marketplace installs from. Force-push because `release` is a
       # derived branch, not a development one — its history is disposable.
       - name: Publish built tree to the release branch
+        # VERSION goes through env, never inline `${{ }}` in the script body: an
+        # expression is substituted as shell SYNTAX before bash parses the line, so a
+        # crafted value could run commands, while "$VERSION" is only ever a value.
+        # The value is `jq -r .version package.json` (repo content, not user input),
+        # so this is hardening against a future edit rather than a live hole — and it
+        # resolves the CodeQL actions/code-injection alerts, which taint any
+        # workflow_dispatch-reachable step output regardless of its origin.
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -92,15 +101,17 @@ jobs:
             plugins/total-recall/scripts/eval
           # -f overrides the .gitignore entry that keeps dist/ off main.
           git add -f plugins/total-recall/dist
-          git commit -m "build: dist for v${{ steps.v.outputs.version }} ($SHA)"
+          git commit -m "build: dist for v$VERSION ($SHA)"
           git push --force origin release
 
       - name: Skip the tag if this version was already released
         id: check
+        env:
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          if git ls-remote --exit-code --tags origin "refs/tags/v${{ steps.v.outputs.version }}" >/dev/null 2>&1; then
+          if git ls-remote --exit-code --tags origin "refs/tags/v$VERSION" >/dev/null 2>&1; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
-            echo "v${{ steps.v.outputs.version }} already tagged — release branch refreshed, nothing to tag."
+            echo "v$VERSION already tagged — release branch refreshed, nothing to tag."
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
@@ -112,10 +123,11 @@ jobs:
         if: steps.check.outputs.exists == 'false'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
         run: |
-          gh release create "v${{ steps.v.outputs.version }}" \
+          gh release create "v$VERSION" \
             --target "$SHA" \
-            --title "v${{ steps.v.outputs.version }}" \
+            --title "v$VERSION" \
             --generate-notes
 
       # The npm package is only the install bootstrap (bin/cli.mjs, no plugin code; the

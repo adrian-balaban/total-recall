@@ -15,6 +15,13 @@ on:
   pull_request:
     branches: [main]
 
+# This gate only reads the repo — it never pushes, tags or publishes (that is
+# release.yml, which declares its own wider scope). The repo-level default is
+# already `read`, but that is a setting someone can flip; pinning it here means
+# the workflow carries its own least-privilege contract.
+permissions:
+  contents: read
+
 jobs:
   stryker:
     name: Stryker mutation score ≥ 65% (all modules)
