@@ -27,14 +27,17 @@ Alte lucruri verificate:
 - Avertismentul `model id rejected by hub: 404` din log vine din testele unitare care folosesc intenționat un id greșit, nu din integrare. Modelul real răspunde 200 pe `config.json`, pe `onnx/model_quantized.onnx` și pe API.
 - `testTimeout: 120_000`, schimbarea necomisă din `vitest.integration.config.ts`, **nu ajunge**. Clientul MCP SDK are propriul timeout de 60s pe request, iar descărcarea depinde tot de rețea.
 
-### 2.2 `Dependabot Updates` pe `main`: 6 rulări roșii
-Sunt joburi de *security update* pentru `qs`, `minimatch` și `@vitest/mocker`, toate cu aceeași eroare:
+### 2.2 `Dependabot Updates` pe `main`: rulări roșii
+Sunt joburi de *security update* pentru `qs`, `minimatch` și `@vitest/mocker`. Joburile pentru `vitest`, `sharp` și `@hono/node-server` au reușit în același interval.
 
-```
-Failed to parse GITHUB_REGISTRIES_PROXY environment variable
-```
+**Corecție (2026-11-12).** Prima ipoteză, eroarea `Failed to parse GITHUB_REGISTRIES_PROXY`, era greșită: variabila e goală și apare ca zgomot în log, în toate joburile. Cauza reală, citită din tabelul de erori al joburilor, e `security_update_not_possible`: fixul există, dar un părinte nu-l lasă să intre.
 
-Eroarea e în infrastructura Dependabot de la GitHub, nu în codul repo-ului. Repo-ul nu are `.github/dependabot.yml`, deci nici registries custom. Joburile pentru `vitest`, `sharp` și `@hono/node-server` au reușit în același interval. `qs` și `@vitest/mocker` sunt rezolvate oricum de #56.
+| Pachet | Versiune fixată | Blocat de | Cea mai nouă rezolvabilă |
+|--------|-----------------|-----------|--------------------------|
+| `minimatch` | 11.0.1 | `@stryker-mutator/core@9.6.1` cere `minimatch@~10.2.4` | 10.2.6 |
+| `@vitest/mocker` | 4.1.12 | vine odată cu un `vitest` nou (`main` are 4.1.8, #57 are 4.1.11) | 4.1.8 |
+
+`qs` s-a rezolvat prin #56. Alertele rămase sunt dev-only și de severitate medie: minimatch #12, @vitest/mocker #9 și #5, vitest #6.
 
 ### 2.3 `release`
 Ultima rulare e verde (`43034928200`). Rulările `skipped` de pe 10–11 nov sunt efectul normal al gate-ului roșu.
@@ -76,11 +79,16 @@ gh run rerun <run-id> --failed
 gh pr merge <n> --squash --delete-branch   # sau --merge, după convenția repo-ului (#55 a fost merge commit)
 ```
 
-### 3.3 Dependabot
-- Nu e nimic de reparat în repo. După merge-ul #56, deschide *Security → Dependabot alerts* și verifică ce a mai rămas (probabil doar `minimatch`).
-- Dacă joburile de security update pică în continuare cu `GITHUB_REGISTRIES_PROXY`, verifică githubstatus.com, apoi re-run din *Insights → Dependency graph → Dependabot*. Dacă tot nu merge, raportează la GitHub Support.
-- `minimatch` se poate rezolva manual: `npm audit fix` în `plugins/total-recall/` într-un PR separat, după #57.
-- Separat, din nota anterioară: un `.github/dependabot.yml` cu `groups` (un PR zilnic în loc de câte unul pe pachet) ar reduce conflictele de lockfile ca acestea.
+### 3.3 Dependabot (PR #62)
+Soluția: `.github/dependabot.yml` nou (nu exista), cu:
+- `ignore` pentru `minimatch` și `@vitest/mocker`, fiecare cu un comentariu despre cine îl blochează și când se scoate;
+- `open-pull-requests-limit: 0` pe ecosistemul npm din `/plugins/total-recall`: ține oprite *version updates* (altfel Dependabot ar fi început PR-uri zilnice pentru tot), iar security updates pentru restul pachetelor merg ca înainte.
+
+Observații:
+- `@vitest/mocker` ignorat înseamnă fără PR direct pentru el; fixul 4.1.12 vine prin `vitest`, care nu e ignorat.
+- **Incert:** documentația GitHub nu spune clar dacă `ignore` din fișier oprește și joburile de *security update*, nu doar pe cele de versiune. Dacă joburile rămân roșii după merge-ul #62, soluția sigură e închiderea alertelor ca „tolerabile": `gh api -X PATCH repos/adrian-balaban/total-recall/dependabot/alerts/<n> -f state=dismissed -f dismissed_reason=tolerable_risk` pentru #12, #9, #5 și #6. Decizia de risc e a proprietarului repo-ului.
+- **Când se scot ignorările:** `minimatch` când Stryker acceptă minimatch 11; `@vitest/mocker` când există un vitest cu mocker >= 4.1.12.
+- Opțional, separat: `groups` în același fișier (un PR zilnic în loc de câte unul pe pachet) ar reduce conflictele de lockfile, dar necesită activarea version updates.
 
 ## 4. Checklist
 
@@ -90,6 +98,7 @@ gh pr merge <n> --squash --delete-branch   # sau --merge, după convenția repo-
 - [ ] #58: închis ca inclus în #56
 - [ ] #57: `@dependabot rebase`, CI verde, merge
 - [ ] #60: update branch, titlu și descriere noi, CI verde, merge, release 1.9.1 verificat
-- [ ] Dependabot alerts verificate după merge, `minimatch` rezolvat
+- [ ] #62: `.github/dependabot.yml` cu ignorare `minimatch` și `@vitest/mocker`, CI verde, merge
+- [ ] După #62: joburile Dependabot nu mai sunt roșii; altfel alertele #12, #9, #5, #6 închise ca „tolerabile"
 - [ ] (opțional) smoke test de vectori cu cache de model în CI
 - [ ] (opțional) `.github/dependabot.yml` cu grupare
