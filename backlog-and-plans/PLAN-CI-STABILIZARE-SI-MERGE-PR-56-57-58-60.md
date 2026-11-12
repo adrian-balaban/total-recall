@@ -96,9 +96,9 @@ Notes:
 - [x] Branch `fix/integration-no-model-download`: `hybrid: false` in the 2 tests, PR #61, green CI twice, merged
 - [x] #56: update branch, green CI, merged
 - [x] #58: closed as included in #56
-- [ ] #57: `@dependabot rebase` done, waiting for green CI, merge
-- [ ] #60: update branch, new title and description, green CI, merge, verify release 1.9.1
-- [ ] #62: `.github/dependabot.yml` ignoring `minimatch` and `@vitest/mocker`, green CI, merge
-- [ ] After #62: the Dependabot jobs are no longer red; otherwise dismiss alerts #12, #9, #5, #6 as "tolerable risk"
+- [x] #57: rebased by Dependabot, green CI, merged (vitest 4.1.11)
+- [x] #60: new title and description, green CI, merged; release v1.9.1 published (tag, GitHub release, `release` branch)
+- [x] #62: `.github/dependabot.yml` ignoring `minimatch` and `@vitest/mocker`, green CI, merged
+- [ ] After #62: check that the next Dependabot Updates run is no longer red (open alerts: #13, #12, #9); otherwise dismiss them as "tolerable risk"
 - [ ] (optional) vector smoke test with a model cache in CI
 - [ ] (optional) `.github/dependabot.yml` with grouping
