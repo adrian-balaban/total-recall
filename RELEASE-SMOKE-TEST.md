@@ -88,12 +88,22 @@ Run this after every release, not just hardening ones.
 - [ ] (npx) `npx -y @adrian-balaban/total-recall --help` prints the usage; on a clean sandboxed `HOME` (with `claude` installed) `npx -y @adrian-balaban/total-recall -y` adds the marketplace, installs the plugin, runs `install.sh`, and a new session shows the memory index
 - [ ] (local-install channel, `HOME=$(mktemp -d)`, a clean clone with no `node_modules`/`dist`) See [PLAN-INSTALARE-LOCALA-FINAL.md § Pasul 9](backlog-and-plans/PLAN-INSTALARE-LOCALA-FINAL.md#pasul-9--smoke-end-to-end) for the full checklist. Short form:
   - `./install.sh -y --no-vector` exits 0; `claude plugin list` shows `total-recall@total-recall-local` enabled
-  - the `installPath` from `installed_plugins.json` has all 6 `dist/` artifacts and **no** `node_modules`
+  - the `installPath` from `installed_plugins.json` has all 6 `dist/` artifacts. Whether it also holds a `node_modules` is not pinned down: 1.9.1 showed ~650 MB of it (devDependencies included) with `--no-vector`, but none with the complete profile. Record what you see; the staging dir never receives the clone's `node_modules`
   - re-run with no changes → "unchanged", no `uninstall`; a trivial edit under `src/` → re-run rebuilds and the cache's `dist/index.js` is the new one
-  - complete profile (no `--no-vector`): vector deps land in `installPath/node_modules`, never in the clone or the staging dir
-  - marketplace already installed + `--local` → stop with the switch-channel command; `--force` → proceeds with a warning (and the reverse direction)
+  - complete profile (no `--no-vector`): vector deps land in the staging dir `~/.total-recall/local-marketplace/plugins/total-recall/node_modules`, which is where Claude Code runs the plugin from (`bin/local.mjs`). The clone also gets a `node_modules` from the local build, and the plugin cache copy has none (1.9.1)
+  - marketplace already installed + `--local` → stop with the switch-channel command; `--force` → proceeds, installing both side by side (1.9.1 prints no warning for this; the reverse direction stops the same way)
   - without `claude`: exits 0, vaults + index created, no MCP registered unless `--vscode`/`--gemini` was passed
   - documented uninstall (both with and without `claude`) leaves `claude plugin list` clean / no orphaned VS Code `mcp.json` entry, and memories untouched
+
+### Last full run: 1.9.1 (2026-11-12)
+
+Passed: sections 2–5 and the SessionEnd commit; org sync (hook push, `orgSync: "server"` single push, force-delete reaching the remote); redaction and `export_memories` → `import_memories`; 1.4.0, 1.5.0 (resources and 22 tools), 1.6.0, 1.6.1, 1.8.0 `indexMaxEntries`, the npm provenance and pack contents, `npx --help`, an npx marketplace install, and the local channel (install, unchanged re-run, rebuild after a `src/` edit, both channel conflicts, no-`claude` install, uninstall).
+
+Open from that run:
+- PreCompact ended `outcome=dropped` on a near-empty fake transcript (`claude_rc=0`, so the `--tools ""` fix works). Re-check with a real `/compact`; the pass condition is `wrote` or `nothing`.
+- Cross-language rerank separated the match (0.57) from an unrelated memory only at 0.31, above the "<0.25" example.
+- `get_memories_by_keys` still returned a memory whose file had been deleted from disk (served from cache); `update_memory` correctly raised ENOENT.
+- Not run: 1.6.9 model reuse after an update, the Windows `%APPDATA%` check, 1.5.0 prompts listing, and the VS Code / Visual Studio host matrix.
 
 ---
 

@@ -278,7 +278,7 @@ Commit: `test(cli): --local coverage`.
 7. O modificare trivială în `src/` → re-run → rebuild + refresh, iar `dist/index.js` din cache e cel nou.
 8. Profil complet (fără `--no-vector`) → dependențele vector apar în `installPath/node_modules`, nu în staging și nu în clone. Confirmă și că pasul 7 din `install.sh` (`npm install --no-save <vector deps> && npm run build`) reușește pe arborele curat din cache: `npm install` aduce și devDependencies (`esbuild`). Comportamentul e identic cu fluxul marketplace de azi, dar aici se verifică explicit.
 9. Instalare marketplace prezentă + `--local` → stop; cu `--force` → trece, cu warning. Invers: `npx …` cu local instalat → stop.
-10. `PATH` fără `claude`, cu `--vscode` → intrarea din VS Code `mcp.json` indică `~/.total-recall/local-marketplace/plugins/total-recall/dist/index.js`, exit 0. Fără `--vscode` → exit 0, iar mesajul spune că Step 3 a fost sărit.
+10. `PATH` fără `claude`, cu `--vscode` → intrarea din VS Code `mcp.json` rulează `bash` cu argumentul `~/.total-recall/local-marketplace/plugins/total-recall/scripts/start-server.sh` (verificat pe 1.9.1; nu `dist/index.js`), exit 0. Fără `--vscode` → exit 0, iar mesajul spune că Step 3 a fost sărit.
 11. Dezinstalarea documentată, în ambele variante (cu și fără `claude`) → `claude plugin list` curat, nicio intrare `total-recall` orfană în VS Code `mcp.json`; memoriile sunt neatinse.
 
 Dacă mașina agentului nu are `claude`, punctele 2–4 și 6–9 rămân la maintainer și se notează în PR.
