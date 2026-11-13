@@ -8,6 +8,7 @@ import { rebuildInvertedIndex, registerDocument, deregisterDocument } from '../t
 import { memIndex, recordError } from '../state.js';
 import { contentCache } from '../lru-cache.js';
 import { scheduleSave } from '../persistence.js';
+import { appendJournal } from '../journal.js';
 import { embedAndUpsert, embed, embedTextFor, flushEmbeddings } from '../embeddings.js';
 import { deleteVector, dropVectorTable, upsertVector } from '../vectorStore.js';
 import type { MemoryFrontmatter } from '../types.js';
@@ -143,6 +144,11 @@ export function updateMemory(args: any): any {
   // vector (the regression pinned by the "explicit empty-string content" test).
   if (content !== undefined) embedAndUpsert(key, newContent);
 
+  // Journal personal updates too (store.ts journals only stores): a day's journal
+  // that shows a memory as stored but never its later edits misleads recall.
+  // Org memories stay out of the personal journal, mirroring store.ts.
+  if (!meta.isOrg) appendJournal('update', key, meta.title);
+
   return { key, message: 'Memory updated.' };
 }
 
@@ -192,12 +198,17 @@ export function deleteMemory(args: any): any {
   // since the index was loaded), unlinkSync would throw and abort the in-memory
   // cleanup. Swallow the fs error and still drop the index/vector/cache entries so
   // the key is gone regardless of on-disk state.
+  // Capture before `delete memIndex[key]` drops the metadata.
+  const { title, isOrg } = meta;
   try { fs.unlinkSync(meta.filePath); } catch {}
   delete memIndex[key];
   deregisterDocument(key);
   contentCache.delete(key);
   deleteVector(VECTORS_DB, key).catch(() => {});
   scheduleSave();
+  // Without this line a stored-then-deleted memory (e.g. a smoke test) looks
+  // alive in the journal forever. appendJournal never throws (journal.ts).
+  if (!isOrg) appendJournal('delete', key, title);
 
   return { key, message: 'Memory deleted.' };
 }

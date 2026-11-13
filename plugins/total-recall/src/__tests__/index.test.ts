@@ -411,6 +411,22 @@ describe('store_memory', () => {
     expect(fs.readFileSync(jPath, 'utf8')).toContain('Journal Trigger');
   });
 
+  it('appends an [update] journal line for a personal update_memory', async () => {
+    const res = result(await callTool('store_memory', { title: 'Journal Upd', content: 'X', tags: [], category: 'knowledge' }));
+    await callTool('update_memory', { key: res.key, content: 'Y' });
+    const today = new Date().toISOString().slice(0, 10);
+    const body = fs.readFileSync(path.join(VAULT, 'personal-vault', 'journal', `${today}.md`), 'utf8');
+    expect(body).toMatch(new RegExp(`\\[update\\] \\*\\*Journal Upd\\*\\* \\(\`${res.key}\`\\)`));
+  });
+
+  it('appends a [delete] journal line (with the pre-delete title) for a personal delete_memory', async () => {
+    const res = result(await callTool('store_memory', { title: 'Journal Del', content: 'X', tags: [], category: 'knowledge' }));
+    await callTool('delete_memory', { key: res.key });
+    const today = new Date().toISOString().slice(0, 10);
+    const body = fs.readFileSync(path.join(VAULT, 'personal-vault', 'journal', `${today}.md`), 'utf8');
+    expect(body).toMatch(new RegExp(`\\[delete\\] \\*\\*Journal Del\\*\\* \\(\`${res.key}\`\\)`));
+  });
+
   it('sets author field', async () => {
     const res = result(await callTool('store_memory', {
       title: 'Author Test', content: 'X', tags: [], author: 'testuser',
