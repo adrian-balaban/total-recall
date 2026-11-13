@@ -105,7 +105,7 @@ For Codex, the same command and argument go in `~/.codex/config.toml`. Add the `
 | _"remember for the team that we deploy to eu-central-1"_ | Tagged `org`, filtered and pushed to the team repo       | `store_memory`                   |
 | _"what did we decide about the database?"_               | The assistant searches and reads the matching memories   | `search_index`, `recall_memory`  |
 | _"that memory is outdated, update it"_ / _"delete it"_   | The file is edited or deleted                            | `update_memory`, `delete_memory` |
-| nothing (Claude Code)                                    | 0–3 lessons from the session are saved before compaction | `PreCompact` hook                |
+| nothing (Claude Code)                                    | 0–3 lessons from the session are saved before compaction and when the session ends (opt out: `TR_SESSION_END_EXTRACT=0`) | `PreCompact` / `SessionEnd` hooks |
 
 All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results.
 

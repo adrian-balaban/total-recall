@@ -38,6 +38,18 @@ set -euo pipefail
 TOTAL_RECALL_DIR="${TOTAL_RECALL_DIR:-$HOME/.total-recall}"
 LOG="$TOTAL_RECALL_DIR/.session-end.log"
 
+# Claude Code passes the hook input as JSON on stdin (session_id, transcript_path,
+# reason). CLAUDE_SESSION_ID is never set, so every marker used to read
+# "claude_session_id=unknown". Never block on a terminal; bash-only parsing keeps
+# this hook free of a node dependency (the values are UUIDs / plain paths).
+HOOK_INPUT=""
+if [ ! -t 0 ]; then HOOK_INPUT=$(cat 2>/dev/null || true); fi
+json_str() {
+  printf '%s' "$HOOK_INPUT" | sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" | head -1
+}
+SESSION_ID=$(json_str session_id | tr -cd 'A-Za-z0-9_-')
+SESSION_ID=${SESSION_ID:-${CLAUDE_SESSION_ID:-unknown}}
+
 # Append-only, no rotation. One line per session end. The mtime is also a
 # "last clean session" timestamp you can correlate with index.json's mtime
 # to detect missed flushes.
@@ -46,7 +58,7 @@ printf '%s pid=%s ppid=%s claude_session_id=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   "${$:-unknown}" \
   "${PPID:-unknown}" \
-  "${CLAUDE_SESSION_ID:-unknown}" \
+  "$SESSION_ID" \
   >> "$LOG" 2>/dev/null || true
 
 # Find the running MCP child of THIS Claude Code process (PPID = our parent).
@@ -64,6 +76,33 @@ if [ -n "$MCP_PID" ]; then
   # -TERM (not -KILL): gives the MCP child a chance to run shutdown() and
   # flush. -KILL would skip the flush and reintroduce the original bug.
   kill -TERM "$MCP_PID" 2>/dev/null || true
+fi
+
+# Capture learnings from sessions that never compacted. Until 1.10 the only
+# automatic capture was PreCompact, so a long session that ended without
+# compaction (2026-11-12, repo total-recall, ~6 h of work) stored nothing.
+# Re-use the PreCompact extractor with the same stdin JSON, DETACHED: this hook
+# has a 5 s timeout and `claude -p` takes longer. Skipped when:
+#   - TR_EXTRACT_RUNNING=1: we ARE the nested `claude -p` of an extraction
+#     (it fires SessionEnd too) — without this, extraction recurses forever;
+#   - TR_SESSION_END_EXTRACT=0: user opt-out (each run is one model call);
+#   - no readable transcript_path.
+# Duplicates with a PreCompact run of the same session are bounded by
+# store-learning.mjs skipping existing slugs.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRANSCRIPT_PATH=$(json_str transcript_path)
+if [ "${TR_EXTRACT_RUNNING:-}" != "1" ] \
+   && [ "${TR_SESSION_END_EXTRACT:-1}" != "0" ] \
+   && [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] \
+   && [ -f "$SCRIPT_DIR/extract-and-store-memories.sh" ]; then
+  DETACH=""
+  command -v setsid >/dev/null 2>&1 && DETACH="setsid"
+  # Own session (setsid) so Claude Code tearing down its process group does not
+  # kill the run; all std streams detached so the hook's stdout stays pure JSON.
+  printf '%s' "$HOOK_INPUT" \
+    | TR_EXTRACT_TRIGGER=session-end $DETACH nohup bash "$SCRIPT_DIR/extract-and-store-memories.sh" \
+      >/dev/null 2>&1 &
+  disown 2>/dev/null || true
 fi
 
 # H1: local-only durability snapshot of the personal vault. Root cause of the

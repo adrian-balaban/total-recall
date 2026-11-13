@@ -25,6 +25,13 @@ function normalizeTags(tags: unknown): string[] {
     .filter(Boolean);
 }
 
+// Personal-vault journal only (mirrors store.ts). Kept out of updateMemory /
+// deleteMemory so the org check does not add to their cyclomatic complexity
+// (TR-Q9 ratchet: those two are frozen in complexity-baseline.json).
+function journalPersonal(action: 'update' | 'delete', key: string, title: string, isOrg: boolean): void {
+  if (!isOrg) appendJournal(action, key, title);
+}
+
 export function updateMemory(args: any): any {
   const { key, content, tags, importanceScore } = args;
   const sessionId = typeof args.sessionId === 'string' ? args.sessionId : undefined;
@@ -147,7 +154,7 @@ export function updateMemory(args: any): any {
   // Journal personal updates too (store.ts journals only stores): a day's journal
   // that shows a memory as stored but never its later edits misleads recall.
   // Org memories stay out of the personal journal, mirroring store.ts.
-  if (!meta.isOrg) appendJournal('update', key, meta.title);
+  journalPersonal('update', key, meta.title, meta.isOrg);
 
   return { key, message: 'Memory updated.' };
 }
@@ -208,7 +215,7 @@ export function deleteMemory(args: any): any {
   scheduleSave();
   // Without this line a stored-then-deleted memory (e.g. a smoke test) looks
   // alive in the journal forever. appendJournal never throws (journal.ts).
-  if (!isOrg) appendJournal('delete', key, title);
+  journalPersonal('delete', key, title, isOrg);
 
   return { key, message: 'Memory deleted.' };
 }
