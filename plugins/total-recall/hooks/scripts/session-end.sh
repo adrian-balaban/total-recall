@@ -78,6 +78,33 @@ if [ -n "$MCP_PID" ]; then
   kill -TERM "$MCP_PID" 2>/dev/null || true
 fi
 
+# Capture learnings from sessions that never compacted. Until 1.10 the only
+# automatic capture was PreCompact, so a long session that ended without
+# compaction (2026-11-12, repo total-recall, ~6 h of work) stored nothing.
+# Re-use the PreCompact extractor with the same stdin JSON, DETACHED: this hook
+# has a 5 s timeout and `claude -p` takes longer. Skipped when:
+#   - TR_EXTRACT_RUNNING=1: we ARE the nested `claude -p` of an extraction
+#     (it fires SessionEnd too) — without this, extraction recurses forever;
+#   - TR_SESSION_END_EXTRACT=0: user opt-out (each run is one model call);
+#   - no readable transcript_path.
+# Duplicates with a PreCompact run of the same session are bounded by
+# store-learning.mjs skipping existing slugs.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+TRANSCRIPT_PATH=$(json_str transcript_path)
+if [ "${TR_EXTRACT_RUNNING:-}" != "1" ] \
+   && [ "${TR_SESSION_END_EXTRACT:-1}" != "0" ] \
+   && [ -n "$TRANSCRIPT_PATH" ] && [ -f "$TRANSCRIPT_PATH" ] \
+   && [ -f "$SCRIPT_DIR/extract-and-store-memories.sh" ]; then
+  DETACH=""
+  command -v setsid >/dev/null 2>&1 && DETACH="setsid"
+  # Own session (setsid) so Claude Code tearing down its process group does not
+  # kill the run; all std streams detached so the hook's stdout stays pure JSON.
+  printf '%s' "$HOOK_INPUT" \
+    | TR_EXTRACT_TRIGGER=session-end $DETACH nohup bash "$SCRIPT_DIR/extract-and-store-memories.sh" \
+      >/dev/null 2>&1 &
+  disown 2>/dev/null || true
+fi
+
 # H1: local-only durability snapshot of the personal vault. Root cause of the
 # 2026-07-31 personal-vault loss: it had NO git and NO backup, so when its .md
 # files were cleared out-of-band the self-healing index (which rebuilds FROM the

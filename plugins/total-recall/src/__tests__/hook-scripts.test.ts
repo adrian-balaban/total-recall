@@ -14,6 +14,40 @@ const LOAD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'load-memory-index.
 const BUILD_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'build-memory-index.sh');
 const SESSION_END_SCRIPT = path.join(REPO_ROOT, 'hooks', 'scripts', 'session-end.sh');
 
+const SE_CLAUDE_STUB = `#!/usr/bin/env bash
+cat > /dev/null
+printf '%s' "\${TR_EXTRACT_RUNNING:-}" > "$TR_SE_MARKER"
+sleep "\${TR_SE_SLEEP:-0}"
+exit 0
+`;
+
+function waitFor(pred: () => boolean, ms = 15000): boolean {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (pred()) return true;
+    spawnSync('sleep', ['0.2']);
+  }
+  return pred();
+}
+
+function seSetup(prefix: string) {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+  const bin = path.join(home, 'bin');
+  fs.mkdirSync(bin);
+  fs.writeFileSync(path.join(bin, 'claude'), SE_CLAUDE_STUB);
+  fs.chmodSync(path.join(bin, 'claude'), 0o755);
+  const transcript = path.join(home, 't.jsonl');
+  fs.writeFileSync(transcript, '{"role":"user","content":"hello"}\n');
+  const marker = path.join(home, 'claude-ran');
+  const env = { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}`, NODE_BIN: process.execPath, TR_SE_MARKER: marker };
+  const input = JSON.stringify({ session_id: 'sess-1', transcript_path: transcript, hook_event_name: 'SessionEnd' });
+  const extractLog = path.join(home, '.total-recall', '.extract.log');
+  return { home, env, input, marker, extractLog };
+}
+
+const HAS_DIST = fs.existsSync(path.join(REPO_ROOT, 'dist', 'frontmatter.mjs'));
+
 function has(bin: string): boolean {
   return spawnSync(bin, ['--version'], { stdio: 'ignore' }).status === 0;
 }
@@ -1016,5 +1050,50 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     const log = fs.readFileSync(path.join(home, '.total-recall', '.session-end.log'), 'utf8');
     expect(log).toMatch(/ claude_session_id=b2bb06fb-1e55-4d80$/m);
     fs.rmSync(home, { recursive: true, force: true });
+  });
+
+  (HAS_DIST ? it : it.skip)('session-end.sh: spawns a detached extraction (trigger=session-end) and returns without waiting', () => {
+    const s = seSetup('tr-se-x-');
+    const t0 = Date.now();
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe', input: s.input, env: { ...s.env, TR_SE_SLEEP: '4' },
+    });
+    expect(r.status).toBe(0);
+    expect(JSON.parse(r.stdout).continue).toBe(true);
+    expect(Date.now() - t0).toBeLessThan(3000);           // did not wait for the 4 s claude
+    expect(waitFor(() => fs.existsSync(s.extractLog) &&
+      / outcome=\S+ .* trigger=session-end$/m.test(fs.readFileSync(s.extractLog, 'utf8')))).toBe(true);
+    expect(fs.readFileSync(s.marker, 'utf8')).toBe('1');  // nested claude carries the guard
+    fs.rmSync(s.home, { recursive: true, force: true });
+  });
+
+  it('session-end.sh: no extraction inside a nested extraction run (TR_EXTRACT_RUNNING=1)', () => {
+    const s = seSetup('tr-se-g-');
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe', input: s.input, env: { ...s.env, TR_EXTRACT_RUNNING: '1' },
+    });
+    expect(r.status).toBe(0);
+    expect(waitFor(() => fs.existsSync(s.marker), 2000)).toBe(false);
+    fs.rmSync(s.home, { recursive: true, force: true });
+  });
+
+  it('session-end.sh: opt-out with TR_SESSION_END_EXTRACT=0', () => {
+    const s = seSetup('tr-se-o-');
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe', input: s.input, env: { ...s.env, TR_SESSION_END_EXTRACT: '0' },
+    });
+    expect(r.status).toBe(0);
+    expect(waitFor(() => fs.existsSync(s.marker), 2000)).toBe(false);
+    fs.rmSync(s.home, { recursive: true, force: true });
+  });
+
+  it('session-end.sh: no transcript_path → no extraction', () => {
+    const s = seSetup('tr-se-n-');
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe', input: JSON.stringify({ session_id: 'x' }), env: s.env,
+    });
+    expect(r.status).toBe(0);
+    expect(waitFor(() => fs.existsSync(s.marker), 2000)).toBe(false);
+    fs.rmSync(s.home, { recursive: true, force: true });
   });
 }, 60000);
