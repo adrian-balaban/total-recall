@@ -4,7 +4,7 @@
 //
 // Why a directory marketplace at all: `claude plugin install <path>` does not work (it only
 // accepts `plugin[@marketplace]`); only `claude plugin marketplace add <dir>` (which needs
-// `<dir>/.claude-plugin/marketplace.json`) does. See backlog-and-plans/PLAN-INSTALARE-LOCALA-FINAL.md.
+// `<dir>/.claude-plugin/marketplace.json`) does. See backlog-and-plans/PLAN-LOCAL-INSTALL-FINAL.md.
 //
 // This module imports ONLY node:* and ./cli.mjs (for readInstalledPlugin/installState and the
 // shared constants) — never anything under plugins/, so it stays installable as part of the npm
