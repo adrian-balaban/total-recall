@@ -19,7 +19,7 @@ this page is not evidence of absence.
 | # | Title | Severity | Needs | Status |
 |---|---|---|---|---|
 | [V1](#v1--redos-in-the-privacy-filters-email-regex) | ReDoS in the privacy filter's email regex | Medium | A long memory body | Open |
-| [V2](#v2--org-index-framing-can-be-escaped-from-a-memory-title) | Org index framing can be escaped from a memory title | Medium | Org-repo push access | Open |
+| [V2](#v2--org-index-framing-can-be-escaped-from-a-memory-title) | Org index framing can be escaped from a memory title | Medium | Org-repo push access | **Fixed** (unreleased) |
 | [V3](#v3--labelled-secrets-under-16-characters-pass-the-filter) | Labelled secrets under 16 characters pass the filter | Low | An `org`-tagged memory | Known, documented |
 | [V4](#v4--automatic-capture-stores-attacker-text-without-review) | Automatic capture stores attacker text without review | Medium | Text the session reads | Partly mitigated |
 | [V5](#v5--org-push-access-is-the-only-real-access-control) | Org push access is the only real access control | Medium (by design) | Org-repo push access | By design, documented |
@@ -84,7 +84,7 @@ local-part and host classes cannot overlap. A length cap on `content` in the
 
 ## V2 — Org index framing can be escaped from a memory title
 
-**Severity:** Medium · **Status:** Open · **Component:** `hooks/scripts/frame-org-index.mjs`, `src/index-cache.ts`
+**Severity:** Medium · **Status:** **Fixed** (unreleased; `defuseOrgTags`) · **Component:** `hooks/scripts/frame-org-index.mjs`, `src/host-context.ts`
 
 Since 1.4.0 org entries in the injected index are wrapped in a delimited block to mark
 them as data, not instructions ([SECURITY.md](SECURITY.md), threat model T1):
@@ -125,14 +125,21 @@ hostile teammate. Note also what the framing never covered: full org memory bodi
 returned by `recall_memory` / `get_memories_by_keys` / `get_architecture_context` are
 unframed by design (already documented).
 
-**Workaround today.** Set `"orgInjection": "titles"` — which does **not** help, titles
-are the injected field — or `"off"` in `~/.total-recall/config.json`, which drops org
-text from the injected index entirely. `off` is the only effective setting.
+**The fix.** `defuseOrgTags` inserts a zero-width space (U+200B) after the `<` of any
+`org-memory-data` tag, in either form and any case, in the org lines before they are
+placed inside the block. The tag stays readable to a human but no longer matches the
+delimiter the model is told to trust, so exactly one real closing tag is ever emitted
+— the one the framing itself writes.
 
-**Fix direction.** Strip or entity-escape `<` and `>` in titles and tags before
-rendering them into the block (in `renderIndexCache`, so the server's
-`total-recall://index` path is covered too), or switch the delimiter to an
-unguessable per-session nonce.
+It is applied in **both** framing implementations, which had to stay byte-identical:
+`frameOrgIndex` in `src/host-context.ts` (the `total-recall://index` resource, for
+hookless hosts) and `hooks/scripts/frame-org-index.mjs` (the SessionStart hook). The
+defuse runs *after* the `titles`-mode rewrite, which slices the line apart and would
+otherwise let a tag be reassembled from the pieces. `host-context.test.ts` spawns the
+hook script and asserts identical output per mode, so the two cannot drift.
+
+**Before the fix**, the only effective mitigation was `"orgInjection": "off"`;
+`"titles"` did **not** help, because titles are the injected field.
 
 ## V3 — Labelled secrets under 16 characters pass the filter
 
@@ -238,8 +245,7 @@ Restricting it to the project directory by default is on the project's fix list.
 In the maintainer's order of value:
 
 1. Let users switch automatic capture off (V4).
-2. Escape the framing delimiter in index titles and tags (V2) — restores the only
-   technical mitigation for the org-vault injection path.
+2. ~~Escape the framing delimiter in index titles and tags (V2)~~ — **done**, see V2.
 3. Bound the text handed to the privacy filter, or de-ambiguate `EMAIL_RE` (V1).
 4. Signed commits and a build-provenance attestation for `dist/` (V6).
 5. Frame guardrail and recalled org bodies, or make `orgInjection` cover them (V2, V5).

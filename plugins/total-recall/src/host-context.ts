@@ -29,6 +29,25 @@ export const EXTRACT_PROMPT =
   'For each one: run search_index to check for a duplicate, then call store_memory with a title, an Executive Summary ' +
   '(WHY, not just WHAT), tags, a category and an importanceScore. Store nothing if nothing qualifies.\n\n' + WORKFLOW_RULES;
 
+// Neutralise the containment delimiter inside teammate-written text. A memory title is
+// copied verbatim into the <org-memory-data> block, and `</org-memory-data>` is 18 chars —
+// well inside the 40-char title budget renderIndexCache allows — so a teammate with push
+// access could close the block early and have the remainder of their title read as if it
+// sat OUTSIDE the untrusted region, i.e. alongside the plugin's own instructions. The
+// framing is the only technical mitigation for that threat (SECURITY.md "Org-vault content
+// is untrusted input"), so it must survive a hostile title.
+//
+// Zero-width space after the `<` keeps the text human-readable (a reader still sees the
+// tag) while making it no longer match the literal delimiter the model is told to trust.
+// Applied to EVERY `<` that opens an org-memory-data tag, both the opening and closing
+// form, in whatever case — the model is not case-sensitive about what it treats as markup.
+// Kept in sync with hooks/scripts/frame-org-index.mjs; host-context.test.ts spawns that
+// script and asserts byte-identical output for every mode.
+const ORG_TAG_RE = /<(\/?)(org-memory-data)/gi;
+export function defuseOrgTags(s: string): string {
+  return s.replace(ORG_TAG_RE, '<​$1$2');
+}
+
 // Frames org-vault entries ("- org/…" lines) as untrusted reference data, per orgInjection
 // (index | titles | off). Same contract as hooks/scripts/frame-org-index.mjs; a parity test
 // feeds both the same input.
@@ -42,6 +61,9 @@ export function frameOrgIndex(text: string, mode: string): string {
   if (m === 'titles') {
     org = org.map((l) => '- ' + l.slice(l.indexOf(':') + 1).replace(/\s*\[[^\]]*\]\s*\([^)]*\)\s*$/, '').trim());
   }
+  // Defuse AFTER the titles-mode rewrite: that step slices the line apart, so defusing
+  // first would leave a tag reassembled from the pieces.
+  org = org.map(defuseOrgTags);
   return [
     ...rest,
     '',
