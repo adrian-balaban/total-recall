@@ -1003,4 +1003,18 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     expect(fs.existsSync(path.join(vault, '.git'))).toBe(false);
     fs.rmSync(home, { recursive: true, force: true });
   });
+
+  it('session-end.sh: logs session_id from the stdin hook JSON, not the never-set env var', () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-sessid-'));
+    fs.mkdirSync(path.join(home, '.total-recall'), { recursive: true });
+    const r = spawnSync('bash', [SESSION_END_SCRIPT], {
+      encoding: 'utf8', stdio: 'pipe',
+      input: JSON.stringify({ session_id: 'b2bb06fb-1e55-4d80', hook_event_name: 'SessionEnd', reason: 'other' }),
+      env: { ...process.env, HOME: home, TR_SESSION_END_EXTRACT: '0' },
+    });
+    expect(r.status).toBe(0);
+    const log = fs.readFileSync(path.join(home, '.total-recall', '.session-end.log'), 'utf8');
+    expect(log).toMatch(/ claude_session_id=b2bb06fb-1e55-4d80$/m);
+    fs.rmSync(home, { recursive: true, force: true });
+  });
 }, 60000);

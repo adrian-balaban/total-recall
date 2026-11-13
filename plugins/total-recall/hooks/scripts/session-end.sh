@@ -38,6 +38,18 @@ set -euo pipefail
 TOTAL_RECALL_DIR="${TOTAL_RECALL_DIR:-$HOME/.total-recall}"
 LOG="$TOTAL_RECALL_DIR/.session-end.log"
 
+# Claude Code passes the hook input as JSON on stdin (session_id, transcript_path,
+# reason). CLAUDE_SESSION_ID is never set, so every marker used to read
+# "claude_session_id=unknown". Never block on a terminal; bash-only parsing keeps
+# this hook free of a node dependency (the values are UUIDs / plain paths).
+HOOK_INPUT=""
+if [ ! -t 0 ]; then HOOK_INPUT=$(cat 2>/dev/null || true); fi
+json_str() {
+  printf '%s' "$HOOK_INPUT" | sed -nE "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"([^\"]*)\".*/\1/p" | head -1
+}
+SESSION_ID=$(json_str session_id | tr -cd 'A-Za-z0-9_-')
+SESSION_ID=${SESSION_ID:-${CLAUDE_SESSION_ID:-unknown}}
+
 # Append-only, no rotation. One line per session end. The mtime is also a
 # "last clean session" timestamp you can correlate with index.json's mtime
 # to detect missed flushes.
@@ -46,7 +58,7 @@ printf '%s pid=%s ppid=%s claude_session_id=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
   "${$:-unknown}" \
   "${PPID:-unknown}" \
-  "${CLAUDE_SESSION_ID:-unknown}" \
+  "$SESSION_ID" \
   >> "$LOG" 2>/dev/null || true
 
 # Find the running MCP child of THIS Claude Code process (PPID = our parent).
