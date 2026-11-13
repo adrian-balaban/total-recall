@@ -72,7 +72,23 @@ export function sanitizeAllowedDomains(list: unknown): string[] {
 // the comma into the host). The local part stays ASCII (personal emails at IDN hosts
 // are the realistic leak shape; quoted-unicode locals are not). The host still flows
 // through isAllowedEmail, so an allowlisted IDN domain (e.g. `münchen.de`) is honored.
-export const EMAIL_RE = /[A-Za-z0-9._%+-]+@([A-Za-z0-9.\u00A0-\uFFFF-]+\.[A-Za-z0-9\u00A0-\uFFFF-]{2,})/g;
+//
+// The local part is ANCHORED on a non-local-part character (or start of input). Without
+// that anchor the pattern was quadratic: `[A-Za-z0-9._%+-]+` can begin at every offset of
+// a long run, and with /g the scan restarts at each one, so input like
+// `("a" * n) + "@" + ("b" * n)` \u2014 which never completes an address, because the host
+// branch needs a dot \u2014 cost O(n^2). Measured before the anchor: 20 KB 197 ms, 40 KB
+// 775 ms, 60 KB 1.7 s, and ~4.9 s for a 100 KB body inside orgSpecIssue, which runs in
+// the single-threaded MCP server and so stalled EVERY tool call for that long. The body
+// is model-written and has no length cap, so untrusted text that the session merely read
+// could trigger it. With the anchor a run of local-part characters can only be entered
+// once, at its true start, and the same inputs are ~1 ms.
+//
+// Capture groups are therefore 1 = local part, 2 = host (was: 1 = host). Callers must
+// rebuild the address as `m[1] + "@" + m[2]`; m[0] now carries the leading delimiter
+// character, and \u2014 because the host class includes space for IDN support \u2014 also any
+// trailing words, which is why findSuspiciousEmail never reports m[0].
+export const EMAIL_RE = /(?:^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]+)@([A-Za-z0-9.\u00A0-\uFFFF-]+\.[A-Za-z0-9\u00A0-\uFFFF-]{2,})/g;
 
 export function isAllowedEmail(host: string, allowedDomains: string[]): boolean {
   if (!allowedDomains.length) return false; // fail-closed
@@ -87,11 +103,18 @@ export function findSuspiciousEmail(text: string, allowedDomains: string[]): str
   EMAIL_RE.lastIndex = 0;
   let m: RegExpExecArray | null;
   while ((m = EMAIL_RE.exec(text)) !== null) {
-    // EMAIL_RE always captures group 1 (the host) on a match; assert non-undefined
-    // so the rest of the function reads it as a plain string under
+    // EMAIL_RE always captures group 1 (local part) and 2 (host) on a match; assert
+    // non-undefined so the rest of the function reads them as plain strings under
     // noUncheckedIndexedAccess.
-    const host = m[1]!;
-    if (!isAllowedEmail(host, allowedDomains)) return m[0];
+    const host = m[2]!;
+    // Rebuild the address rather than returning m[0]: that now includes the leading
+    // delimiter character the anchor consumed, and the host class includes space (IDN
+    // support), so m[0] also trails into the following words.
+    if (!isAllowedEmail(host, allowedDomains)) return `${m[1]!}@${host}`;
+    // The anchor can consume the single character separating two adjacent addresses
+    // (`a@x.com b@y.com`), which would hide the second one. Resume from the end of the
+    // host so the next address is still reachable.
+    EMAIL_RE.lastIndex = m.index + m[0].length;
   }
   return null;
 }

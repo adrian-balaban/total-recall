@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
-import { privacyCheck, sanitizeAllowedDomains } from '../privacy-filter.js';
+import { privacyCheck, sanitizeAllowedDomains, findSuspiciousEmail } from '../privacy-filter.js';
 
 // The org-sync privacy filter (secret-token + email checks) and the email-allowlist
 // sanitizer live in src/privacy-filter.ts, built to dist/privacy-filter.mjs and
@@ -35,6 +35,53 @@ describe('privacyCheck', () => {
     // so use an ASCII local part with an IDN host, the realistic leak shape.)
     expect(privacyCheck({ title: 'Notes' }, 'Пишите мне at user@пример.рф.')).toMatch(/email/);
     expect(privacyCheck({ title: 'Notes' }, 'Mail to user@example.日本.')).toMatch(/email/);
+  });
+
+  // V1: EMAIL_RE's local part is anchored on a non-local-part character so a long run
+  // can only be entered at its true start. Unanchored, `[A-Za-z0-9._%+-]+` could begin at
+  // every offset and /g restarted the scan at each one, making input that never completes
+  // an address (no dot in the host) cost O(n^2): 40 KB took 775 ms and a 100 KB body took
+  // ~4.9 s inside orgSpecIssue — which runs in the single-threaded MCP server, so every
+  // tool call stalled for that long. The body is model-written with no length cap, so
+  // text the session merely read could trigger it.
+  it('scans a pathological non-email body in linear time (V1 ReDoS regression)', () => {
+    // The worst case: a long local-part run, an @, then a host run with no dot.
+    const payload = (s: number) => 'a'.repeat(s) + '@' + 'b'.repeat(s);
+    const time = (s: number) => {
+      const t0 = Date.now();
+      privacyCheck({ title: 'Notes' }, payload(s), ['acme.com']);
+      return Date.now() - t0;
+    };
+    time(2000); // warm up, so JIT does not skew the first measurement
+    // Generous ceiling: the fixed scan is ~1 ms, the quadratic one was ~775 ms at this
+    // size. Loose enough not to flake on a slow or loaded CI runner, tight enough that a
+    // reintroduced O(n^2) (which grows 4x per doubling) blows straight through it.
+    // This absolute ceiling is the assertion that actually catches the bug: replaying the
+    // pre-fix regex gives 799 ms here, well past 300 ms.
+    expect(time(20000)).toBeLessThan(300);
+    // Secondary, weaker signal: growth should stay roughly linear. The quadratic version
+    // measures ~4.1x across this doubling, so an 8x bound does NOT catch it on its own —
+    // it guards against a worse-than-quadratic regression and documents the expectation.
+    // Floor at 1 ms so a fast machine reporting 0 ms cannot make the ratio meaningless.
+    const small = Math.max(time(10000), 1);
+    const large = Math.max(time(20000), 1);
+    expect(large).toBeLessThan(small * 8);
+  });
+
+  it('still reports the address, and finds a later one after an allowlisted hit', () => {
+    // The reported value is rebuilt as local@host: m[0] would carry the delimiter the
+    // anchor consumed, and (because the host class allows space for IDN) trailing words.
+    expect(privacyCheck({ title: 'Notes' }, 'Reach john.doe@gmail.com now.', ['acme.com']))
+      .toMatch(/email/);
+    expect(findSuspiciousEmail('Reach john.doe@gmail.com now.', ['acme.com']))
+      .toBe('john.doe@gmail.com');
+    // The anchor can consume the single separator between two adjacent addresses, so the
+    // scan resumes past the host; otherwise an allowlisted address would mask the next one.
+    expect(findSuspiciousEmail('ok@acme.com bad@gmail.com', ['acme.com'])).toBe('bad@gmail.com');
+    expect(findSuspiciousEmail('a@acme.com,b@evil.org', ['acme.com'])).toBe('b@evil.org');
+    expect(findSuspiciousEmail('only@acme.com', ['acme.com'])).toBeNull();
+    // The host-suffix bypass the whole-host comparison exists to close.
+    expect(findSuspiciousEmail('x@acme.com.evil.com', ['acme.com'])).toBe('x@acme.com.evil.com');
   });
 
   it('honors an allowlisted IDN domain (the host still flows through isAllowedEmail)', () => {

@@ -18,7 +18,7 @@ this page is not evidence of absence.
 
 | # | Title | Severity | Needs | Status |
 |---|---|---|---|---|
-| [V1](#v1--redos-in-the-privacy-filters-email-regex) | ReDoS in the privacy filter's email regex | Medium | A long memory body | Open |
+| [V1](#v1--redos-in-the-privacy-filters-email-regex) | ReDoS in the privacy filter's email regex | Medium | A long memory body | **Fixed** (unreleased) |
 | [V2](#v2--org-index-framing-can-be-escaped-from-a-memory-title) | Org index framing can be escaped from a memory title | Medium | Org-repo push access | **Fixed** (unreleased) |
 | [V3](#v3--labelled-secrets-under-16-characters-pass-the-filter) | Labelled secrets under 16 characters pass the filter | Low | An `org`-tagged memory | Known, documented |
 | [V4](#v4--automatic-capture-stores-attacker-text-without-review) | Automatic capture stores attacker text without review | Medium | Text the session reads | Partly mitigated |
@@ -33,7 +33,7 @@ There is no CVSS scoring and no CVE has been requested for any of these.
 
 ## V1 — ReDoS in the privacy filter's email regex
 
-**Severity:** Medium · **Status:** Open · **Component:** `src/privacy-filter.ts` (`EMAIL_RE`)
+**Severity:** Medium · **Status:** **Fixed** (unreleased; anchored local part) · **Component:** `src/privacy-filter.ts` (`EMAIL_RE`)
 
 `EMAIL_RE` is applied with `exec` in a loop over the whole memory text. Its local-part
 and host character classes overlap, so on input that *looks* like it is heading toward
@@ -77,10 +77,28 @@ console.log('blocked the server for', Date.now()-t0, 'ms');"
 text the session read (a web page, a file, tool output) — so this is reachable without
 the user ever typing the payload. It is a denial of service only: no data is disclosed.
 
-**Fix direction.** Cap the text handed to `privacyCheck` (scan the first N KB and treat
-"too long to scan" as fail-closed for the org path), and/or rewrite `EMAIL_RE` so the
-local-part and host classes cannot overlap. A length cap on `content` in the
-`store_memory` schema would bound it at the boundary.
+**The fix.** The local part is now anchored on a non-local-part character (or start of
+input): `(?:^|[^A-Za-z0-9._%+-])([A-Za-z0-9._%+-]+)@…`. A run of local-part characters
+can then only be entered once, at its true start, instead of at every offset, so the
+scan is linear.
+
+| Input | Before | After |
+|---|---|---|
+| 20 KB (`a`×10k + `@` + `b`×10k) | 197 ms | ~1 ms |
+| 40 KB | 775 ms | ~1 ms |
+| **100 KB through `orgSpecIssue`** | **4,896 ms** | **3 ms** |
+
+No input cap was added: with the regex fixed, every detector measured linear (1 MB of
+prose in 18 ms, and adversarial shapes aimed at the card, IBAN, phone, entropy and
+labelled-secret passes all under 5 ms). A cap would have traded away fail-closed
+coverage for no measured benefit.
+
+Capture groups shifted (1 = local part, 2 = host), so `findSuspiciousEmail` rebuilds the
+address as `local@host` rather than returning `m[0]` — which now carries the delimiter
+the anchor consumed and, because the host class allows space for IDN support, trailing
+words too. The scan also resumes past the host, since the anchor can consume the single
+separator between two adjacent addresses and would otherwise let an allowlisted address
+mask the next one.
 
 ## V2 — Org index framing can be escaped from a memory title
 
@@ -246,7 +264,7 @@ In the maintainer's order of value:
 
 1. Let users switch automatic capture off (V4).
 2. ~~Escape the framing delimiter in index titles and tags (V2)~~ — **done**, see V2.
-3. Bound the text handed to the privacy filter, or de-ambiguate `EMAIL_RE` (V1).
+3. ~~Bound the text handed to the privacy filter, or de-ambiguate `EMAIL_RE` (V1)~~ — **done**, see V1.
 4. Signed commits and a build-provenance attestation for `dist/` (V6).
 5. Frame guardrail and recalled org bodies, or make `orgInjection` cover them (V2, V5).
 6. Restrict `index_architecture` to the project directory by default (V7).
