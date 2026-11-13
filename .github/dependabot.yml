@@ -1,12 +1,30 @@
 version: 2
 updates:
   - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 1
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: npm
     directory: /plugins/total-recall
     schedule:
       interval: weekly
-    # Version updates stay off: this file exists only to carry the ignore rules below.
-    # Security updates are separate and keep opening PRs for everything else.
-    open-pull-requests-limit: 0
+    # Version updates are on so vulnerability fixes can be grouped into one PR.
+    # Dependabot security-update PRs (the open-pull-requests-limit: 0 path) can't be
+    # grouped — grouping only applies to version updates — so all vulnerable deps are
+    # bundled here instead of getting one PR each.
+    open-pull-requests-limit: 1
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
     ignore:
       # GHSA-g3hv-75wg-m249 (moderate) needs minimatch >= 11.0.1, which nothing here can
       # reach: @stryker-mutator/core pins minimatch ~10.2.4, and so does the latest Stryker
