@@ -91,7 +91,18 @@ jobs:
           # Kept on purpose: src/, tsconfig.json and package-lock.json (install.sh
           # rebuilds dist/ after adding the vector deps), CLAUDE.md (GEMINI.md points
           # to it) and ARCHITECTURE.md (linked from the plugin README).
+          #
+          # .github/workflows/ is dropped for a second, harder reason: GITHUB_TOKEN may
+          # not create or update workflow files without the `workflows` permission, so
+          # force-pushing a tree that CONTAINS them is rejected outright —
+          #   ! [remote rejected] release -> release (refusing to allow a GitHub App to
+          #     create or update workflow `.github/workflows/<f>.yml` ...)
+          # — which is how this job failed on af78408, after codeql.yml was added and
+          # then removed on main. Stripping the directory is the least-privilege fix
+          # (the alternative, granting `workflows: write`, widens the token for every
+          # run); consumers install a plugin and have no use for our CI config.
           git rm -r -q --ignore-unmatch -- \
+            .github/workflows \
             plugins/total-recall/src/__tests__ \
             plugins/total-recall/vitest.config.ts \
             plugins/total-recall/vitest.integration.config.ts \

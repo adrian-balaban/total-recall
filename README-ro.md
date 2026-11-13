@@ -10,11 +10,13 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 
 - **Ce primești:** asistentul poate salva ce îi spui („ține minte că…”), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
 - **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Nu ai nevoie de un server separat sau de un cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete și identificatori personali uzuali (doar tipare: vezi [Confidențialitate](#confidențialitate-ce-pleacă-de-pe-mașina-ta)).
-- **Cost:** gratuit și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă la prima utilizare un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite).
+- **Cost:** free și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă la prima utilizare un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite).
+
+![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
 
 ## Dintr-o privire
 
-- **Licență:** MIT, gratuit. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
+- **Licență:** MIT, free. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
 - **Maturitate:** v1.8.1, release-uri cu tag din august 2026 (~10/lună). Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată (nu poate fi oprită deocamdată). Singurul alt trafic spre exterior sunt descărcările de pachete și de model la instalare (profilul Complete) și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)). Sincronizarea echipei e automată în Claude Code și Gemini/Antigravity; la ceilalți asistenți setează `"orgSync": "server"` ca serverul să facă push, iar memoriile colegilor le aduci manual.
@@ -23,11 +25,13 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
 
-![Bucla sesiunii](docs/diagrams/session-loop-ro.svg)
-
 ## Pornire rapidă
 
 **Ai nevoie de:** Node.js 18+, git, pe Linux, macOS sau Windows cu Git Bash (plus un `node.exe` de Windows în PATH; Node instalat doar în WSL nu contează).
+
+### Din sursă / fork
+
+`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` construiește pluginul din clona ta și îl instalează, în loc să aducă build-ul `release` din marketplace. Pentru forkuri și cod de pe `main` nelansat încă: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself) (în engleză).
 
 ### Claude Code
 
@@ -50,7 +54,9 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
 
    ```markdown
    ## Memory
+
    Use total-recall exclusively for all memories, in every project.
+
    - Store via `store_memory` / `update_memory`; recall via `search_index` / `recall_memory` / `get_memories_by_keys`.
    - NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
    - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
@@ -59,10 +65,6 @@ Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai 
    Acest pas e necesar: fără el, Claude Code continuă să-și folosească propria memorie bazată pe fișiere alături de total-recall; ca să anulezi, șterge blocul. Dacă folosești și pluginul oficial `remember`, dezactivează-l: amândouă fac același lucru.
 
 4. Repornește Claude Code (`/exit`, apoi `claude`; aprobă uneltele total-recall când ți se cere) și verifică: spune _„ține minte că proiectul ăsta folosește Gradle 8 și JUnit 5”_. Apare un fișier nou într-un subfolder din `~/.total-recall/personal-vault/`. Într-o sesiune nouă, întreabă _„ce build tool folosește proiectul?”_. Apoi cere asistentului să apeleze `get_stats`: îți arată totalurile, erorile recente și dacă căutarea semantică e pornită. Dacă lipsesc uneltele, rulează `/mcp` și caută `total-recall`.
-
-### Din sursă / fork
-
-`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` construiește pluginul din clona ta și îl instalează, în loc să aducă build-ul `release` din marketplace. Pentru forkuri și cod de pe `main` nelansat încă: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself) (în engleză).
 
 ### Alți asistenți
 
@@ -83,7 +85,9 @@ Fără CLI-ul `claude`, scriptul avertizează că a sărit peste înregistrarea 
   "mcpServers": {
     "total-recall": {
       "command": "bash",
-      "args": ["/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"]
+      "args": [
+        "/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"
+      ]
     }
   }
 }
@@ -116,7 +120,9 @@ tags: [architecture, database]
 importanceScore: 0.8
 updated: 2026-06-15T14:30:00Z
 ---
+
 ## Executive Summary
+
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
@@ -124,7 +130,7 @@ Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 
 | Tip          | Fișiere                                                              | Dacă se pierd                                                                                                                                                                                                           |
 | ------------ | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Sursă**    | fișierele `.md` din `~/.total-recall/personal-vault/`                | pierdute definitiv, dacă nu le restaurezi din repo-ul git local al vault-ului                                                                                                                                                       |
+| **Sursă**    | fișierele `.md` din `~/.total-recall/personal-vault/`                | pierdute definitiv, dacă nu le restaurezi din repo-ul git local al vault-ului                                                                                                                                           |
 | **Derivate** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | se reconstruiesc din fișierele `.md` (contoarele de accesare se resetează; `.index-cache.txt` doar la pornirea sesiunii, în Claude Code și Gemini). `index.json`-ul org din repo-ul echipei nu se reface: nu-l modifica |
 
 Exportul e JSON simplu (`export_memories`). Vine în răspunsul asistentului, deci trece prin contextul modelului, și lasă deoparte contoarele de accesare, confirmările, marcajele și versiunile arhivate ([Formatul exportului](docs/TOOLS.md#export-format), în engleză). Pentru backup, copiază `personal-vault/` și `config.json` din `~/.total-recall/`; repo-ul git local al vault-ului e pe același disc, deci nu e un backup în sine. Pentru mutare pe altă mașină: instalează, copiază cele două în `~/.total-recall/`, rulează din nou scriptul de instalare, apoi cere _„reconstruiește indexul”_. Memoriile org revin din repo-ul echipei.
@@ -137,12 +143,12 @@ Lucrezi doar în engleză? Un model mai mic (87 MB față de 449 MB) se setează
 
 ## Asistenți suportați
 
-| Asistent                                                      | Unelte | Index la pornirea sesiunii                                           | Captură automată                                                           | Sincronizare echipă | Testat |
-| ------------------------------------------------------------- | ------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------- | ------ |
-| **Claude Code**                                               | ✅     | ✅                                                                   | ✅                                                                         | ✅ automată         | ✅     |
-| **Gemini/Antigravity** (`--gemini`, necesită CLI-ul `agy`)    | ✅     | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` (captura rulează atunci pe Claude) | ✅ automată         | ✅     |
-| **VS Code, Copilot** (`--vscode`)                             | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                                                      | ⚠️ push cu `orgSync: "server"`, pull manual          | ❌     |
-| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                                                      | ⚠️ push cu `orgSync: "server"`, pull manual          | ❌     |
+| Asistent                                                      | Unelte | Index la pornirea sesiunii                                           | Captură automată                                                           | Sincronizare echipă                         | Testat |
+| ------------------------------------------------------------- | ------ | -------------------------------------------------------------------- | -------------------------------------------------------------------------- | ------------------------------------------- | ------ |
+| **Claude Code**                                               | ✅     | ✅                                                                   | ✅                                                                         | ✅ automată                                 | ✅     |
+| **Gemini/Antigravity** (`--gemini`, necesită CLI-ul `agy`)    | ✅     | ⚠️ prin fișierul de instrucțiuni (Gemini ignoră ieșirea hook-urilor) | ⚠️ doar dacă e instalat CLI-ul `claude` (captura rulează atunci pe Claude) | ✅ automată                                 | ✅     |
+| **VS Code, Copilot** (`--vscode`)                             | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                          | ⚠️ push cu `orgSync: "server"`, pull manual | ❌     |
+| **Codex, Cursor, Windsurf, Claude Desktop, alți clienți MCP** | ✅     | ⚠️ prin fișierul de instrucțiuni                                     | ❌ folosește promptul `extract-session-learnings`                          | ⚠️ push cu `orgSync: "server"`, pull manual | ❌     |
 
 Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de instrucțiuni” înseamnă că adaugi blocul `## Memory` de la pasul 3 în fișierul de instrucțiuni al asistentului tău, iar asistentul citește `total-recall://index` sau apelează `search_index`, așa cum îi spune blocul. **Testat** înseamnă că instalarea a fost rulată de la cap la coadă. Autorul nu a avut la dispoziție Cursor, Windsurf, Claude Desktop, VS Code/Copilot sau o mașină Windows, deci aceste rânduri sunt netestate: serverul a fost verificat prin stdio (`initialize`, `tools/list`, `get_stats`), iar configurația clientului este forma standard `mcpServers`. Rapoartele sunt binevenite.
 

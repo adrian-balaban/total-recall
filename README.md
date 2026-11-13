@@ -6,11 +6,13 @@
 
 Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor and Windsurf (both not yet tested), Claude Desktop, or any other client that speaks the Model Context Protocol (MCP). Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
 
-🇬🇧 English · [🇷🇴 Română](README-ro.md)
+🇬🇧 English · [🇷🇴 Romanian](README-ro.md)
 
 - **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
 - **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No external server or account to manage. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets and common personal identifiers (patterns only: see [Privacy](#privacy-what-leaves-your-machine)).
 - **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model on first use (449 MB; 87 MB for the English-only one; `--no-vector` skips it).
+
+![Session loop](docs/diagrams/session-loop-en.svg)
 
 ## At a glance
 
@@ -23,11 +25,13 @@ Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Anti
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
-![Session loop](docs/diagrams/session-loop-en.svg)
-
 ## Quick start
 
 **You need:** Node.js 18+, git, and Linux, macOS or Windows with Git Bash (plus a Windows `node.exe` on PATH; Node installed only inside WSL does not count).
+
+### From source / fork
+
+`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` builds the plugin from your clone and installs it, instead of fetching the marketplace's `release` build. For forks and code on `main` ahead of the last release: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself).
 
 ### Claude Code
 
@@ -50,7 +54,9 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
    ```markdown
    ## Memory
+
    Use total-recall exclusively for all memories, in every project.
+
    - Store via `store_memory` / `update_memory`; recall via `search_index` / `recall_memory` / `get_memories_by_keys`.
    - NEVER use the harness file-based memory (`memory/`, `MEMORY.md`) or `.remember/`.
    - If total-recall is unavailable, tell me and skip persisting — do not silently fall back.
@@ -58,11 +64,7 @@ Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
 
    This step is required: without it, Claude Code keeps using its own file-based memory alongside total-recall; remove the block to undo. If you also run the official `remember` plugin, disable it: both do the same job.
 
-4. Restart Claude Code (`/exit`, then `claude`; approve the total-recall tools when asked) and check it works: say *"remember that this project uses Gradle 8 and JUnit 5"*. A new file appears in a subfolder of `~/.total-recall/personal-vault/`. In a new session, ask *"what build tool does this project use?"*. Then ask the assistant to call `get_stats`: it lists totals and recent errors, and whether semantic search is on. If the tools are missing, run `/mcp` and look for `total-recall`.
-
-### From source / fork
-
-`git clone https://github.com/adrian-balaban/total-recall.git && cd total-recall && ./install.sh` builds the plugin from your clone and installs it, instead of fetching the marketplace's `release` build. For forks and code on `main` ahead of the last release: [INSTALL.md § Install from a local clone](plugins/total-recall/INSTALL.md#-install-from-a-local-clone-build-it-yourself).
+4. Restart Claude Code (`/exit`, then `claude`; approve the total-recall tools when asked) and check it works: say _"remember that this project uses Gradle 8 and JUnit 5"_. A new file appears in a subfolder of `~/.total-recall/personal-vault/`. In a new session, ask _"what build tool does this project use?"_. Then ask the assistant to call `get_stats`: it lists totals and recent errors, and whether semantic search is on. If the tools are missing, run `/mcp` and look for `total-recall`.
 
 ### Other assistants
 
@@ -83,7 +85,9 @@ Without the `claude` CLI the script warns that it skipped MCP registration: that
   "mcpServers": {
     "total-recall": {
       "command": "bash",
-      "args": ["/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"]
+      "args": [
+        "/home/you/total-recall-plugin/plugins/total-recall/scripts/start-server.sh"
+      ]
     }
   }
 }
@@ -95,13 +99,13 @@ For Codex, the same command and argument go in `~/.codex/config.toml`. Add the `
 
 ## Daily use
 
-| You say | What happens | Tool |
-|---|---|---|
-| *"remember that we chose PostgreSQL because of JSONB"* | A memory is written to `~/.total-recall/personal-vault/` | `store_memory` |
-| *"remember for the team that we deploy to eu-central-1"* | Tagged `org`, filtered and pushed to the team repo | `store_memory` |
-| *"what did we decide about the database?"* | The assistant searches and reads the matching memories | `search_index`, `recall_memory` |
-| *"that memory is outdated, update it"* / *"delete it"* | The file is edited or deleted | `update_memory`, `delete_memory` |
-| nothing (Claude Code) | 0–3 lessons from the session are saved before compaction | `PreCompact` hook |
+| You say                                                  | What happens                                             | Tool                             |
+| -------------------------------------------------------- | -------------------------------------------------------- | -------------------------------- |
+| _"remember that we chose PostgreSQL because of JSONB"_   | A memory is written to `~/.total-recall/personal-vault/` | `store_memory`                   |
+| _"remember for the team that we deploy to eu-central-1"_ | Tagged `org`, filtered and pushed to the team repo       | `store_memory`                   |
+| _"what did we decide about the database?"_               | The assistant searches and reads the matching memories   | `search_index`, `recall_memory`  |
+| _"that memory is outdated, update it"_ / _"delete it"_   | The file is edited or deleted                            | `update_memory`, `delete_memory` |
+| nothing (Claude Code)                                    | 0–3 lessons from the session are saved before compaction | `PreCompact` hook                |
 
 All projects share one vault. Name the project in the memory ("in the billing service, …") to keep projects apart in search results.
 
@@ -116,18 +120,20 @@ tags: [architecture, database]
 importanceScore: 0.8
 updated: 2026-06-15T14:30:00Z
 ---
+
 ## Executive Summary
+
 Prefer PostgreSQL over MySQL for new projects because of JSONB support…
 ```
 
 `## Executive Summary` is the part the assistant reads first; it says why the memory matters.
 
-| Kind | Files | If lost |
-|---|---|---|
-| **Source** | the `.md` files in `~/.total-recall/personal-vault/` | gone, unless you restore them from the vault's local git repo |
+| Kind        | Files                                                                | If lost                                                                                                                                                                                       |
+| ----------- | -------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Source**  | the `.md` files in `~/.total-recall/personal-vault/`                 | gone, unless you restore them from the vault's local git repo                                                                                                                                 |
 | **Derived** | `index.json`, `invertedIndex.json`, `.index-cache.txt`, `vectors.db` | rebuilt from the `.md` files (access counts reset; `.index-cache.txt` only at session start, in Claude Code and Gemini). The org `index.json` in the team repo is not rebuilt: leave it alone |
 
-Export is plain JSON (`export_memories`). It comes back in the assistant's answer, so it passes through the model's context, and it leaves out access counts, confirmations, flags and archived versions ([Export format](docs/TOOLS.md#export-format)). For a backup, copy `personal-vault/` and `config.json` from `~/.total-recall/`; the vault's local git repo sits on the same disk, so it is not a backup by itself. To move to another machine: install, copy those two into `~/.total-recall/`, re-run the setup script, then ask for *"rebuild the index"*. Org memories come back from the team repo.
+Export is plain JSON (`export_memories`). It comes back in the assistant's answer, so it passes through the model's context, and it leaves out access counts, confirmations, flags and archived versions ([Export format](docs/TOOLS.md#export-format)). For a backup, copy `personal-vault/` and `config.json` from `~/.total-recall/`; the vault's local git repo sits on the same disk, so it is not a backup by itself. To move to another machine: install, copy those two into `~/.total-recall/`, re-run the setup script, then ask for _"rebuild the index"_. Org memories come back from the team repo.
 
 ## Languages
 
@@ -137,12 +143,12 @@ English only? A smaller model (87 MB vs. 449 MB) is one config line: [How it wor
 
 ## Supported assistants
 
-| Assistant | Tools | Index at session start | Automatic capture | Team sync | Tested |
-|---|---|---|---|---|---|
-| **Claude Code** | ✅ | ✅ | ✅ | ✅ automatic | ✅ |
-| **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI) | ✅ | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed (capture then runs on Claude) | ✅ automatic | ✅ |
-| **VS Code, Copilot** (`--vscode`) | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ⚠️ push with `orgSync: "server"`, pull by hand | ❌ |
-| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅ | ⚠️ through the instruction file | ❌ use the `extract-session-learnings` prompt | ⚠️ push with `orgSync: "server"`, pull by hand | ❌ |
+| Assistant                                                      | Tools | Index at session start                                     | Automatic capture                                                      | Team sync                                      | Tested |
+| -------------------------------------------------------------- | ----- | ---------------------------------------------------------- | ---------------------------------------------------------------------- | ---------------------------------------------- | ------ |
+| **Claude Code**                                                | ✅    | ✅                                                         | ✅                                                                     | ✅ automatic                                   | ✅     |
+| **Gemini/Antigravity** (`--gemini`, needs the `agy` CLI)       | ✅    | ⚠️ through the instruction file (Gemini drops hook output) | ⚠️ only if the `claude` CLI is installed (capture then runs on Claude) | ✅ automatic                                   | ✅     |
+| **VS Code, Copilot** (`--vscode`)                              | ✅    | ⚠️ through the instruction file                            | ❌ use the `extract-session-learnings` prompt                          | ⚠️ push with `orgSync: "server"`, pull by hand | ❌     |
+| **Codex, Cursor, Windsurf, Claude Desktop, other MCP clients** | ✅    | ⚠️ through the instruction file                            | ❌ use the `extract-session-learnings` prompt                          | ⚠️ push with `orgSync: "server"`, pull by hand | ❌     |
 
 All 22 tools work everywhere. "Through the instruction file" means you add the `## Memory` block from step 3 to your assistant's own instruction file, and the assistant then reads `total-recall://index` or calls `search_index` as it says. **Tested** means the install was run end to end. The maintainer had no Cursor, Windsurf, Claude Desktop, VS Code/Copilot or Windows machine to test on, so those rows are untested: the server was checked over stdio (`initialize`, `tools/list`, `get_stats`), and the client config shown is the standard `mcpServers` form. Reports are welcome.
 
@@ -157,7 +163,7 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 ## Privacy: what leaves your machine
 
 - **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes. The files are not encrypted.
-- **Automatic capture reads what the session read** (web pages, tool output) and saves its lessons without review. They appear in later sessions in every project, so check them now and then with *"list my recent memories"*.
+- **Automatic capture reads what the session read** (web pages, tool output) and saves its lessons without review. They appear in later sessions in every project, so check them now and then with _"list my recent memories"_.
 - **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture, which cannot be switched off yet).
 - **Other network calls:** the semantic model downloads from Hugging Face once (kept in `~/.total-recall/models/`); the team vault uses git. No telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The assistant chooses the tag, and a tagged memory is pushed without asking. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
@@ -176,7 +182,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 
 - **Upgrade (Claude Code):** `claude plugin update total-recall@my-claude-plugins`, restart, then run the setup script again (an update does not run it).
 - **Other assistants:** upgrade and uninstall steps are in [INSTALL.md → Install without Claude Code](plugins/total-recall/INSTALL.md#-install-without-claude-code).
-- **Restore a memory:** in Claude Code and Gemini the personal vault is committed to its local git repo at the end of each session: `git -C ~/.total-recall/personal-vault log`, `git restore` what you need, then ask for *"rebuild the index"* (`rebuild_index`). With other assistants, commit the vault yourself. Archived versions (`.superseded/`) and `vectors.db` are not in that repo.
+- **Restore a memory:** in Claude Code and Gemini the personal vault is committed to its local git repo at the end of each session: `git -C ~/.total-recall/personal-vault log`, `git restore` what you need, then ask for _"rebuild the index"_ (`rebuild_index`). With other assistants, commit the vault yourself. Archived versions (`.superseded/`) and `vectors.db` are not in that repo.
 - **Something looks off:** `get_stats` shows recent errors and whether semantic search is on. In Claude Code, the session start warns when team pushes or automatic capture keep failing. If semantic search is off after an update, run `npm rebuild better-sqlite3` in the plugin folder.
 
 ## Limits
