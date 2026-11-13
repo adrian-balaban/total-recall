@@ -97,7 +97,7 @@ Sources: `architecture/diagrams/*.puml` and `../../docs/diagrams/*.puml`. Re-ren
 | Org writes author-protected, caller `author` ignored `[TR-D4]` `[TR-D8]` | `store.ts` |
 | `category` cannot escape the vault `[TR-D6]` | `store.ts`, before `ensureDir` |
 | Frontmatter values reject newlines `[TR-D9]`; keys escaped before `RegExp` | `frontmatter.ts` |
-| Journal only on personal `store_memory` | `store.ts` |
+| Journal only on personal `store_memory` / `update_memory` / `delete_memory` | `store.ts`, `mutate.ts` |
 | `sessions` ≤ 50, deduped `[TR-P2]` | `mutate.ts` |
 | `rerank_memories` ≤ 200 keys `[TR-P1]` | `rerank.ts` |
 | Unreadable export → `{key, error}`, skipped on import `[TR-W7]` | `bulk.ts` |
@@ -105,5 +105,6 @@ Sources: `architecture/diagrams/*.puml` and `../../docs/diagrams/*.puml`. Re-ren
 | SessionStart output carries `hookEventName` `[TR-C5]` | `load-memory-index.sh` |
 | PostToolUse matcher stays a regex | `hooks-matcher.test.ts` |
 | PreCompact reads `transcript_path` from stdin JSON | `extract-and-store-memories.sh` |
+| SessionEnd extraction is detached and skipped under `TR_EXTRACT_RUNNING=1` | `session-end.sh` |
 
-Five of these invariants carry no `[TR-…]` ID (one `memIndex` per process, journal only on personal stores, optional deps never bundled, the PostToolUse matcher stays a regex, PreCompact reads `transcript_path`): the ADL gate does not cover them, and only the named tests do.
+Six of these invariants carry no `[TR-…]` ID (one `memIndex` per process, journal only on personal writes, optional deps never bundled, the PostToolUse matcher stays a regex, PreCompact reads `transcript_path`, SessionEnd extraction is detached and recursion-guarded): the ADL gate does not cover them, and only the named tests do.

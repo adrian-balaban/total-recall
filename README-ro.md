@@ -105,7 +105,7 @@ Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.
 | _„ține minte pentru echipă că facem deploy în eu-central-1”_ | Etichetată `org`, filtrată și trimisă în repo-ul echipei | `store_memory`                   |
 | _„ce am decis despre baza de date?”_                         | Asistentul caută și citește memoriile potrivite          | `search_index`, `recall_memory`  |
 | _„memoria asta e depășită, actualizeaz-o”_ / _„șterge-o”_    | Fișierul e editat sau șters                              | `update_memory`, `delete_memory` |
-| nimic (Claude Code)                                          | Înainte de compactare se salvează 0–3 lecții din sesiune | hook-ul `PreCompact`             |
+| nimic (Claude Code)                                          | Înainte de compactare și la închiderea sesiunii se salvează 0–3 lecții (dezactivare: `TR_SESSION_END_EXTRACT=0`) | hook-urile `PreCompact` / `SessionEnd` |
 
 Toate proiectele folosesc același vault. Numește proiectul în memorie („în serviciul de billing, …”) ca să le ții separate în rezultatele căutării.
 
