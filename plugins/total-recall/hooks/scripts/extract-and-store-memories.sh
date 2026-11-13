@@ -71,6 +71,11 @@ fi
 # for the same discoverability. stdout stays clean (the hook only emits the
 # final {"continue":true}); only stderr is tee'd to the log.
 EXTRACT_LOG="$HOME/.total-recall/.extract.log"
+# Which lifecycle event ran this extraction: PreCompact (default) or SessionEnd,
+# which re-runs this script detached (session-end.sh). Sanitised: it lands in a
+# log line that check-extract-outcomes.sh greps.
+TRIGGER=$(printf '%s' "${TR_EXTRACT_TRIGGER:-precompact}" | tr -cd 'a-z-')
+TRIGGER=${TRIGGER:-precompact}
 # Cap the transcript fed to `claude -p`. A long session's transcript.jsonl grows
 # past claude -p's stdin limit ("piped stdin input exceeds 10MB") — observed
 # failing every extraction on large sessions, with the error line then counted as
@@ -97,7 +102,10 @@ trap 'rm -f "$STORE_ERR"' EXIT
 # passed), no skills and no saved session. A claude CLI too old to know these flags fails
 # here with outcome=cli-error, which the SessionStart alarm reports: fail closed on purpose.
 set +e
-"$CLAUDE_BIN" -p "$EXTRACT_PROMPT" --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence \
+# TR_EXTRACT_RUNNING=1: the nested `claude -p` is itself a Claude Code session and
+# fires SessionEnd; session-end.sh sees this flag and does not spawn another
+# extraction (otherwise every extraction would recurse).
+TR_EXTRACT_RUNNING=1 "$CLAUDE_BIN" -p "$EXTRACT_PROMPT" --tools "" --strict-mcp-config --disable-slash-commands --no-session-persistence \
   < <(tail -c "$MAX_BYTES" "$TRANSCRIPT") 2>>"$EXTRACT_LOG" \
   | "$NODE_BIN" "$SCRIPT_DIR/store-learning.mjs" 2>"$STORE_ERR"
 CLAUDE_RC=${PIPESTATUS[0]}
@@ -115,9 +123,9 @@ elif [ "$N_DROPPED" -gt 0 ] || [ "$N_ERRORS" -gt 0 ]; then OUTCOME=dropped
 else OUTCOME=nothing; fi
 VERSION=$(PKG="$SCRIPT_DIR/../../package.json" "$NODE_BIN" -e 'try{process.stdout.write(String(require(process.env.PKG).version||"unknown"))}catch{process.stdout.write("unknown")}' 2>/dev/null || echo unknown)
 SESSION=$(printf '%s' "$HOOK_INPUT" | "$NODE_BIN" -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).session_id||"").replace(/[^A-Za-z0-9_-]/g,""))}catch{}})' 2>/dev/null || true)
-printf '%s v%s session=%s outcome=%s written=%s skipped=%s errors=%s dropped=%s claude_rc=%s\n' \
+printf '%s v%s session=%s outcome=%s written=%s skipped=%s errors=%s dropped=%s claude_rc=%s trigger=%s\n' \
   "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$VERSION" "${SESSION:-unknown}" "$OUTCOME" \
-  "$N_WRITTEN" "$N_SKIPPED" "$N_ERRORS" "$N_DROPPED" "${CLAUDE_RC:-0}" >>"$EXTRACT_LOG" 2>/dev/null || true
+  "$N_WRITTEN" "$N_SKIPPED" "$N_ERRORS" "$N_DROPPED" "${CLAUDE_RC:-0}" "$TRIGGER" >>"$EXTRACT_LOG" 2>/dev/null || true
 
 # E5: keep the log bounded — only the last MAX_LOG_LINES lines survive.
 if [ "$(wc -l <"$EXTRACT_LOG" 2>/dev/null || echo 0)" -gt "$MAX_LOG_LINES" ]; then

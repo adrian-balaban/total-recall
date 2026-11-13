@@ -37,6 +37,7 @@ const extractLog = () => path.join(tmpHome, '.total-recall', '.extract.log');
 const CLAUDE_STUB = `#!/usr/bin/env bash
 cat > /dev/null
 [ -n "\${TR_CLAUDE_ARGS_FILE:-}" ] && printf '%s\\n' "$@" > "$TR_CLAUDE_ARGS_FILE"
+[ -n "\${TR_CLAUDE_ENV_FILE:-}" ] && printf '%s' "\${TR_EXTRACT_RUNNING:-}" > "$TR_CLAUDE_ENV_FILE"
 [ -n "\${TR_CLAUDE_MARKER:-}" ] && touch "$TR_CLAUDE_MARKER"
 [ -n "\${TR_CLAUDE_LINES_FILE:-}" ] && [ -f "$TR_CLAUDE_LINES_FILE" ] && cat "$TR_CLAUDE_LINES_FILE"
 exit "\${TR_CLAUDE_EXIT:-0}"
@@ -46,6 +47,7 @@ function runHook(stdinJson: string, opts: {
   claudeLines?: string;   // canned stdout for the claude stub
   claudeExit?: number;    // exit code for the claude stub
   noClaude?: boolean;     // run with a PATH that has no `claude` at all
+  trigger?: string;
 } = {}): { stdout: string; stderr: string; status: number | null } {
   fs.rmSync(claudeMarker, { force: true });
   const env: NodeJS.ProcessEnv = {
@@ -54,6 +56,7 @@ function runHook(stdinJson: string, opts: {
     NODE_BIN: process.execPath,
     TR_CLAUDE_MARKER: claudeMarker,
     TR_CLAUDE_ARGS_FILE: path.join(tmpHome, 'claude-args.txt'),
+    TR_CLAUDE_ENV_FILE: path.join(tmpHome, 'claude-env.txt'),
   };
   if (opts.claudeLines !== undefined) {
     const f = path.join(tmpHome, 'claude-lines.txt');
@@ -61,6 +64,7 @@ function runHook(stdinJson: string, opts: {
     env.TR_CLAUDE_LINES_FILE = f;
   }
   if (opts.claudeExit !== undefined) env.TR_CLAUDE_EXIT = String(opts.claudeExit);
+  if (opts.trigger !== undefined) env.TR_EXTRACT_TRIGGER = opts.trigger;
   env.PATH = opts.noClaude ? minimalBin : `${stubBin}:${process.env.PATH}`;
   const r = spawnSync(BASH, [REAL_SH], { encoding: 'utf8', input: stdinJson, env, stdio: ['pipe', 'pipe', 'pipe'] });
   return { stdout: r.stdout ?? '', stderr: r.stderr ?? '', status: r.status };
@@ -199,12 +203,12 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
 
   it('E1: a run that writes records outcome=wrote with ISO time, version and session', () => {
     run({ claudeLines: learningLine('Outcome Wrote') + '\n' });
-    expect(outcomeLine()).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ v\S+ session=sess-123 outcome=wrote written=1 skipped=0 errors=0 dropped=0 claude_rc=0$/);
+    expect(outcomeLine()).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ v\S+ session=sess-123 outcome=wrote written=1 skipped=0 errors=0 dropped=0 claude_rc=0 trigger=precompact$/);
   });
 
   it('E1: empty model output is outcome=nothing', () => {
     run({ claudeLines: '' });
-    expect(outcomeLine()).toMatch(/outcome=nothing written=0 skipped=0 errors=0 dropped=0 claude_rc=0$/);
+    expect(outcomeLine()).toMatch(/outcome=nothing written=0 skipped=0 errors=0 dropped=0 claude_rc=0 trigger=precompact$/);
   });
 
   it('E1: prose only, or a JSON array, is outcome=dropped (not silently "nothing")', () => {
@@ -223,7 +227,7 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
 
   it('E1: a failing `claude -p` is outcome=cli-error with its exit code', () => {
     run({ claudeLines: '', claudeExit: 7 });
-    expect(outcomeLine()).toMatch(/outcome=cli-error .*claude_rc=7$/);
+    expect(outcomeLine()).toMatch(/outcome=cli-error .*claude_rc=7 trigger=precompact$/);
   });
 
   it('E1: the hook still ends with {"continue":true} when claude fails', () => {
@@ -253,5 +257,21 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
     expect(fs.readFileSync(file, 'utf8')).toBe(first);
     const log = fs.readFileSync(extractLog(), 'utf8');
     expect(log).toContain('1 skipped (existing)');
+  });
+  it('G1: the nested `claude -p` runs with TR_EXTRACT_RUNNING=1 (SessionEnd recursion guard)', () => {
+    runHook(JSON.stringify({ transcript_path: transcript }), { claudeLines: '' });
+    expect(fs.readFileSync(path.join(tmpHome, 'claude-env.txt'), 'utf8')).toBe('1');
+  });
+
+  it('G2: the outcome line records trigger=precompact by default', () => {
+    runHook(JSON.stringify({ transcript_path: transcript }), { claudeLines: '' });
+    const line = fs.readFileSync(extractLog(), 'utf8').split('\n').filter((l) => / outcome=/.test(l)).pop()!;
+    expect(line).toMatch(/ trigger=precompact$/);
+  });
+
+  it('G3: TR_EXTRACT_TRIGGER=session-end is recorded on the outcome line', () => {
+    runHook(JSON.stringify({ transcript_path: transcript }), { claudeLines: '', trigger: 'session-end' });
+    const line = fs.readFileSync(extractLog(), 'utf8').split('\n').filter((l) => / outcome=/.test(l)).pop()!;
+    expect(line).toMatch(/ trigger=session-end$/);
   });
 }, 60000);
