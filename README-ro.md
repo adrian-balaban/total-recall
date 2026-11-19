@@ -4,7 +4,7 @@
 
 **Asistentul tău AI uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, VS Code (GitHub Copilot agent mode), Codex CLI, Cursor și Windsurf (ambele netestate încă), Claude Desktop sau orice alt client care respectă Model Context Protocol (MCP). Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
+Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, sau, inca netestate, oricare alt client care respectă Model Context Protocol (MCP), precum GitHub Copilot agent mode. Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
@@ -99,12 +99,12 @@ Pentru Codex, aceeași comandă și același argument merg în `~/.codex/config.
 
 ## Utilizare zilnică
 
-| Spui                                                         | Ce se întâmplă                                           | Unealtă                          |
-| ------------------------------------------------------------ | -------------------------------------------------------- | -------------------------------- |
-| _„ține minte că am ales PostgreSQL pentru JSONB”_            | Se scrie o memorie în `~/.total-recall/personal-vault/`  | `store_memory`                   |
-| _„ține minte pentru echipă că facem deploy în eu-central-1”_ | Etichetată `org`, filtrată și trimisă în repo-ul echipei | `store_memory`                   |
-| _„ce am decis despre baza de date?”_                         | Asistentul caută și citește memoriile potrivite          | `search_index`, `recall_memory`  |
-| _„memoria asta e depășită, actualizeaz-o”_ / _„șterge-o”_    | Fișierul e editat sau șters                              | `update_memory`, `delete_memory` |
+| Spui                                                         | Ce se întâmplă                                                                                                   | Unealtă                                |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
+| _„ține minte că am ales PostgreSQL pentru JSONB”_            | Se scrie o memorie în `~/.total-recall/personal-vault/`                                                          | `store_memory`                         |
+| _„ține minte pentru echipă că facem deploy în eu-central-1”_ | Etichetată `org`, filtrată și trimisă în repo-ul echipei                                                         | `store_memory`                         |
+| _„ce am decis despre baza de date?”_                         | Asistentul caută și citește memoriile potrivite                                                                  | `search_index`, `recall_memory`        |
+| _„memoria asta e depășită, actualizeaz-o”_ / _„șterge-o”_    | Fișierul e editat sau șters                                                                                      | `update_memory`, `delete_memory`       |
 | nimic (Claude Code)                                          | Înainte de compactare și la închiderea sesiunii se salvează 0–3 lecții (dezactivare: `TR_SESSION_END_EXTRACT=0`) | hook-urile `PreCompact` / `SessionEnd` |
 
 Toate proiectele folosesc același vault. Numește proiectul în memorie („în serviciul de billing, …”) ca să le ții separate în rezultatele căutării.
