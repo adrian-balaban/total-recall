@@ -1,10 +1,10 @@
 # 🧠 total-recall
 
-[![CI](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml/badge.svg?branch=main)](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml) [![License: MIT](https://img.shields.io/github/license/adrian-balaban/total-recall)](LICENSE)
+[![CI](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml/badge.svg?branch=main)](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml) [![Release](https://img.shields.io/github/v/release/adrian-balaban/total-recall)](https://github.com/adrian-balaban/total-recall/releases) [![License: MIT](https://img.shields.io/github/license/adrian-balaban/total-recall)](LICENSE)
 
 **Asistentul tău AI uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity. De asemenea, sunt facute implementarile si inca nu sunt testate, modificarile pentru a fi utilizat de catre oricare alt client care respectă Model Context Protocol (MCP), precum GitHub Copilot agent mode. Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
+Memorie persistentă și căutabilă pentru asistenții AI de programare. **Testat:** Claude Code și Google Antigravity & Gemini. **Implementat, dar încă netestat:** orice alt client compatibil cu Model Context Protocol (MCP), precum GitHub Copilot agent mode. Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
@@ -17,7 +17,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude
 ## Dintr-o privire
 
 - **Licență:** MIT, free. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** v1.8.1, release-uri cu tag din august 2026 (~10/lună). Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
+- **Maturitate:** release-uri cu tag din august 2026 (~10/lună). Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
 - **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată (nu poate fi oprită deocamdată). Singurul alt trafic spre exterior sunt descărcările de pachete și de model la instalare (profilul Complete) și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)). Sincronizarea echipei e automată în Claude Code și Gemini/Antigravity; la ceilalți asistenți setează `"orgSync": "server"` ca serverul să facă push, iar memoriile colegilor le aduci manual.
 - **Indexul are plafon implicit:** `indexMaxEntries` are valoarea implicită 300 (circa 10k tokeni); `0` elimină plafonul. O memorie costă 30–40 de tokeni (exemple fără plafon: circa 4,4k la 105 memorii, 32–40k la 1.000 și 162–200k la 5.000), iar intrările dincolo de plafon rămân accesibile prin căutare.

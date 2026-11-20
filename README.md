@@ -1,10 +1,10 @@
 # 🧠 total-recall
 
-[![CI](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml/badge.svg?branch=main)](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml) [![License: MIT](https://img.shields.io/github/license/adrian-balaban/total-recall)](LICENSE)
+[![CI](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml/badge.svg?branch=main)](https://github.com/adrian-balaban/total-recall/actions/workflows/mutation.yml) [![Release](https://img.shields.io/github/v/release/adrian-balaban/total-recall)](https://github.com/adrian-balaban/total-recall/releases) [![License: MIT](https://img.shields.io/github/license/adrian-balaban/total-recall)](LICENSE)
 
 **Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
-Persistent, searchable memory for these AI coding assistants: Claude Code and Google Antigravity & Gemini. Also, are implemented and not tested the changes for using any other client that speaks the Model Context Protocol (MCP), like GitHub Copilot agent mode. Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
+Persistent, searchable memory for AI coding assistants. **Supported and tested:** Claude Code and Google Antigravity/Gemini. **Implemented, not yet tested:** any other client that speaks the Model Context Protocol (MCP), such as GitHub Copilot agent mode. Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
 
 🇬🇧 English · [🇷🇴 Romanian](README-ro.md)
 
@@ -17,7 +17,7 @@ Persistent, searchable memory for these AI coding assistants: Claude Code and Go
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** v1.8.1, tagged releases since August 2026 (~10/month). Latest measured baseline (v1.7.1): 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
+- **Maturity:** tagged releases since August 2026 (~10/month). Latest measured baseline (v1.7.1): 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
 - **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (it cannot be switched off yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
 - **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Team sync is automatic in Claude Code and Gemini/Antigravity; on other assistants set `"orgSync": "server"` so the server pushes, and pull teammates' memories by hand.
 - **The index is capped by default:** `indexMaxEntries` defaults to 300 (about 10k tokens); `0` removes the cap. Memories cost 30–40 tokens each (uncapped examples: about 4.4k at 105, 32–40k at 1,000 and 162–200k at 5,000), and entries beyond the cap stay findable through search.
