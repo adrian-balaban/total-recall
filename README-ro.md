@@ -4,7 +4,7 @@
 
 **Asistentul tău AI uită totul la finalul fiecărei sesiuni. Acest plugin rezolvă problema.**
 
-Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity, sau, inca netestate, oricare alt client care respectă Model Context Protocol (MCP), precum GitHub Copilot agent mode. Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
+Memorie persistentă și căutabilă pentru asistenții AI de programare: Claude Code, Gemini/Antigravity. De asemenea, sunt facute implementarile si inca nu sunt testate, modificarile pentru a fi utilizat de catre oricare alt client care respectă Model Context Protocol (MCP), precum GitHub Copilot agent mode. Memoriile sunt fișiere Markdown simple pe discul tău, pe care le poți citi, edita, căuta cu grep și versiona cu git, sau le poți deschide ca vault [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) (în engleză).
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 

@@ -4,7 +4,7 @@
 
 **Your AI assistant forgets everything at the end of each session. This plugin fixes that.**
 
-Persistent, searchable memory for AI coding assistants: Claude Code, Gemini/Antigravity, or, not yet tested, any other client that speaks the Model Context Protocol (MCP), like GitHub Copilot agent mode. Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
+Persistent, searchable memory for these AI coding assistants: Claude Code and Google Antigravity & Gemini. Also, are implemented and not tested the changes for using any other client that speaks the Model Context Protocol (MCP), like GitHub Copilot agent mode. Memories are plain Markdown files on your disk that you can read, edit, grep and version with git, or open as an [Obsidian](docs/HOW-IT-WORKS.md#-obsidian) vault.
 
 🇬🇧 English · [🇷🇴 Romanian](README-ro.md)
 
