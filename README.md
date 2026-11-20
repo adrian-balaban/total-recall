@@ -8,7 +8,7 @@ Persistent, searchable memory for AI coding assistants. **Supported and tested:*
 
 🇬🇧 English · [🇷🇴 Romanian](README-ro.md)
 
-- **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted.
+- **What you get:** your assistant can save what you tell it ("remember that…"), find it again in any later session, and update or forget it. In Claude Code it also sees an index of its memories at the start of every session and saves 0–3 lessons on its own before the context is compacted and when the session ends.
 - **Where it lives:** `~/.total-recall/`, one `.md` file per memory, one vault for all your projects. No external server or account to manage. Memories you tag `org` can go to a shared Git repo (optional), after a privacy filter that blocks secrets and common personal identifiers (patterns only: see [Privacy](#privacy-what-leaves-your-machine)).
 - **Cost:** free and open source (MIT). The plugin is ~1–2 MB; the default profile downloads a local multilingual model on first use (449 MB; 87 MB for the English-only one; `--no-vector` skips it).
 
@@ -17,10 +17,10 @@ Persistent, searchable memory for AI coding assistants. **Supported and tested:*
 ## At a glance
 
 - **License:** MIT, free. **Maintainer:** one person, [Adrian Balaban](https://github.com/adrian-balaban), best-effort — issues and PRs welcome, but there's no SLA.
-- **Maturity:** tagged releases since August 2026 (~10/month). Latest measured baseline (v1.7.1): 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from the `release` branch but are **not signed**.
-- **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (it cannot be switched off yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
+- **Maturity:** tagged releases since August 2026. Latest measured baseline (v1.7.1): 1,046 tests, 97% coverage, 81% mutation score. Releases build on GitHub Actions from `main` after the test gate and are published to the `release` branch; the plugin is **not signed** (only the npx launcher has npm provenance).
+- **Files stay local** by default. The model provider sees what the assistant reads, and Claude Code sends the last 1 MiB of the transcript to `claude -p` for automatic capture (the session-end part can be switched off with `TR_SESSION_END_EXTRACT=0`; the part before compaction cannot yet). The only other outbound traffic is package and model downloads at setup (Complete profile) and, if you opt in, your own team's git repo.
 - **Team vault risk:** anyone with push access to the team repo can edit any memory, and nothing is reviewed before it goes live ([details](#team-setup-org-vault)). Team sync is automatic in Claude Code and Gemini/Antigravity; on other assistants set `"orgSync": "server"` so the server pushes, and pull teammates' memories by hand.
-- **The index is capped by default:** `indexMaxEntries` defaults to 300 (about 10k tokens); `0` removes the cap. Memories cost 30–40 tokens each (uncapped examples: about 4.4k at 105, 32–40k at 1,000 and 162–200k at 5,000), and entries beyond the cap stay findable through search.
+- **The index is capped by default:** `indexMaxEntries` defaults to 300 (about 10k tokens); `0` removes the cap. Memories cost 30–40 tokens each (uncapped examples: about 4.3k at 114, 32–40k at 1,000 and 162–200k at 5,000), and entries beyond the cap stay findable through search.
 - **Spec-driven tools (for architects and test leads, on by default):** link decisions to requirement IDs and check that every tagged rule in your ADL files has a test carrying its ID (coverage only; your tests are not run). Five of the 22 tools. Not using ADL files? Ignore them, or set `"specDriven": {"enabled": false}` in `~/.total-recall/config.json`. [Spec-driven work](docs/SPEC-DRIVEN.md).
 
 Full numbers: [Quality metrics](docs/QUALITY.md) · [Limits](#limits) below.
@@ -164,7 +164,7 @@ All 22 tools work everywhere. "Through the instruction file" means you add the `
 
 - **The files stay local.** The personal vault is never pushed anywhere; its local git repo blocks pushes. The files are not encrypted.
 - **Automatic capture reads what the session read** (web pages, tool output) and saves its lessons without review. They appear in later sessions in every project, so check them now and then with _"list my recent memories"_.
-- **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture, which cannot be switched off yet).
+- **The model sees what it reads:** the index, recalled memories and, in Claude Code, the last 1 MiB of the transcript (sent to `claude -p` for automatic capture; see [At a glance](#at-a-glance) for what can be switched off).
 - **Other network calls:** the semantic model downloads from Hugging Face once (kept in `~/.total-recall/models/`); the team vault uses git. No telemetry.
 - **Only `org`-tagged memories are shared**, and only after the privacy filter passes. The assistant chooses the tag, and a tagged memory is pushed without asking. The filter fails closed: if it cannot check a memory, nothing is pushed. It catches patterns, not meaning: internal host names, client names and business facts get through, so don't tag those `org`.
 - **Teammates' memories reach your model.** Their entries in the index are marked as reference data, not instructions; full memories you recall are not, and `orgInjection` does not cover them. That lowers the prompt-injection risk but does not remove it: give push access only to people you trust, or set `orgInjection` to `titles` or `off`. See [SECURITY.md](SECURITY.md) and [known vulnerabilities](VULNERABILITIES.md).
@@ -191,7 +191,7 @@ Start solo and add the team later: `install.sh` is safe to re-run. Settings (`or
 - **Text search reads the title, the tags and the first 500 characters** of each memory, not the whole body. Put the key fact first.
 - **Several sessions at once** write separate files (one per memory), but a memory stored in one can be missing from another's search until it restarts ([details](docs/HOW-IT-WORKS.md)).
 - **Nothing is deleted automatically.** The forgetting curve only ranks results. A deleted memory stays in the vault's local git history and in `.superseded/`.
-- **Automatic capture** runs only where the `claude` CLI is installed, and cannot be switched off yet.
+- **Automatic capture** runs only where the `claude` CLI is installed, and only the session-end part can be switched off (`TR_SESSION_END_EXTRACT=0`).
 - **Retrieval quality is not yet measured** against an evaluation set; it is on the [backlog](backlog-and-plans/BACKLOG.md).
 
 ## More

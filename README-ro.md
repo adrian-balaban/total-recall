@@ -8,7 +8,7 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare. **Test
 
 [🇬🇧 English](README.md) · 🇷🇴 Română
 
-- **Ce primești:** asistentul poate salva ce îi spui („ține minte că…”), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului.
+- **Ce primești:** asistentul poate salva ce îi spui („ține minte că…”), regăsi informația în orice sesiune ulterioară și o poate actualiza sau șterge. În Claude Code vede în plus, la începutul fiecărei sesiuni, un index al memoriilor și salvează singur 0–3 lecții înainte de compactarea contextului și la încheierea sesiunii.
 - **Unde se păstrează:** în `~/.total-recall/`, câte un fișier `.md` pentru fiecare memorie, un singur vault pentru toate proiectele. Nu ai nevoie de un server separat sau de un cont. Memoriile etichetate `org` pot ajunge (opțional) într-un repo Git comun, după un filtru de confidențialitate care blochează secrete și identificatori personali uzuali (doar tipare: vezi [Confidențialitate](#confidențialitate-ce-pleacă-de-pe-mașina-ta)).
 - **Cost:** free și open source (MIT). Pluginul are ~1–2 MB; profilul implicit descarcă la prima utilizare un model local multilingv (449 MB; 87 MB pentru cel doar în engleză; `--no-vector` îl omite).
 
@@ -17,10 +17,10 @@ Memorie persistentă și căutabilă pentru asistenții AI de programare. **Test
 ## Dintr-o privire
 
 - **Licență:** MIT, free. **Întreținător:** o singură persoană, [Adrian Balaban](https://github.com/adrian-balaban), după posibilități — issue-urile și pull request-urile sunt binevenite, dar nu există SLA.
-- **Maturitate:** release-uri cu tag din august 2026 (~10/lună). Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din branch-ul `release`, dar **nu sunt semnate**.
-- **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată (nu poate fi oprită deocamdată). Singurul alt trafic spre exterior sunt descărcările de pachete și de model la instalare (profilul Complete) și, dacă optezi pentru asta, repo-ul git al propriei echipe.
+- **Maturitate:** release-uri cu tag din august 2026. Ultima bază de măsură (v1.7.1): 1.046 de teste, acoperire 97%, scor de mutație 81%. Release-urile se construiesc pe GitHub Actions din `main`, după verificările de calitate, și se publică în branch-ul `release`; pluginul **nu este semnat** (doar launcherul npx are provenance npm).
+- **Fișierele rămân locale** implicit. Furnizorul modelului vede ce citește asistentul, iar Claude Code trimite ultimul 1 MiB din istoricul sesiunii (transcript) la `claude -p` pentru captura automată (partea de la încheierea sesiunii se oprește cu `TR_SESSION_END_EXTRACT=0`; cea dinainte de compactare deocamdată nu). Singurul alt trafic spre exterior sunt descărcările de pachete și de model la instalare (profilul Complete) și, dacă optezi pentru asta, repo-ul git al propriei echipe.
 - **Riscul vault-ului de echipă:** oricine are drept de push pe repo-ul echipei poate edita orice memorie, iar nimic nu e revizuit înainte să devină activ pentru toată echipa ([detalii](#configurare-pentru-echipă-vault-org)). Sincronizarea echipei e automată în Claude Code și Gemini/Antigravity; la ceilalți asistenți setează `"orgSync": "server"` ca serverul să facă push, iar memoriile colegilor le aduci manual.
-- **Indexul are plafon implicit:** `indexMaxEntries` are valoarea implicită 300 (circa 10k tokeni); `0` elimină plafonul. O memorie costă 30–40 de tokeni (exemple fără plafon: circa 4,4k la 105 memorii, 32–40k la 1.000 și 162–200k la 5.000), iar intrările dincolo de plafon rămân accesibile prin căutare.
+- **Indexul are plafon implicit:** `indexMaxEntries` are valoarea implicită 300 (circa 10k tokeni); `0` elimină plafonul. O memorie costă 30–40 de tokeni (exemple fără plafon: circa 4,3k la 114 memorii, 32–40k la 1.000 și 162–200k la 5.000), iar intrările dincolo de plafon rămân accesibile prin căutare.
 - **Unelte spec-driven (pentru arhitecți și lideri de testare, active implicit):** leagă deciziile de ID-urile cerințelor și verifică dacă fiecare regulă cu ID din fișierele ADL are un test care conține acel ID (doar acoperirea; testele nu sunt rulate). Cinci din cele 22 de unelte. Nu folosești fișiere ADL? Ignoră-le sau setează `"specDriven": {"enabled": false}` în `~/.total-recall/config.json`. [Lucru spec-driven și ADL](docs/SPEC-DRIVEN.md) (în engleză).
 
 Cifre complete: [Metrici de calitate](docs/QUALITY.md) · [Limite](#limite) mai jos.
@@ -164,7 +164,7 @@ Toate cele 22 de unelte funcționează în toți clienții. „Prin fișierul de
 
 - **Fișierele rămân locale.** Vault-ul personal nu e trimis nicăieri; repo-ul git local blochează orice push. Fișierele nu sunt criptate.
 - **Captura automată citește ce a citit sesiunea** (pagini web, rezultatele uneltelor) și salvează lecțiile fără revizuire. Ele apar în sesiunile următoare, în toate proiectele, așa că verifică-le din când în când cu _„listează memoriile recente”_.
-- **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din istoricul sesiunii (transcript, trimis la `claude -p` pentru captura automată, care nu poate fi oprită deocamdată).
+- **Modelul vede ce citește:** indexul, memoriile regăsite și, în Claude Code, ultimul 1 MiB din istoricul sesiunii (transcript, trimis la `claude -p` pentru captura automată; vezi [Dintr-o privire](#dintr-o-privire) ce se poate opri).
 - **Alte conexiuni la rețea:** modelul semantic se descarcă o dată de pe Hugging Face; vault-ul de echipă folosește git. Fără telemetrie.
 - **Se partajează doar memoriile etichetate `org`**, și doar după ce trec filtrul. Asistentul alege eticheta, iar o memorie etichetată e trimisă fără să te întrebe. Filtrul blochează în caz de dubiu: dacă nu poate verifica o memorie, nu trimite nimic. Filtrul recunoaște tipare, nu sens: nume de servere interne, nume de clienți sau informații de business trec de el, deci nu le eticheta `org`.
 - **Memoriile colegilor ajung la modelul tău.** Intrările lor din index sunt marcate ca date de referință, nu ca instrucțiuni; memoriile complete pe care le regăsești nu sunt, iar `orgInjection` nu le acoperă. Asta reduce riscul de prompt injection, dar nu îl elimină: dă drept de push doar oamenilor în care ai încredere sau setează `orgInjection` la `titles` ori `off`. Vezi [SECURITY.md](SECURITY.md) și [vulnerabilitățile cunoscute](VULNERABILITIES.md) (în engleză).
@@ -191,7 +191,7 @@ Pe scurt: creează un repo Git privat cu un branch `knowledge` (fără pull requ
 - **Căutarea de text citește titlul, etichetele și primele 500 de caractere** ale fiecărei memorii, nu tot textul. Pune informația-cheie la început.
 - **Mai multe sesiuni în paralel** scriu fișiere separate (câte unul pe memorie), dar o memorie salvată într-una poate lipsi din căutările alteia până când aceasta repornește ([detalii](docs/HOW-IT-WORKS.md), în engleză).
 - **Nimic nu se șterge automat.** Curba uitării doar ordonează rezultatele. O memorie ștearsă rămâne în istoricul git local al vault-ului și în `.superseded/`.
-- **Captura automată** rulează doar unde e instalat CLI-ul `claude` și nu poate fi oprită deocamdată.
+- **Captura automată** rulează doar unde e instalat CLI-ul `claude` și doar partea de la încheierea sesiunii poate fi oprită (`TR_SESSION_END_EXTRACT=0`).
 - **Calitatea căutării nu e încă măsurată** pe un set de evaluare; e în [backlog](backlog-and-plans/BACKLOG.md) (în engleză).
 
 ## Mai mult (în engleză)

@@ -9,11 +9,11 @@
 
 Three read-only reviews, with key facts re-checked by hand:
 
-| Review | Scope |
-|---|---|
+| Review   | Scope                                                                           |
+| -------- | ------------------------------------------------------------------------------- |
 | Accuracy | README claims vs code: version, tools, install flags, hooks, config keys, links |
-| Parity | EN ↔ RO drift, translation errors, Romanian language quality |
-| Clarity | README read as a first-time visitor: structure, jargon, gaps |
+| Parity   | EN ↔ RO drift, translation errors, Romanian language quality                    |
+| Clarity  | README read as a first-time visitor: structure, jargon, gaps                    |
 
 A second, independent review proposed running persona round 4 from `PLAN-README-PERSONA-OPTIMIZATION.md` §0. Its claims are checked in [Cross-check with the persona-review process](#cross-check-with-the-persona-review-process) below.
 
@@ -25,17 +25,17 @@ Both READMEs have the same structure line for line, so every English change need
 
 ### Verified
 
-| Claim | Verdict | Evidence |
-|---|---|---|
-| Round 4 protocol exists and has not been run | Confirmed | `PLAN-README-PERSONA-OPTIMIZATION.md` header: "rounds 1–3b applied …; round 4 not run yet"; protocol in §0 (15 personas, FILES OPENED, findings table) |
-| E1, E2: line 7 regressions from `1bcf15a` | Confirmed | `git show 1bcf15a`; same as E1/E2 below |
-| E3: "v1.8.1" is stale | Confirmed | 1.10.0 in `package.json`; tag `v1.10.0` (2026-11-13); 1.9.0 and 1.9.1 in between |
-| E4: "~10/month" release cadence is stale | Confirmed | 33 tags from 2026-08-20 (v1.1.18) to 2026-11-13 (v1.10.0), 85 days ≈ 11.6/month. Missed by our reviews; added as E8 below |
-| E5: releases are not signed | Confirmed, still true | `PLAN-SIGNED-RELEASES.md` is still a proposal; only the npx launcher has npm provenance |
-| E6: "22 tools" | Confirmed correct | 17 core + 5 architecture (`src/tools/*.ts`, `docs/TOOLS.md`) |
-| E7: naming drift at L7 ("Google Antigravity & Gemini" vs "Gemini/Antigravity" elsewhere) | Confirmed | Covered by E1/E2 below |
-| E8: new claim clusters since round 3b (npx launcher, local-clone install, `TR_SESSION_END_EXTRACT=0`, `VULNERABILITIES.md` links, capture sandbox) | Plausible | README history `dd229c6…1bcf15a`; not checked commit by commit. These are new material for round 4 |
-| E9: word budget must be re-measured | Confirmed, and well over | Prose words (fenced code and `<details>` excluded): **EN ≈ 2,539, RO ≈ 2,568**. Round 3 measured 2,088 / 2,144; the §7 target is ~2,050 / 2,075. That is about **+450 words (~22%) over target**. Figures come from a quick `awk` count; round 4 must re-measure with the §4 method |
+| Claim                                                                                                                                              | Verdict                  | Evidence                                                                                                                                                                                                                                                                            |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Round 4 protocol exists and has not been run                                                                                                       | Confirmed                | `PLAN-README-PERSONA-OPTIMIZATION.md` header: "rounds 1–3b applied …; round 4 not run yet"; protocol in §0 (15 personas, FILES OPENED, findings table)                                                                                                                              |
+| E1, E2: line 7 regressions from `1bcf15a`                                                                                                          | Confirmed                | `git show 1bcf15a`; same as E1/E2 below                                                                                                                                                                                                                                             |
+| E3: "v1.8.1" is stale                                                                                                                              | Confirmed                | 1.10.0 in `package.json`; tag `v1.10.0` (2026-11-13); 1.9.0 and 1.9.1 in between                                                                                                                                                                                                    |
+| E4: "~10/month" release cadence is stale                                                                                                           | Confirmed                | 33 tags from 2026-08-20 (v1.1.18) to 2026-11-13 (v1.10.0), 85 days ≈ 11.6/month. Missed by our reviews; added as E8 below                                                                                                                                                           |
+| E5: releases are not signed                                                                                                                        | Confirmed, still true    | `PLAN-SIGNED-RELEASES.md` is still a proposal; only the npx launcher has npm provenance                                                                                                                                                                                             |
+| E6: "22 tools"                                                                                                                                     | Confirmed correct        | 17 core + 5 architecture (`src/tools/*.ts`, `docs/TOOLS.md`)                                                                                                                                                                                                                        |
+| E7: naming drift at L7 ("Google Antigravity & Gemini" vs "Gemini/Antigravity" elsewhere)                                                           | Confirmed                | Covered by E1/E2 below                                                                                                                                                                                                                                                              |
+| E8: new claim clusters since round 3b (npx launcher, local-clone install, `TR_SESSION_END_EXTRACT=0`, `VULNERABILITIES.md` links, capture sandbox) | Plausible                | README history `dd229c6…1bcf15a`; not checked commit by commit. These are new material for round 4                                                                                                                                                                                  |
+| E9: word budget must be re-measured                                                                                                                | Confirmed, and well over | Prose words (fenced code and `<details>` excluded): **EN ≈ 2,539, RO ≈ 2,568**. Round 3 measured 2,088 / 2,144; the §7 target is ~2,050 / 2,075. That is about **+450 words (~22%) over target**. Figures come from a quick `awk` count; round 4 must re-measure with the §4 method |
 
 ### Rejected / not applicable
 
@@ -64,16 +64,16 @@ Both READMEs have the same structure line for line, so every English change need
 
 One small docs PR, to do now.
 
-| # | Line(s) | Problem | Fix |
-|---|---|---|---|
-| E1 | EN L7 | Broken English from `1bcf15a` ("Also, are implemented and not tested the changes…") | Use the two-tier wording below |
-| E2 | RO L7 | No diacritics ("facute", "si", "inca", "catre"); "Google" dropped | Use the same structure in Romanian (below) |
-| E3 | L20 | Says "v1.8.1"; the actual version is 1.10.0 | Drop the version from the prose and add a release badge |
-| E4 | L20 | "Releases build … from the `release` branch" is wrong | Releases build from `main` after the mutation-test gate and are pushed to `release`. The npx launcher is published with provenance; the plugin is not signed. |
-| E5 | L21, L167, L194 vs L108 | Says automatic capture "cannot be switched off yet", but L108 documents `TR_SESSION_END_EXTRACT=0`, which `session-end.sh:95` honours | State it once: session-end capture can be turned off (`TR_SESSION_END_EXTRACT=0`); pre-compaction capture can't yet. L11 should also mention session end. |
-| E6 | L23 | "about 4.4k at 105" appears nowhere else; `docs/QUALITY.md:104` says ~4.3k at 114 | Use the QUALITY.md figure, or link instead of quoting a number |
-| E7 | RO L168 | Leaves out "(kept in `~/.total-recall/models/`)" | Add "(se păstrează în `~/.total-recall/models/`)" |
-| E8 | L20 | "~10/month" release cadence; actual ≈ 11.6/month (33 tags in 85 days) | Drop the number, or link to GitHub Releases, so it can't go stale |
+| #   | Line(s)                 | Problem                                                                                                                               | Fix                                                                                                                                                           |
+| --- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | EN L7                   | Broken English from `1bcf15a` ("Also, are implemented and not tested the changes…")                                                   | Use the two-tier wording below                                                                                                                                |
+| E2  | RO L7                   | No diacritics ("facute", "si", "inca", "catre"); "Google" dropped                                                                     | Use the same structure in Romanian (below)                                                                                                                    |
+| E3  | L20                     | Says "v1.8.1"; the actual version is 1.10.0                                                                                           | Drop the version from the prose and add a release badge                                                                                                       |
+| E4  | L20                     | "Releases build … from the `release` branch" is wrong                                                                                 | Releases build from `main` after the mutation-test gate and are pushed to `release`. The npx launcher is published with provenance; the plugin is not signed. |
+| E5  | L21, L167, L194 vs L108 | Says automatic capture "cannot be switched off yet", but L108 documents `TR_SESSION_END_EXTRACT=0`, which `session-end.sh:95` honours | State it once: session-end capture can be turned off (`TR_SESSION_END_EXTRACT=0`); pre-compaction capture can't yet. L11 should also mention session end.     |
+| E6  | L23                     | "about 4.4k at 105" appears nowhere else; `docs/QUALITY.md:104` says ~4.3k at 114                                                     | Use the QUALITY.md figure, or link instead of quoting a number                                                                                                |
+| E7  | RO L168                 | Leaves out "(kept in `~/.total-recall/models/`)"                                                                                      | Add "(se păstrează în `~/.total-recall/models/`)"                                                                                                             |
+| E8  | L20                     | "~10/month" release cadence; actual ≈ 11.6/month (33 tags in 85 days)                                                                 | Drop the number, or link to GitHub Releases, so it can't go stale                                                                                             |
 
 ### Proposed text for E1 (EN L7)
 
@@ -95,31 +95,31 @@ Same PR as Phase 1, or a follow-up. RO lines only.
 
 ### Grammar and meaning
 
-| Line | Current | Proposed |
-|---|---|---|
-| 140 | "…din 1.6.8 e multilingv"; "inclusiv chirilică, greacă…"; "suportă potrivire" | "din versiunea 1.6.8, modelul e multilingv"; "inclusiv limbi scrise cu alfabet chirilic, precum și greacă, arabă, chineză și japoneză"; "permite potrivirea între limbi" |
-| 160, 169 | "blochează în caz de dubiu" ("fails closed") | "dacă verificarea eșuează, blochează (fail-closed)" |
-| 175 | "Tratează-l ca pe un wiki comun" (`-l` points at the wrong noun) | "Tratează vault-ul de echipă ca pe un wiki comun" |
-| 47 | "întreabă profilul" | "te întreabă ce profil vrei" |
+| Line     | Current                                                                       | Proposed                                                                                                                                                                 |
+| -------- | ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 140      | "…din 1.6.8 e multilingv"; "inclusiv chirilică, greacă…"; "suportă potrivire" | "din versiunea 1.6.8, modelul e multilingv"; "inclusiv limbi scrise cu alfabet chirilic, precum și greacă, arabă, chineză și japoneză"; "permite potrivirea între limbi" |
+| 160, 169 | "blochează în caz de dubiu" ("fails closed")                                  | "dacă verificarea eșuează, blochează (fail-closed)"                                                                                                                      |
+| 175      | "Tratează-l ca pe un wiki comun" (`-l` points at the wrong noun)              | "Tratează vault-ul de echipă ca pe un wiki comun"                                                                                                                        |
+| 47       | "întreabă profilul"                                                           | "te întreabă ce profil vrei"                                                                                                                                             |
 
 ### Consistent terms
 
-- "free" stays as is in L13 and L19 (decided: keep the English term, not "gratuit")
+- "free" → "gratuit" (L13, L19)
 - Maintainer: pick "Întreținătorul" or "Autorul" and use it in both L19 and L153
 - Settings: "configurația" (L81); keep "Configurare" for the process/section (L179)
 - Troubleshooting bullets: noun-style labels throughout, e.g. L185 "**Recuperarea unei memorii:** …"
 
 ### Smaller wording fixes
 
-| Line | Proposed |
-|---|---|
-| 20 | "Ultima măsurătoare de referință (v1.7.1)" |
-| 30 | "nu e suficient" |
-| 40 | "aceste comenzi" |
-| 177 | "Pașii, testul de funcționare și checklist-ul de lansare în echipă" |
-| 195 | "Calitatea regăsirii" |
-| 201 | "un tutorial pas cu pas de cinci minute" |
-| 203 | "scalabilitate" |
+| Line | Proposed                                                            |
+| ---- | ------------------------------------------------------------------- |
+| 20   | "Ultima măsurătoare de referință (v1.7.1)"                          |
+| 30   | "nu e suficient"                                                    |
+| 40   | "aceste comenzi"                                                    |
+| 177  | "Pașii, testul de funcționare și checklist-ul de lansare în echipă" |
+| 195  | "Calitatea regăsirii"                                               |
+| 201  | "un tutorial pas cu pas de cinci minute"                            |
+| 203  | "scalabilitate"                                                     |
 
 ### Links
 
@@ -173,7 +173,7 @@ These are inputs to round 4, not adopted changes:
 
 A small CI step that would have caught E2 and E3:
 
-- [ ] Fail if `README-ro.md` contains common Romanian words without diacritics (` si `, `inca`, `facute`, `catre`, …).
+- [ ] Fail if `README-ro.md` contains common Romanian words without diacritics (`si`, `inca`, `facute`, `catre`, …).
 - [ ] Fail if `README.md` and `README-ro.md` have different line counts.
 - [ ] Fail if either README quotes a version that doesn't match `plugins/total-recall/package.json`.
 - [ ] Optional: report prose word count against the budget (warning only).
