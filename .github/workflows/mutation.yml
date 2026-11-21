@@ -14,6 +14,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # The weekly schedule drives the benchmark-full job (the full 20k run); the
+  # stryker job simply runs again with it. workflow_dispatch is the manual
+  # escape hatch for a pre-release full-scale benchmark.
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
 
 # This gate only reads the repo — it never pushes, tags or publishes (that is
 # release.yml, which declares its own wider scope). The repo-level default is
@@ -78,3 +84,72 @@ jobs:
         run: |
           npm test
           node test/pack-guard.mjs
+
+  # WP-1 (PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE): the scale objective from
+  # capabilities.adl (>=1000 stores/s, recall p95 <150ms at 20k memories, TF-IDF)
+  # as an automated check. Smoke on every push/PR (small N, generous headroom);
+  # the full 20k run stays on a weekly schedule + manual dispatch so the
+  # I/O-bound DELETE phase (~79/s at 20k in the recorded run) never slows the
+  # gate. TF-IDF-only: the transformers package is moved aside so the vector
+  # stack degrades (TR-R3) instead of downloading a model on the runner.
+  benchmark-smoke:
+    name: Smoke benchmark (LT_N=250, budget-enforced)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: plugins/total-recall
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: plugins/total-recall/package-lock.json
+      - run: npm ci
+      - name: Force the TF-IDF path (move the optional embedder aside, TR-R3)
+        run: mv node_modules/@huggingface/transformers node_modules/@huggingface/transformers.disabled-loadtest
+      - name: Smoke benchmark against the budget (exit 3 on a target miss)
+        run: >
+          LT_N=250 LT_PROFILE=smoke LT_CLEANUP=1
+          LT_RESULT_JSON=/tmp/loadtest-smoke.json
+          HOME=/tmp/tr-loadtest
+          npx tsx scripts/loadtest.ts
+      - name: Upload the benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-smoke
+          path: /tmp/loadtest-smoke.json
+          if-no-files-found: ignore
+
+  benchmark-full:
+    name: Full-scale benchmark (20k memories, weekly)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: plugins/total-recall
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: plugins/total-recall/package-lock.json
+      - run: npm ci
+      - name: Force the TF-IDF path (move the optional embedder aside, TR-R3)
+        run: mv node_modules/@huggingface/transformers node_modules/@huggingface/transformers.disabled-loadtest
+      - name: Full 20k benchmark against the budget (exit 3 on a target miss)
+        run: >
+          LT_PROFILE=full LT_CLEANUP=1
+          LT_RESULT_JSON=/tmp/loadtest-full.json
+          HOME=/tmp/tr-loadtest
+          npx tsx scripts/loadtest.ts
+      - name: Upload the benchmark result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: loadtest-full-${{ github.run_id }}
+          path: /tmp/loadtest-full.json
+          if-no-files-found: ignore

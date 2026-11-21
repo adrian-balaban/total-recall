@@ -107,4 +107,4 @@ Sources: `architecture/diagrams/*.puml` and `../../docs/diagrams/*.puml`. Re-ren
 | PreCompact reads `transcript_path` from stdin JSON | `extract-and-store-memories.sh` |
 | SessionEnd extraction is detached and skipped under `TR_EXTRACT_RUNNING=1` | `session-end.sh` |
 
-Six of these invariants carry no `[TR-…]` ID (one `memIndex` per process, journal only on personal writes, optional deps never bundled, the PostToolUse matcher stays a regex, PreCompact reads `transcript_path`, SessionEnd extraction is detached and recursion-guarded): the ADL gate does not cover them, and only the named tests do.
+Every invariant in this table now carries a `[TR-…]` ID and is covered by the ADL gate (`adl-coverage.test.ts`): the last six untagged ones were tagged as `TR-S15`, `TR-D13`, `TR-R7`, `TR-C8`, `TR-C9` and `TR-R8`. The two scale targets in `capabilities.adl` remain deliberately untagged until the benchmark automation has a calibrated CI baseline (PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md WP-1: smoke benchmark in the gate, full 20k on a schedule, tagging after three green scheduled runs).

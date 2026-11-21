@@ -344,60 +344,79 @@ function commitAndPush(relFile, relIndex, message) {
 
 async function main() {
   const cliArgs = process.argv.slice(2);
-  const key = cliArgs[0];
+  // `--drain` (TR-W9): retry pending org sync work without a new org write —
+  // commit and push whatever earlier failed syncs left staged. Their privacy/tag
+  // checks already passed when they were staged (commitAndPush resets --soft
+  // after a failed push, keeping the changes staged for exactly this retry).
+  const drainMode = cliArgs[0] === '--drain';
+  const key = drainMode ? undefined : cliArgs[0];
   const flags = cliArgs.slice(1);
   const deleteMode = flags.includes('--delete');
   const force = flags.includes('--force');
 
-  if (!key) { console.error('Usage: sync-org-memory.mjs <key> [--delete]'); process.exit(1); }
+  if (!key && !drainMode) {
+    console.error('Usage: sync-org-memory.mjs <key> [--delete] | sync-org-memory.mjs --drain');
+    process.exit(1);
+  }
 
   if (!ORG_REPO) {
     console.error('Error: orgRepo is not set. Add {"orgRepo": "https://github.com/you/your-vault.git"} to ~/.total-recall/config.json');
     process.exit(1);
   }
 
-  const relKey = key.replace(/^org\//, '');
-  const orgFile = path.join(ORG_VAULT, relKey + '.md');
-  // Path-traversal guard: `key` arrives from the hook (caller-supplied). A key like
-  // `org/../../etc/passwd` or an absolute path would resolve `orgFile` outside the org
-  // vault and let the script stage/commit/delete an arbitrary file. The realpath
-  // containment check below subsumes the lexical `..` / isAbsolute arms (a `..` that
-  // escapes, or an absolute path that path.join turns into a subpath, both fail the
-  // startsWith containment), so they were redundant — kept only the explicit `\0`
-  // rejection (path.join/resolve behave oddly on embedded nulls) plus the containment
-  // check.
-  if (relKey.includes('\0')) {
-    console.error(`Rejecting suspicious org key: ${key}`);
-    process.exit(0);
-  }
-  if (isReservedKey(relKey)) {
-    console.error(`Rejecting reserved org key: ${key}`);
-    process.exit(0);
-  }
-  const resolvedOrgFile = path.resolve(orgFile);
-  if (!resolvedOrgFile.startsWith(path.resolve(ORG_VAULT) + path.sep)) {
-    console.error(`Org key escapes vault: ${key}`);
-    process.exit(0);
-  }
   // Git pathspecs always use `/`; on Windows path.relative yields `\`-separated
   // paths that `git add --` treats as literal names (no match → sync no-op).
   const toGitPath = (p) => p.split(path.sep).join('/');
-  const relFile = toGitPath(path.relative(ORG_VAULT_DIR, orgFile));     // e.g. org-vault/architecture/foo.md
   const relIndex = toGitPath(path.relative(ORG_VAULT_DIR, path.join(ORG_VAULT, 'index.json')));
 
-  // store_memory writes org memories DIRECTLY into the org-vault working tree (which
-  // lives on the `org-vault` branch after pull-org-vault.sh runs at session start). The
-  // old code read from PERSONAL_VAULT here — where org files never live — so
-  // existsSync was always false and every org sync silently exited 0 (a no-op). Sync
-  // now commits the file that is already on disk, not a copy from personal.
-  if (!deleteMode) {
-    if (!fs.existsSync(orgFile)) {
-      console.error(`Org file not found: ${orgFile}`);
+  // Key-dependent paths and guards: skipped entirely in drain mode, which never
+  // stages a new file — it only commits what earlier failed syncs left staged.
+  let relFile = relIndex;
+  // Function-scoped on purpose, not block-scoped: the delete and store paths
+  // below also read orgFile/relKey. This is plain .mjs — tsc never checks it,
+  // so a block-scoping slip here only surfaces as a runtime ReferenceError.
+  let relKey = '';
+  let orgFile = '';
+  if (!drainMode) {
+    relKey = key.replace(/^org\//, '');
+    orgFile = path.join(ORG_VAULT, relKey + '.md');
+    // Path-traversal guard: `key` arrives from the hook (caller-supplied). A key like
+    // `org/../../etc/passwd` or an absolute path would resolve `orgFile` outside the org
+    // vault and let the script stage/commit/delete an arbitrary file. The realpath
+    // containment check below subsumes the lexical `..` / isAbsolute arms (a `..` that
+    // escapes, or an absolute path that path.join turns into a subpath, both fail the
+    // startsWith containment), so they were redundant — kept only the explicit `\0`
+    // rejection (path.join/resolve behave oddly on embedded nulls) plus the containment
+    // check.
+    if (relKey.includes('\0')) {
+      console.error(`Rejecting suspicious org key: ${key}`);
       process.exit(0);
     }
-    if (!orgFileIsSafe(orgFile)) {
-      console.error(`Rejecting org key ${key}: file is a symlink or resolves outside the org vault (possible planted link in the shared repo).`);
+    if (isReservedKey(relKey)) {
+      console.error(`Rejecting reserved org key: ${key}`);
       process.exit(0);
+    }
+    const resolvedOrgFile = path.resolve(orgFile);
+    if (!resolvedOrgFile.startsWith(path.resolve(ORG_VAULT) + path.sep)) {
+      console.error(`Org key escapes vault: ${key}`);
+      process.exit(0);
+    }
+    relFile = toGitPath(path.relative(ORG_VAULT_DIR, orgFile));     // e.g. org-vault/architecture/foo.md
+
+    // store_memory writes org memories DIRECTLY into the org-vault working tree (which
+    // lives on the `org-vault` branch after pull-org-vault.sh runs at session start). The
+    // old code read from PERSONAL_VAULT here — where org files never live — so
+    // existsSync was always false and every org sync silently exited 0 (a no-op). Sync
+    // now commits the file that is already on disk, not a copy from personal.
+    if (!deleteMode) {
+      if (!fs.existsSync(orgFile)) {
+        console.error(`Org file not found: ${orgFile}`);
+        process.exit(0);
+      }
+      if (!orgFileIsSafe(orgFile)) {
+        console.error(`Rejecting org key ${key}: file is a symlink or resolves outside the org vault (possible planted link in the shared repo).`);
+        process.exit(0);
+      }
     }
   }
 
@@ -427,6 +446,20 @@ async function main() {
   // push will fail loudly if the remote has advanced, and we reset the local commit on
   // failure so the branch stays clean for the next attempt.
   git(ORG_VAULT_DIR, ['pull', '--ff-only', '--no-recurse-submodules', 'origin', BRANCH], { quiet: true, allowFail: true });
+
+  // TR-W9: the drain. Only what is already staged is committed — changes whose
+  // privacy/tag checks ran when an earlier sync staged them, before its push
+  // failed. A clean staging area means nothing is pending; exit 0 either way
+  // (the hook contract keeps this script non-blocking).
+  if (drainMode) {
+    const pushed = commitAndPush(relFile, relIndex, 'chore(total-recall): drain pending org sync');
+    if (!pushed) {
+      console.log('Nothing pending: the org sync staging area is clean.');
+      return;
+    }
+    console.log('Drained the pending org sync (staged changes pushed).');
+    return;
+  }
 
   if (deleteMode) {
     if (fs.existsSync(orgFile)) {

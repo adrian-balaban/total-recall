@@ -95,6 +95,12 @@ Run this after every release, not just hardening ones.
   - without `claude`: exits 0, vaults + index created, no MCP registered unless `--vscode`/`--gemini` was passed
   - documented uninstall (both with and without `claude`) leaves `claude plugin list` clean / no orphaned VS Code `mcp.json` entry, and memories untouched
 
+## 10. Full-scale benchmark (release gate — WP-1)
+
+- [ ] The weekly scheduled benchmark (`Actions → mutation → benchmark-full`) is green within the last 7 days — targets: ≥1000 stores/s, recall p95 <150 ms at 20k memories, TF-IDF (`capabilities.adl`, enforced via `scripts/loadtest-budget.json`)
+- [ ] No scheduled run inside the window? Run it locally and record the summary here:
+  `HOME=/tmp/tr-loadtest npx tsx plugins/total-recall/scripts/loadtest.ts` (the throwaway HOME is mandatory; ~10–15 min — the DELETE phase is I/O-bound)
+
 ### Last full run: 1.9.1 (2026-11-12)
 
 Passed: sections 2–5 and the SessionEnd commit; org sync (hook push, `orgSync: "server"` single push, force-delete reaching the remote); redaction and `export_memories` → `import_memories`; 1.4.0, 1.5.0 (resources and 22 tools), 1.6.0, 1.6.1, 1.8.0 `indexMaxEntries`, the npm provenance and pack contents, `npx --help`, an npx marketplace install, and the local channel (install, unchanged re-run, rebuild after a `src/` edit, both channel conflicts, no-`claude` install, uninstall).

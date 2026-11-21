@@ -65,4 +65,19 @@ describe('ADL consistency', () => {
     expect(ids.sort()).toEqual(['adl:embedder', 'adl:hooks', 'adl:host-harness', 'adl:mcp-server', 'adl:org-remote'].sort());
     expect(new Set(ids).size).toBe(ids.length);
   });
+
+  // Every edge in the runtime landscape declares whether it is synchronous or
+  // asynchronous at the workflow level (`# edge: sync` / `# edge: async` on the
+  // line directly above the DEFINE COMMUNICATION). The label is a full-line
+  // comment because the ADL parser reads the style token to end-of-line.
+  it('every DEFINE COMMUNICATION in system.adl carries a sync/async edge label', () => {
+    const lines = fs.readFileSync(path.join(ADL_DIR, 'system.adl'), 'utf8').split('\n');
+    const bad: string[] = [];
+    lines.forEach((l, i) => {
+      if (!/^DEFINE COMMUNICATION/.test(l)) return;
+      const label = (lines[i - 1] ?? '').trim();
+      if (!/^# edge: (sync|async)\b/.test(label)) bad.push(`line ${i + 1}: ${l.trim()}`);
+    });
+    expect(bad).toEqual([]);
+  });
 });

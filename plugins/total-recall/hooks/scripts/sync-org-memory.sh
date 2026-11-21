@@ -7,8 +7,14 @@ set -euo pipefail
 # The old code read "$1" (always empty here) and then a nonexistent "tool_result"
 # field, so KEY was always empty, the early-return fired, and org sync was a
 # silent no-op for EVERY store/update/delete. Read stdin once and parse it for
-# real.
-HOOK_INPUT=$(cat)
+# real. `--drain` (TR-W9) never reads stdin — it is a recovery command, not a
+# hook, and reading stdin would block forever on a terminal (see the drain block
+# below, after drain_queue is defined).
+if [ "${1:-}" = "--drain" ]; then
+  HOOK_INPUT=""
+else
+  HOOK_INPUT=$(cat)
+fi
 
 # tool_name is "mcp__plugin_<plugin>_<server>__<tool>" for plugin-bundled MCP
 # tools (here mcp__plugin_total-recall_total-recall__<tool>); the PostToolUse
@@ -86,7 +92,9 @@ process.stdin.on("data", d => s += d).on("end", () => {
 # so the delimiter is collision-free. Three fields: KEY, DELETE_FLAG, FORCE_FLAG.
 IFS=$'\x1f' read -r KEY DELETE_FLAG FORCE_FLAG <<< "$PARSED"
 
-if [ -z "$KEY" ]; then
+# In drain mode there is no hook payload: fall through to the drain block below
+# (after drain_queue is defined) instead of the hook's empty-key early return.
+if [ -z "$KEY" ] && [ "${1:-}" != "--drain" ]; then
   echo '{"continue":true}'
   exit 0
 fi
@@ -196,6 +204,37 @@ start_worker() {
     flock -u 9
   ) 2>&1 | stamp_log &
 }
+
+# --drain (TR-W9): retry pending org sync work WITHOUT a new org write. The
+# queue is normally drained by the background worker a PostToolUse org write
+# starts; when the last sync failed (network/auth down), pending work waits for
+# the NEXT org write. This mode breaks that dependency. Two layers, in order:
+#   1. drain_queue — retry jobs that never ran or crashed; each still goes
+#      through the real sync-org-memory.mjs, so the privacy/tag checks of
+#      [TR-D3] apply to retried jobs too.
+#   2. sync-org-memory.mjs --drain — commit and push whatever an earlier FAILED
+#      push left staged (the .mjs exits 0 even on a failed push, so those jobs
+#      leave the queue and their changes stay staged).
+# Non-blocking by house style: exits 0 even when a job fails again (it stays
+# queued with a .sync.log line). Stdin is never read, so this is safe to run
+# from a terminal or a recovery script.
+if [ "${1:-}" = "--drain" ]; then
+  if command -v flock >/dev/null 2>&1; then
+    exec 9>"$LOCK"
+    if flock -w 30 -x 9; then
+      drain_queue || log_warn "drain: a queued job failed again; it stays queued for retry"
+      "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" --drain || log_warn "drain: the staged-sync pass could not run (see .sync-errors.log)"
+      flock -u 9
+    else
+      log_warn "drain: org sync lock busy after 30s; queue left untouched"
+    fi
+  else
+    # No flock (the same degraded path the enqueue case takes): drain inline.
+    drain_queue || log_warn "drain: a queued job failed again; it stays queued for retry"
+    "$NODE_BIN" "$PLUGIN_ROOT/scripts/sync-org-memory.mjs" --drain || log_warn "drain: the staged-sync pass could not run (see .sync-errors.log)"
+  fi
+  exit 0
+fi
 
 # orgSync "server" (config.json): the MCP server pushes org writes itself (src/org-sync.ts runs
 # this very script with a synthesized payload and ORG_SYNC_FROM_SERVER=1). Any other caller, i.e.

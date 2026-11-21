@@ -7,10 +7,25 @@ DEFINE CAPABILITY Simplicity AS one Node process, Markdown files, no server to r
 DEFINE CAPABILITY Cost AS zero runtime cost; optional embeddings run locally
 DEFINE CAPABILITY Evolvability AS tools isolated behind one registry (TR-S5, TR-S11)
 
-# Stressors and their residues
-# S1 the host harness changes its hook API (Claude Code, Gemini CLI): residue TR-C5, hooks.gemini.json
+# Stressors and their residues. Machine-checked format ([TR-E1], stressor-residues.test.ts):
+#   # S<n> <stressor description>: residue <TR-ID>[, <TR-ID>]*
+# Every residue ID must exist as a tagged ASSERT somewhere in architecture/adl/.
+# Residues are prioritised by the course's three tests — protects a core area,
+# covers several stressors, probability × impact (REVIEW.md §8).
+# S1 the host harness changes its hook API (Claude Code, Gemini CLI): residue TR-C5, TR-C1 (the per-host adapters are hooks/hooks.json and hooks.gemini.json)
 # S2 the embedder or a native binding is missing: residue TR-R1, TR-R3
 # S3 a teammate runs an older plugin version: residue TR-C1, TR-C6
-# S4 the vault grows to tens of thousands of memories: residue the loadtest targets in capabilities.adl
+# S4 the vault grows to tens of thousands of memories: residue TR-P1, TR-P2 (plus the untagged loadtest targets in capabilities.adl, to be tagged once they are automated)
 # S5 a teammate pushes hostile org content: residue TR-D3, TR-D12
-ASSERT(Each stressor above has at least one tagged assertion as its residue)
+# S6 the embedding model, provider or cost changes: residue TR-R6, TR-R3, TR-R1
+# S7 privacy rules gain new patterns: residue TR-D3, TR-D12
+#
+# Stressor × component × data-store incidence (what each stressor hits):
+#   S1 → hooks/hooks.json, hooks.gemini.json (Lifecycle Hooks × host harness)
+#   S2 → Vectors: embeddings.ts, vectorStore.ts (server quantum × vectors.db)
+#   S3 → memory-file contract readers, org index.json (every reader × both vaults)
+#   S4 → persistence: index.json, invertedIndex.json, .index-cache.txt (both vaults)
+#   S5 → privacy-filter.ts, org index framing (org vault × org git remote)
+#   S6 → Vectors + the vector-model-switch rebuild path (vectors.db)
+#   S7 → privacy-filter pattern table, org injection framing (org vault × org git remote)
+ASSERT(Each stressor above has at least one tagged assertion as its residue) # [TR-E1]

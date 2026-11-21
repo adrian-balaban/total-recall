@@ -68,6 +68,8 @@ Total Recall describes itself in nine ADL files under [plugins/total-recall/arch
 - **A new source file** must belong to exactly one component: add it to the matching pattern in [components.ts](../plugins/total-recall/src/__tests__/architecture/components.ts), or the partition rule `[TR-S12]` fails.
 - **A new rule** is an `ASSERT(…)` in the ADL file it belongs to, tagged with the next free ID of that file's prefix (`TR-S` structure, `TR-D` data governance, `TR-R` runtime safety, `TR-W` workflows, `TR-C` contracts, `TR-P` capabilities, `TR-Q` code quality).
 - **Its test** carries the ID in its name, `it('[TR-S15] …')`. A rule the code does not meet yet can start as `it.fails('[TR-…] …')` and be switched to `it` once the code complies.
+- **A generated fitness function** ships only together with a known-passing and a known-failing fixture that demonstrate the test can both pass and fail — a checker that has never failed cannot be trusted (see `architecture/GOVERNANCE.md`).
+- **A new runtime edge** in `system.adl` carries a `# edge: sync` or `# edge: async` comment on the line directly above its `DEFINE COMMUNICATION` (enforced by `adl-consistency.test.ts`); the stressor/residue list in `architecture-style.adl` is machine-checked by `[TR-E1]`.
 
 ## Org guardrails
 

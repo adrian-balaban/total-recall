@@ -9,6 +9,11 @@ Status legend: **DEFERRED** (real work, waiting for a trigger) · **DECIDED**
 (documented as by-design, no change intended). Finished items are removed. Source review files were removed when the `reviews/` folder was
 pruned (2026-07-29); this backlog is now the sole record.
 
+Every **DEFERRED** entry is a time-bounded exemption (`architecture/GOVERNANCE.md` §3):
+it carries an **Expiry** date — explicit on the newer entries below, and **2027-06-30 by
+default** where no line names one. An expired entry is a Fail at the next REVIEW pass
+(`plugins/total-recall/architecture/REVIEW.md`), not an indefinite deferment.
+
 ---
 
 ## ⏸️ DEFERRED — waiting for a trigger
@@ -228,6 +233,41 @@ pruned (2026-07-29); this backlog is now the sole record.
 - **Trigger:** `config.orgVault`/`personalVault` edited at runtime without an
   MCP-server restart. Low, latent.
 - **Shape when picked up:** the restart requirement is documented in `docs/HOW-IT-WORKS.md`; the remaining robust fix is to resolve vault paths at use time in `store.ts`/`mutate.ts` instead of importing module-load constants.
+
+### QUALITY.md baseline refresh (WP-5 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE)
+- **What:** `docs/QUALITY.md` still reports the v1.7.1 baseline (and four v1.6.8
+  figures) while the package is at v1.10.0. Re-measure from CI outputs (coverage,
+  mutation over the 19 modules, complexity table), DORA from git tag timestamps,
+  server start / index-build on an idle machine, and NDQMS with measured traffic
+  inputs where cheap. Update README "At a glance" in the same pass (the docs-sync
+  rule in CLAUDE.md).
+- **Trigger:** the next release train, or any architecture-review pass.
+- **Shape when picked up:** one measurement session + one docs commit; no code.
+- **Expiry:** 2027-03-31.
+
+### Contract churn measurement + cross-version fixtures (WP-7)
+- **What:** measure contract churn periodically (advisory, `[TR-Q11]`-style: git
+  history of the golden tool schema, hook envelope fields, frontmatter fields and
+  the `index.json` shape) and keep a small version-fixture matrix in the
+  integration suite — an old-form memory file, hook envelope and org `index.json`
+  read without error (`[TR-C6]` pins the principle; the fixtures pin it across
+  versions).
+- **Trigger:** the first contract-bearing change that makes reviewers ask "what
+  else consumes this shape?", or the next quarterly review.
+- **Shape when picked up:** one advisory script/report + two or three fixture files.
+- **Expiry:** 2027-06-30.
+
+### Tag `[TR-P6]`/`[TR-P7]` once the benchmark automation is calibrated (WP-1 step 4)
+- **What:** the two scale assertions in `capabilities.adl` are deliberately
+  untagged ("untagged on purpose"). WP-1 made them enforceable (budget file +
+  smoke job in the gate + weekly full 20k run). Tag them — and add the tagged
+  smoke-scale test — only after at least three green scheduled runs prove the CI
+  budget floors; if the smoke test proves flaky on runners, keep the assertions
+  untagged with an explicit expiring exemption instead. Never a silently red gate.
+- **Trigger:** three green `benchmark-full` runs on the same runner image.
+- **Shape when picked up:** tag the two ASSERTs, add the architecture test carrying
+  both IDs, drop the interim note in GOVERNANCE.md.
+- **Expiry:** 2027-03-31 (by then the weekly run has happened ≥ 12 times — decide).
 
 ---
 

@@ -120,7 +120,7 @@ suite('extract-and-store-memories.sh (PreCompact hook, end to end)', () => {
     fs.mkdirSync(path.join(tmpHome, '.total-recall'), { recursive: true });
   });
 
-  it('A1: stdin without transcript_path → clean {"continue":true}, claude never invoked', () => {
+  it('[TR-C9] A1: stdin without transcript_path → clean {"continue":true}, claude never invoked', () => {
     const r = runHook('{}');
     expect(r.status).toBe(0);
     expect(r.stdout.trim()).toBe('{"continue":true}');

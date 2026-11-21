@@ -22,3 +22,11 @@ ASSERT(The PostToolUse matcher targets the declared server's write tools only) #
 ASSERT(Lifecycle Hooks inject SessionStart context only with hookEventName SessionStart) # [TR-C5]
 ASSERT(A memory file with frontmatter keys this version does not know is read without error) # [TR-C6]
 ASSERT(Resources and prompts never change the tools list; the memory index resource frames org entries as untrusted data) # [TR-C7]
+
+# A bare exact-match matcher (`store_memory|update_memory|delete_memory`) never
+# matches the full plugin tool name, so org sync would silently never fire — the
+# matcher must keep a regex meta character (hooks-matcher.test.ts).
+ASSERT(The PostToolUse matcher stays a regex, never a bare exact-match list) # [TR-C8]
+
+# PreCompact finds the transcript only through the stdin hook JSON, never env or cwd guesses.
+ASSERT(PreCompact reads transcript_path from the stdin hook JSON) # [TR-C9]

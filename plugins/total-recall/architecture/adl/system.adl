@@ -14,19 +14,40 @@ DEFINE SYSTEM Total Recall AS tr
     DEFINE EXTERNAL Org Git Remote AS org-remote
 
 # Personal Vault and Org Vault are defined in data-governance.adl
+
+# Quanta — one per deployment/consistency boundary (matches docs/QUALITY.md §Quantum coupling):
+#   server = { MCP Stdio Server, Local Embedder }  one Node process; the embedder loads in-process
+#   hooks  = { Lifecycle Hooks }                   separate short-lived processes on their own bundles
+#   remote = { Org Git Remote }                    the shared git repository; eventual consistency
+# Static coupling across the quanta is restricted by TR-S13, TR-S14 and TR-R5.
+
 # Tool calls over MCP/stdio (TR-R2: the server never writes diagnostics to stdout)
+# edge: sync
 DEFINE COMMUNICATION Host Harness TO MCP Stdio Server AS stdio
 # Hook events with stdin JSON; SessionStart hooks inject the memory index into the context
+# edge: sync
 DEFINE COMMUNICATION Host Harness TO Lifecycle Hooks AS hook-events
 # Untagged memories, as Markdown files (TR-D2)
+# edge: sync
 DEFINE COMMUNICATION MCP Stdio Server TO Personal Vault AS file-io
 # Memories tagged org, written to the org vault working tree (TR-D1)
+# edge: sync
 DEFINE COMMUNICATION MCP Stdio Server TO Org Vault AS file-io
 # Embeds text for hybrid search; optional (TR-R3: degrades to TF-IDF when missing)
+# edge: sync
 DEFINE COMMUNICATION MCP Stdio Server TO Local Embedder AS in-process
+# Only with orgSync:"server" in config.json: the server runs the hooks' sync script
+# itself (ORG_SYNC_FROM_SERVER=1; src/org-sync.ts → sync-org-memory.sh). Opt-in and
+# off by default ([TR-R4]); at the workflow level it is the same eventual-consistency
+# org-sync saga as the hook path, so exactly one of the two pushes ever fires.
+# edge: async
+DEFINE COMMUNICATION MCP Stdio Server TO Lifecycle Hooks AS server-mode-sync
 # PreCompact extraction and the standalone index scan write directly, without MCP
+# edge: sync
 DEFINE COMMUNICATION Lifecycle Hooks TO Personal Vault AS file-io
-# After each org write: privacy filter, then git add, commit and push (TR-D3)
+# After each org write: privacy filter, then enqueue, then git add, commit and push (TR-D3)
+# edge: async — eventual consistency, per the org-sync saga (TR-W5, TR-W9, TR-W10)
 DEFINE COMMUNICATION Lifecycle Hooks TO Org Vault AS git
 # git pull at SessionStart, git push after each filtered org write
+# edge: async — eventual consistency (git is the transport, the saga is the consistency story)
 DEFINE COMMUNICATION Org Vault TO Org Git Remote AS git-tls

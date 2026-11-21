@@ -75,4 +75,15 @@ describe('repository rules', () => {
     expect(file).toBeGreaterThan(-1);
     expect(index).toBeGreaterThan(file);
   });
+
+  // [TR-R7] The optional native stack is optional at runtime: if esbuild inlined
+  // it into dist, a machine without the deps could not even load the bundle and
+  // the TR-R1/R3 degradation story would collapse. Pin the build flags.
+  it('[TR-R7] the esbuild bundle keeps the optional native dependencies external', () => {
+    const pkg = JSON.parse(read(ROOT, 'package.json'));
+    const bundle = String(pkg.scripts['build:esbuild']);
+    for (const dep of ['fsevents', '@huggingface/transformers', 'better-sqlite3', 'sqlite-vec']) {
+      expect(bundle).toContain(`--external:${dep}`);
+    }
+  });
 });
