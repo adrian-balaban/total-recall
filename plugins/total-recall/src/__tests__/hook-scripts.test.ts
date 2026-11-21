@@ -1052,7 +1052,11 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     fs.rmSync(home, { recursive: true, force: true });
   });
 
-  (HAS_DIST ? it : it.skip)('session-end.sh: spawns a detached extraction (trigger=session-end) and returns without waiting', () => {
+  (HAS_DIST ? it : it.skip)(
+    // The tag lives on its own quoted line so adl-coverage.test.ts sees it even
+    // though the it( call itself sits behind the HAS_DIST conditional.
+    '[TR-R8] session-end.sh: spawns a detached extraction (trigger=session-end) and returns without waiting',
+    () => {
     const s = seSetup('tr-se-x-');
     const t0 = Date.now();
     const r = spawnSync('bash', [SESSION_END_SCRIPT], {
@@ -1067,7 +1071,7 @@ pullSuite('pull-org-vault.sh (#5)', () => {
     fs.rmSync(s.home, { recursive: true, force: true });
   });
 
-  it('session-end.sh: no extraction inside a nested extraction run (TR_EXTRACT_RUNNING=1)', () => {
+  it('[TR-R8] session-end.sh: no extraction inside a nested extraction run (TR_EXTRACT_RUNNING=1)', () => {
     const s = seSetup('tr-se-g-');
     const r = spawnSync('bash', [SESSION_END_SCRIPT], {
       encoding: 'utf8', stdio: 'pipe', input: s.input, env: { ...s.env, TR_EXTRACT_RUNNING: '1' },

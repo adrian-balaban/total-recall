@@ -45,3 +45,7 @@ ASSERT(Vault Walk has no dependency on State, Vectors or Persistence) # [TR-S13]
 ASSERT(Index Cache has no dependency on State, Vectors or Persistence) # [TR-S14]
 # S5 covers the five isolated tools; bulk and architecture reuse store and mutate on purpose
 ASSERT(The bulk and architecture tools depend on no tool other than store, mutate and Tool Registry) # [TR-S11]
+
+# One shared in-memory index per process: state.ts owns the singleton and every
+# reader/writer imports that one instance (ES module semantics guarantee it).
+ASSERT(There is exactly one memIndex per process, the State singleton) # [TR-S15]

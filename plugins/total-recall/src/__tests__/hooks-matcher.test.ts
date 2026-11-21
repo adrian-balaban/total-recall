@@ -67,7 +67,7 @@ const READ_TOOLS = [
 describe.each([
   ['hooks.json', readPostToolUseMatcher(HOOKS_JSON)],
 ])('org-sync PostToolUse matcher (%s)', (_label, matcher) => {
-  it('is a regex, not a bare exact-match list (contains a non-exact-match char)', () => {
+  it('[TR-C8] is a regex, not a bare exact-match list (contains a non-exact-match char)', () => {
     // A bare `store_memory|update_memory|delete_memory` would be exact-match-only
     // and silently never fire. Parens (or any regex meta char) force the regex path.
     expect(/^[a-zA-Z0-9_\- ,|]*$/.test(matcher)).toBe(false);

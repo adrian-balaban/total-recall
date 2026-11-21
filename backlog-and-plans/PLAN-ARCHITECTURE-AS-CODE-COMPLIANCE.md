@@ -1,6 +1,6 @@
 # Plan — Architecture as Code conformance for `total-recall`
 
-**Status:** proposed  
+**Status:** applied — WP-0…WP-4 + WP-6 landed 2026-11-21; WP-5/WP-7 deferred with expiry (BACKLOG); TR-P6/P7 tagging pending benchmark calibration  
 **Date:** 2026-11-21  
 **Target repository:** `/home/adrianb/_/in-progress/total-recall`  
 **Baseline branch/commit:** `main` @ `69116efe84aec5171e18201effab4e34443f4206`  
@@ -484,3 +484,26 @@ Definition of done for the whole plan:
 | No review record or disposition register (§0.7, §1.2) | WP-0, WP-4 |
 | `loadtest.ts` stripped from `release`; exit-code semantics (§1.4) | WP-1 |
 | Contract churn and version fixtures unmeasured (§1.2) | WP-7 |
+
+## 8. Application log
+
+**2026-11-21 — applied in one pass (WP-0…WP-4, WP-6):**
+
+- **WP-0** — `plugins/total-recall/architecture/REVIEW.md`: the full checklist record (12 sections, item by item, with evidence at `69116ef`), including the §0 driver table and the §4 crash/recovery matrix.
+- **WP-1** — `scripts/loadtest-budget.json` (new) + `scripts/loadtest.ts`: budget-driven targets (`LT_PROFILE` smoke/full auto-selection), actual-vs-target reporting, exit-code separation (1 = operational error, 3 = target miss), JSON trend artifact (`LT_RESULT_JSON`); the VERIFY phase now excludes the engine-auto-created personal `journal/<date>.md` (the documented false alarm would have failed every gate run). `.github/workflows/mutation.yml`: `benchmark-smoke` job on every push/PR (`LT_N=250`) and `benchmark-full` weekly (`on: schedule` + `workflow_dispatch`), TF-IDF-forced per TR-R3. `RELEASE-SMOKE-TEST.md` §10 adds the interim release-gate item.
+- **WP-2** — `sync-org-memory.mjs --drain` (commits/pushes the staged leftovers of failed pushes; key guards skipped, ORG_REPO guard kept) + `hooks/scripts/sync-org-memory.sh --drain` (drains `.sync-queue` under the worker's lock, then runs the .mjs drain; never reads stdin) + `src/__tests__/sync-org-reconcile.e2e.test.ts` (the outage→heal→drain→reconcile scenario against a local bare remote) + `workflows.adl` `[TR-W9]`/`[TR-W10]`.
+- **WP-3** — `system.adl`: `# edge: sync/async` labels on every communication (+ consistency test), the conditional `orgSync:"server"` edge declared, quanta comments (server/hooks/remote); `architecture-style.adl`: S1–S7 in the machine-checked residue format + the stressor×component×store incidence table + `[TR-E1]` on the residue rule; the six ARCHITECTURE.md invariants tagged (`[TR-S15]`, `[TR-D13]`, `[TR-R7]`, `[TR-C8]`, `[TR-C9]`, `[TR-R8]`) with their tests (the `it.fails`-style conditional got its ID on its own quoted line so `adl-coverage` sees it); ARCHITECTURE.md closing note updated; new tests: `stressor-residues.test.ts`, `[TR-R7]` in `adl-repo-rules.test.ts`, `[TR-S15]` in `state.test.ts`, the `[TR-D13]` negative (org writes no journal line) in `index.test.ts`.
+- **WP-4** — `plugins/total-recall/architecture/GOVERNANCE.md` (fitness-function register, named ownership, three dispositions, cadence, governance boundary, reevaluation triggers) + BACKLOG Expiry convention (explicit on new entries, 2027-06-30 default) + SPEC-DRIVEN.md "Adding a rule": known-pass/known-fail requirement + the edge-label convention.
+- **WP-6** — stressors S6 (embedding model/provider/cost) and S7 (new privacy patterns) with residues + the incidence matrix; quanta declared (see WP-3).
+- **Deferred with expiry (BACKLOG):** WP-5 (QUALITY.md v1.10.0 refresh — 2027-03-31), WP-7 (contract churn + version fixtures — 2027-06-30), `[TR-P6]`/`[TR-P7]` tagging (2027-03-31, after ≥ 3 green scheduled runs).
+
+**Validation at application time (this machine, `TMPDIR=` to mirror CI):**
+
+- `npm run typecheck` — pass (after installing the missing optional dep `@huggingface/transformers` locally; its absence was a pre-existing environment gap, unrelated to this change set).
+- `npm run build` — pass (all five dist bundles).
+- `npm test` — **77 files, 1116/1116 tests pass** (up from 1022 at the v1.7.1 baseline), including `adl-coverage` with the nine new IDs, the edge-label consistency check, `[TR-E1]`, and the `[TR-W9]`/`[TR-W10]` e2e.
+- `npm run test:integration` — 4 files, 24/24 pass (real `dist/index.js` over stdio).
+- Smoke benchmark (`LT_N=50`, throwaway HOME): targets PASS, VERIFY PASS, exit 0, JSON artifact written.
+- Repository root: `npm test` (npx launcher) and `node test/pack-guard.mjs` — pass.
+- `npx stryker run` deliberately not re-run: no mutated `src/` module changed in this pass; the next CI run produces the score.
+- Two implementation lessons recorded by the gate itself: `sync-org-memory.mjs` is plain `.mjs` (tsc never checks it — the block-scoping slip surfaced only as a runtime `ReferenceError` in the e2e), and `adl-coverage.test.ts` requires IDs in `it()` names, not `describe()` names.

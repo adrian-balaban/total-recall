@@ -29,3 +29,11 @@ ASSERT(Lifecycle Hooks load server code only through the standalone dist mjs bun
 
 # Two embedding models produce vectors in different spaces, even at the same dimension
 ASSERT(Vectors never ranks a query against vectors made by a different embedding model: on a model change the vector index is rebuilt) # [TR-R6]
+
+# The optional native stack must never be inlined into dist — it is optional at
+# runtime and the bundle must stay loadable without it (TR-R1/R3 rely on this).
+ASSERT(The esbuild bundle keeps the optional native dependencies external, never inlined into dist) # [TR-R7]
+
+# SessionEnd must not block the host and must not recurse into itself (the nested
+# claude -p fires SessionEnd too; TR_EXTRACT_RUNNING=1 breaks the cycle).
+ASSERT(SessionEnd extraction runs detached from the hook and is skipped inside a nested extraction run) # [TR-R8]

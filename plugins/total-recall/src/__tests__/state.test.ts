@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest';
+import * as fs from 'fs';
+import * as path from 'path';
 
 // recordError / errors live in the REAL shared state singleton; reset `errors`
 // after each test so the cap test below can't pollute other suites' get_stats.
@@ -36,5 +38,31 @@ describe('recordError', () => {
     recordError('boom');
     expect(errors[errors.length - 1]!.msg).toBe('boom');
     expect(errors[errors.length - 1]!.time).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+});
+
+// [TR-S15] One memIndex per process: state.ts is the only definition site and
+// every reader/writer imports that one singleton (ES module semantics guarantee
+// a single instance per process; this test pins that no module shadows it with
+// a second declaration, which would fork the index and lose writes).
+describe('memIndex singleton ([TR-S15])', () => {
+  it('[TR-S15] declares memIndex only in state.ts', () => {
+    const srcDir = path.resolve(__dirname, '..');
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) {
+          if (e.name !== '__tests__') walk(p);
+        } else if (e.name.endsWith('.ts') && !e.name.endsWith('.d.ts')) {
+          const src = fs.readFileSync(p, 'utf8');
+          const declares = /(^|\n)\s*(export\s+)?(const|let|var)\s+memIndex\b/.test(src);
+          if (declares && path.relative(srcDir, p) !== 'state.ts') offenders.push(path.relative(srcDir, p));
+        }
+      }
+    };
+    walk(srcDir);
+    expect(offenders).toEqual([]);
+    expect(fs.readFileSync(path.join(srcDir, 'state.ts'), 'utf8')).toMatch(/(const|let|var)\s+memIndex\b/);
   });
 });

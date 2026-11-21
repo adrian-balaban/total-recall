@@ -18,8 +18,11 @@
  * `@huggingface/transformers` to `.disabled-loadtest` in node_modules and pass
  * `hybrid:false` to `recall_memory`; restore the package afterwards.
  *
- * The VERIFY line reports FAIL on the engine-auto-created `journal/<date>.md`.
- * That is a known false alarm (residual-by-tag is 0), not a real failure.
+ * The VERIFY phase counts the .md files left in the throwaway vaults, but
+ * EXCLUDES the engine-auto-created personal `journal/<date>.md` (one file per
+ * day, written by appendJournal, never indexed): counting it used to report a
+ * known false-alarm FAIL on every clean run. Residual-by-tag stays the primary
+ * judge; the file count now means "no loadtest residue on disk".
  *
  * Reference results after the registerDocument O(N²) fix (2026-07-30, 20k,
  * TF-IDF-only): ADD flat at ~2200/s (was 206/s → 23/s), SEARCH p50 87ms /
@@ -29,6 +32,7 @@ import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { storeMemory } from '../src/tools/store.js';
 import { deleteMemories } from '../src/tools/bulk.js';
@@ -58,6 +62,31 @@ if (process.env.HOME === realHome && process.env.LT_ALLOW_REAL_HOME !== '1') {
 
 const N = Math.max(1, Math.floor(Number(process.env.LT_N ?? 10000)));
 const TAG = 'loadtest';
+
+// ─── PERFORMANCE BUDGET (WP-1, PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE) ───────────
+// Targets live in scripts/loadtest-budget.json — one source for this script and
+// the CI gate. LT_PROFILE=smoke|full picks the budget (auto: smoke for N ≤ 500,
+// full above — the full profile carries the capabilities.adl targets). A target
+// miss exits 3 (operational errors keep exit 1) so the gate can tell "the engine
+// got slower" from "the engine is broken". A missing/unreadable budget file
+// downgrades to a report-only run: the benchmark never blocks on tooling alone.
+type BudgetProfile = { lt_n: number; min_store_writes_per_sec: number; max_recall_p95_ms: number; tolerance: number };
+type BudgetFile = { description?: string; profiles: Record<string, BudgetProfile> };
+let budget: { profile: string; minRate: number; maxP95: number; tolerance: number } | null = null;
+try {
+  const budgetPath = process.env.LT_BUDGET ?? fileURLToPath(new URL('./loadtest-budget.json', import.meta.url));
+  const raw = JSON.parse(fs.readFileSync(budgetPath, 'utf8')) as BudgetFile;
+  const profile = process.env.LT_PROFILE ?? (N <= 500 ? 'smoke' : 'full');
+  const p = raw.profiles[profile] ?? raw.profiles.full!;
+  budget = { profile, minRate: p.min_store_writes_per_sec, maxP95: p.max_recall_p95_ms, tolerance: p.tolerance };
+  console.log(`performance budget: profile=${profile} (>=${budget.minRate}/s ÷ ${budget.tolerance}, p95 <=${budget.maxP95}ms × ${budget.tolerance})`);
+} catch (e) {
+  console.error(`loadtest: no performance budget loaded (${(e as Error).message}) — report-only run`);
+}
+// Measured headline figures, compared against the budget in the summary.
+let addRate = 0;   // stores/s over the ADD phase
+let searchP50 = 0; // ms over the SEARCH phase
+let searchP95 = 0; // ms over the SEARCH phase
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 const ms = () => {
@@ -158,6 +187,7 @@ const summary: Array<[string, string]> = [];
   summary.push(['ADD stores', fmt(added)]);
   summary.push(['ADD seconds', dur.toFixed(1)]);
   summary.push(['ADD /sec', (added / dur).toFixed(0)]);
+  addRate = added / dur;
   errors += storeErrors;
 }
 
@@ -193,6 +223,8 @@ const summary: Array<[string, string]> = [];
   const rec = await recallMemory({ query: 'loadtestcanary-7', limit: 10, hybrid: false, excludeJournal: false });
   console.log(`  recall_memory "loadtestcanary-7" (tfidf): ${rec.length} hits in ${(ms() - t1).toFixed(2)}ms`);
 
+  searchP50 = pct(lat, 0.5);
+  searchP95 = pct(lat, 0.95);
   summary.push(['SEARCH p50 ms', pct(lat, 0.5).toFixed(2)]);
   summary.push(['SEARCH p95 ms', pct(lat, 0.95).toFixed(2)]);
   summary.push(['recall hits', String(rec.length)]);
@@ -258,7 +290,7 @@ const summary: Array<[string, string]> = [];
   console.log(`\n--- Phase 4: VERIFY ---`);
   const remaining = listMemories({ tag: TAG, limit: 1000, offset: 0 });
   const stats = await getStats();
-  const personalLeft = countFiles(personalVault);
+  const personalLeft = countFiles(personalVault, { skipJournal: true });
   const orgLeft = countFiles(orgVault);
   console.log(`  residual loadtest memories (by tag): ${remaining.total}`);
   console.log(`  throwaway vault total (get_stats): ${fmt(stats.total)}`);
@@ -273,21 +305,75 @@ const summary: Array<[string, string]> = [];
 console.log(`\n=== SUMMARY ===`);
 for (const [k, v] of summary) console.log(`  ${k.padEnd(16)} ${v}`);
 console.log(`  ${'errors'.padEnd(16)} ${errors}`);
+
+// Performance targets (WP-1): compare the measured headline figures against the
+// budget and report actual vs target. tolerance widens the pass band for runner
+// noise: rate passes at >= min/tolerance, p95 at <= max*tolerance.
+let targetMisses = 0;
+const targetReport: Array<{ check: string; target: string; actual: string; pass: boolean }> = [];
+if (budget) {
+  const rateFloor = budget.minRate / budget.tolerance;
+  const p95Ceil = budget.maxP95 * budget.tolerance;
+  const ratePass = addRate >= rateFloor;
+  const p95Pass = searchP95 <= p95Ceil;
+  targetReport.push(
+    { check: 'store_rate', target: `>= ${rateFloor.toFixed(0)}/s (budget ${budget.minRate}/s ÷ tol ${budget.tolerance})`, actual: `${addRate.toFixed(0)}/s`, pass: ratePass },
+    { check: 'recall_p95', target: `<= ${p95Ceil.toFixed(1)}ms (budget ${budget.maxP95}ms × tol ${budget.tolerance})`, actual: `${searchP95.toFixed(2)}ms`, pass: p95Pass },
+  );
+  for (const t of targetReport) {
+    console.log(`  TARGET ${t.check.padEnd(10)} ${t.pass ? 'PASS' : 'MISS'}  actual ${t.actual}  vs ${t.target}`);
+    if (!t.pass) targetMisses++;
+  }
+  console.log(`  ${'targets'.padEnd(16)} ${targetMisses === 0 ? 'PASS' : `MISS (${targetMisses})`} [profile: ${budget.profile}]`);
+} else {
+  console.log(`  ${'targets'.padEnd(16)} skipped (no budget loaded — report-only run)`);
+}
+
+// JSON artifact for the trend record (LT_RESULT_JSON, best-effort — a failed
+// write must never fail a successful benchmark run).
+if (process.env.LT_RESULT_JSON) {
+  try {
+    const resultJson = {
+      generatedAt: new Date().toISOString(),
+      lt_n: N,
+      profile: budget?.profile ?? null,
+      store_writes_per_sec: Number(addRate.toFixed(1)),
+      recall_p50_ms: Number(searchP50.toFixed(2)),
+      recall_p95_ms: Number(searchP95.toFixed(2)),
+      targets: targetReport,
+      targetsPass: budget ? targetMisses === 0 : null,
+      operationalErrors: errors,
+    };
+    fs.mkdirSync(path.dirname(process.env.LT_RESULT_JSON), { recursive: true });
+    fs.writeFileSync(process.env.LT_RESULT_JSON, JSON.stringify(resultJson, null, 2) + '\n');
+    console.log(`  ${'result json'.padEnd(16)} ${process.env.LT_RESULT_JSON}`);
+  } catch (e) {
+    console.error(`  result json write failed: ${(e as Error).message}`);
+  }
+}
 console.log(`  ${'overall'.padEnd(16)} ${errors === 0 ? 'PASS' : 'FAIL'}\n`);
 
-// Filesystem sanity helper.
-function countFiles(dir: string): number {
+// Filesystem sanity helper. skipJournal excludes the engine-auto-created
+// personal journal/<date>.md (appendJournal writes it without indexing, so it
+// is not loadtest residue — see the header note).
+function countFiles(dir: string, opts: { skipJournal?: boolean } = {}): number {
   if (!fs.existsSync(dir)) return 0;
   let n = 0;
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory()) n += countFiles(path.join(dir, e.name));
+    if (e.isDirectory()) {
+      if (opts.skipJournal && e.name === 'journal' && path.dirname(path.join(dir, e.name)) === personalVault) continue;
+      n += countFiles(path.join(dir, e.name), opts);
+    }
     else if (e.isFile() && e.name.endsWith('.md')) n++;
   }
   return n;
 }
 
 // Keep the exit explicit so flushPending's timers can't strand the process.
+// 1 = operational error (unchanged), 3 = performance target miss, 0 = clean.
+// Operational errors take precedence: a broken run says nothing about speed.
 if (errors > 0) process.exitCode = 1;
+else if (targetMisses > 0) process.exitCode = 3;
 // (Avoid leaving the throwaway HOME around if run in a one-shot mode.)
 if (process.env.LT_CLEANUP === '1') {
   spawnSync('rm', ['-rf', home], { stdio: 'ignore' });

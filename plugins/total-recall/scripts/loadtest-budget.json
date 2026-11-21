@@ -1,0 +1,12 @@
+{
+  "description": "Performance budgets for scripts/loadtest.ts (WP-1 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE). The full profile carries the ADL targets (capabilities.adl: >=1000 stores/s flat to 20000 memories, recall p95 <150ms, TF-IDF); the smoke profile is the PR-gate variant at reduced scale. tolerance widens the pass band for runner noise: rate passes at >= min/tolerance, p95 at <= max*tolerance.",
+  "calibration": {
+    "status": "provisional — floors set with very large headroom from the recorded reference run (2026-07-30, 20k memories, TF-IDF: ADD ~2200/s, SEARCH p95 93ms, DELETE 79/s I/O-bound). Recalibrate on the CI runner before tightening any number; until then a miss means something is deeply wrong, not marginally slow.",
+    "date": "2026-11-21",
+    "machine": "local workstation (maintainer); CI-runner calibration pending — see PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md WP-1"
+  },
+  "profiles": {
+    "smoke": { "lt_n": 250, "min_store_writes_per_sec": 100, "max_recall_p95_ms": 500, "tolerance": 2.0 },
+    "full": { "lt_n": 10000, "min_store_writes_per_sec": 1000, "max_recall_p95_ms": 150, "tolerance": 1.3 }
+  }
+}

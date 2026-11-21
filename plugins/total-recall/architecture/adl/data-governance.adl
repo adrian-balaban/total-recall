@@ -31,3 +31,7 @@ ASSERT(Overwriting with force archives the earlier body under .superseded and re
 
 # Inbound org content is data, not instructions
 ASSERT(Org memories injected at SessionStart appear only inside a delimited teammate-written reference data block, and orgInjection off injects none) # [TR-D12]
+
+# The journal is the personal vault's audit trail; org writes are audited by the
+# org repo's git history instead (ARCHITECTURE.md invariant, now tagged).
+ASSERT(The journal records only personal store, update and delete actions) # [TR-D13]

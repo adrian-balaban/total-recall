@@ -403,7 +403,7 @@ describe('store_memory', () => {
     expect(raw).toContain('importanceScore: 0.8');
   });
 
-  it('appends to journal for personal memories', async () => {
+  it('[TR-D13] appends to journal for personal memories', async () => {
     await callTool('store_memory', { title: 'Journal Trigger', content: 'X', tags: [], category: 'knowledge' });
     const today = new Date().toISOString().slice(0, 10);
     const jPath = path.join(VAULT, 'personal-vault', 'journal', `${today}.md`);
@@ -411,7 +411,7 @@ describe('store_memory', () => {
     expect(fs.readFileSync(jPath, 'utf8')).toContain('Journal Trigger');
   });
 
-  it('appends an [update] journal line for a personal update_memory', async () => {
+  it('[TR-D13] appends an [update] journal line for a personal update_memory', async () => {
     const res = result(await callTool('store_memory', { title: 'Journal Upd', content: 'X', tags: [], category: 'knowledge' }));
     await callTool('update_memory', { key: res.key, content: 'Y' });
     const today = new Date().toISOString().slice(0, 10);
@@ -419,12 +419,21 @@ describe('store_memory', () => {
     expect(body).toMatch(new RegExp(`\\[update\\] \\*\\*Journal Upd\\*\\* \\(\`${res.key}\`\\)`));
   });
 
-  it('appends a [delete] journal line (with the pre-delete title) for a personal delete_memory', async () => {
+  it('[TR-D13] appends a [delete] journal line (with the pre-delete title) for a personal delete_memory', async () => {
     const res = result(await callTool('store_memory', { title: 'Journal Del', content: 'X', tags: [], category: 'knowledge' }));
     await callTool('delete_memory', { key: res.key });
     const today = new Date().toISOString().slice(0, 10);
     const body = fs.readFileSync(path.join(VAULT, 'personal-vault', 'journal', `${today}.md`), 'utf8');
     expect(body).toMatch(new RegExp(`\\[delete\\] \\*\\*Journal Del\\*\\* \\(\`${res.key}\`\\)`));
+  });
+
+  // The other half of [TR-D13]: org memories must NOT land in the personal
+  // journal — the org repo's git history is their audit trail.
+  it('[TR-D13] writes no journal line for an org memory', async () => {
+    fs.rmSync(path.join(VAULT, 'personal-vault', 'journal'), { recursive: true, force: true });
+    await callTool('store_memory', { title: 'Org No Journal', content: 'X', tags: ['org'], category: 'knowledge' });
+    const today = new Date().toISOString().slice(0, 10);
+    expect(fs.existsSync(path.join(VAULT, 'personal-vault', 'journal', `${today}.md`))).toBe(false);
   });
 
   it('sets author field', async () => {
