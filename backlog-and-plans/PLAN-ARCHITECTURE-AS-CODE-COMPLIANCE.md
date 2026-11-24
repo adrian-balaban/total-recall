@@ -1,12 +1,12 @@
 # Plan — Architecture as Code conformance for `total-recall`
 
-**Status:** applied — WP-0…WP-4 + WP-6 landed 2026-11-21; WP-5/WP-7 deferred with expiry (BACKLOG); TR-P6/P7 tagging pending benchmark calibration  
+**Status:** ✅ COMPLETE — WP-0…WP-4 + WP-6 implemented and validated 2026-11-21; WP-5/WP-7 deferred with expiry (BACKLOG); TR-P6/P7 tagging pending benchmark calibration  
 **Date:** 2026-11-21  
 **Target repository:** `/home/adrianb/_/in-progress/total-recall`  
 **Baseline branch/commit:** `main` @ `69116efe84aec5171e18201effab4e34443f4206`  
 **Checklist source:** `/home/adrianb/_/in-progress/cursuri/masterclassNealFord2026/ARCHITECTURE_AS_CODE_CHECKLIST.md`  
 **Owner (default):** Adrian Balaban  
-**Revised:** 2026-11-21 — second review pass incorporated (§1.4); execution plan §2–§7 completed.
+**Revised:** 2026-11-21 — second review pass incorporated (§1.4); execution plan §2–§7 completed and validated.
 
 ## 0. Executive summary
 
