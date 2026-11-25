@@ -27,10 +27,10 @@ The deliverable of each kata, in the format of the course folders (`make-the-gra
 
 ```
 katas/                         (repo root)
-  s1-k1-structura/       ├─ answers.md   (scenario, answers, dispositions)
-  s1-k2-calitate-cod/    └─ adl/*.adl   (ADL sketch — sandbox, outside the gate, IDs [K<n>-<nn>])
+  s1-k1-structure/       ├─ answers.md   (scenario, answers, dispositions)
+  s1-k2-code-quality/    └─ adl/*.adl   (ADL sketch — sandbox, outside the gate, IDs [K<n>-<nn>])
   ...
-  s3-k11-echipa/         (same for K1–K11; K12 has no adl/ — only the wrap-up and decisions)
+  s3-k11-team/         (same for K1–K11; K12 has no adl/ — only the wrap-up and decisions)
 
 plugins/total-recall/src/__tests__/katas/
   k1-*.test.ts …         (kata fitness functions — separate workflow `katas.yml`, see §3.6)
