@@ -19,6 +19,7 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "test:katas": "vitest run --config vitest.katas.config.ts",
     "test:integration": "npm run build && vitest run --config vitest.integration.config.ts",
     "mutation": "stryker run"
   },

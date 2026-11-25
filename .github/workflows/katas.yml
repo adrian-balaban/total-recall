@@ -1,0 +1,59 @@
+# Architecture-kata fitness functions (backlog-and-plans/PLAN-ARCHITECTURE-KATAS.md).
+#
+# Deliberately separate from the `mutation` workflow: the katas are exercises on
+# top of the product, not part of its release gate. `release.yml` triggers only
+# on `mutation`, so a red kata run never blocks a release and a kata test never
+# slows Stryker or the coverage thresholds. The tests live in
+# plugins/total-recall/src/__tests__/katas/ and are excluded from the default
+# vitest suite (vitest.config.ts); this workflow runs them through
+# vitest.katas.config.ts.
+#
+# Runs when anything a fitness function can observe changes: the kata folders,
+# the production source, the production ADL, or the workflow itself.
+name: katas
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'katas/**'
+      - 'plugins/total-recall/src/**'
+      - 'plugins/total-recall/architecture/**'
+      - 'plugins/total-recall/vitest.katas.config.ts'
+      - 'plugins/total-recall/package.json'
+      - '.github/workflows/katas.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'katas/**'
+      - 'plugins/total-recall/src/**'
+      - 'plugins/total-recall/architecture/**'
+      - 'plugins/total-recall/vitest.katas.config.ts'
+      - 'plugins/total-recall/package.json'
+      - '.github/workflows/katas.yml'
+  workflow_dispatch:
+
+# Read-only: this workflow never pushes, tags or publishes.
+permissions:
+  contents: read
+
+jobs:
+  katas:
+    name: Kata fitness functions (known-pass + known-fail)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: plugins/total-recall
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: '26'
+          cache: 'npm'
+          cache-dependency-path: plugins/total-recall/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      # Fixtures are synthetic and live under os.tmpdir() (assert-tmp-path.ts);
+      # nothing here reads a real vault.
+      - run: npm run test:katas
