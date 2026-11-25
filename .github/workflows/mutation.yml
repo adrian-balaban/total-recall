@@ -46,6 +46,14 @@ jobs:
       # Install optional native deps too — Stryker runs the real vitest suite,
       # which exercises better-sqlite3 + sqlite-vec + @huggingface/transformers.
       - run: npm ci
+      # npm skips a failed optional dependency without an error (seen once on
+      # PR #73: 458 packages instead of 494, then `typecheck` died on a missing
+      # @huggingface/transformers). Fail here, naming the cause, instead.
+      - name: Verify optional dependencies were installed
+        run: |
+          for d in @huggingface/transformers better-sqlite3 sqlite-vec; do
+            test -d "node_modules/$d" || { echo "::error::optional dependency $d was not installed by npm ci"; exit 1; }
+          done
       # Security gate: audit production dependencies to prevent critical supply-chain vulnerabilities
       - run: npm audit --audit-level=critical --omit=dev
       - run: npm run typecheck
