@@ -17,6 +17,11 @@ export default defineConfig({
     exclude: [
       ...configDefaults.exclude,
       'src/__tests__/integration/**',
+      // Architecture-kata fitness functions run in their own workflow
+      // (.github/workflows/katas.yml, `npm run test:katas`) so they never gate
+      // the mutation/release pipeline. Hygiene rules still see them: the
+      // ADL/test-quality checks walk the directory, they don't run the files.
+      'src/__tests__/katas/**',
       '**/.stryker-tmp/**',
     ],
     coverage: {
