@@ -1,0 +1,29 @@
+# K11 - The human + agent team. Kata sandbox sketch (plan section 3.6).
+# [K11-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K11 - the written instructions, the owner register and the commit history are the team's governance
+CATEGORY Governance
+NAMESPACE TrK11NS
+DEFINE SYSTEM Total Recall K11 Sandbox AS trk11
+    DEFINE COMPONENT Instructions AS instructions
+    DEFINE COMPONENT Owner Register AS register
+    DEFINE COMPONENT Commit History AS history
+
+# Course pp. 47-50, 69-74: a team of humans and agents works from what is written down. CLAUDE.md,
+# GOVERNANCE.md, REVIEW.md and ARCHITECTURE.md are read before every change. A removed test file or a
+# retired TR-* ID sends a contributor to a rule that is gone. A line that says "pending" may name one
+# that does not exist yet.
+ASSERT(Instructions: every test file and every TR-* ID named in CLAUDE.md, GOVERNANCE.md, REVIEW.md and ARCHITECTURE.md exists, unless the line says it is pending) # [K11-01]
+
+# GOVERNANCE.md section 1 gives each ADL file an owner, a trigger and a remediation. A new ADL file with
+# no row is a rule with no owner.
+ASSERT(Owner Register: every production ADL file has a row in the governance register, and every row names a file that exists) # [K11-02]
+
+# Commit history is the audit trail of the team, human and agent alike: a commit that changes an ADL
+# file carries a test, or a governance, review or backlog record. Checked on the real history only when
+# the clone is not shallow.
+ASSERT(Commit History: every commit that changes an ADL file also changes a test or a governance, review or backlog record) # [K11-03]
+
+# Not re-asserted, answered with existing evidence (answers.md): agents are contributors, never
+# approvers (GOVERNANCE section 2, TR-Q2, TR-Q4, TR-Q5), dispositions for a failed assertion (GOVERNANCE
+# section 3). Checks that cannot be deterministic stay interactive reviews (checklist section 9).
