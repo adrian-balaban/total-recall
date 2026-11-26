@@ -134,13 +134,13 @@ const isShallow = () => git(REPO, 'rev-parse', '--is-shallow-repository').trim()
 describe('[K11-03] a commit that changes an ADL file carries its evidence', () => {
   it('[K11-03] known-pass: an ADL change with a test in the same commit has evidence', () => {
     const repo = tmpDir(); git(repo, 'init', '-q');
-    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x) # [TR-A1]\n', 'src/__tests__/a.test.ts': 'it("[TR-A1]")\n' }, 'add rule with its test');
+    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x) # [ZZ-A1]\n', 'src/__tests__/a.test.ts': 'it("covers the rule")\n' }, 'add rule with its test');
     expect(adlCommitsWithoutEvidence(repo, 'architecture/adl')).toEqual([]);
   });
   it('[K11-03] known-fail: an ADL change with no test or governance record is named by its subject', () => {
     const repo = tmpDir(); git(repo, 'init', '-q');
-    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x) # [TR-A1]\n', 'src/__tests__/a.test.ts': 'it("[TR-A1]")\n' }, 'add rule with its test');
-    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x, y) # [TR-A1]\n' }, 'loosen the rule quietly');
+    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x) # [ZZ-A1]\n', 'src/__tests__/a.test.ts': 'it("covers the rule")\n' }, 'add rule with its test');
+    commitFiles(repo, { 'architecture/adl/a.adl': 'ASSERT(x, y) # [ZZ-A1]\n' }, 'loosen the rule quietly');
     expect(adlCommitsWithoutEvidence(repo, 'architecture/adl')).toEqual(['loosen the rule quietly']);
   });
   it('[K11-03] known-pass: a governance record in the same commit counts as evidence', () => {
