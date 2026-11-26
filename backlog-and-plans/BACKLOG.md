@@ -18,6 +18,29 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
+### Supersede archive failure is swallowed silently (found by kata K10)
+- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-03]`.
+- **What:** `store_memory(force=true)` archives the prior body under `.superseded/` before it
+  overwrites. The archive `catch` in `src/tools/store.ts` is empty ("best-effort"), so if the
+  archive write fails (disk full, permissions) the overwrite still proceeds, the prior body is
+  gone, and nothing is recorded: `get_stats.recentErrors` stays clean. `supersededAt[]` records
+  that a supersession happened, not that the body was kept.
+- **Trigger:** the next change to the force-overwrite path in `store.ts`, or a report of a
+  `supersededAt` entry with no archived file. **Expiry:** 2027-06-30 (the default).
+- **Shape when picked up:** record the failure with `recordError` in that `catch` (one line;
+  keep the overwrite non-blocking), and pin it with a test that makes the archive directory
+  unwritable. Flip `[K10-03]` to its fixed value when it lands.
+
+### PreCompact extracts carry no provenance (found by kata K10)
+- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-02]`.
+- **What:** `hooks/scripts/store-learning.mjs` writes `sessions: []` and no origin marker, so
+  a memory the PreCompact hook extracted looks the same as one an agent stored on purpose.
+  The server's `store_memory` stamps the session; the extractor does not.
+- **Trigger:** the first time pruning or recall quality needs to treat extracted and
+  deliberate memories differently. **Expiry:** 2027-06-30 (the default).
+- **Shape when picked up:** stamp a tag (for example `precompact-extract`) or a `source`
+  field in the extractor's frontmatter; keep `schemaVersion` handling intact (`[TR-C6]`).
+
 ### `install.sh` Step 5c → 7 ordering: Gemini copy predates vector deps
 - **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog).
 - **What:** the Gemini extension (`agy plugin install`, Step 5c) copies the plugin directory

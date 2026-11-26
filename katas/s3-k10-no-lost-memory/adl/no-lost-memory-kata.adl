@@ -1,0 +1,28 @@
+# K10 - "No memory may be lost". Kata sandbox sketch (plan section 3.6).
+# [K10-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K10 - the paths where a memory's only copy can be truncated, dropped or mistaken
+CATEGORY Data
+NAMESPACE TrK10NS
+DEFINE SYSTEM Total Recall K10 Sandbox AS trk10
+    DEFINE COMPONENT Memory File Writers AS writers
+    DEFINE COMPONENT Provenance AS provenance
+    DEFINE COMPONENT Supersede Archive AS archive
+
+# Course pp. 35-36: reconcile so that nothing received is lost. The .md files are the only copy of a
+# memory's content. TR-W3 orders .md before index, TR-D11 archives on a force-overwrite. What remains:
+# the hook writes tmp + rename, the server writes in place. A crash mid-write can truncate the only copy.
+# That is a decided exemption (BACKLOG), so the check pins the pairing both ways.
+ASSERT(Memory File Writers: raw memory-file writes exist only together with a backlog exemption that has a trigger, and the exemption goes when the writes do) # [K10-01]
+
+# A memory the PreCompact hook extracted and one an agent stored on purpose differ in trust and in how
+# to prune them. The server stamps the session; the extractor writes sessions: [] and no origin.
+ASSERT(Provenance: every memory writer stamps a session or an origin) # [K10-02]
+
+# TR-D11 archives the prior body before a force-overwrite, but the archive is best-effort. That is
+# defensible only if a failed archive is recorded; today the catch is empty.
+ASSERT(Supersede Archive: a failed archive of the prior body is recorded, never swallowed) # [K10-03]
+
+# Not re-asserted, answered with existing evidence (answers.md): .md before index (TR-W3), supersede
+# archive and supersededAt (TR-D11), atomic index files (TR-W1), org reconciliation (TR-W9, TR-W10),
+# the single-writer index.json note (plugins/total-recall/CLAUDE.md, mergeRuntimeFieldsFromDisk).
