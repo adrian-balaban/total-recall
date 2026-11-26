@@ -1,0 +1,25 @@
+# K5 - The write matrix and privacy. Kata sandbox sketch (plan section 3.6).
+# [K5-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K5 - which file may write which persisted artifact, and nothing reaches the org remote unfiltered
+CATEGORY Data
+NAMESPACE TrK5NS
+DEFINE SYSTEM Total Recall K5 Sandbox AS trk5
+    DEFINE DATABASE Index AS index
+    DEFINE DATABASE Vector Store AS vectordb
+    DEFINE COMPONENT Memory Files AS memfiles
+    DEFINE COMPONENT Org Push AS orgpush
+
+# Course pp. 33-38: access is described with assertions on who may touch which database, not by
+# nesting. The vault has five persisted artifacts with a declared writer set each (index.json and
+# invertedIndex.json: persistence; .index-cache.txt: the cache builder, TR-W8; vectors.db: the vector
+# store). Memory .md files and the journal are written by raw filesystem calls, so the same rule is
+# an inventory: any production file with a raw write sink must be named.
+ASSERT(Index: each persisted artifact is written only by its declared writer files, and every production file with a raw filesystem write is on the writer inventory) # [K5-01]
+
+# TR-D3 says the org push is filtered. The matrix reading: every file in the repo that can run a
+# git push is itself wired to the privacy filter, in any language (TS, mjs, shell).
+ASSERT(Org Push: every file that can run a git push imports the privacy filter, and the only such file is sync-org-memory.mjs) # [K5-02]
+
+# Not re-asserted, answered with existing evidence (answers.md): vault routing (TR-D1, TR-D2),
+# the filter fails closed (TR-D3), atomic writes (TR-W1), one cache writer (TR-W8).
