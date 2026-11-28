@@ -2,7 +2,7 @@
 
 **Owner:** maintainer · **Created:** 2026-11-28 · **Baseline:** `main` @ `307c288`
 **Inputs:** `plugins/total-recall/architecture/adl/*.adl`, `architecture/GOVERNANCE.md`, `architecture/REVIEW.md` (pass at `69116ef`), checklist `ARCHITECTURE_AS_CODE_CHECKLIST.md`
-**Predecessor:** `PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md` (WP-0…WP-7). This plan finishes its open WPs and adds the gaps found in the 2026-11-28 re-review.
+**Predecessor:** `applied/PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md` (WP-0…WP-7). This plan finishes its open WPs and adds the gaps found in the 2026-11-28 re-review.
 
 ## 0. Starting point
 
