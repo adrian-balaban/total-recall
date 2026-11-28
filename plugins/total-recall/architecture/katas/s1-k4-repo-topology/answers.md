@@ -44,7 +44,7 @@ On the first run `[K4-01]` reported `plugins/total-recall/vitest.katas.config.ts
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s1-k4-repo-topology`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K4-01","assert:K4-02"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s1-k4-repo-topology`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K4-01","assert:K4-02"]`).
 
 ## Dispositions
 

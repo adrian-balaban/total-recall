@@ -33,7 +33,7 @@ Sketch: [adl/structure-kata.adl](adl/structure-kata.adl) · Fitness functions: [
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s1-k1-structure` → system `trk1`, 2 components, 2 assertions. On the kata folder alone `trace` shows no tests, because the index cannot see the test file (plan §4); re-indexing at the repo root links all 5 `[K1-01]` tests.
+- `index_architecture` on `plugins/total-recall/architecture/katas/s1-k1-structure` → system `trk1`, 2 components, 2 assertions. On the kata folder alone `trace` shows no tests, because the index cannot see the test file (plan §4); re-indexing at the repo root links all 5 `[K1-01]` tests.
 - `validate_architecture` on the repo root, `record:false` → `trk1`: 2 passed, `tr`: 72 passed, no failures. This proves the IDs are wired to tests, not that the checks pass; the proof is `npm run test:katas`.
 - `trace` K1-01 / K1-02 and `get_architecture_context(trk1)` run before writing the tests' final shape.
 - Decision stored via `store_memory` (`category: architecture-changes`, `elements: ["assert:K1-01","assert:K1-02"]`).

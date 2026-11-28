@@ -1,5 +1,5 @@
 // K4 — repo topology and shared code (course pp. 26–27).
-// Sketch: katas/s1-k4-repo-topology/adl/repo-topology-kata.adl. Fitness functions for [K4-01], [K4-02];
+// Sketch: plugins/total-recall/architecture/katas/s1-k4-repo-topology/adl/repo-topology-kata.adl. Fitness functions for [K4-01], [K4-02];
 // each has a known-pass and a known-fail. Fixtures are synthetic and live under os.tmpdir().
 import { describe, it, expect, afterAll } from 'vitest';
 import { execFileSync } from 'child_process';
@@ -34,7 +34,7 @@ const CONTRIBUTOR_ONLY: RegExp[] = [
   /^plugins\/total-recall\/vitest[\w.-]*\.config\.ts$/,
   /^plugins\/total-recall\/stryker[\w.-]*\.json$/,
   /(^|\/)__tests__\//,
-  /^katas\//,
+  /^plugins\/total-recall\/architecture\/katas\//,
 ];
 
 function stripList(releaseYml: string): string[] {
@@ -72,9 +72,9 @@ describe('[K4-01] every contributor-only file is on the release strip list', () 
     expect(shippedContributorFiles(tracked, stripList(RELEASE_YML))).toEqual([]);
   });
   it('[K4-01] known-fail: a new vitest config nobody named would ship, and so would katas/', () => {
-    const tracked = ['plugins/total-recall/vitest.katas.config.ts', 'katas/s1-k1/answers.md', 'plugins/total-recall/vitest.config.ts'];
+    const tracked = ['plugins/total-recall/vitest.katas.config.ts', 'plugins/total-recall/architecture/katas/s1-k1/answers.md', 'plugins/total-recall/vitest.config.ts'];
     expect(shippedContributorFiles(tracked, stripList(RELEASE_YML))).toEqual(
-      ['plugins/total-recall/vitest.katas.config.ts', 'katas/s1-k1/answers.md']);
+      ['plugins/total-recall/vitest.katas.config.ts', 'plugins/total-recall/architecture/katas/s1-k1/answers.md']);
   });
   it('[K4-01] known-fail: an empty or unparsable strip list makes every contributor file ship', () => {
     expect(stripList('name: release\n')).toEqual([]);

@@ -34,7 +34,7 @@ Sketch: [adl/write-matrix-kata.adl](adl/write-matrix-kata.adl) · Fitness functi
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s2-k5-write-matrix`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K5-01","assert:K5-02"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s2-k5-write-matrix`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K5-01","assert:K5-02"]`).
 
 ## Dispositions
 

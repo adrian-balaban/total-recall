@@ -39,7 +39,7 @@ All three are the same edge, Lifecycle Hooks TO MCP Stdio Server, asynchronous. 
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s2-k7-quanta-coupling`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K7-01","assert:K7-02"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s2-k7-quanta-coupling`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K7-01","assert:K7-02"]`).
 
 ## Dispositions
 

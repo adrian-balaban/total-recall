@@ -1,4 +1,4 @@
-// K8 — stressor × component audit (course pp. 66–67). Sketch: katas/s2-k8-stressors/adl/stressors-kata.adl.
+// K8 — stressor × component audit (course pp. 66–67). Sketch: plugins/total-recall/architecture/katas/s2-k8-stressors/adl/stressors-kata.adl.
 // Fitness functions for [K8-01], [K8-02]; each has a known-pass and a known-fail.
 // The stressor list and its residue rule ([TR-E1]) already exist; this kata audits what they leave out.
 import { describe, it, expect, afterAll } from 'vitest';

@@ -1,5 +1,5 @@
 // K7 — quanta and coupling (course pp. 40–43): which processes are separate quanta, and are all the
-// couplings between them declared? Sketch: katas/s2-k7-quanta-coupling/adl/quanta-kata.adl.
+// couplings between them declared? Sketch: plugins/total-recall/architecture/katas/s2-k7-quanta-coupling/adl/quanta-kata.adl.
 // Fitness functions for [K7-01], [K7-02]; each has a known-pass and a known-fail.
 import { describe, it, expect, afterAll } from 'vitest';
 import * as fs from 'fs';

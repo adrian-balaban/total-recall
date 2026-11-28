@@ -40,7 +40,7 @@ These are recorded as reviews by a human (or an LLM-assisted pass whose output a
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s3-k11-team`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K11-01","assert:K11-02","assert:K11-03"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s3-k11-team`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K11-01","assert:K11-02","assert:K11-03"]`).
 
 ## Dispositions
 
