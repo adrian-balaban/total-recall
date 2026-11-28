@@ -18,6 +18,18 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
+### Org-sync failure modes with no behavioural test (found by kata K6)
+- **Source:** `katas/s2-k6-org-sync-saga/answers.md`, check `[K6-02]`.
+- **What:** seven failure paths in `scripts/sync-org-memory.mjs` have no test that exercises them:
+  usage error, unset `orgRepo`, a key containing a NUL byte, a key that escapes the vault, a
+  missing org file, a failed branch switch (skipped, never pushes from the wrong branch), and a
+  note tagged both `org` and `personal` (rejected before staging). The surrounding behaviour is
+  covered (privacy block, author and no-prune refusals, forward-incompatible and corrupt index,
+  wipe guard); these are the guards that never fire in the suite.
+- **Trigger:** the next change to `sync-org-memory.mjs`, or K12 promotion of `[K6-02]`.
+  **Expiry:** 2027-06-30 (the default). When a test lands, remove its row from the pinned list in
+  `k6-org-sync-saga.test.ts`.
+
 ### `install.sh` Step 5c → 7 ordering: Gemini copy predates vector deps
 - **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog).
 - **What:** the Gemini extension (`agy plugin install`, Step 5c) copies the plugin directory
