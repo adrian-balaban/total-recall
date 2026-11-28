@@ -1,0 +1,26 @@
+# K2 - Quality of agent-generated code. Kata sandbox sketch (plan section 3.6).
+# [K2-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K2 - complexity limits for agent-generated code, and the A/I/D main sequence, on total-recall
+CATEGORY Engineering Practices
+NAMESPACE TrK2NS
+DEFINE CONST MAX_CC = 10
+DEFINE CONST MAX_CC_AGENT = 5
+DEFINE CONST MAX_DISTANCE = 0.3
+DEFINE SYSTEM Total Recall K2 Sandbox AS trk2
+    DEFINE COMPONENT Complexity Measure AS measure
+    DEFINE COMPONENT Agent Limit AS agentlimit
+    DEFINE COMPONENT Main Sequence AS mainseq
+
+# A fitness function built on a metric is only believed if the metric agrees with an independent
+# answer. The course's agent-written grade() is 15 (page 28, Task 1); the measurer behind TR-Q9
+# must say the same on a TypeScript port of it.
+ASSERT(Complexity Measure counts decision points the way the course does: the ported grade() is 15, a straight-line function is 1) # [K2-01]
+
+# The course's agent limit (per method < 5) cannot be a flat rule here: 71 existing functions sit
+# in [5,10). As a ratchet over the functions outside the TR-Q9 baseline it can: today's count is
+# frozen, and a new function at or above MAX_CC_AGENT fails.
+ASSERT(Agent Limit: no function outside the shrinking baseline newly reaches MAX_CC_AGENT) # [K2-02]
+
+# Distance from the main sequence, D = |A + I - 1|, per component. Measured, not gated: see answers.md.
+ASSERT(Main Sequence: the distance D of each component is computed from Na, Nc, Ca, Ce, and the formulas reproduce the course table) # [K2-03]
