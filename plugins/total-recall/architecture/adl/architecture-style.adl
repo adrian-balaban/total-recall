@@ -19,6 +19,9 @@ DEFINE CAPABILITY Evolvability AS tools isolated behind one registry (TR-S5, TR-
 # S5 a teammate pushes hostile org content: residue TR-D3, TR-D12
 # S6 the embedding model, provider or cost changes: residue TR-R6, TR-R3, TR-R1
 # S7 privacy rules gain new patterns: residue TR-D3, TR-D12
+# S8 the Node version changes under the plugin (a native binding built for another ABI): residue TR-R1, TR-R3
+# S9 the nested claude -p CLI changes flags or recurses: residue TR-R8, TR-C9
+# (Config read once at load and needing a restart is a known variability with no tagged residue yet: tracked in BACKLOG and K8-02, not numbered here.)
 #
 # Stressor × component × data-store incidence (what each stressor hits):
 #   S1 → hooks/hooks.json, hooks.gemini.json (Lifecycle Hooks × host harness)
@@ -28,4 +31,6 @@ DEFINE CAPABILITY Evolvability AS tools isolated behind one registry (TR-S5, TR-
 #   S5 → privacy-filter.ts, org index framing (org vault × org git remote)
 #   S6 → Vectors + the vector-model-switch rebuild path (vectors.db)
 #   S7 → privacy-filter pattern table, org injection framing (org vault × org git remote)
+#   S8 → Vectors: better-sqlite3 / sqlite-vec bindings (server quantum × vectors.db)
+#   S9 → PreCompact and SessionEnd extraction (hooks quantum × the nested claude process)
 ASSERT(Each stressor above has at least one tagged assertion as its residue) # [TR-E1]

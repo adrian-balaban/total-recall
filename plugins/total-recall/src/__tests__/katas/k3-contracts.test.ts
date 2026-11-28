@@ -67,11 +67,11 @@ describe('[K3-01] every cross-version boundary is a declared contract', () => {
     const root = tmpTree({ ...SYNTH_FILES, 'scripts/sync-org-memory.mjs': 'export {};\n' });
     expect(undeclaredBoundaries(root, ADL(['mcp-tools', 'hook-envelope', 'memory-file']))).toEqual([]);
   });
-  it('[K3-01] the real contracts.adl: the org index.json is the one undeclared boundary (finding, pinned)', () => {
+  it('[K3-01] the real contracts.adl declares all four boundaries, org-index included (finding closed)', () => {
     const adl = fs.readFileSync(path.join(PLUGIN, 'architecture/adl/contracts.adl'), 'utf8');
-    expect(declaredContracts(adl)).toEqual(['mcp-tools', 'hook-envelope', 'memory-file']);
-    // Disposition: declare `org-index` in contracts.adl at K12 (TR-C10). When that lands this becomes [].
-    expect(undeclaredBoundaries(PLUGIN, adl)).toEqual(['org-index']);
+    expect(declaredContracts(adl)).toEqual(['mcp-tools', 'hook-envelope', 'memory-file', 'org-index']);
+    // Disposition (done): `org-index` declared in contracts.adl; the version guard is already tested in sync-org-memory tests.
+    expect(undeclaredBoundaries(PLUGIN, adl)).toEqual([]);
   });
 });
 

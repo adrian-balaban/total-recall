@@ -14,6 +14,10 @@ DEFINE CONTRACT hook-envelope BETWEEN {Host Harness, Lifecycle Hooks} AS NAME-VA
 # Memory files: written by the server, by the hooks, and by teammates on other plugin versions through the org vault
 DEFINE CONTRACT memory-file BETWEEN {MCP Stdio Server, Lifecycle Hooks} AS NAME-VALUE-PAIRS
     including {title, tags, created, updated, author, schemaVersion}
+# Org index.json: written by one client version and read by another through the shared org vault.
+# Version-guarded (ORG_INDEX_VERSION): a newer file is refused, the legacy flat shape is still read.
+DEFINE CONTRACT org-index BETWEEN {MCP Stdio Server, Lifecycle Hooks} AS NAME-VALUE-PAIRS
+    including {v, entries}
 
 ASSERT(The 17 core tool schemas stay identical to the golden; new tools and spec fields are additive and optional) # [TR-C1]
 ASSERT(A tool call with malformed arguments is rejected at the Zod boundary as an error result, and the server keeps serving) # [TR-C2]

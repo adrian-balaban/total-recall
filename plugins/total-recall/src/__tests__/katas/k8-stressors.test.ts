@@ -109,9 +109,11 @@ describe('[K8-02] every source of variability in the code is named by a stressor
   it('[K8-02] known-pass: a source of variability that is not in the code is not demanded', () => {
     expect(unnamedVariability(tmpTree({ 'package.json': '{}' }), '# S1 x: residue TR-C5\n')).toEqual([]);
   });
-  it('[K8-02] the real architecture-style.adl: three sources of variability have no stressor (finding, pinned)', () => {
+  it('[K8-02] the real architecture-style.adl: only config-read-once still has no stressor (S8, S9 added; config-read-once tracked in BACKLOG)', () => {
     expect(stressorLines(styleOf(PLUGIN)).split('\n').length).toBeGreaterThanOrEqual(7); // the seven stressors were read
-    // Disposition: add S8..S10 with residues at K12, or record why the existing residues are enough.
-    expect(unnamedVariability(PLUGIN, styleOf(PLUGIN))).toEqual(['node-version', 'config-read-once', 'nested-claude-cli']);
+    // Disposition: S8 (Node version) and S9 (nested claude -p) added. Config-read-once has no tagged residue to
+    // name, so it stays a recorded gap (BACKLOG: config.orgVault change without restart). When a residue exists,
+    // add `# S10 ...: residue TR-xx` and this becomes [].
+    expect(unnamedVariability(PLUGIN, styleOf(PLUGIN))).toEqual(['config-read-once']);
   });
 });

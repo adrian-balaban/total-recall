@@ -75,11 +75,11 @@ describe('[K7-01] every cross-quantum coupling in the hook scripts is a declared
   it('[K7-01] known-pass: a coupling with no evidence in the code is not demanded', () => {
     expect(undeclaredCouplings(tmpTree({ 'hooks/scripts/session-end.sh': 'echo done\n' }), ADL_WITHOUT)).toEqual([]);
   });
-  it('[K7-01] the real system.adl: the hooks-to-server coupling is the one undeclared edge (finding, pinned)', () => {
+  it('[K7-01] the real system.adl declares the hooks-to-server coupling (finding closed)', () => {
     const adl = fs.readFileSync(path.join(PLUGIN, 'architecture/adl/system.adl'), 'utf8');
     expect(readEdges(adl).length).toBeGreaterThanOrEqual(9); // the edges were really read
-    // Disposition: declare `Lifecycle Hooks TO MCP Stdio Server` (async, marker file and SIGTERM) at K12.
-    expect(undeclaredCouplings(PLUGIN, adl)).toEqual(['Lifecycle Hooks TO MCP Stdio Server']);
+    // Disposition (done): `Lifecycle Hooks TO MCP Stdio Server` declared in system.adl (async, marker file and SIGTERM).
+    expect(undeclaredCouplings(PLUGIN, adl)).toEqual([]);
   });
 });
 

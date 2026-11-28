@@ -18,6 +18,7 @@ ASSERT(An access-count flush saves index.json without rebuilding invertedIndex.j
 ASSERT(Tool Registry records a perf sample for every successful tool call and an error for every failing one) # [TR-P4]
 ASSERT(PreCompact extraction failures are reported at the next SessionStart) # [TR-P5]
 
-# Measured with scripts/loadtest.ts (TF-IDF only), not in CI: untagged on purpose
+# Measured with scripts/loadtest.ts (TF-IDF only). CI enforces the budget in scripts/loadtest-budget.json
+# (smoke on every push, full 20k weekly); untagged until the budget is calibrated on the CI runner (P4).
 ASSERT(store_memory sustains at least 1000 writes per second, flat up to 20000 memories)
 ASSERT(recall_memory p95 stays under 150 ms at 20000 memories)
