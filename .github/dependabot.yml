@@ -25,6 +25,15 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
+      # One weekly PR for all minor/patch bumps instead of one PR per dependency.
+      # Majors are not grouped: they get their own PR so a breaking change is reviewed alone.
+      minor-and-patch:
+        applies-to: version-updates
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - "*"
     ignore:
       # GHSA-g3hv-75wg-m249 (moderate) needs minimatch >= 11.0.1, which nothing here can
       # reach: @stryker-mutator/core pins minimatch ~10.2.4, and so does the latest Stryker
