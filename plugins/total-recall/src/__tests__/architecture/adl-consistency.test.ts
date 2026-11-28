@@ -80,4 +80,35 @@ describe('ADL consistency', () => {
     });
     expect(bad).toEqual([]);
   });
+
+  // [TR-A1] — quanta in system.adl are a machine-checked declaration, not prose.
+  // Every actor, service, database and external (across all ADL files) must belong to
+  // exactly one `# quantum <name> = { … }` in system.adl. The member lists use display
+  // names; we match against the element name or id.
+  it('[TR-A1] every actor, service, database and external belongs to exactly one declared quantum', () => {
+    const sysLines = fs.readFileSync(path.join(ADL_DIR, 'system.adl'), 'utf8').split('\n');
+    const quantumRe = /^#\s*quantum\s+(\S+)\s*=\s*\{\s*([^}]*)\s*\}/;
+    const quanta = new Map<string, Set<string>>();
+    for (const line of sysLines) {
+      const m = line.match(quantumRe);
+      if (!m) continue;
+      quanta.set(m[1]!, new Set(m[2]!.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)));
+    }
+    expect(quanta.size).toBeGreaterThanOrEqual(3); // server / hooks / remote at least
+
+    const kinds = new Set(['ACTOR', 'SERVICE', 'DATABASE', 'EXTERNAL']);
+    const governed = elements.filter((e) => kinds.has(e.kind));
+    expect(governed.length).toBeGreaterThan(0);
+
+    const problems: string[] = [];
+    for (const e of governed) {
+      const owners = [...quanta.entries()]
+        .filter(([, members]) => members.has(e.name.toLowerCase()) || members.has(e.id.toLowerCase()))
+        .map(([n]) => n);
+      if (owners.length !== 1) {
+        problems.push(`${e.file}: ${e.kind} ${e.name} (${e.elementId}) -> ${owners.length === 0 ? 'no quantum' : owners.join(' + ')}`);
+      }
+    }
+    expect(problems).toEqual([]);
+  });
 });

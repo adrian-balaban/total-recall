@@ -49,3 +49,9 @@ ASSERT(The bulk and architecture tools depend on no tool other than store, mutat
 # One shared in-memory index per process: state.ts owns the singleton and every
 # reader/writer imports that one instance (ES module semantics guarantee it).
 ASSERT(There is exactly one memIndex per process, the State singleton) # [TR-S15]
+
+# Required edges — the positive side of the partition beyond the `has no dependency` rules
+# above. These are dependency-existence rules: at least the named files depend on the
+# registry (checklist §9.5 warns against reading them as "every file must depend on X").
+ASSERT(Each of the store, mutate, query, recall and rerank tools depends on Tool Registry) # [TR-S16]
+ASSERT(Server depends on Tool Registry) # [TR-S17]

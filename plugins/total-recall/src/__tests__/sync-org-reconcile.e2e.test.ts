@@ -136,7 +136,7 @@ function writeOrgMemory(relKey: string, title: string): void {
 
 const suite = OK ? describe : describe.skip;
 
-suite('org sync reconciliation and recovery (TR-W9, TR-W10)', () => {
+suite('org sync reconciliation and recovery (TR-W9, TR-W10, TR-D14)', () => {
   beforeAll(() => {
     tmpHome = fs.mkdtempSync(path.join(os.tmpdir(), 'tr-reconcile-'));
     remote = path.join(tmpHome, 'remote.git');
@@ -212,4 +212,24 @@ suite('org sync reconciliation and recovery (TR-W9, TR-W10)', () => {
     // And the org index reached the remote too.
     expect(remoteTree()).toContain('org-vault/index.json');
   }, 30000);
+
+  it('[TR-D14] journal entries and .superseded archives never enter an org sync', async () => {
+    // Personal provenance lives in the Personal Vault (a sibling of the org repo), so it
+    // must never reach the shared remote tree even when a sync runs beside it.
+    const personal = path.join(tmpHome, '.total-recall', 'personal-vault');
+    const today = new Date().toISOString().slice(0, 10);
+    fs.mkdirSync(path.join(personal, 'journal'), { recursive: true });
+    fs.writeFileSync(path.join(personal, 'journal', `${today}.md`), 'journal fixture\n');
+    fs.mkdirSync(path.join(personal, '.superseded', 'architecture'), { recursive: true });
+    fs.writeFileSync(path.join(personal, '.superseded', 'architecture', 'fixture.123.md'), 'superseded fixture\n');
+
+    writeOrgMemory('architecture/reconcile-d14', 'Reconcile D14');
+    const r = runHook('org/architecture/reconcile-d14');
+    expect(r.status).toBe(0);
+    expect(r.stdout.trim()).toBe('{"continue":true}');
+    expect(await waitFor(() => remoteTree().includes('org-vault/architecture/reconcile-d14.md'))).toBe(true);
+
+    const tree = remoteTree();
+    expect(tree.some((p) => p.includes('journal/') || p.includes('.superseded/'))).toBe(false);
+  }, 60000);
 }, 120000);

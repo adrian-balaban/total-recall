@@ -15,11 +15,18 @@ DEFINE SYSTEM Total Recall AS tr
 
 # Personal Vault and Org Vault are defined in data-governance.adl
 
-# Quanta — one per deployment/consistency boundary (matches docs/QUALITY.md §Quantum coupling):
-#   server = { MCP Stdio Server, Local Embedder }  one Node process; the embedder loads in-process
-#   hooks  = { Lifecycle Hooks }                   separate short-lived processes on their own bundles
-#   remote = { Org Git Remote }                    the shared git repository; eventual consistency
-# Static coupling across the quanta is restricted by TR-S13, TR-S14 and TR-R5.
+# Quanta — one per deployment/consistency boundary (matches docs/QUALITY.md §Quantum coupling).
+# The lines below use a machine-checked format — `# quantum <name> = { … }` — verified by the
+# [TR-A1] test in adl-consistency.test.ts: every actor, service, database and external must
+# belong to exactly one declared quantum.
+# quantum server = { MCP Stdio Server, Local Embedder }   one Node process; the embedder loads in-process
+# quantum hooks  = { Lifecycle Hooks }                    separate short-lived processes on their own bundles
+# quantum remote = { Org Git Remote }                     the shared git repository; eventual consistency
+# quantum vault  = { Personal Vault, Org Vault }          machine-local Markdown + SQLite state (Org Vault is a worktree of `remote`)
+# quantum host   = { Host Harness }                       the operator (Claude Code / Gemini CLI) that spawns server and hooks
+# Static coupling across the quanta is restricted by TR-S13, TR-S14 and TR-R5 (see [TR-A2]).
+ASSERT(Every actor, service, database and external belongs to exactly one declared quantum) # [TR-A1]
+ASSERT(Static coupling between quanta exists only through TR-S13, TR-S14 and TR-R5) # [TR-A2]
 
 # Tool calls over MCP/stdio (TR-R2: the server never writes diagnostics to stdout)
 # edge: sync

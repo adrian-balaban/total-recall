@@ -1,0 +1,12 @@
+DESCRIPTION Self-enforcing governance rules: backlog expiries and stale pre-code objectives
+CATEGORY Engineering Practices
+NAMESPACE TrGovernanceNS
+DEFINE SYSTEM Total Recall AS tr
+
+# A DEFERRED backlog entry past its Expiry is a Fail at the next REVIEW pass, not an
+# indefinite deferment (GOVERNANCE.md §3). Entries without an Expiry line default to
+# 2027-06-30 (the BACKLOG.md legend). Enforced by backlog-expiry.test.ts.
+ASSERT(No DEFERRED entry in BACKLOG.md is past its Expiry date) # [TR-G1]
+# A pre-code objective may start as it.fails('[TR-…] …'); a release-gating failure must
+# never be parked there. One older than the latest release tag is stale (REVIEW.md §10).
+ASSERT(No it.fails('[TR-…]') call is older than the latest release) # [TR-G2]
