@@ -49,6 +49,11 @@ DEFINE COMMUNICATION MCP Stdio Server TO Local Embedder AS in-process
 # org-sync saga as the hook path, so exactly one of the two pushes ever fires.
 # edge: async
 DEFINE COMMUNICATION MCP Stdio Server TO Lifecycle Hooks AS server-mode-sync
+# Hooks nudge the running server without MCP: pull-org-vault.sh and store-learning.mjs touch the
+# ~/.total-recall/.reconcile-requested marker (the server polls it, up to DEFAULT_POLL_MS), and
+# session-end.sh SIGTERMs the MCP child so shutdown() flushes (TR-W2). No reply, no shared code.
+# edge: async
+DEFINE COMMUNICATION Lifecycle Hooks TO MCP Stdio Server AS marker-and-signal
 # PreCompact extraction and the standalone index scan write directly, without MCP
 # edge: sync
 DEFINE COMMUNICATION Lifecycle Hooks TO Personal Vault AS file-io

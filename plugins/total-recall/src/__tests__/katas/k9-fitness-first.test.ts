@@ -68,12 +68,12 @@ describe('[K9-02] the ADL does not understate what CI enforces', () => {
   it('[K9-02] known-fail: a "not in CI" claim while a workflow enforces the budget is named', () => {
     expect(ciClaimMismatch('# not in CI: untagged on purpose\n', 'LT_N=250 LT_PROFILE=smoke x\n')).toHaveLength(1);
   });
-  it('[K9-02] the real tree: the capabilities comment is stale (finding, pinned)', () => {
+  it('[K9-02] the real tree: the capabilities comment no longer understates CI (finding closed)', () => {
     const adl = read(PLUGIN, 'architecture/adl/capabilities.adl');
     const wf = fs.readdirSync(path.join(REPO, '.github/workflows')).map(f => read(REPO, `.github/workflows/${f}`)).join('\n');
     expect(/LT_PROFILE=(smoke|full)/.test(wf)).toBe(true); // the benchmark really is in a workflow
-    // Disposition: revise the comment at K12 (smoke in the PR gate, full weekly), and tag the two asserts.
-    expect(ciClaimMismatch(adl, wf)).toHaveLength(1);
+    // Disposition (done): comment revised (smoke in the PR gate, full weekly). Tagging the two asserts waits for P4.
+    expect(ciClaimMismatch(adl, wf)).toEqual([]);
   });
 });
 

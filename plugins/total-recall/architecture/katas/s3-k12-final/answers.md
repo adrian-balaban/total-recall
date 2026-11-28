@@ -10,25 +10,25 @@ Dispositions use the plan's three outcomes: **(a)** promote into `architecture/a
 
 | Sketch | What it checks | Real-tree result | Recommendation | Reserved ID |
 |---|---|---|---|---|
-| K1-01 | every component has a file-set and every file-set owns a file | pass | **(a)** promote | TR-S16 |
+| K1-01 | every component has a file-set and every file-set owns a file | pass | **(a)** promote | TR-S18 |
 | K1-02 | each allow-list rule is exercised | pass | **(c)** reject: a ceiling is not a floor, and it overfits to today's imports | — |
 | K2-01 | complexity measurer reproduces the course's 15 | pass | **(a)** promote | TR-Q12 |
 | K2-02 | no new function reaches the agent limit (5) | 71-function ceiling | **(b)**/revise: needs a per-function frozen list first | — |
 | K2-03 | A/I/D per component | 7 of 12 in the "pain zone" | **(c)** reject as a gate: it flags the intended foundation | — |
-| K3-01 | every cross-version boundary is a declared contract | **gap: org `index.json`** | **Revise ADL** (add `org-index` contract), then **(a)** | TR-C10 |
+| K3-01 | every cross-version boundary is a declared contract | **gap: org `index.json`** | ~~Revise ADL~~ **done:** `org-index` contract declared; then **(a)** | TR-C12 |
 | K3-02 | bootstrap, marketplace and plugin names agree and are append-only | pass | **(a)** promote | TR-C11 |
 | K4-01 | every contributor-only file is on the release strip list | **was red; fixed in #77** | **(a)** promote | TR-Q13 |
 | K4-02 | all four version copies agree and the sync script names each | pass | **(a)** promote (extends `TR-Q3`) | TR-Q14 |
-| K5-01 | each artifact is written only by its declared writers | pass | **(a)** promote | TR-D14 |
-| K5-02 | every `git push` site knows the privacy filter | pass | **(a)** promote (sharpens `TR-D3`) | TR-D15 |
+| K5-01 | each artifact is written only by its declared writers | pass | **(a)** promote; overlaps `TR-D14` (personal provenance vs org sync), fold the shared part | TR-D15 |
+| K5-02 | every `git push` site knows the privacy filter | pass | **(a)** promote (sharpens `TR-D3`) | TR-D16 |
 | K6-01 | every saga failure site has a declared compensation | pass | **(a)** promote | TR-W11 |
 | K6-02 | every failure mode is exercised by a test | **7 untested** | hold until the pinned list is empty (backlog entry) | — |
-| K7-01 | every dynamic cross-quantum coupling is declared | **gap: hooks → server** | **Revise ADL** (`system.adl` edge), then **(a)** | TR-R9 |
+| K7-01 | every dynamic cross-quantum coupling is declared | **gap: hooks → server** | ~~Revise ADL~~ **done:** `marker-and-signal` edge declared; then **(a)** | TR-R9 |
 | K7-02 | every edge to an external is async | pass | **(a)** promote | TR-R10 |
 | K8-01 | every file in the stressor matrix exists | pass | **(a)** promote | TR-E2 |
-| K8-02 | every source of variability is a stressor | **3 missing** | **Revise ADL** (add S8–S10 with residues), then **(a)** | TR-E3 |
-| K9-01 | ADL performance numbers equal the enforced budget | pass | **(a)** promote | see §3 |
-| K9-02 | the ADL does not understate what CI enforces | **stale comment** | fold into the comment fix; no assertion | — |
+| K8-02 | every source of variability is a stressor | **3 missing, 2 closed** | **Partly done:** S8 and S9 added; config-read-once has no tagged residue (stays a gap, BACKLOG); then **(a)** | TR-E3 |
+| K9-01 | ADL performance numbers equal the enforced budget | pass | **(a)** promote, as the follow-ups' `TR-P6`/`TR-P7` (WP P4, gated on 3 green weekly runs) | TR-P6, TR-P7 |
+| K9-02 | the ADL does not understate what CI enforces | ~~stale comment~~ **fixed** | comment revised; no assertion | — |
 | K9-03 | "not yet measured" has a backlog entry with a trigger | pass | **(c)** reject: cheap but rarely changes | — |
 | K10-01 | raw memory writes are a recorded exemption | pass (4 sites) | **(b)**: folds into the atomic-writes ADR | — |
 | K10-02 | no memory writer leaves provenance empty | **extractor flagged** | hold until the backlog fix lands | — |
@@ -37,7 +37,7 @@ Dispositions use the plan's three outcomes: **(a)** promote into `architecture/a
 | K11-02 | every ADL file has an owner row | pass | **(a)** promote | TR-Q16 |
 | K11-03 | ADL commits carry evidence | 1 early exception | **(c)** reject, or keep as a sketch: needs full git history | — |
 
-Counts: **16 to promote** (after the three ADL revisions), **3 held** behind a backlog fix, **2 interactive or folded**, **5 rejected or dropped**.
+Counts: **16 to promote** (the ADL revisions for `org-index`, hooks → server and S8/S9 are now done), **3 held** behind a backlog fix, **2 interactive or folded**, **5 rejected or dropped**.
 
 ## 2. Findings that need a decision regardless of promotion
 
@@ -57,13 +57,14 @@ Counts: **16 to promote** (after the three ADL revisions), **3 held** behind a b
 
 Promotion follows plan §5: allocate the next free ID in the series, move the `ASSERT` into the production ADL in the house style, rename the test tag from `[Kn-nn]` to `[TR-xx]` and move the test next to its suite, add the `# S<n> …: residue TR-xx` line where the assertion is a stressor's residue, delete the sketch and the kata test. Promoted tests enter the default suite, so they are subject to `test:coverage` (95/95/90/95), the Stryker allow-list rule (`[TR-Q2]`) and Stryker's break threshold.
 
-1. **ADL revisions first** (no new IDs): `contracts.adl` (`org-index`), `system.adl` (hooks → server), `architecture-style.adl` (S8–S10), the `capabilities.adl` comment. These are the real findings and are small.
+1. **ADL revisions first** (no new IDs; **done** except the `capabilities.adl` tagging, which waits for P4): `contracts.adl` (`org-index`), `system.adl` (hooks → server), `architecture-style.adl` (S8–S10), the `capabilities.adl` comment. These are the real findings and are small.
 2. **Process and repo-hygiene assertions** (K1-01, K2-01, K4-01, K4-02, K11-01, K11-02): pure source checks, low risk to the mutation gate.
 3. **Contract, data and runtime assertions** (K3-01, K3-02, K5-01, K5-02, K6-01, K7-01, K7-02, K8-01, K8-02, K9-01): each reads real files, so each needs its own look at flakiness under Stryker.
 
 Open points the maintainer should settle, because they are judgement, not evidence:
 
-- **`TR-P6` and `TR-P7` are named "pending" in `GOVERNANCE.md` §2** for the benchmark. `K9-01` should take them or move past them, not collide.
+- **`TR-P6` and `TR-P7` are named "pending" in `GOVERNANCE.md` §2** for the benchmark. `K9-01` takes them, as the follow-ups' WP P4, so there is one promotion, not two.
+- **ID renumbering.** The follow-ups PR (#86) took `TR-S16`, `TR-S17` and `TR-D14`, and reserved `TR-P6`–`TR-P9` and `TR-C10` (`MAX_TOOLS`). The Reserved ID column above is the renumbered one: next free are `TR-S18`, `TR-D15`/`TR-D16`, `TR-C11`/`TR-C12`. Re-check the series before each promotion PR.
 - **The tests that read the git history or real files** (K11-03 and the real-tree parts of K4-01, K7-01, K9-02) are fragile in a shallow clone or when a file is renamed; decide whether the extra guard is worth that.
 - **Whether `katas/` stays after promotion.** Plan §5 deletes the sketches and kata tests; `answers.md` files are the record and could stay.
 - **The course checklist** (`ARCHITECTURE_AS_CODE_CHECKLIST.md`, sections 1–12 and the §12 minimum release gate) lives outside this repo and was not renewed here; it is a review the maintainer does against these results.
