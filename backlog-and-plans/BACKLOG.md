@@ -304,6 +304,23 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
   both IDs, drop the interim note in GOVERNANCE.md.
 - **Expiry:** 2027-03-31 (by then the weekly run has happened ≥ 12 times — decide).
 
+### Capability budgets for startup and index size (P5 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)
+- **What:** tag the REVIEW §0 targets already in code/config — startup under 500 ms and the
+  SessionStart index cap of 300 entries (`indexMaxEntries`) — as `[TR-P8]`/`[TR-P9]` in
+  `capabilities.adl`. Reuse `index-cache.test.ts` / `server.integration.test.ts` if they already
+  cover the behavior; put startup timing in the benchmark job, not unit tests (runner flakiness).
+- **Trigger:** the next release train.
+- **Shape when picked up:** two tagged ASSERTs + one test (or reuse) + one benchmark job line.
+- **Expiry:** 2027-03-31.
+
+### Contract endpoint bound (P6 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)
+- **What:** `DEFINE CONST MAX_TOOLS` + `ASSERT(The server registers at most MAX_TOOLS tools)
+  # [TR-C10]` in `contracts.adl`, tested against the tool registry (count includes the spec
+  tools). Companion to WP-7's churn report and cross-version fixtures.
+- **Trigger:** next quarterly review, or the first contract-bearing change.
+- **Shape when picked up:** one constant + one tagged assertion + one registry test.
+- **Expiry:** 2027-06-30.
+
 ---
 
 ## ✅ DECIDED — documented as by-design, no change intended
