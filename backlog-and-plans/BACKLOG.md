@@ -54,7 +54,7 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
   field in the extractor's frontmatter; keep `schemaVersion` handling intact (`[TR-C6]`).
 
 ### `install.sh` Step 5c → 7 ordering: Gemini copy predates vector deps
-- **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog).
+- **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](applied/PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog).
 - **What:** the Gemini extension (`agy plugin install`, Step 5c) copies the plugin directory
   **before** Step 7 installs the vector-search dependencies, so the Gemini copy never gets
   hybrid vector search — it stays on TF-IDF only. This predates the local-install channel and
@@ -63,7 +63,7 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
   user reports semantic search not working.
 
 ### Orphan cache directories after `uninstall`/`claude plugin update`
-- **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog), F4/F5.
+- **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](applied/PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog), F4/F5.
 - **What:** `claude plugin uninstall` empties the plugin's entry in `installed_plugins.json` but
   leaves the versioned directory under `~/.claude/plugins/cache/<marketplace>/total-recall/` on
   disk; `claude plugin update` leaves the previous version's directory behind the same way. Disk

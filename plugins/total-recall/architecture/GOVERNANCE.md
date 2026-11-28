@@ -1,6 +1,6 @@
 # Governance register — Total Recall
 
-**Owner:** Adrian Balaban (maintainer) · **Established:** 2026-11-21 (WP-4 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md) · **Review record:** `architecture/REVIEW.md`
+**Owner:** Adrian Balaban (maintainer) · **Established:** 2026-11-21 (WP-4 of applied/PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md) · **Review record:** `architecture/REVIEW.md`
 
 ## 1. Fitness-function register
 
