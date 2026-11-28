@@ -86,4 +86,17 @@ describe('repository rules', () => {
       expect(bundle).toContain(`--external:${dep}`);
     }
   });
+
+  // [TR-A2] — the quanta rule made load-bearing. The hooks quantum must not reach the
+  // server quantum's entry: the build-index-cache bundle (and its vault-walk / index-cache
+  // leaves) import none of src/index.ts / src/server.ts, and among the hook scripts only
+  // session-end.sh names dist/index.js (the server entry).
+  it('[TR-A2] hook bundles import nothing from the server entry (session-end.sh is the one exception)', () => {
+    const dir = path.join(ROOT, 'hooks', 'scripts');
+    const naming = fs.readdirSync(dir).filter((f) => f.endsWith('.sh') && /dist\/index\.js/.test(read(dir, f)));
+    expect(naming).toEqual(['session-end.sh']);
+    for (const f of ['src/hooks/build-index-cache.ts', 'src/index-cache.ts', 'src/vault-walk.ts']) {
+      expect(read(ROOT, f)).not.toMatch(/from\s+['"](?:\.\.\/)+index(?:\.js)?['"]|from\s+['"](?:\.\.\/)+server(?:\.js)?['"]/);
+    }
+  });
 });

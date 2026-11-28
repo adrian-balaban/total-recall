@@ -1,0 +1,23 @@
+# K8 - Stressor x component audit. Kata sandbox sketch (plan section 3.6).
+# [K8-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K8 - the stressor matrix points at real files, and every source of variability in the code is a stressor
+CATEGORY Architectural Capabilities
+NAMESPACE TrK8NS
+DEFINE SYSTEM Total Recall K8 Sandbox AS trk8
+    DEFINE COMPONENT Incidence Matrix AS matrix
+    DEFINE COMPONENT Stressor List AS stressors
+
+# Course pp. 66-67: a stressor x component matrix that names its residues. architecture-style.adl
+# already has it (S1..S7) and TR-E1 checks the residue IDs. Nothing checks the other half: the files
+# the incidence lines point at. A renamed file leaves a matrix that reads well and points nowhere.
+ASSERT(Incidence Matrix: every source file named in the stressor incidence lines of architecture-style.adl exists) # [K8-01]
+
+# The list is only as complete as the sources of variability someone thought of. The audit reads them
+# from the code (an engines range, a value read once at load, a nested CLI call) and requires a
+# stressor line that names each. It finds three the seven stressors leave out.
+ASSERT(Stressor List: every source of variability found in the code is named by a stressor line with a residue) # [K8-02]
+
+# Not re-asserted, answered with existing evidence (answers.md): the residue rule (TR-E1), harness
+# API change (S1: TR-C5, TR-C1), missing native binding (S2: TR-R1, TR-R3), 20k scale (S4: TR-P1,
+# TR-P2 and the weekly benchmark job).

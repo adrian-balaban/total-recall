@@ -16,7 +16,9 @@ Every ADL assertion is a fitness function enforced by a test that carries its ID
 | `capabilities.adl` (`TR-P*`) | maintainer (benchmark: same) | the assertions + `scripts/loadtest-budget.json` | every push/PR (smoke, `LT_N=250`) + weekly schedule (full 20k) | `loadtest.ts` JSON artifact | a miss with a calibrated budget is a real regression: fix or exempt with expiry; an uncalibrated miss recalibrates first |
 | `code-quality.adl` (`TR-Q*`) | maintainer | the assertions + `stryker.conf.json` + `vitest.config.ts` thresholds + `complexity-baseline.json` | every push/PR | CI runs (coverage, Stryker, source checks) | fix the code or shrink the baseline; the baseline only shrinks |
 | `system.adl` (landscape) | maintainer | endpoint consistency + edge labels | every push/PR | `adl-consistency.test.ts` | declare the new edge/element or fix the drift |
+| `system.adl` (quanta, `TR-A*`) | maintainer | the `# quantum` declarations (`[TR-A1]`) + the hook/server coupling (`[TR-A2]`) | every push/PR | `adl-consistency.test.ts` + `adl-repo-rules.test.ts` | add the element to its one quantum, or declare a new quantum; fix the cross-quantum import |
 | `architecture-style.adl` (stressors) | maintainer | the stressor/residue format (`[TR-E1]`) | every push/PR | `stressor-residues.test.ts` | add the missing residue as a tagged assertion before merging |
+| `governance.adl` (`TR-G*`) | maintainer | BACKLOG `Expiry:` lines + git tags (`[TR-G2]`) | every push/PR | `backlog-expiry.test.ts` (BACKLOG.md + `git log`) | pick up or close the expired/stale item; an expiry only moves forward |
 
 ## 2. Named ownership
 

@@ -18,6 +18,41 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
 
 ## ⏸️ DEFERRED — waiting for a trigger
 
+### Org-sync failure modes with no behavioural test (found by kata K6)
+- **Source:** `katas/s2-k6-org-sync-saga/answers.md`, check `[K6-02]`.
+- **What:** seven failure paths in `scripts/sync-org-memory.mjs` have no test that exercises them:
+  usage error, unset `orgRepo`, a key containing a NUL byte, a key that escapes the vault, a
+  missing org file, a failed branch switch (skipped, never pushes from the wrong branch), and a
+  note tagged both `org` and `personal` (rejected before staging). The surrounding behaviour is
+  covered (privacy block, author and no-prune refusals, forward-incompatible and corrupt index,
+  wipe guard); these are the guards that never fire in the suite.
+- **Trigger:** the next change to `sync-org-memory.mjs`, or K12 promotion of `[K6-02]`.
+  **Expiry:** 2027-06-30 (the default). When a test lands, remove its row from the pinned list in
+  `k6-org-sync-saga.test.ts`.
+
+### Supersede archive failure is swallowed silently (found by kata K10)
+- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-03]`.
+- **What:** `store_memory(force=true)` archives the prior body under `.superseded/` before it
+  overwrites. The archive `catch` in `src/tools/store.ts` is empty ("best-effort"), so if the
+  archive write fails (disk full, permissions) the overwrite still proceeds, the prior body is
+  gone, and nothing is recorded: `get_stats.recentErrors` stays clean. `supersededAt[]` records
+  that a supersession happened, not that the body was kept.
+- **Trigger:** the next change to the force-overwrite path in `store.ts`, or a report of a
+  `supersededAt` entry with no archived file. **Expiry:** 2027-06-30 (the default).
+- **Shape when picked up:** record the failure with `recordError` in that `catch` (one line;
+  keep the overwrite non-blocking), and pin it with a test that makes the archive directory
+  unwritable. Flip `[K10-03]` to its fixed value when it lands.
+
+### PreCompact extracts carry no provenance (found by kata K10)
+- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-02]`.
+- **What:** `hooks/scripts/store-learning.mjs` writes `sessions: []` and no origin marker, so
+  a memory the PreCompact hook extracted looks the same as one an agent stored on purpose.
+  The server's `store_memory` stamps the session; the extractor does not.
+- **Trigger:** the first time pruning or recall quality needs to treat extracted and
+  deliberate memories differently. **Expiry:** 2027-06-30 (the default).
+- **Shape when picked up:** stamp a tag (for example `precompact-extract`) or a `source`
+  field in the extractor's frontmatter; keep `schemaVersion` handling intact (`[TR-C6]`).
+
 ### `install.sh` Step 5c → 7 ordering: Gemini copy predates vector deps
 - **Source:** [PLAN-LOCAL-INSTALL-FINAL.md §10](PLAN-LOCAL-INSTALL-FINAL.md#10-follow-ups-found-in-review-to-move-to-backlog).
 - **What:** the Gemini extension (`agy plugin install`, Step 5c) copies the plugin directory
@@ -268,6 +303,23 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
 - **Shape when picked up:** tag the two ASSERTs, add the architecture test carrying
   both IDs, drop the interim note in GOVERNANCE.md.
 - **Expiry:** 2027-03-31 (by then the weekly run has happened ≥ 12 times — decide).
+
+### Capability budgets for startup and index size (P5 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)
+- **What:** tag the REVIEW §0 targets already in code/config — startup under 500 ms and the
+  SessionStart index cap of 300 entries (`indexMaxEntries`) — as `[TR-P8]`/`[TR-P9]` in
+  `capabilities.adl`. Reuse `index-cache.test.ts` / `server.integration.test.ts` if they already
+  cover the behavior; put startup timing in the benchmark job, not unit tests (runner flakiness).
+- **Trigger:** the next release train.
+- **Shape when picked up:** two tagged ASSERTs + one test (or reuse) + one benchmark job line.
+- **Expiry:** 2027-03-31.
+
+### Contract endpoint bound (P6 of PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)
+- **What:** `DEFINE CONST MAX_TOOLS` + `ASSERT(The server registers at most MAX_TOOLS tools)
+  # [TR-C10]` in `contracts.adl`, tested against the tool registry (count includes the spec
+  tools). Companion to WP-7's churn report and cross-version fixtures.
+- **Trigger:** next quarterly review, or the first contract-bearing change.
+- **Shape when picked up:** one constant + one tagged assertion + one registry test.
+- **Expiry:** 2027-06-30.
 
 ---
 

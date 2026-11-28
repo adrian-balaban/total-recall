@@ -35,3 +35,8 @@ ASSERT(Org memories injected at SessionStart appear only inside a delimited team
 # The journal is the personal vault's audit trail; org writes are audited by the
 # org repo's git history instead (ARCHITECTURE.md invariant, now tagged).
 ASSERT(The journal records only personal store, update and delete actions) # [TR-D13]
+
+# The journal and the force-overwrite .superseded archive are personal provenance. They live
+# in the Personal Vault, so the org sync (which only ever stages the org vault) must never
+# carry them to the shared repository.
+ASSERT(Journal entries and .superseded archives of Personal Vault never enter an org sync) # [TR-D14]

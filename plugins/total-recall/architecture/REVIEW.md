@@ -1,6 +1,6 @@
 # Review record — Architecture as Code checklist
 
-**Repository:** `total-recall` · **Baseline:** `main` @ `69116ef` (2026-11-21) · **Owner:** Adrian Balaban (maintainer)
+**Repository:** `total-recall` · **Baseline:** `main` @ `307c288` (2026-11-28 follow-up — PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md) · **Owner:** Adrian Balaban (maintainer)
 **Checklist:** `/home/adrianb/_/in-progress/cursuri/masterclassNealFord2026/ARCHITECTURE_AS_CODE_CHECKLIST.md`
 **Method:** static inspection plus the repository's own gates at the baseline commit. Refresh at every release and at major architecture changes.
 **Status legend:** Pass · Fail · Partial (a Fail with an action) · N/A (reason + reevaluation trigger, see the N/A register in PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md §2).
@@ -41,7 +41,7 @@
 | Every production unit has an architectural home | Pass | `[TR-S12]` + `components.ts` | none |
 | Shared areas have explicit ownership, no dumping ground | Pass | Pure Helpers enumerated; `[TR-Q11]` churn watch | none |
 | Responsibilities cohesive, inferable from names/location | Pass | CLAUDE.md module map; review culture | none |
-| Required AND forbidden dependencies documented | Pass | `[TR-S1–S14]`; contracts `BETWEEN` | none |
+| Required AND forbidden dependencies documented | Pass | `[TR-S1–S17]`; contracts `BETWEEN`; positive edges `[TR-S16/S17]` | none |
 | Deliberate shared-library use distinguished from forbidden cross-service deps | Pass | standalone hook bundles `[TR-R5]` vs tool isolation `[TR-S5]` | none |
 | No unintended cyclic dependencies | Pass | `[TR-S7]` (ArchUnitTS `haveNoCycles`) | none |
 | Layer rules enforced | Pass | `[TR-S2]`, `[TR-S3]` | none |
@@ -52,7 +52,7 @@
 
 | Item | Status | Evidence | Action |
 |---|---|---|---|
-| Load-bearing decisions as ADL definitions and ASSERT statements | Pass | 9 ADL files, 66 tagged assertions | none |
+| Load-bearing decisions as ADL definitions and ASSERT statements | Pass | 10 ADL files, 79 tagged assertions | none |
 | Files carry metadata (DESCRIPTION/CATEGORY/NAMESPACE) | Pass | every ADL file header | none |
 | Logical names bound to physical identifiers | Pass | `AS` aliases ↔ `components.ts` patterns, real dirs/files | none |
 | High-level and per-concern detail files separated | Pass | structure/system/workflows/contracts/… split | none |
@@ -74,7 +74,7 @@
 | No cross-domain "just read" reaches | Pass | personal/org vault separation `[TR-D7]` | none |
 | Cross-domain needs met deliberately (APIs/events/replicas) | Pass | org sync saga (choreography, eventual) | none |
 | Freshness/consistency/duplication/availability/cost trade-offs recorded | Pass | saga CONSISTENCY eventual; QUALITY.md NDQMS notes | none |
-| Sensitive data isolated from unauthorized clients/agents | Pass | `[TR-D3]`, `[TR-D5]`, `[TR-D9]`, `[TR-C3]`; THREAT-MODEL T1/T2 | none |
+| Sensitive data isolated from unauthorized clients/agents | Pass | `[TR-D3]`, `[TR-D5]`, `[TR-D9]`, `[TR-D14]`, `[TR-C3]`; THREAT-MODEL T1/T2 | none |
 | Storage growth and peak-load budgets measurable | Partial | loadtest + `indexMaxEntries` cap; not automated | WP-1 (done in this pass; tagging pending calibration) |
 | Schema-change frequency reviewed | Partial | contract churn unmeasured | WP-7 (deferred, expiry in BACKLOG) |
 | Reconciliation proves critical records flow end to end | Pass | `[TR-W10]` e2e: local org keys == remote tree, exactly once (WP-2) | none |
@@ -104,8 +104,8 @@
 | Item | Status | Evidence | Action |
 |---|---|---|---|
 | Shared databases/brokers/libraries/caches identified | Pass | `system.adl` landscape; shared files named (index.json, org tree) | none |
-| Quanta identified deliberately | Pass | quanta declared in `system.adl` + QUALITY.md NDQMS (server/hooks/remote) (WP-6) | none |
-| Every element belongs to a declared quantum | Pass | `system.adl` quantum comments map all five elements | none |
+| Quanta identified deliberately | Pass | quanta declared in `system.adl` + QUALITY.md NDQMS (server/hooks/remote/vault/host); coupling rule `[TR-A2]` | none |
+| Every element belongs to a declared quantum | Pass | `# quantum` declarations, machine-checked by `[TR-A1]` (`adl-consistency.test.ts`) | none |
 | Synchronous dependencies identified | Pass | `# edge: sync/async` labels + consistency test (WP-3) | none |
 | Scale/availability implications of sync dependencies stated | Pass | all sync edges are in-process/local; the async ones are git-bound (commented per edge) | none |
 | Static and dynamic coupling declared separately | Pass | `structure.adl` (static) vs `system.adl` (runtime) | none |
@@ -178,8 +178,8 @@
 | Checks run in CI; production checks after business windows | Pass | mutation.yml per push/PR; RELEASE-SMOKE-TEST per release; scheduled benchmark weekly | none |
 | Governance exposed at a stable boundary | Pass | `mutation.yml` gate; the shipped spec-driven MCP tools expose the same governance to users | none |
 | Checks produce actionable evidence | Pass | coverage/mutation reports; benchmark JSON artifact (WP-1); `.sync-errors.log` | none |
-| Failures get one of three dispositions | Pass | GOVERNANCE.md (fix / revise architecture / expiring exemption) | none |
-| Pre-code objective vs release-gating failure distinguished | Pass | `it.fails` sanctioned for pre-code (SPEC-DRIVEN.md); REVIEW tracks stale ones | none |
+| Failures get one of three dispositions | Pass | GOVERNANCE.md (fix / revise architecture / expiring exemption); expiry now machine-checked `[TR-G1]` | none |
+| Pre-code objective vs release-gating failure distinguished | Pass | `it.fails` sanctioned for pre-code (SPEC-DRIVEN.md); staleness now machine-checked `[TR-G2]` | none |
 | Repeated agent-caused failures fix the prompt/rule/scope | Pass | BACKLOG DEFERRED entries + CLAUDE.md contract-pinning practice | none |
 
 ## 11. Teams and enterprise alignment
@@ -196,6 +196,8 @@
 ## 12. Minimum release gate
 
 See PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md §5 for the item-by-item mapping. Summary at this baseline: items 2, 3, 4, 9 Pass with evidence; 1, 6, 7, 10 Partial with owned actions; 5 closed by WP-2 (`[TR-W9]`/`[TR-W10]`); 8 closed by WP-1 (smoke benchmark in the gate, full 20k scheduled).
+
+**2026-11-28 follow-up (PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)** applied P1 (this pass), P2 (`[TR-G1]/[TR-G2]` governance gates + `governance.adl`), P3 (`[TR-A1]/[TR-A2]` quanta), P8 (`[TR-S16]/[TR-S17]` positive dependencies) and P9 (`[TR-D14]` personal provenance vs org sync), plus the P10 advisory fixture-pairing check. Still pending (time-boxed in BACKLOG): P4 `[TR-P6]/[TR-P7]` (gated on ≥3 green `benchmark-full` runs), P5 `[TR-P8]/[TR-P9]` (capability budgets), P6 `[TR-C10]` + contract churn + version fixtures, P7 (QUALITY.md v1.10.0 refresh).
 
 ## Sign-off
 
