@@ -1,0 +1,27 @@
+# K9 - Fitness functions before architecture claims. Kata sandbox sketch (plan section 3.6).
+# [K9-nn] sketch IDs are recognised by validate_architecture / trace and ignored by the
+# CI adl-coverage gate. Never [TR-*]; promotion is decided only at K12 (architecture/REVIEW.md).
+DESCRIPTION K9 - what the ADL promises, what CI enforces, and what is declared unmeasured
+CATEGORY Architectural Capabilities
+NAMESPACE TrK9NS
+DEFINE SYSTEM Total Recall K9 Sandbox AS trk9
+    DEFINE COMPONENT Performance Targets AS targets
+    DEFINE COMPONENT CI Claims AS ciclaims
+    DEFINE COMPONENT Unmeasured Claims AS unmeasured
+
+# Course pp. 52-53, 64-65: a capability is only real once a fitness function measures it. capabilities.adl
+# states the performance targets in prose (1000 writes/s, recall p95 under 150 ms, 20000 memories) and
+# scripts/loadtest-budget.json is what the benchmark fails on. If the two drift the ADL promises more than
+# anything checks. Memories are per vault: the loadtest fills two, so lt_n x 2.
+ASSERT(Performance Targets: the writes per second, recall p95 and memory count stated in capabilities.adl equal the full profile of loadtest-budget.json) # [K9-01]
+
+# A comment that says a target is "not in CI" is a claim about the gate. mutation.yml runs the benchmark
+# against the budget (smoke in the PR gate, full weekly), so the comment understates the enforcement.
+ASSERT(CI Claims: what capabilities.adl says about CI enforcement matches the workflows) # [K9-02]
+
+# The README says retrieval quality is "not yet measured". That is honest only if the gap has a backlog
+# entry with a trigger, so it has a way to end (GOVERNANCE section 3).
+ASSERT(Unmeasured Claims: every "not yet measured" claim in the README has a backlog entry with a trigger) # [K9-03]
+
+# Not re-asserted, answered with existing evidence (answers.md): the spec-driven eval (scripts/eval/spec-eval.ts
+# and its CI test), the budget in the PR gate, the ADL coverage gate (TR-Q-series).
