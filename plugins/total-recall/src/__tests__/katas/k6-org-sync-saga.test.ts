@@ -1,5 +1,5 @@
 // K6 — org-sync as a saga: failure modes (course pp. 44–45, saga: compensation per step).
-// Sketch: katas/s2-k6-org-sync-saga/adl/saga-kata.adl. Fitness functions for [K6-01], [K6-02];
+// Sketch: plugins/total-recall/architecture/katas/s2-k6-org-sync-saga/adl/saga-kata.adl. Fitness functions for [K6-01], [K6-02];
 // each has a known-pass and a known-fail. Fixtures are synthetic strings.
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';

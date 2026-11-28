@@ -16,7 +16,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'katas/**'
+      - 'plugins/total-recall/architecture/katas/**'
       - 'plugins/total-recall/src/**'
       - 'plugins/total-recall/architecture/**'
       - 'plugins/total-recall/vitest.katas.config.ts'
@@ -25,7 +25,7 @@ on:
   pull_request:
     branches: [main]
     paths:
-      - 'katas/**'
+      - 'plugins/total-recall/architecture/katas/**'
       - 'plugins/total-recall/src/**'
       - 'plugins/total-recall/architecture/**'
       - 'plugins/total-recall/vitest.katas.config.ts'

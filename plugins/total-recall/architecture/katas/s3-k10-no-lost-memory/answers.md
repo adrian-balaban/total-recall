@@ -34,7 +34,7 @@ Sketch: [adl/no-lost-memory-kata.adl](adl/no-lost-memory-kata.adl) · Fitness fu
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s3-k10-no-lost-memory`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K10-01","assert:K10-02","assert:K10-03"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s3-k10-no-lost-memory`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K10-01","assert:K10-02","assert:K10-03"]`).
 
 ## Dispositions
 

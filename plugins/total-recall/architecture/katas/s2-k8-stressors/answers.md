@@ -39,7 +39,7 @@ Sketch: [adl/stressors-kata.adl](adl/stressors-kata.adl) · Fitness functions: [
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s2-k8-stressors`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K8-01","assert:K8-02"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s2-k8-stressors`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K8-01","assert:K8-02"]`).
 
 ## Dispositions
 

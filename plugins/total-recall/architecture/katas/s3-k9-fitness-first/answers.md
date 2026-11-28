@@ -31,7 +31,7 @@ Sketch: [adl/fitness-first-kata.adl](adl/fitness-first-kata.adl) · Fitness func
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s3-k9-fitness-first`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K9-01","assert:K9-02","assert:K9-03"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s3-k9-fitness-first`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K9-01","assert:K9-02","assert:K9-03"]`).
 
 ## Dispositions
 

@@ -1,5 +1,5 @@
 // K3 — install channels + strict/permissive contracts (course pp. 30–31).
-// Sketch: katas/s1-k3-contracts-channels/adl/contracts-kata.adl. Fitness functions for [K3-01], [K3-02];
+// Sketch: plugins/total-recall/architecture/katas/s1-k3-contracts-channels/adl/contracts-kata.adl. Fitness functions for [K3-01], [K3-02];
 // each has a known-pass and a known-fail. Fixtures are synthetic and live under os.tmpdir().
 import { describe, it, expect, afterAll } from 'vitest';
 import * as fs from 'fs';

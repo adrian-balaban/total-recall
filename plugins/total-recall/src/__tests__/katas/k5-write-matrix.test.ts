@@ -1,5 +1,5 @@
 // K5 — the write matrix and privacy (course pp. 33–38: "which services may touch which database").
-// Sketch: katas/s2-k5-write-matrix/adl/write-matrix-kata.adl. Fitness functions for [K5-01], [K5-02];
+// Sketch: plugins/total-recall/architecture/katas/s2-k5-write-matrix/adl/write-matrix-kata.adl. Fitness functions for [K5-01], [K5-02];
 // each has a known-pass and a known-fail. Fixtures are synthetic and live under os.tmpdir().
 import { describe, it, expect, afterAll } from 'vitest';
 import * as fs from 'fs';

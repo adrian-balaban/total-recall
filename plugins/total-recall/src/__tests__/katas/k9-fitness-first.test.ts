@@ -1,5 +1,5 @@
 // K9 — fitness functions before architecture claims (course pp. 52–53, 64–65).
-// Sketch: katas/s3-k9-fitness-first/adl/fitness-first-kata.adl. Fitness functions for [K9-01]..[K9-03];
+// Sketch: plugins/total-recall/architecture/katas/s3-k9-fitness-first/adl/fitness-first-kata.adl. Fitness functions for [K9-01]..[K9-03];
 // each has a known-pass and a known-fail. Fixtures are synthetic strings.
 import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';

@@ -108,7 +108,7 @@ jobs:
             plugins/total-recall/vitest.integration.config.ts \
             plugins/total-recall/vitest.stryker.config.ts \
             plugins/total-recall/vitest.katas.config.ts \
-            katas \
+            plugins/total-recall/architecture/katas \
             plugins/total-recall/stryker.conf.json \
             plugins/total-recall/scripts/loadtest.ts \
             plugins/total-recall/scripts/eval

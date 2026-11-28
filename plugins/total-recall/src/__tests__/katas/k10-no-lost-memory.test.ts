@@ -1,5 +1,5 @@
 // K10 — "no memory may be lost" (course pp. 35–36: no-lost-answer reconciliation).
-// Sketch: katas/s3-k10-no-lost-memory/adl/no-lost-memory-kata.adl. Fitness functions for [K10-01]..[K10-03];
+// Sketch: plugins/total-recall/architecture/katas/s3-k10-no-lost-memory/adl/no-lost-memory-kata.adl. Fitness functions for [K10-01]..[K10-03];
 // each has a known-pass and a known-fail. Fixtures are synthetic strings (source and backlog text).
 // The .md files are the only copy of a memory's content (plugins/total-recall/CLAUDE.md), so these
 // are the paths where content can be lost: a half-written file, an archive that failed silently, and

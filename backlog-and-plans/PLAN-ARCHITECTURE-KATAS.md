@@ -16,7 +16,7 @@
 - Each round = one session (~1–1.5 h) = branch `feat/katas-kX` + a PR through the existing gate `.github/workflows/mutation.yml`: npm audit → typecheck → build (+ version-sync check) → `test:coverage` (thresholds 95/95/90/95) → `test:integration` → Stryker ≥ 65 → `npx` launcher tests (`npm test` at the root + `test/pack-guard.mjs`); in parallel, the `benchmark-smoke` job (`LT_N=250`, budget enforced). The kata tests are **not** part of this gate: they run in the separate workflow `.github/workflows/katas.yml` (§3.6), which does not block the release (`release.yml` starts only after `mutation`).
 - **Load-bearing, not wallpaper:** every new fitness function protects data integrity, privacy (`privacy-filter`), write atomicity, crash safety — nothing cosmetic.
 - **Fail = feedback, not a bug:** every failing assertion gets an explicit disposition (fix implementation / revise ADL / exemption with expiry — the format in `architecture/GOVERNANCE.md` §3).
-- **ADL sandbox until K12:** the sketches live in `katas/**/adl/*.adl` at the repo root — outside the scan of the ADL gates (they all read only `plugins/total-recall/architecture/adl/`) and not shipped (the root npm package publishes only `bin`; the plugin is distributed from `plugins/total-recall/` through the `release` branch). Promotion is decided only at K12, on the criteria in `architecture/REVIEW.md` + checklist §1–12.
+- **ADL sandbox until K12:** the sketches live in `plugins/total-recall/architecture/katas/**/adl/*.adl` at the repo root — outside the scan of the ADL gates (they all read only `plugins/total-recall/architecture/adl/`) and not shipped (the root npm package publishes only `bin`; the plugin is distributed from `plugins/total-recall/` through the `release` branch). Promotion is decided only at K12, on the criteria in `architecture/REVIEW.md` + checklist §1–12.
 - **Sketch IDs, not `TR-*`:** sandbox assertions carry `[K<n>-<nn>]` IDs (e.g. `# [K5-01]`). `validate_architecture` and `trace` recognise them (they accept any tag `[A-Za-z][A-Za-z0-9_.-]*`), but `adl-coverage` ignores them (its regex is `TR-[A-Z][0-9]+`) — so CI does not go red, and no `TR-*` IDs are allocated prematurely (see §3.6).
 - **Two manifestations:** every fitness function generated from ADL is verified on one case that passes and one that fails, before it is believed (see §3.3 — "fails" means the test demonstrates detection, not that CI is red).
 - **Dogfood integration:** every kata runs the plugin itself on its own materials (`index_architecture`, `validate_architecture record:false`, `trace(id=...)`, `store_memory` with `elements: ["assert:K*-*"]`). Findings that are not promoted now go into `backlog-and-plans/BACKLOG.md` with a trigger, as in the compliance pass.
@@ -26,7 +26,7 @@
 The deliverable of each kata, in the format of the course folders (`make-the-grade-pages-28-29` … `73-74` — `answers.md` + `adl/*.adl`):
 
 ```
-katas/                         (repo root)
+plugins/total-recall/architecture/katas/
   s1-k1-structure/       ├─ answers.md   (scenario, answers, dispositions)
   s1-k2-code-quality/    └─ adl/*.adl   (ADL sketch — sandbox, outside the gate, IDs [K<n>-<nn>])
   ...
@@ -78,7 +78,7 @@ All in `/home/adrianb/_/in-progress/cursuri/masterclassNealFord2026/`. The pages
 4. **Load-bearing walls, not wallpaper.** Data integrity, privacy, write atomicity and crash safety are protected — nothing cosmetic.
 5. **Fail = feedback, not a bug.** Every failing assertion gets an explicit disposition: fix implementation / revise ADL / temporary exemption — a `DEFERRED` entry in `backlog-and-plans/BACKLOG.md` **with an expiry date** (`GOVERNANCE.md` §3; an expired exemption is a Fail at the next REVIEW pass).
 6. **ADL sandbox until K12.**
-   - The sketches live in `katas/**/adl/*.adl`; they do not enter `plugins/total-recall/architecture/adl/` (the gate would go red there immediately), `dist/` or the npm packages.
+   - The sketches live in `plugins/total-recall/architecture/katas/**/adl/*.adl`; they do not enter `plugins/total-recall/architecture/adl/` (the gate would go red there immediately), `dist/` or the npm packages.
    - Sketch IDs have the form `[K<n>-<nn>]`, never `[TR-…]`. A kata test may cite an **existing** `[TR-xx]`, but not a new one: `adl-coverage` fails on any `[TR-xx]` in a test name that has no production ASSERT.
    - Kata tests live in `plugins/total-recall/src/__tests__/katas/` (vitest is rooted in `plugins/total-recall/`, so a test placed in `katas/` at the repo root would not run anywhere and could not resolve `archunit` from `node_modules`). They are excluded from the default suite (`vitest.config.ts`, so also from `test:coverage` in the `mutation` gate) and from Stryker (which runs only the allow-list anyway), and run through `vitest.katas.config.ts` / `npm run test:katas` / `.github/workflows/katas.yml` (triggered by changes in `katas/**`, `src/**`, `architecture/**`; `passWithNoTests` until the first kata lands). The hygiene rules `[TR-Q4]`/`[TR-Q5]` and `adl-coverage` still walk the directory, so they apply to the kata tests too.
 7. **ADL notation** is the one in the guide pp. 75–123: `DEFINE SYSTEM X AS id`, `ASSERT(...)`, indentation = containment. Prefer `IS DEPENDENT ON` + an explicit `HAS NO DEPENDENCY ON` over the exclusive form `IS ONLY DEPENDENT ON` (the guide, "Prefer …"). `IS DEPENDENT ON` is an existence claim: the generated check is "at least one class", not a per-class rule. Note: the production ADL writes assertions in natural language, with the ID as a trailing comment (`ASSERT(Tool Registry depends only on State and Paths) # [TR-S6]`). Sketches may use the form from the guide, but at promotion (K12) they are rewritten in the house style.
@@ -87,14 +87,14 @@ All in `/home/adrianb/_/in-progress/cursuri/masterclassNealFord2026/`. The pages
 ## 4. Mechanics of a kata round (per session)
 
 1. Read the scenario and tasks from the course material (the matching row in §1 + the sources in §2; the model folder from `SECTIONS.md`).
-2. Write or update the sketch `katas/sX-kY-*/adl/*.adl` — assertions with sketch IDs `# [KY-nn]`, no `TR-*`.
+2. Write or update the sketch `architecture/katas/sX-kY-*/adl/*.adl` — assertions with sketch IDs `# [KY-nn]`, no `TR-*`.
 3. Write the fitness function in `plugins/total-recall/src/__tests__/katas/kY-*.test.ts` (ArchUnitTS on the real code, or a check on a synthetic fixture under `os.tmpdir()`), with test names carrying the sketch ID (`it('[KY-nn] …')`), verified known-pass + known-fail (§3.3).
 4. The dogfood loop:
    - `index_architecture` on the kata folder, so the index contains only the sketch.
-   - `validate_architecture` with `record:false` on the **repo root** — only there does it see both `katas/**/adl` and the tests in `plugins/total-recall/src/__tests__/katas/` (on the kata folder, every ID would show up without a test). `record:false` is mandatory: otherwise every sketch failure becomes a `troubleshooting/fitness-*` memory in the personal vault.
+   - `validate_architecture` with `record:false` on the **repo root** — only there does it see both `plugins/total-recall/architecture/katas/**/adl` and the tests in `plugins/total-recall/src/__tests__/katas/` (on the kata folder, every ID would show up without a test). `record:false` is mandatory: otherwise every sketch failure becomes a `troubleshooting/fitness-*` memory in the personal vault.
    - `trace(id=...)`, then `get_architecture_context(...)` before any code generation.
    - Kata decisions are saved through `store_memory` with `elements: ["assert:KY-nn"]`.
-   - Note: the `architecture-change` hook fires on any `.adl` edit (including in `katas/`) and suggests `index_architecture` on the cwd — this is expected, not an error.
+   - Note: the `architecture-change` hook fires on any `.adl` edit (including in `architecture/katas/`) and suggests `index_architecture` on the cwd — this is expected, not an error.
 5. `answers.md` for the round: question → answer → evidence (link to the ADL/test).
 6. Every unresolved item gets one of the 3 dispositions — no gap without a disposition.
 7. PR `feat/katas-kX` → gates → merge; product findings that are not promoted go into `BACKLOG.md` with a trigger.

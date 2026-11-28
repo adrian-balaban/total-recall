@@ -102,7 +102,7 @@ describe('total-recall over real stdio', () => {
   });
 
   it('indexes this repo\'s own ADL and answers an element query over stdio', async () => {
-    const archDir = path.resolve(__dirname, '../../../architecture');
+    const archDir = path.resolve(__dirname, '../../../architecture/adl');
     const indexed = json(await client.callTool({ name: 'index_architecture', arguments: { path: archDir } }));
     expect(indexed.systems.map((s: any) => s.system)).toEqual(['tr']);
     const ctx = json(await client.callTool({ name: 'get_architecture_context', arguments: { system: 'tr', element: 'adl:org-vault' } }));

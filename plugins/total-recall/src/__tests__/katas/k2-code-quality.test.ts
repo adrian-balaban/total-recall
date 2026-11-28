@@ -1,4 +1,4 @@
-// K2 — quality of agent-generated code (course pp. 28–29). Sketch: katas/s1-k2-code-quality/adl/code-quality-kata.adl
+// K2 — quality of agent-generated code (course pp. 28–29). Sketch: plugins/total-recall/architecture/katas/s1-k2-code-quality/adl/code-quality-kata.adl
 // Fitness functions for [K2-01]..[K2-03]; each has a known-pass and a known-fail case (plan §3.3).
 // Fixtures are synthetic and live under os.tmpdir(); the real tree is only read.
 import { describe, it, expect, afterAll } from 'vitest';

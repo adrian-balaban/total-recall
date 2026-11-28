@@ -19,7 +19,7 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
 ## ⏸️ DEFERRED — waiting for a trigger
 
 ### Org-sync failure modes with no behavioural test (found by kata K6)
-- **Source:** `katas/s2-k6-org-sync-saga/answers.md`, check `[K6-02]`.
+- **Source:** `plugins/total-recall/architecture/katas/s2-k6-org-sync-saga/answers.md`, check `[K6-02]`.
 - **What:** seven failure paths in `scripts/sync-org-memory.mjs` have no test that exercises them:
   usage error, unset `orgRepo`, a key containing a NUL byte, a key that escapes the vault, a
   missing org file, a failed branch switch (skipped, never pushes from the wrong branch), and a
@@ -31,7 +31,7 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
   `k6-org-sync-saga.test.ts`.
 
 ### Supersede archive failure is swallowed silently (found by kata K10)
-- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-03]`.
+- **Source:** `plugins/total-recall/architecture/katas/s3-k10-no-lost-memory/answers.md`, check `[K10-03]`.
 - **What:** `store_memory(force=true)` archives the prior body under `.superseded/` before it
   overwrites. The archive `catch` in `src/tools/store.ts` is empty ("best-effort"), so if the
   archive write fails (disk full, permissions) the overwrite still proceeds, the prior body is
@@ -44,7 +44,7 @@ default** where no line names one. An expired entry is a Fail at the next REVIEW
   unwritable. Flip `[K10-03]` to its fixed value when it lands.
 
 ### PreCompact extracts carry no provenance (found by kata K10)
-- **Source:** `katas/s3-k10-no-lost-memory/answers.md`, check `[K10-02]`.
+- **Source:** `plugins/total-recall/architecture/katas/s3-k10-no-lost-memory/answers.md`, check `[K10-02]`.
 - **What:** `hooks/scripts/store-learning.mjs` writes `sessions: []` and no origin marker, so
   a memory the PreCompact hook extracted looks the same as one an agent stored on purpose.
   The server's `store_memory` stamps the session; the extractor does not.

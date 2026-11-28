@@ -50,7 +50,7 @@ Na = interfaces, type aliases, abstract classes; Nc = exported functions, classe
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s1-k2-code-quality`, `validate_architecture` on the repo root with `record:false`, `trace` for the three IDs, and the decision stored with `store_memory` (`elements: ["assert:K2-01","assert:K2-02","assert:K2-03"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s1-k2-code-quality`, `validate_architecture` on the repo root with `record:false`, `trace` for the three IDs, and the decision stored with `store_memory` (`elements: ["assert:K2-01","assert:K2-02","assert:K2-03"]`).
 
 ## Dispositions
 

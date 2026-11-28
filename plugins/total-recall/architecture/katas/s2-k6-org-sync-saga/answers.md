@@ -47,7 +47,7 @@ Sketch: [adl/saga-kata.adl](adl/saga-kata.adl) · Fitness functions: [k6-org-syn
 
 ## Dogfood log
 
-- `index_architecture` on `katas/s2-k6-org-sync-saga`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K6-01","assert:K6-02"]`).
+- `index_architecture` on `plugins/total-recall/architecture/katas/s2-k6-org-sync-saga`, `validate_architecture` on the repo root with `record:false`, `trace`, and the decision stored with `store_memory` (`elements: ["assert:K6-01","assert:K6-02"]`).
 
 ## Dispositions
 

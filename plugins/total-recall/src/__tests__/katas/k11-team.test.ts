@@ -1,5 +1,5 @@
 // K11 — the human + agent team (course pp. 47–50, 69–74): the written instructions and the governance
-// register are what a new contributor, human or agent, acts on. Sketch: katas/s3-k11-team/adl/team-kata.adl.
+// register are what a new contributor, human or agent, acts on. Sketch: plugins/total-recall/architecture/katas/s3-k11-team/adl/team-kata.adl.
 // Fitness functions for [K11-01]..[K11-03]; each has a known-pass and a known-fail. Fixtures are
 // synthetic and live under os.tmpdir(). The checks that cannot be made deterministic (is the rule
 // still right? does the prose say what the code does?) stay interactive reviews (checklist §9), see answers.md.

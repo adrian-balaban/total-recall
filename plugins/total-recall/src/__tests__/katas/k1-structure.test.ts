@@ -5,7 +5,7 @@ import * as path from 'path';
 import { COMPONENT_FILES } from '../architecture/components.js';
 import { assertTmpPath } from '../assert-tmp-path.js';
 
-// K1 - Entity Trap vs the real structure (katas/s1-k1-structure/adl/structure-kata.adl).
+// K1 - Entity Trap vs the real structure (plugins/total-recall/architecture/katas/s1-k1-structure/adl/structure-kata.adl).
 // Sketch IDs [K1-nn] are not TR-* IDs: adl-coverage ignores them. Every check has a known-pass
 // (real tree) and a known-fail (synthetic tree under os.tmpdir()), asserted - CI stays green.
 
