@@ -197,7 +197,7 @@
 
 See PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE.md §5 for the item-by-item mapping. Summary at this baseline: items 2, 3, 4, 9 Pass with evidence; 1, 6, 7, 10 Partial with owned actions; 5 closed by WP-2 (`[TR-W9]`/`[TR-W10]`); 8 closed by WP-1 (smoke benchmark in the gate, full 20k scheduled).
 
-**2026-11-28 follow-up (PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)** applied P1 (this pass), P2 (`[TR-G1]/[TR-G2]` governance gates + `governance.adl`), P3 (`[TR-A1]/[TR-A2]` quanta), P8 (`[TR-S16]/[TR-S17]` positive dependencies) and P9 (`[TR-D14]` personal provenance vs org sync), plus the P10 advisory fixture-pairing check. Still open (time-boxed in BACKLOG): P4 `[TR-P6]/[TR-P7]` (gated on ≥3 green `benchmark-full` runs), P5 `[TR-P8]/[TR-P9]` (capability budgets), P6 `[TR-C10]` + contract churn + version fixtures, P7 (QUALITY.md v1.10.0 refresh).
+**2026-11-28 follow-up (PLAN-ARCHITECTURE-AS-CODE-COMPLIANCE-FOLLOWUPS.md)** applied P1 (this pass), P2 (`[TR-G1]/[TR-G2]` governance gates + `governance.adl`), P3 (`[TR-A1]/[TR-A2]` quanta), P8 (`[TR-S16]/[TR-S17]` positive dependencies) and P9 (`[TR-D14]` personal provenance vs org sync), plus the P10 advisory fixture-pairing check. Still pending (time-boxed in BACKLOG): P4 `[TR-P6]/[TR-P7]` (gated on ≥3 green `benchmark-full` runs), P5 `[TR-P8]/[TR-P9]` (capability budgets), P6 `[TR-C10]` + contract churn + version fixtures, P7 (QUALITY.md v1.10.0 refresh).
 
 ## Sign-off
 

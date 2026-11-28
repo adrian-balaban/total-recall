@@ -100,7 +100,7 @@ describe('[K11-02] every ADL file has an owner row in the governance register', 
   });
   it('[K11-02] known-pass: on the real tree every production ADL file has a row', () => {
     const files = fs.readdirSync(path.join(PLUGIN, 'architecture/adl')).filter(f => f.endsWith('.adl'));
-    expect(files.length).toBe(9);
+    expect(files.length).toBe(10);
     expect(registerGaps(files, read(PLUGIN, 'architecture/GOVERNANCE.md'))).toEqual([]);
   });
 });
